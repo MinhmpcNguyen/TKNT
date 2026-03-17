@@ -1,0 +1,67 @@
+{
+  "status": "OK",
+  "cluster_id": "sleep_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "bed",
+      "x": 0,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "wardrobe_or_closet",
+      "x": 2000,
+      "y": 0,
+      "rot": 90
+    },
+    {
+      "id": "dresser",
+      "x": 0,
+      "y": 1800,
+      "rot": 90
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "bed",
+        "x": 0,
+        "y": 0,
+        "w": 1910,
+        "h": 1690
+      },
+      {
+        "id": "wardrobe_or_closet",
+        "x": 2000,
+        "y": 0,
+        "w": 600,
+        "h": 1200
+      },
+      {
+        "id": "dresser",
+        "x": 0,
+        "y": 1800,
+        "w": 490,
+        "h": 930
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 2600,
+      "max_y": 2730
+    }
+  },
+  "notes": [
+    "The bed is placed as the anchor at the origin.",
+    "The wardrobe is placed to the left of the bed with a gap of 100 mm.",
+    "The dresser is placed to the right of the bed with a gap of 100 mm."
+  ],
+  "missing": []
+}

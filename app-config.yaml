@@ -1,0 +1,25 @@
+# NOTE: For all authentication and validation,
+# use a random generated-string from `openssl rand -hex "bits"`,
+# "bits" can be 16 or 32
+
+authentication:
+  api_key:
+    name: "X-API-KEY"
+    value: "your-api-key"
+
+services:
+  openai:
+    azure: true # Use whether openai from Azure or direct
+    api_version: "2024-08-01-preview"
+    public_key: "${OPENAI_PUBLIC_KEY}"
+    private_key_file: "${OPENAI_PRIVATE_KEY}"
+    models:
+      gpt_4o:
+        name: "gpt-4o"
+        azure_endpoint: "https://openai-centic.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2023-03-15-preview"
+      gpt_4o_mini:
+        name: "gpt-4o-mini"
+        azure_endpoint: "https://openai-centic.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
+      text_embedding_3_small:
+        name: "text-embedding-3-small"
+        azure_endpoint: "https://openai-centic.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2023-05-15"

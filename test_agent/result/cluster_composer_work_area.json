@@ -1,0 +1,67 @@
+{
+  "status": "OK",
+  "cluster_id": "work_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "desk",
+      "x": 0,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "desk_chair",
+      "x": -550,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "book_shelf",
+      "x": 1080,
+      "y": 0,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "desk",
+        "x": 0,
+        "y": 0,
+        "w": 980,
+        "h": 510
+      },
+      {
+        "id": "desk_chair",
+        "x": -550,
+        "y": 0,
+        "w": 500,
+        "h": 500
+      },
+      {
+        "id": "book_shelf",
+        "x": 1080,
+        "y": 0,
+        "w": 800,
+        "h": 300
+      }
+    ],
+    "local_bbox": {
+      "min_x": -550,
+      "min_y": 0,
+      "max_x": 1880,
+      "max_y": 510
+    }
+  },
+  "notes": [
+    "Desk is placed at the origin as the anchor.",
+    "Desk chair is placed to the left of the desk with a gap of 50 mm.",
+    "Book shelf is placed to the right of the desk with a gap of 100 mm."
+  ],
+  "missing": []
+}

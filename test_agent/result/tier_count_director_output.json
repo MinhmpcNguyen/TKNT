@@ -1,0 +1,130 @@
+{
+  "status": "NEED_INFO",
+  "assumptions": [
+    "The room is intended to be uncluttered and airy, suggesting minimal furniture and smaller size tiers where possible."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "sleep",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "anchor",
+      "rationale": "A large bed is typical for a sleep area and serves as the anchor.",
+      "rep_dims_m": {
+        "L": 1.91,
+        "W": 1.69,
+        "H": 0.47,
+        "A": 3.2278999999999995,
+        "R": 1.1301775147928994,
+        "source_id": "bed_005"
+      }
+    },
+    {
+      "object_type": "nightstand",
+      "category": "sleep",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "A small nightstand complements the large bed without cluttering.",
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.4,
+        "H": 0.51,
+        "A": 0.18000000000000002,
+        "R": 1.125,
+        "source_id": "nightstand_009"
+      }
+    },
+    {
+      "object_type": "desk",
+      "category": "work",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "A medium desk provides sufficient workspace while maintaining airiness.",
+      "rep_dims_m": {
+        "L": 0.98,
+        "W": 0.51,
+        "H": 0.78,
+        "A": 0.4998,
+        "R": 1.9215686274509802,
+        "source_id": "desk_006"
+      }
+    },
+    {
+      "object_type": "desk_chair",
+      "category": "work",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "primary",
+      "rationale": "A medium chair is necessary for comfort and fits well with the desk.",
+      "rep_dims_m": {
+        "L": 0.5,
+        "W": 0.5,
+        "H": 0.9,
+        "A": 0.25,
+        "R": 1.0,
+        "source_id": "desk_chair_001"
+      }
+    },
+    {
+      "object_type": "wardrobe_or_closet",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "anchor",
+      "rationale": "A large wardrobe provides ample storage and serves as the anchor.",
+      "rep_dims_m": {
+        "L": 1.2,
+        "W": 0.6,
+        "H": 2.0,
+        "A": 0.72,
+        "R": 2.0,
+        "source_id": "wardrobe_or_closet_001"
+      }
+    },
+    {
+      "object_type": "dresser",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "primary",
+      "rationale": "A medium dresser offers storage without overwhelming the space.",
+      "rep_dims_m": {
+        "L": 0.93,
+        "W": 0.49,
+        "H": 0.87,
+        "A": 0.4557,
+        "R": 1.8979591836734695,
+        "source_id": "dresser_001"
+      }
+    },
+    {
+      "object_type": "book_shelf",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "A small bookshelf adds functionality without cluttering.",
+      "rep_dims_m": {
+        "L": 0.8,
+        "W": 0.3,
+        "H": 1.8,
+        "A": 0.24,
+        "R": 2.666666666666667,
+        "source_id": "book_shelf_001"
+      }
+    }
+  ],
+  "global_notes": [
+    "Ensure all furniture selections align with the japandi style and maintain an uncluttered, airy feel."
+  ]
+}

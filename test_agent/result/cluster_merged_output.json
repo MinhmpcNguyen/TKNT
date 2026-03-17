@@ -1,0 +1,338 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_area",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 50
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "Headboard is at the bottom, foot of the bed faces top."
+          },
+          "nightstand": {
+            "front": "top",
+            "notes": "Front of the nightstand faces the same direction as the bed."
+          }
+        },
+        "access_requirements": []
+      },
+      "decisions": [
+        {
+          "object_type": "bed",
+          "category": "sleep",
+          "cluster_id": "sleep_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "anchor",
+          "rationale": "A large bed is typical for a sleep area and serves as the anchor.",
+          "rep_dims_m": {
+            "L": 1.91,
+            "W": 1.69,
+            "H": 0.47,
+            "A": 3.2278999999999995,
+            "R": 1.1301775147928994,
+            "source_id": "bed_005"
+          }
+        },
+        {
+          "object_type": "nightstand",
+          "category": "sleep",
+          "cluster_id": "sleep_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "A small nightstand complements the large bed without cluttering.",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.4,
+            "H": 0.51,
+            "A": 0.18000000000000002,
+            "R": 1.125,
+            "source_id": "nightstand_009"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_area",
+      "tag": "work",
+      "members": [
+        "desk",
+        "desk_chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "desk_chair"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "desk_chair",
+          "b": "desk",
+          "b_edge": "front",
+          "span": "any",
+          "gap_min": 0,
+          "gap_max": 50
+        },
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90
+          ],
+          "desk_chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "top",
+            "notes": "Front of the desk is where the user sits."
+          },
+          "desk_chair": {
+            "front": "top",
+            "notes": "Front of the chair faces the desk."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "desk",
+          "category": "work",
+          "cluster_id": "work_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "A medium desk provides sufficient workspace while maintaining airiness.",
+          "rep_dims_m": {
+            "L": 0.98,
+            "W": 0.51,
+            "H": 0.78,
+            "A": 0.4998,
+            "R": 1.9215686274509802,
+            "source_id": "desk_006"
+          }
+        },
+        {
+          "object_type": "desk_chair",
+          "category": "work",
+          "cluster_id": "work_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "primary",
+          "rationale": "A medium chair is necessary for comfort and fits well with the desk.",
+          "rep_dims_m": {
+            "L": 0.5,
+            "W": 0.5,
+            "H": 0.9,
+            "A": 0.25,
+            "R": 1.0,
+            "source_id": "desk_chair_001"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_area",
+      "tag": "storage",
+      "members": [
+        "wardrobe_or_closet",
+        "dresser",
+        "book_shelf"
+      ],
+      "anchors": [
+        "wardrobe_or_closet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "wardrobe_or_closet",
+          "b": "dresser"
+        },
+        {
+          "type": "no_overlap",
+          "a": "wardrobe_or_closet",
+          "b": "book_shelf"
+        },
+        {
+          "type": "no_overlap",
+          "a": "dresser",
+          "b": "book_shelf"
+        },
+        {
+          "type": "requires_access",
+          "id": "wardrobe_or_closet",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dresser",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe_or_closet": [
+            0,
+            90
+          ],
+          "dresser": [
+            0,
+            90
+          ],
+          "book_shelf": [
+            0,
+            90
+          ]
+        },
+        "facing": {
+          "wardrobe_or_closet": {
+            "front": "top",
+            "notes": "Doors open towards the top."
+          },
+          "dresser": {
+            "front": "top",
+            "notes": "Drawers open towards the top."
+          },
+          "book_shelf": {
+            "front": "top",
+            "notes": "Books are accessed from the top."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe_or_closet",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dresser",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "wardrobe_or_closet",
+          "category": "storage",
+          "cluster_id": "storage_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "anchor",
+          "rationale": "A large wardrobe provides ample storage and serves as the anchor.",
+          "rep_dims_m": {
+            "L": 1.2,
+            "W": 0.6,
+            "H": 2.0,
+            "A": 0.72,
+            "R": 2.0,
+            "source_id": "wardrobe_or_closet_001"
+          }
+        },
+        {
+          "object_type": "dresser",
+          "category": "storage",
+          "cluster_id": "storage_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "primary",
+          "rationale": "A medium dresser offers storage without overwhelming the space.",
+          "rep_dims_m": {
+            "L": 0.93,
+            "W": 0.49,
+            "H": 0.87,
+            "A": 0.4557,
+            "R": 1.8979591836734695,
+            "source_id": "dresser_001"
+          }
+        },
+        {
+          "object_type": "book_shelf",
+          "category": "storage",
+          "cluster_id": "storage_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "A small bookshelf adds functionality without cluttering.",
+          "rep_dims_m": {
+            "L": 0.8,
+            "W": 0.3,
+            "H": 1.8,
+            "A": 0.24,
+            "R": 2.666666666666667,
+            "source_id": "book_shelf_001"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters are organized based on typical bedroom functionality."
+  ],
+  "missing": []
+}

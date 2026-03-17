@@ -1,0 +1,257 @@
+{
+  "raw_text": "```json\n{\n  \"status\": \"OK\",\n  \"room\": {\n    \"unit\": \"mm\",\n    \"room_id\": \"room_1\",\n    \"name\": \"Main\",\n    \"polygon_ccw\": [\n      {\"x\": 0, \"y\": 0},\n      {\"x\": 6000, \"y\": 0},\n      {\"x\": 6000, \"y\": 2000},\n      {\"x\": 4000, \"y\": 2000},\n      {\"x\": 4000, \"y\": 4000},\n      {\"x\": 0, \"y\": 4000}\n    ]\n  },\n  \"openings\": {\n    \"doors\": [\n      {\n        \"id\": \"door_1\",\n        \"segment_mm\": [\n          {\"x\": 0, \"y\": 2000},\n          {\"x\": 0, \"y\": 2600}\n        ],\n        \"swing_radius_mm\": 600,\n        \"hinge_hint\": \"LEFT\"\n      }\n    ],\n    \"windows\": [\n      {\n        \"id\": \"window_1\",\n        \"segment_mm\": [\n          {\"x\": 2000, \"y\": 0},\n          {\"x\": 4000, \"y\": 0}\n        ],\n        \"clearance_mm\": 100\n      }\n    ]\n  },\n  \"obstacles\": [\n    {\n      \"id\": \"door_1_swing\",\n      \"type\": \"door_swing\",\n      \"polygon_ccw\": [\n        {\"x\": 0, \"y\": 2000},\n        {\"x\": 600, \"y\": 2000},\n        {\"x\": 600, \"y\": 2600},\n        {\"x\": 0, \"y\": 2600}\n      ],\n      \"hard\": true\n    },\n    {\n      \"id\": \"window_1_clearance\",\n      \"type\": \"window_clearance\",\n      \"polygon_ccw\": [\n        {\"x\": 2000, \"y\": 0},\n        {\"x\": 4000, \"y\": 0},\n        {\"x\": 4000, \"y\": 100},\n        {\"x\": 2000, \"y\": 100}\n      ],\n      \"hard\": true\n    }\n  ],\n  \"meta\": {\n    \"room_type\": \"bedroom\",\n    \"style\": \"japandi\",\n    \"height_mm\": 2800,\n    \"window_direction\": \"SE\",\n    \"max_iterations\": 12\n  },\n  \"notes\": [],\n  \"missing\": [],\n  \"conflicts\": []\n}\n```",
+  "raw": {
+    "status": "OK",
+    "room": {
+      "unit": "mm",
+      "room_id": "room_1",
+      "name": "Main",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 2000
+        },
+        {
+          "x": 4000,
+          "y": 2000
+        },
+        {
+          "x": 4000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ]
+    },
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2000
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "swing_radius_mm": 600,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 2000,
+              "y": 0
+            },
+            {
+              "x": 4000,
+              "y": 0
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    },
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2000
+          },
+          {
+            "x": 600,
+            "y": 2000
+          },
+          {
+            "x": 600,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 2600
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 2000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 100
+          },
+          {
+            "x": 2000,
+            "y": 100
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "meta": {
+      "room_type": "bedroom",
+      "style": "japandi",
+      "height_mm": 2800,
+      "window_direction": "SE",
+      "max_iterations": 12
+    },
+    "notes": [],
+    "missing": [],
+    "conflicts": []
+  },
+  "parsed": {
+    "status": "OK",
+    "room": {
+      "unit": "mm",
+      "room_id": "room_1",
+      "name": "Main",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 2000
+        },
+        {
+          "x": 4000,
+          "y": 2000
+        },
+        {
+          "x": 4000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ]
+    },
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2000
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "swing_radius_mm": 600,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 2000,
+              "y": 0
+            },
+            {
+              "x": 4000,
+              "y": 0
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    },
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2000
+          },
+          {
+            "x": 600,
+            "y": 2000
+          },
+          {
+            "x": 600,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 2600
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 2000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 100
+          },
+          {
+            "x": 2000,
+            "y": 100
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "meta": {
+      "room_type": "bedroom",
+      "style": "japandi",
+      "height_mm": 2800,
+      "window_direction": "SE",
+      "max_iterations": 12
+    },
+    "notes": [],
+    "missing": [],
+    "conflicts": []
+  }
+}

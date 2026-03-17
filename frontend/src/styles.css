@@ -1,0 +1,413 @@
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #1d1b17;
+  background: #f6f4ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f6f4ef;
+}
+
+.app-root {
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 240px 1fr 240px 220px;
+  gap: 12px;
+  align-items: start;
+}
+
+.side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #e3ded4;
+  min-height: 120px;
+}
+
+.user-input-panel {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.point-list {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.point-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f9f6ef;
+  border: 1px solid #e4ddd2;
+}
+
+.point-item.active {
+  border-color: #e3b26b;
+  background: #fff2d8;
+}
+
+.muted {
+  color: #8c8275;
+  font-size: 12px;
+}
+
+.wall-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.wall-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wall-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wall-actions label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.library-list {
+  display: grid;
+  gap: 8px;
+}
+
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #e7e1d6;
+  border-radius: 8px;
+  background: #fbfaf8;
+  cursor: grab;
+}
+
+.library-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #d0c8bc;
+}
+
+.library-name {
+  font-weight: 600;
+}
+
+.library-meta {
+  font-size: 12px;
+  color: #6d665c;
+}
+
+.canvas-wrapper {
+  padding: 8px;
+  background: #fdfcf9;
+  border-radius: 16px;
+  border: 1px solid #e3ded4;
+}
+
+.three-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 640px;
+}
+
+.three-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 6px 10px 8px;
+  gap: 12px;
+}
+
+.three-panel-title {
+  font-weight: 700;
+}
+
+.three-panel-hint {
+  font-size: 12px;
+  color: #7d7468;
+}
+
+.three-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.three-panel-actions .ghost {
+  background: #faf7f1;
+}
+
+.three-panel-body {
+  flex: 1;
+  position: relative;
+  min-height: 520px;
+}
+
+.three-panel-canvas {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #ece6da;
+  background: #f6f4ef;
+}
+
+.three-preview-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+}
+
+.three-preview-overlay .muted {
+  background: rgba(255, 255, 255, 0.82);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #e4ddd2;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.toolbar select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #cfc6b8;
+  background: #fff;
+}
+
+button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cfc6b8;
+  background: #fff;
+  cursor: pointer;
+}
+
+button.active {
+  background: #2f2f2f;
+  color: #fff;
+  border-color: #2f2f2f;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button.danger {
+  border-color: #d9534f;
+  color: #d9534f;
+}
+
+.inspector-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.inspector-row input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d6d0c4;
+}
+
+.inspector-row select,
+.inspector-row textarea {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d6d0c4;
+  font-family: inherit;
+}
+
+.inspector-row textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.inspector-readonly {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d6d0c4;
+  background: #f6f3ed;
+  color: #4f4a42;
+  font-size: 14px;
+}
+
+.toolbar-status {
+  font-size: 12px;
+  color: #6d665c;
+  align-self: center;
+}
+
+.toolbar-status.error {
+  color: #b3261e;
+}
+
+.validation-panel ul {
+  padding-left: 16px;
+}
+
+.run-log-panel {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.cluster-preview-panel {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.cluster-preview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 18px;
+}
+
+.modal-card {
+  width: min(1200px, 96vw);
+  height: min(760px, 92vh);
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e3ded4;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee8dc;
+}
+
+.modal-title {
+  font-weight: 700;
+}
+
+.modal-body {
+  flex: 1;
+  position: relative;
+  padding: 10px;
+}
+
+.three-canvas {
+  position: absolute;
+  inset: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #ece6da;
+  background: #f6f4ef;
+}
+
+.cluster-preview-card {
+  border: 1px solid #e7e1d6;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fbfaf8;
+}
+
+.cluster-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.cluster-svg {
+  width: 100%;
+  height: 140px;
+  background: #fdfcf9;
+  border-radius: 8px;
+  border: 1px solid #eadfcd;
+}
+
+.log-list {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.log-line {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f9f6ef;
+  border: 1px solid #e4ddd2;
+  white-space: pre-wrap;
+}
+
+.validation-panel li {
+  margin-bottom: 8px;
+}
+
+.validation-panel .severity-error {
+  color: #b3261e;
+}
+
+.validation-panel .severity-warning {
+  color: #b06d00;
+}
+
+.validation-panel .severity-needs_info {
+  color: #5c6f7c;
+}
+
+.validation-panel .fixes {
+  font-size: 12px;
+  color: #6d665c;
+}

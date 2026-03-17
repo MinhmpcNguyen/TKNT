@@ -1,0 +1,448 @@
+[
+  {
+    "template_id": "tpl_bedroom_single_work",
+    "name": "Bedroom: Single + Work Corner",
+    "room_type": "bedroom",
+    "style_tags": [
+      "minimal",
+      "japandi"
+    ],
+    "zones": [
+      "sleeping",
+      "work",
+      "storage"
+    ],
+    "required_types": [
+      "bed",
+      "wardrobe"
+    ],
+    "recommended_types": [
+      "nightstand",
+      "desk",
+      "chair",
+      "bookshelf"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Place bed against the longest wall, headboard to wall.",
+      "Place wardrobe on a wall that does not block door swing and does not intersect window keep-out.",
+      "Place desk near window wall but outside window keep-out zone; keep walkway >= 800mm."
+    ]
+  },
+  {
+    "template_id": "tpl_bedroom_minimal",
+    "name": "Bedroom: Minimal",
+    "room_type": "bedroom",
+    "style_tags": [
+      "minimal",
+      "scandinavian"
+    ],
+    "zones": [
+      "sleeping",
+      "storage"
+    ],
+    "required_types": [
+      "bed",
+      "wardrobe"
+    ],
+    "recommended_types": [
+      "nightstand",
+      "bench"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Prioritize circulation: keep center area open.",
+      "Keep at least one accessible side of bed >= 600mm clear."
+    ]
+  },
+  {
+    "template_id": "tpl_bedroom_couple",
+    "name": "Bedroom: Couple",
+    "room_type": "bedroom",
+    "style_tags": [
+      "classic",
+      "modern"
+    ],
+    "zones": [
+      "sleeping",
+      "storage"
+    ],
+    "required_types": [
+      "bed",
+      "wardrobe",
+      "nightstand"
+    ],
+    "recommended_types": [
+      "dresser",
+      "bench",
+      "rug"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Place bed centered on main wall with two nightstands.",
+      "Keep wardrobe clearance >= 900mm in front."
+    ]
+  },
+  {
+    "template_id": "tpl_bedroom_kids",
+    "name": "Bedroom: Kids Study",
+    "room_type": "bedroom",
+    "style_tags": [
+      "modern",
+      "scandinavian"
+    ],
+    "zones": [
+      "sleeping",
+      "work",
+      "storage"
+    ],
+    "required_types": [
+      "bed",
+      "desk",
+      "chair"
+    ],
+    "recommended_types": [
+      "bookshelf",
+      "nightstand"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Desk near window for daylight; keep chair pull-out clearance.",
+      "Keep play area open."
+    ]
+  },
+  {
+    "template_id": "tpl_living_tv_sofa",
+    "name": "Living Room: Sofa Facing TV",
+    "room_type": "living_room",
+    "style_tags": [
+      "modern",
+      "midcentury"
+    ],
+    "zones": [
+      "living",
+      "storage"
+    ],
+    "required_types": [
+      "sofa",
+      "tv_console"
+    ],
+    "recommended_types": [
+      "coffee_table",
+      "bookshelf",
+      "rug"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Place sofa to face TV console; avoid blocking windows and door swing.",
+      "Keep main walkway >= 800mm from door to seating area."
+    ]
+  },
+  {
+    "template_id": "tpl_living_conversation",
+    "name": "Living Room: Conversation",
+    "room_type": "living_room",
+    "style_tags": [
+      "boho",
+      "coastal"
+    ],
+    "zones": [
+      "living"
+    ],
+    "required_types": [
+      "sofa",
+      "armchair"
+    ],
+    "recommended_types": [
+      "coffee_table",
+      "side_table",
+      "rug",
+      "floor_lamp"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Arrange sofa + armchairs around a coffee table.",
+      "Keep seating area centered and avoid blocking windows."
+    ]
+  },
+  {
+    "template_id": "tpl_living_open",
+    "name": "Living Room: Open Plan",
+    "room_type": "living_room",
+    "style_tags": [
+      "minimal",
+      "japandi"
+    ],
+    "zones": [
+      "living",
+      "storage"
+    ],
+    "required_types": [
+      "sofa"
+    ],
+    "recommended_types": [
+      "coffee_table",
+      "side_table",
+      "floor_lamp"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Use fewer large pieces, keep center open.",
+      "Maintain clear path from entry to seating."
+    ]
+  },
+  {
+    "template_id": "tpl_studio_compact",
+    "name": "Studio: Compact Zoning",
+    "room_type": "studio",
+    "style_tags": [
+      "modern",
+      "minimal"
+    ],
+    "zones": [
+      "sleeping",
+      "work",
+      "living",
+      "storage"
+    ],
+    "required_types": [
+      "bed",
+      "wardrobe"
+    ],
+    "recommended_types": [
+      "desk",
+      "chair",
+      "sofa",
+      "coffee_table",
+      "tv_console"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Split room into zones; avoid clutter.",
+      "Keep window wall visually open; do not place tall items in window keep-out."
+    ]
+  },
+  {
+    "template_id": "tpl_studio_zoned",
+    "name": "Studio: Zoned Living",
+    "room_type": "studio",
+    "style_tags": [
+      "japandi",
+      "scandinavian"
+    ],
+    "zones": [
+      "sleeping",
+      "living",
+      "work"
+    ],
+    "required_types": [
+      "bed",
+      "sofa"
+    ],
+    "recommended_types": [
+      "desk",
+      "chair",
+      "wardrobe",
+      "rug"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Use rugs to separate zones.",
+      "Keep circulation from door to window clear."
+    ]
+  },
+  {
+    "template_id": "tpl_office_dual",
+    "name": "Office: Dual Desks",
+    "room_type": "office",
+    "style_tags": [
+      "modern",
+      "industrial"
+    ],
+    "zones": [
+      "work",
+      "storage"
+    ],
+    "required_types": [
+      "desk",
+      "chair"
+    ],
+    "recommended_types": [
+      "bookshelf",
+      "storage_cabinet"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Place desks to avoid glare and not block windows; keep chair pull-out clearance.",
+      "Ensure circulation >= 800mm."
+    ]
+  },
+  {
+    "template_id": "tpl_office_exec",
+    "name": "Office: Executive",
+    "room_type": "office",
+    "style_tags": [
+      "classic",
+      "midcentury"
+    ],
+    "zones": [
+      "work",
+      "meeting"
+    ],
+    "required_types": [
+      "desk",
+      "chair"
+    ],
+    "recommended_types": [
+      "sofa",
+      "coffee_table",
+      "bookshelf"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Anchor desk against solid wall with view of entry.",
+      "Keep meeting seating away from circulation path."
+    ]
+  },
+  {
+    "template_id": "tpl_office_shared",
+    "name": "Office: Shared Work",
+    "room_type": "office",
+    "style_tags": [
+      "minimal",
+      "scandinavian"
+    ],
+    "zones": [
+      "work"
+    ],
+    "required_types": [
+      "desk",
+      "chair"
+    ],
+    "recommended_types": [
+      "storage_cabinet",
+      "floor_lamp"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Keep desks parallel and maintain circulation.",
+      "Ensure chair pull-out clearance."
+    ]
+  },
+  {
+    "template_id": "tpl_kitchen_basic",
+    "name": "Kitchen: Basic Line",
+    "room_type": "kitchen",
+    "style_tags": [
+      "modern",
+      "minimal"
+    ],
+    "zones": [
+      "cooking",
+      "storage"
+    ],
+    "required_types": [
+      "kitchen_base_cabinet",
+      "fridge"
+    ],
+    "recommended_types": [
+      "sink",
+      "stove"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Place kitchen base cabinets along one wall; keep working aisle clearance.",
+      "Do not block door swing; do not obstruct window keep-out."
+    ]
+  },
+  {
+    "template_id": "tpl_kitchen_galley",
+    "name": "Kitchen: Galley",
+    "room_type": "kitchen",
+    "style_tags": [
+      "industrial",
+      "modern"
+    ],
+    "zones": [
+      "cooking",
+      "storage"
+    ],
+    "required_types": [
+      "kitchen_base_cabinet",
+      "fridge"
+    ],
+    "recommended_types": [
+      "kitchen_wall_cabinet",
+      "sink",
+      "stove"
+    ],
+    "supported_shapes": [
+      "rect"
+    ],
+    "layout_rules": [
+      "Place base cabinets on two opposing walls.",
+      "Maintain clear aisle between counters."
+    ]
+  },
+  {
+    "template_id": "tpl_kitchen_island",
+    "name": "Kitchen: Island",
+    "room_type": "kitchen",
+    "style_tags": [
+      "modern",
+      "coastal"
+    ],
+    "zones": [
+      "cooking",
+      "storage"
+    ],
+    "required_types": [
+      "kitchen_base_cabinet",
+      "kitchen_island",
+      "fridge"
+    ],
+    "recommended_types": [
+      "sink",
+      "stove"
+    ],
+    "supported_shapes": [
+      "rect",
+      "L"
+    ],
+    "layout_rules": [
+      "Keep island clearance on all sides.",
+      "Place sink or prep area in island if space allows."
+    ]
+  }
+]

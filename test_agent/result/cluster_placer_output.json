@@ -1,0 +1,23 @@
+{
+  "status": "OK",
+  "grid_mm": 50,
+  "cluster_transforms": [
+    {
+      "cluster_id": "work_area",
+      "x": 50,
+      "y": 150,
+      "rot": 0
+    },
+    {
+      "cluster_id": "sleep_area",
+      "x": 650,
+      "y": 1200,
+      "rot": 0
+    }
+  ],
+  "notes": [
+    "Applied NUDGE_UP to work_area to avoid window_clearance.",
+    "Moved sleep_area down to fit within room bounds.",
+    "Moved sleep_area right to clear door swing."
+  ]
+}

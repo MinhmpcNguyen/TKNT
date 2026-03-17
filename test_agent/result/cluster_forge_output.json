@@ -1,0 +1,436 @@
+{
+  "room_type": "bedroom",
+  "raw_text": "```json\n{\n  \"status\": \"OK\",\n  \"clusters\": [\n    {\n      \"cluster_id\": \"sleep_area\",\n      \"tag\": \"sleep\",\n      \"members\": [\"bed\", \"nightstand\"],\n      \"anchors\": [\"bed\"],\n      \"cluster_rules\": {\n        \"grid_mm\": 50,\n        \"allowed_rotations\": {\n          \"bed\": [0, 90],\n          \"nightstand\": [0, 90, 180, 270]\n        },\n        \"facing\": {\n          \"bed\": {\n            \"front\": \"top\",\n            \"notes\": \"Headboard is at the bottom, foot of the bed faces top.\"\n          },\n          \"nightstand\": {\n            \"front\": \"top\",\n            \"notes\": \"Front of the nightstand faces the same direction as the bed.\"\n          }\n        },\n        \"access_requirements\": []\n      },\n      \"hard_constraints\": [\n        {\n          \"type\": \"no_overlap\",\n          \"a\": \"bed\",\n          \"b\": \"nightstand\"\n        },\n        {\n          \"type\": \"anchor_side\",\n          \"a\": \"nightstand\",\n          \"b\": \"bed\",\n          \"side\": \"head_left\",\n          \"gap_min\": 0,\n          \"gap_max\": 50\n        }\n      ],\n      \"soft_constraints\": [],\n      \"notes\": [\"Nightstand is typically placed beside the bed for easy access.\"]\n    },\n    {\n      \"cluster_id\": \"work_area\",\n      \"tag\": \"work\",\n      \"members\": [\"desk\", \"desk_chair\"],\n      \"anchors\": [\"desk\"],\n      \"cluster_rules\": {\n        \"grid_mm\": 50,\n        \"allowed_rotations\": {\n          \"desk\": [0, 90],\n          \"desk_chair\": [0, 90, 180, 270]\n        },\n        \"facing\": {\n          \"desk\": {\n            \"front\": \"top\",\n            \"notes\": \"Front of the desk is where the user sits.\"\n          },\n          \"desk_chair\": {\n            \"front\": \"top\",\n            \"notes\": \"Chair faces the desk.\"\n          }\n        },\n        \"access_requirements\": [\n          {\n            \"id\": \"desk\",\n            \"type\": \"front_clearance\",\n            \"required\": true\n          }\n        ]\n      },\n      \"hard_constraints\": [\n        {\n          \"type\": \"no_overlap\",\n          \"a\": \"desk\",\n          \"b\": \"desk_chair\"\n        },\n        {\n          \"type\": \"dock_to_edge\",\n          \"a\": \"desk_chair\",\n          \"b\": \"desk\",\n          \"b_edge\": \"front\",\n          \"span\": \"any\",\n          \"gap_min\": 0,\n          \"gap_max\": 50\n        },\n        {\n          \"type\": \"requires_access\",\n          \"id\": \"desk\",\n          \"mode\": \"front_clearance\"\n        }\n      ],\n      \"soft_constraints\": [],\n      \"notes\": [\"Desk and chair form a functional work area.\"]\n    },\n    {\n      \"cluster_id\": \"storage_area\",\n      \"tag\": \"storage\",\n      \"members\": [\"wardrobe_or_closet\", \"dresser\", \"book_shelf\"],\n      \"anchors\": [\"wardrobe_or_closet\"],\n      \"cluster_rules\": {\n        \"grid_mm\": 50,\n        \"allowed_rotations\": {\n          \"wardrobe_or_closet\": [0, 90],\n          \"dresser\": [0, 90],\n          \"book_shelf\": [0, 90]\n        },\n        \"facing\": {\n          \"wardrobe_or_closet\": {\n            \"front\": \"top\",\n            \"notes\": \"Doors open towards the top.\"\n          },\n          \"dresser\": {\n            \"front\": \"top\",\n            \"notes\": \"Drawers open towards the top.\"\n          },\n          \"book_shelf\": {\n            \"front\": \"top\",\n            \"notes\": \"Books are accessed from the top.\"\n          }\n        },\n        \"access_requirements\": [\n          {\n            \"id\": \"wardrobe_or_closet\",\n            \"type\": \"front_clearance\",\n            \"required\": true\n          },\n          {\n            \"id\": \"dresser\",\n            \"type\": \"front_clearance\",\n            \"required\": true\n          }\n        ]\n      },\n      \"hard_constraints\": [\n        {\n          \"type\": \"no_overlap\",\n          \"a\": \"wardrobe_or_closet\",\n          \"b\": \"dresser\"\n        },\n        {\n          \"type\": \"no_overlap\",\n          \"a\": \"wardrobe_or_closet\",\n          \"b\": \"book_shelf\"\n        },\n        {\n          \"type\": \"no_overlap\",\n          \"a\": \"dresser\",\n          \"b\": \"book_shelf\"\n        },\n        {\n          \"type\": \"requires_access\",\n          \"id\": \"wardrobe_or_closet\",\n          \"mode\": \"front_clearance\"\n        },\n        {\n          \"type\": \"requires_access\",\n          \"id\": \"dresser\",\n          \"mode\": \"front_clearance\"\n        }\n      ],\n      \"soft_constraints\": [],\n      \"notes\": [\"Storage items require front clearance for access.\"]\n    }\n  ],\n  \"notes\": [\"Clusters are formed based on typical functional groupings in a bedroom.\"],\n  \"missing\": []\n}\n```",
+  "raw": {
+    "status": "OK",
+    "clusters": [
+      {
+        "cluster_id": "sleep_area",
+        "tag": "sleep",
+        "members": [
+          "bed",
+          "nightstand"
+        ],
+        "anchors": [
+          "bed"
+        ],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "bed": [
+              0,
+              90
+            ],
+            "nightstand": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "facing": {
+            "bed": {
+              "front": "top",
+              "notes": "Headboard is at the bottom, foot of the bed faces top."
+            },
+            "nightstand": {
+              "front": "top",
+              "notes": "Front of the nightstand faces the same direction as the bed."
+            }
+          },
+          "access_requirements": []
+        },
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "bed",
+            "b": "nightstand"
+          },
+          {
+            "type": "anchor_side",
+            "a": "nightstand",
+            "b": "bed",
+            "side": "head_left",
+            "gap_min": 0,
+            "gap_max": 50
+          }
+        ],
+        "soft_constraints": [],
+        "notes": [
+          "Nightstand is typically placed beside the bed for easy access."
+        ]
+      },
+      {
+        "cluster_id": "work_area",
+        "tag": "work",
+        "members": [
+          "desk",
+          "desk_chair"
+        ],
+        "anchors": [
+          "desk"
+        ],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "desk": [
+              0,
+              90
+            ],
+            "desk_chair": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "facing": {
+            "desk": {
+              "front": "top",
+              "notes": "Front of the desk is where the user sits."
+            },
+            "desk_chair": {
+              "front": "top",
+              "notes": "Chair faces the desk."
+            }
+          },
+          "access_requirements": [
+            {
+              "id": "desk",
+              "type": "front_clearance",
+              "required": true
+            }
+          ]
+        },
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "desk",
+            "b": "desk_chair"
+          },
+          {
+            "type": "dock_to_edge",
+            "a": "desk_chair",
+            "b": "desk",
+            "b_edge": "front",
+            "span": "any",
+            "gap_min": 0,
+            "gap_max": 50
+          },
+          {
+            "type": "requires_access",
+            "id": "desk",
+            "mode": "front_clearance"
+          }
+        ],
+        "soft_constraints": [],
+        "notes": [
+          "Desk and chair form a functional work area."
+        ]
+      },
+      {
+        "cluster_id": "storage_area",
+        "tag": "storage",
+        "members": [
+          "wardrobe_or_closet",
+          "dresser",
+          "book_shelf"
+        ],
+        "anchors": [
+          "wardrobe_or_closet"
+        ],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "wardrobe_or_closet": [
+              0,
+              90
+            ],
+            "dresser": [
+              0,
+              90
+            ],
+            "book_shelf": [
+              0,
+              90
+            ]
+          },
+          "facing": {
+            "wardrobe_or_closet": {
+              "front": "top",
+              "notes": "Doors open towards the top."
+            },
+            "dresser": {
+              "front": "top",
+              "notes": "Drawers open towards the top."
+            },
+            "book_shelf": {
+              "front": "top",
+              "notes": "Books are accessed from the top."
+            }
+          },
+          "access_requirements": [
+            {
+              "id": "wardrobe_or_closet",
+              "type": "front_clearance",
+              "required": true
+            },
+            {
+              "id": "dresser",
+              "type": "front_clearance",
+              "required": true
+            }
+          ]
+        },
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "wardrobe_or_closet",
+            "b": "dresser"
+          },
+          {
+            "type": "no_overlap",
+            "a": "wardrobe_or_closet",
+            "b": "book_shelf"
+          },
+          {
+            "type": "no_overlap",
+            "a": "dresser",
+            "b": "book_shelf"
+          },
+          {
+            "type": "requires_access",
+            "id": "wardrobe_or_closet",
+            "mode": "front_clearance"
+          },
+          {
+            "type": "requires_access",
+            "id": "dresser",
+            "mode": "front_clearance"
+          }
+        ],
+        "soft_constraints": [],
+        "notes": [
+          "Storage items require front clearance for access."
+        ]
+      }
+    ],
+    "notes": [
+      "Clusters are formed based on typical functional groupings in a bedroom."
+    ],
+    "missing": []
+  },
+  "parsed": {
+    "status": "OK",
+    "clusters": [
+      {
+        "cluster_id": "sleep_area",
+        "tag": "sleep",
+        "members": [
+          "bed",
+          "nightstand"
+        ],
+        "anchors": [
+          "bed"
+        ],
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "bed",
+            "b": "nightstand"
+          },
+          {
+            "type": "anchor_side",
+            "a": "nightstand",
+            "b": "bed",
+            "side": "head_left",
+            "gap_min": 0,
+            "gap_max": 50
+          }
+        ],
+        "soft_constraints": [],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "bed": [
+              0,
+              90
+            ],
+            "nightstand": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "facing": {
+            "bed": {
+              "front": "top",
+              "notes": "Headboard is at the bottom, foot of the bed faces top."
+            },
+            "nightstand": {
+              "front": "top",
+              "notes": "Front of the nightstand faces the same direction as the bed."
+            }
+          },
+          "access_requirements": []
+        }
+      },
+      {
+        "cluster_id": "work_area",
+        "tag": "work",
+        "members": [
+          "desk",
+          "desk_chair"
+        ],
+        "anchors": [
+          "desk"
+        ],
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "desk",
+            "b": "desk_chair"
+          },
+          {
+            "type": "dock_to_edge",
+            "a": "desk_chair",
+            "b": "desk",
+            "b_edge": "front",
+            "span": "any",
+            "gap_min": 0,
+            "gap_max": 50
+          },
+          {
+            "type": "requires_access",
+            "id": "desk",
+            "mode": "front_clearance",
+            "required": null
+          }
+        ],
+        "soft_constraints": [],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "desk": [
+              0,
+              90
+            ],
+            "desk_chair": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "facing": {
+            "desk": {
+              "front": "top",
+              "notes": "Front of the desk is where the user sits."
+            },
+            "desk_chair": {
+              "front": "top",
+              "notes": "Front of the chair faces the desk."
+            }
+          },
+          "access_requirements": [
+            {
+              "id": "desk",
+              "type": "front_clearance",
+              "required": true
+            }
+          ]
+        }
+      },
+      {
+        "cluster_id": "storage_area",
+        "tag": "storage",
+        "members": [
+          "wardrobe_or_closet",
+          "dresser",
+          "book_shelf"
+        ],
+        "anchors": [
+          "wardrobe_or_closet"
+        ],
+        "hard_constraints": [
+          {
+            "type": "no_overlap",
+            "a": "wardrobe_or_closet",
+            "b": "dresser"
+          },
+          {
+            "type": "no_overlap",
+            "a": "wardrobe_or_closet",
+            "b": "book_shelf"
+          },
+          {
+            "type": "no_overlap",
+            "a": "dresser",
+            "b": "book_shelf"
+          },
+          {
+            "type": "requires_access",
+            "id": "wardrobe_or_closet",
+            "mode": "front_clearance",
+            "required": null
+          },
+          {
+            "type": "requires_access",
+            "id": "dresser",
+            "mode": "front_clearance",
+            "required": null
+          }
+        ],
+        "soft_constraints": [],
+        "cluster_rules": {
+          "grid_mm": 50,
+          "allowed_rotations": {
+            "wardrobe_or_closet": [
+              0,
+              90
+            ],
+            "dresser": [
+              0,
+              90
+            ],
+            "book_shelf": [
+              0,
+              90
+            ]
+          },
+          "facing": {
+            "wardrobe_or_closet": {
+              "front": "top",
+              "notes": "Doors open towards the top."
+            },
+            "dresser": {
+              "front": "top",
+              "notes": "Drawers open towards the top."
+            },
+            "book_shelf": {
+              "front": "top",
+              "notes": "Books are accessed from the top."
+            }
+          },
+          "access_requirements": [
+            {
+              "id": "wardrobe_or_closet",
+              "type": "front_clearance",
+              "required": true
+            },
+            {
+              "id": "dresser",
+              "type": "front_clearance",
+              "required": true
+            }
+          ]
+        }
+      }
+    ],
+    "notes": [
+      "Clusters are organized based on typical bedroom functionality."
+    ],
+    "missing": []
+  }
+}
