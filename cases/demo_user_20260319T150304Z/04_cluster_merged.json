@@ -1,0 +1,264 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_area",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 50
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "nightstand",
+          "b": "bed",
+          "weight": 10
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90
+          ],
+          "nightstand": [
+            0,
+            90
+          ]
+        },
+        "facing": {},
+        "access_requirements": []
+      },
+      "decisions": [
+        {
+          "object_type": "bed",
+          "category": "bed",
+          "cluster_id": "sleep_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Main focal point of the bedroom."
+        },
+        {
+          "object_type": "nightstand",
+          "category": "nightstand",
+          "cluster_id": "sleep_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Provides convenience next to the bed."
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_area",
+      "tag": "work",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "chair"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "chair",
+          "b": "desk",
+          "b_edge": "front",
+          "span": "short_edge",
+          "gap_min": 0,
+          "gap_max": 50
+        },
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90
+          ],
+          "chair": [
+            0,
+            90
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "top",
+            "notes": "Desk front is where the user sits."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "desk",
+          "category": "desk",
+          "cluster_id": "work_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Essential for work area functionality."
+        },
+        {
+          "object_type": "chair",
+          "category": "chair",
+          "cluster_id": "work_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Seating for the desk."
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_area",
+      "tag": "storage",
+      "members": [
+        "wardrobe"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "wardrobe",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "top",
+            "notes": "Wardrobe doors open towards the top."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "wardrobe",
+          "category": "wardrobe",
+          "cluster_id": "storage_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Primary storage for clothes."
+        }
+      ]
+    },
+    {
+      "cluster_id": "living_area",
+      "tag": "living",
+      "members": [
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "TV console faces the seating area."
+          }
+        },
+        "access_requirements": []
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "cluster_id": "living_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Anchor for living area, faces seating."
+        }
+      ]
+    },
+    {
+      "cluster_id": "misc_area",
+      "tag": "misc",
+      "members": [],
+      "anchors": [],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {},
+        "facing": null,
+        "access_requirements": []
+      },
+      "decisions": []
+    }
+  ],
+  "notes": [
+    "Clusters are formed based on typical functional groupings in a bedroom."
+  ],
+  "missing": []
+}

@@ -1,0 +1,183 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "living_area",
+      "prefer": [
+        "wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking"
+      ],
+      "priority": "high",
+      "reason": "Media setup benefits from wall placement and should not block window."
+    },
+    {
+      "cluster_id": "sleep_area",
+      "prefer": [
+        "window_side",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "door_swing"
+      ],
+      "priority": "medium",
+      "reason": "Sleep area benefits from daylight and should be away from entry."
+    },
+    {
+      "cluster_id": "storage_area",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Storage should utilize wall space and avoid blocking windows."
+    },
+    {
+      "cluster_id": "work_area",
+      "prefer": [
+        "wall",
+        "window_side"
+      ],
+      "avoid": [
+        "entry_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Work area benefits from daylight and wall placement."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "living_area",
+      "intents": [
+        "back_to_wall",
+        "face_center"
+      ],
+      "target_cluster_id": null,
+      "priority": "high",
+      "reason": "TV console should face center for viewing."
+    },
+    {
+      "cluster_id": "sleep_area",
+      "intents": [
+        "face_window",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Bed should face window for daylight."
+    },
+    {
+      "cluster_id": "storage_area",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Wardrobe should be accessible and against wall."
+    },
+    {
+      "cluster_id": "work_area",
+      "intents": [
+        "face_window",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk should face window for natural light."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "living_area",
+      "object_id": "tv_console",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "TV console should be accessible and face open space."
+    },
+    {
+      "cluster_id": "storage_area",
+      "object_id": "wardrobe",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "object has meaningful front usability and should preserve access"
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "living_area",
+      "b": "sleep_area",
+      "relation": "separate",
+      "priority": "medium",
+      "reason": "Separate lounge and sleep areas for functional distinction."
+    },
+    {
+      "a": "work_area",
+      "b": "storage_area",
+      "relation": "near",
+      "priority": "medium",
+      "reason": "Work and storage areas benefit from proximity."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "living_area",
+      "b": "sleep_area",
+      "relation": "turn_away",
+      "priority": "medium",
+      "reason": "Living area should turn away from sleep area for privacy."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "living_area",
+        "priority": "high",
+        "reason": "Ensure clear path from entry to living area."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Keep entry area open for accessibility."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Maintain open space near window for daylight."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Prioritize wall placement for media and storage clusters.",
+    "Ensure sleep area benefits from window side daylight.",
+    "Maintain open circulation paths from entry to living area.",
+    "Preserve front usability for wardrobe.",
+    "Preserve front usability for tv_console."
+  ],
+  "notes": [
+    "Ensure living area faces center for optimal viewing.",
+    "Avoid blocking window with bulky clusters."
+  ],
+  "missing": []
+}

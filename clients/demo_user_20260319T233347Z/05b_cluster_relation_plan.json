@@ -1,0 +1,155 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "media_area",
+      "prefer": [
+        "wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Media area should be wall-bound and away from entry to avoid blocking."
+    },
+    {
+      "cluster_id": "seating_area",
+      "prefer": [
+        "center",
+        "window_side"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Seating area should be central and near the window for daylight and openness."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "media_area",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster"
+      ],
+      "target_cluster_id": "seating_area",
+      "priority": "high",
+      "reason": "Media area should face open space for usability."
+    },
+    {
+      "cluster_id": "seating_area",
+      "intents": [
+        "inward_to_room",
+        "face_cluster"
+      ],
+      "target_cluster_id": "media_area",
+      "priority": "high",
+      "reason": "Seating area should face the media area for viewing."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "media_area",
+      "object_id": "tv_console",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access",
+        "face_object"
+      ],
+      "target_object_id": "armchair",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "TV console should face open space and preserve front access."
+    },
+    {
+      "cluster_id": "seating_area",
+      "object_id": "sofa",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Sofa should face the TV console for viewing."
+    },
+    {
+      "cluster_id": "seating_area",
+      "object_id": "armchair",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Armchair should face the TV console for viewing."
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "seating_area",
+      "b": "media_area",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Seating and media areas should be near for functional adjacency."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "seating_area",
+      "b": "media_area",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Seating area should face media area for viewing relationship."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "seating_area",
+        "priority": "high",
+        "reason": "Main path should connect entry to seating area for usability."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Entry buffer should remain open for entry usability."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Window buffer should remain open for daylight access."
+      },
+      {
+        "type": "center_lane",
+        "near": "seating_area",
+        "priority": "medium",
+        "reason": "Center lane should remain open for circulation."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Ensure media area is wall-bound and away from entry.",
+    "Position seating area centrally and near the window.",
+    "Maintain open space in front of TV console.",
+    "Preserve entry buffer and window buffer for usability.",
+    "Preserve a clear viewing relationship between armchair and tv_console.",
+    "Do not orient armchair away from tv_console.",
+    "Keep media_area readable from seating_area.",
+    "Preserve front usability for tv_console."
+  ],
+  "notes": [
+    "Seating and media areas have a strong viewing relationship.",
+    "Ensure circulation paths are clear and unobstructed."
+  ],
+  "missing": []
+}

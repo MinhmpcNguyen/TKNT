@@ -1,0 +1,91 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "living_area",
+      "prefer": [
+        "wall",
+        "window_side"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "The living area cluster contains a TV console and seating, which are typically wall-bound and benefit from proximity to the window for natural light."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "living_area",
+      "intents": [
+        "back_to_wall",
+        "face_window"
+      ],
+      "target_cluster_id": null,
+      "priority": "high",
+      "reason": "The living area should have its back to the wall for stability and face the window to utilize natural light."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "living_area",
+      "object_id": "armchair",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "The armchair should face the TV console to support viewing."
+    },
+    {
+      "cluster_id": "living_area",
+      "object_id": "tv_console",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "The TV console should have its front accessible and face open space for usability."
+    }
+  ],
+  "cluster_relations": [],
+  "cluster_directional_relations": [],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "living_area",
+        "priority": "high",
+        "reason": "Ensure clear access from the entry to the living area for usability."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Maintain an open buffer near the entry to prevent blocking."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Keep the area near the window open for light and visibility."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Position the living area cluster along the wall opposite the window to maximize light and viewing functionality.",
+    "Ensure the armchair faces the TV console directly for optimal viewing.",
+    "Preserve front usability for tv_console."
+  ],
+  "notes": [
+    "The living area should be positioned to utilize natural light from the window while maintaining clear access from the entry."
+  ],
+  "missing": []
+}

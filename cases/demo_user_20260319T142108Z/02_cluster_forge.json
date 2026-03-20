@@ -1,0 +1,408 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_area",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand",
+        "bench"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "bench"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 50
+        },
+        {
+          "type": "anchor_side",
+          "a": "bench",
+          "b": "bed",
+          "side": "foot",
+          "gap_min": 0,
+          "gap_max": 100
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "nightstand",
+          "b": "bed",
+          "weight": 10
+        },
+        {
+          "type": "prefer_align_edge",
+          "a": "bench",
+          "b": "bed",
+          "edge": "foot",
+          "weight": 5
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bench": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "Headboard is typically at the top."
+          },
+          "nightstand": {
+            "front": "top",
+            "notes": "Front is the side facing the bed."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "bed",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "work_area",
+      "tag": "work",
+      "members": [
+        "desk",
+        "chair",
+        "office_chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "chair"
+        },
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "office_chair"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "chair",
+          "b": "desk",
+          "b_edge": "front",
+          "span": "short_edge",
+          "gap_min": 0,
+          "gap_max": 50
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "office_chair",
+          "b": "desk",
+          "weight": 10
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "chair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "office_chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "top",
+            "notes": "Front is the working side."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "storage_area",
+      "tag": "storage",
+      "members": [
+        "wardrobe",
+        "dresser",
+        "storage_cabinet"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "wardrobe",
+          "b": "dresser"
+        },
+        {
+          "type": "no_overlap",
+          "a": "wardrobe",
+          "b": "storage_cabinet"
+        },
+        {
+          "type": "no_overlap",
+          "a": "dresser",
+          "b": "storage_cabinet"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "wardrobe",
+          "b": "dresser",
+          "edge": "front",
+          "weight": 5
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dresser": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "top",
+            "notes": "Doors open to the front."
+          },
+          "dresser": {
+            "front": "top",
+            "notes": "Drawers open to the front."
+          },
+          "storage_cabinet": {
+            "front": "top",
+            "notes": "Doors open to the front."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dresser",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "living_area",
+      "tag": "living",
+      "members": [
+        "armchair",
+        "side_table",
+        "floor_lamp",
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "side_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "tv_console"
+        },
+        {
+          "type": "contain_in",
+          "a": "floor_lamp",
+          "b": "side_table"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "armchair",
+          "b": "tv_console",
+          "weight": 10
+        },
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "tv_console",
+          "mode": "face_each_other",
+          "weight": 10
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "TV screen faces the front."
+          }
+        },
+        "access_requirements": []
+      }
+    },
+    {
+      "cluster_id": "misc_area",
+      "tag": "misc",
+      "members": [
+        "bookshelf",
+        "laundry_basket"
+      ],
+      "anchors": [
+        "bookshelf"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bookshelf",
+          "b": "laundry_basket"
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "laundry_basket": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bookshelf": {
+            "front": "top",
+            "notes": "Books are accessed from the front."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "bookshelf",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Clusters are formed based on typical usage and functional grouping."
+  ],
+  "missing": []
+}

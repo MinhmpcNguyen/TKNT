@@ -64,6 +64,7 @@ class ClusterComposer:
         access_clearance_ratio: float = FIXED_ACCESS_CLEARANCE_RATIO,
     ) -> dict[str, Any]:
         access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
+        cluster = _find_cluster(merged_clusters, cluster_id)
         raw = self.generate_raw(
             merged_clusters=merged_clusters,
             cluster_id=cluster_id,
@@ -74,7 +75,7 @@ class ClusterComposer:
             access_clearance_ratio=access_clearance_ratio,
         )
         payload = _parse_json(raw)
-        payload = _sanitize_cluster_output_payload(payload)
+        payload = _sanitize_cluster_output_payload(payload, cluster)
         return ClusterComposerOutput.model_validate(payload).model_dump()
 
 
@@ -2873,7 +2874,9 @@ def _parse_json(raw: str) -> dict[str, Any]:
     return payload
 
 
-def _sanitize_cluster_output_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _sanitize_cluster_output_payload(
+    payload: dict[str, Any], cluster: dict[str, Any]
+) -> dict[str, Any]:
     allowed_keys = {
         "status",
         "cluster_id",
@@ -2898,7 +2901,134 @@ def _sanitize_cluster_output_payload(payload: dict[str, Any]) -> dict[str, Any]:
         cleaned["notes"] = notes
     elif "notes" in cleaned and not isinstance(cleaned.get("notes"), list):
         cleaned["notes"] = []
+
+    cleaned = _ensure_required_fields_for_ok(cleaned, cluster)
+    if not _has_required_orientation_meta(cleaned.get("orientation_meta")):
+        if cleaned.get("status") == "OK":
+            cleaned = _downgrade_ok_payload(cleaned, ["orientation_meta"])
+        else:
+            cleaned.pop("orientation_meta", None)
     return cleaned
+
+
+def _ensure_required_fields_for_ok(
+    payload: dict[str, Any], cluster: dict[str, Any]
+) -> dict[str, Any]:
+    if payload.get("status") != "OK":
+        return payload
+
+    missing_fields: list[str] = []
+
+    cluster_id = payload.get("cluster_id")
+    if not isinstance(cluster_id, str) or not cluster_id.strip():
+        inferred_id = cluster.get("cluster_id")
+        if isinstance(inferred_id, str) and inferred_id.strip():
+            payload["cluster_id"] = inferred_id.strip()
+
+    placements_raw = payload.get("local_placements")
+    if not isinstance(placements_raw, list):
+        missing_fields.append("local_placements")
+        return _downgrade_ok_payload(payload, missing_fields)
+
+    placements = _canonicalize_local_placements(placements_raw)
+    if not placements:
+        missing_fields.append("local_placements")
+        return _downgrade_ok_payload(payload, missing_fields)
+
+    if not isinstance(payload.get("local_frame"), dict):
+        payload["local_frame"] = {
+            "unit": "mm",
+            "grid_mm": int(_extract_grid_mm(cluster)),
+            "origin_note": "(0,0) is an arbitrary local origin for this cluster",
+        }
+
+    spec_by_id = {
+        s["id"]: s
+        for s in _build_object_specs(cluster)
+        if isinstance(s, dict) and isinstance(s.get("id"), str)
+    }
+
+    rects: list[dict[str, Any]] = []
+    for p in placements:
+        pid = p.get("id")
+        if not isinstance(pid, str) or not pid:
+            continue
+        spec = spec_by_id.get(pid)
+        if spec is None:
+            continue
+
+        w = int(spec.get("w", 0) or 0)
+        h = int(spec.get("h", 0) or 0)
+        rot = int(p.get("rot", 0)) % 360
+        if rot in (90, 270):
+            w, h = h, w
+
+        rects.append(
+            {
+                "id": pid,
+                "x": int(p.get("x", 0)),
+                "y": int(p.get("y", 0)),
+                "w": int(w),
+                "h": int(h),
+            }
+        )
+
+    placement_ids = {p["id"] for p in placements}
+    rect_ids = {r["id"] for r in rects}
+    if rect_ids != placement_ids:
+        missing_fields.append("cluster_footprint.rects")
+    elif not isinstance(payload.get("cluster_footprint"), dict):
+        payload["cluster_footprint"] = {
+            "type": "union_of_rects",
+            "rects": rects,
+            "local_bbox": _local_bbox_from_rects(rects),
+        }
+
+    if not _has_required_orientation_meta(payload.get("orientation_meta")):
+        payload["orientation_meta"] = _infer_orientation_meta(
+            cluster=cluster,
+            placements=placements,
+            rects=rects,
+            spec_by_id=spec_by_id,
+            verifier_eval=None,
+        )
+
+    if not _has_required_orientation_meta(payload.get("orientation_meta")):
+        missing_fields.append("orientation_meta")
+
+    if missing_fields:
+        return _downgrade_ok_payload(payload, missing_fields)
+
+    return payload
+
+
+def _has_required_orientation_meta(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    front = _coerce_axis_vec(value.get("cluster_front_local"))
+    axis = _coerce_axis_vec(value.get("cluster_axis_local"))
+    if front is None or axis is None:
+        return False
+    return True
+
+
+def _downgrade_ok_payload(
+    payload: dict[str, Any], missing_fields: list[str]
+) -> dict[str, Any]:
+    payload["status"] = "NEED_INFO"
+    existing = payload.get("missing")
+    missing: list[str] = []
+    if isinstance(existing, list):
+        missing = [str(x).strip() for x in existing if str(x).strip()]
+    for item in missing_fields:
+        if item and item not in missing:
+            missing.append(item)
+    payload["missing"] = missing
+
+    if not _has_required_orientation_meta(payload.get("orientation_meta")):
+        payload.pop("orientation_meta", None)
+
+    return payload
 
 
 def _coerce_json_text(raw: str) -> str:

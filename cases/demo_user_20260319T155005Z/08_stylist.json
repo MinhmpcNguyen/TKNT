@@ -1,0 +1,332 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 3000,
+            "y": 1550
+          },
+          {
+            "x": 3000,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 1550
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 2600
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 3000,
+              "y": 1550
+            },
+            {
+              "x": 3000,
+              "y": 2450
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2600
+            },
+            {
+              "x": 0,
+              "y": 1400
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#F3E7D8",
+      "floor_color_hex": "#C28E63",
+      "ceiling_color_hex": "#F3E7D8"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#DAB997"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#DAB997"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "bed",
+      "object_type": "bed",
+      "source": "existing",
+      "cluster_id": "sleep_area",
+      "polygon_ccw": [
+        {
+          "x": 2550,
+          "y": 3950
+        },
+        {
+          "x": 490,
+          "y": 3950
+        },
+        {
+          "x": 490,
+          "y": 2740
+        },
+        {
+          "x": 2550,
+          "y": 2740
+        }
+      ],
+      "bbox": {
+        "min_x": 490,
+        "min_y": 2740,
+        "max_x": 2550,
+        "max_y": 3950
+      },
+      "color_hex": "#DAB997",
+      "material": "fabric",
+      "place_on": null
+    },
+    {
+      "instance_id": "desk",
+      "object_type": "desk",
+      "source": "existing",
+      "cluster_id": "work_area",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 500
+        },
+        {
+          "x": 1090,
+          "y": 500
+        },
+        {
+          "x": 1090,
+          "y": 1000
+        },
+        {
+          "x": 0,
+          "y": 1000
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 500,
+        "max_x": 1090,
+        "max_y": 1000
+      },
+      "color_hex": "#B98A61",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "wardrobe",
+      "object_type": "wardrobe",
+      "source": "existing",
+      "cluster_id": "storage_area",
+      "polygon_ccw": [
+        {
+          "x": 1250,
+          "y": 50
+        },
+        {
+          "x": 2060,
+          "y": 50
+        },
+        {
+          "x": 2060,
+          "y": 650
+        },
+        {
+          "x": 1250,
+          "y": 650
+        }
+      ],
+      "bbox": {
+        "min_x": 1250,
+        "min_y": 50,
+        "max_x": 2060,
+        "max_y": 650
+      },
+      "color_hex": "#A57C67",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "tv_console",
+      "object_type": "tv_console",
+      "source": "existing",
+      "cluster_id": "living_area",
+      "polygon_ccw": [
+        {
+          "x": 1800,
+          "y": 1400
+        },
+        {
+          "x": 1800,
+          "y": 2660
+        },
+        {
+          "x": 1420,
+          "y": 2660
+        },
+        {
+          "x": 1420,
+          "y": 1400
+        }
+      ],
+      "bbox": {
+        "min_x": 1420,
+        "min_y": 1400,
+        "max_x": 1800,
+        "max_y": 2660
+      },
+      "color_hex": "#7B5A43",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "inventory",
+      "cluster_id": null,
+      "polygon_ccw": [
+        {
+          "x": 1500,
+          "y": 3500
+        },
+        {
+          "x": 1500,
+          "y": 3000
+        },
+        {
+          "x": 2220,
+          "y": 3000
+        },
+        {
+          "x": 2220,
+          "y": 3500
+        }
+      ],
+      "bbox": {
+        "min_x": 1500,
+        "min_y": 3000,
+        "max_x": 2220,
+        "max_y": 3500
+      },
+      "color_hex": "#2F2F2F",
+      "material": "engineered_wood",
+      "place_on": {
+        "target_instance_id": "__ceiling__",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "wall_art_001",
+      "object_type": "wall_art",
+      "source": "inventory",
+      "cluster_id": null,
+      "polygon_ccw": [
+        {
+          "x": 100,
+          "y": 3600
+        },
+        {
+          "x": 100,
+          "y": 3160
+        },
+        {
+          "x": 520,
+          "y": 3160
+        },
+        {
+          "x": 520,
+          "y": 3600
+        }
+      ],
+      "bbox": {
+        "min_x": 100,
+        "min_y": 3160,
+        "max_x": 520,
+        "max_y": 3600
+      },
+      "color_hex": "#D0B08C",
+      "material": "stone",
+      "place_on": {
+        "target_instance_id": "__wall__",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "notes": [],
+  "missing": []
+}

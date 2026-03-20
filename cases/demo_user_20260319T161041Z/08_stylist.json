@@ -1,0 +1,296 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 2500,
+        "y": 0
+      },
+      {
+        "x": 2500,
+        "y": 3000
+      },
+      {
+        "x": 0,
+        "y": 3000
+      }
+    ],
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 2500,
+            "y": 1050
+          },
+          {
+            "x": 2500,
+            "y": 1950
+          },
+          {
+            "x": 1900,
+            "y": 1950
+          },
+          {
+            "x": 1900,
+            "y": 1050
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2100
+          },
+          {
+            "x": 0,
+            "y": 900
+          },
+          {
+            "x": 100,
+            "y": 900
+          },
+          {
+            "x": 100,
+            "y": 2100
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 2500,
+              "y": 1050
+            },
+            {
+              "x": 2500,
+              "y": 1950
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2100
+            },
+            {
+              "x": 0,
+              "y": 900
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#E9D9C8",
+      "floor_color_hex": "#C28E63",
+      "ceiling_color_hex": "#F3E7D8"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#DAB997"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#DAB997"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "bed",
+      "object_type": "bed",
+      "source": "existing",
+      "cluster_id": "sleep_area",
+      "polygon_ccw": [
+        {
+          "x": 600,
+          "y": 2950
+        },
+        {
+          "x": 600,
+          "y": 890
+        },
+        {
+          "x": 1810,
+          "y": 890
+        },
+        {
+          "x": 1810,
+          "y": 2950
+        }
+      ],
+      "bbox": {
+        "min_x": 600,
+        "min_y": 890,
+        "max_x": 1810,
+        "max_y": 2950
+      },
+      "color_hex": "#B98A61",
+      "material": null,
+      "place_on": null
+    },
+    {
+      "instance_id": "desk",
+      "object_type": "desk",
+      "source": "existing",
+      "cluster_id": "work_area",
+      "polygon_ccw": [
+        {
+          "x": 2500,
+          "y": 2000
+        },
+        {
+          "x": 2500,
+          "y": 2980
+        },
+        {
+          "x": 1990,
+          "y": 2980
+        },
+        {
+          "x": 1990,
+          "y": 2000
+        }
+      ],
+      "bbox": {
+        "min_x": 1990,
+        "min_y": 2000,
+        "max_x": 2500,
+        "max_y": 2980
+      },
+      "color_hex": "#A57C67",
+      "material": null,
+      "place_on": null
+    },
+    {
+      "instance_id": "wardrobe",
+      "object_type": "wardrobe",
+      "source": "existing",
+      "cluster_id": "storage_area",
+      "polygon_ccw": [
+        {
+          "x": 1600,
+          "y": 0
+        },
+        {
+          "x": 2410,
+          "y": 0
+        },
+        {
+          "x": 2410,
+          "y": 600
+        },
+        {
+          "x": 1600,
+          "y": 600
+        }
+      ],
+      "bbox": {
+        "min_x": 1600,
+        "min_y": 0,
+        "max_x": 2410,
+        "max_y": 600
+      },
+      "color_hex": "#7B5A43",
+      "material": null,
+      "place_on": null
+    },
+    {
+      "instance_id": "tv_console",
+      "object_type": "tv_console",
+      "source": "existing",
+      "cluster_id": "living_area",
+      "polygon_ccw": [
+        {
+          "x": 50,
+          "y": 50
+        },
+        {
+          "x": 1310,
+          "y": 50
+        },
+        {
+          "x": 1310,
+          "y": 430
+        },
+        {
+          "x": 50,
+          "y": 430
+        }
+      ],
+      "bbox": {
+        "min_x": 50,
+        "min_y": 50,
+        "max_x": 1310,
+        "max_y": 430
+      },
+      "color_hex": "#A57C67",
+      "material": null,
+      "place_on": null
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "inventory",
+      "cluster_id": null,
+      "polygon_ccw": [
+        {
+          "x": 1000,
+          "y": 2500
+        },
+        {
+          "x": 1000,
+          "y": 3000
+        },
+        {
+          "x": 1720,
+          "y": 3000
+        },
+        {
+          "x": 1720,
+          "y": 2500
+        }
+      ],
+      "bbox": {
+        "min_x": 1000,
+        "min_y": 2500,
+        "max_x": 1720,
+        "max_y": 3000
+      },
+      "color_hex": "#2F2F2F",
+      "material": "engineered_wood",
+      "place_on": {
+        "target_instance_id": "__ceiling__",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "notes": [],
+  "missing": []
+}

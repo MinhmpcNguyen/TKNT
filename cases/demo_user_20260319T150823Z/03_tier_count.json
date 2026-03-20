@@ -1,0 +1,142 @@
+{
+  "status": "NEED_INFO",
+  "assumptions": [],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "bed",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Main focal point of the bedroom."
+    },
+    {
+      "object_type": "nightstand",
+      "category": "nightstand",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Essential for bedside storage."
+    },
+    {
+      "object_type": "bench",
+      "category": "bench",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "desk",
+      "category": "desk",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Primary work surface."
+    },
+    {
+      "object_type": "chair",
+      "category": "chair",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Necessary for seating at the desk."
+    },
+    {
+      "object_type": "office_chair",
+      "category": "office_chair",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "wardrobe",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Essential for clothing storage."
+    },
+    {
+      "object_type": "dresser",
+      "category": "dresser",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage_cabinet",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "bookshelf",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    },
+    {
+      "object_type": "laundry_basket",
+      "category": "laundry_basket",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Not essential, can be omitted."
+    }
+  ],
+  "global_notes": []
+}

@@ -101,7 +101,7 @@ def _normalize_item(item: dict[str, Any]) -> _NormItem | None:
         W = width_mm / 1000.0
         H = height_mm / 1000.0
         if W > L:
-            L, W = W, L  # ensure L >= W
+            L, W = W, L
 
         A = L * W
         R = L / W if W > 0 else float("inf")
@@ -185,12 +185,6 @@ def _medoid(items: list[_NormItem]) -> _NormItem | None:
 
 
 def _rep_from_items_for_tier(items_cat: list[_NormItem], tier: str) -> _NormItem | None:
-    """
-    Backfill representative when a tier has 0 samples.
-    - S: smallest footprint in category
-    - L: largest footprint in category
-    - M: medoid of entire category
-    """
     if not items_cat:
         return None
     if tier == "S":
@@ -272,10 +266,7 @@ def _build_size_profiles(
             },
         }
 
-    # Generic fallback profile, useful when a category is missing at inference time.
-    generic_s = _medoid(
-        [it for items_cat in by_cat.values() for it in items_cat[:]]
-    )  # rough medoid for all
+    generic_s = _medoid([it for items_cat in by_cat.values() for it in items_cat[:]])
     generic_base = filtered_global if filtered_global else norm
     a_low_g, a_high_g = _compute_thresholds(generic_base, p_low, p_high)
 
@@ -394,12 +385,8 @@ def _rep_has_positive_dims(rep: Any) -> bool:
 
 
 def _sanitize_profiles_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """
-    Defensive sanitize when profiles are loaded from DB and may have rep_dims_m[tier]=null.
-    We backfill missing tiers using any available tier within the same category (M -> L -> S).
-    """
     out = payload if isinstance(payload, dict) else {}
-    for cat, prof in list(out.items()):
+    for _, prof in list(out.items()):
         if not isinstance(prof, dict):
             continue
         rep_dims = prof.get("rep_dims_m")
@@ -683,11 +670,6 @@ def _extract_access_requirements(clusters_json: Any) -> _AccessRequirements:
 
 
 def _clearance_policy_for_category(category: str) -> tuple[float, float, float]:
-    """
-    Returns (min_depth_m, max_depth_m, occupancy_multiplier)
-    - depth is front-clearance depth in meters
-    - occupancy_multiplier softens categories needing partial/occasional access
-    """
     k = _norm_key(category)
 
     seating_tokens = ("sofa", "sectional", "armchair", "recliner", "chair", "bench")
@@ -733,18 +715,6 @@ def _effective_footprint_m2_from_profile(
     category: str,
     needs_front_clearance: bool,
 ) -> tuple[float, float, float]:
-    """
-    Effective footprint:
-      base = L * W
-
-    If needs front clearance:
-      clearance_depth = clamp(W * FIXED_ACCESS_CLEARANCE_RATIO, min_depth, max_depth)
-      extra = L * clearance_depth * occupancy_multiplier
-      effective = base + extra
-
-    Returns:
-      (base_m2, effective_m2, clearance_depth_m)
-    """
     rep = (size_profile.get("rep_dims_m") or {}).get(tier.upper())
     if not isinstance(rep, dict):
         raise ValueError(f"Missing rep_dims_m for tier={tier}")
@@ -820,8 +790,6 @@ def _decision_needs_access(
         k in access_requirements.object_ids for k in decision_keys
     ):
         return True
-
-    # backward compatibility with old data
     if category and category in access_requirements.object_ids:
         return True
 
@@ -847,14 +815,30 @@ def _estimate_decision_footprint_detail(
     )
 
     needs_access = _decision_needs_access(decision, access_requirements)
-    base_fp_per_item, effective_fp_per_item, clearance_depth_m = (
-        _effective_footprint_m2_from_profile(
-            profile,
-            tier,
-            category=category,
-            needs_front_clearance=needs_access,
-        )
-    )
+
+    footprint_options_by_tier: dict[str, dict[str, float]] = {}
+    for cand_tier in ("S", "M", "L"):
+        try:
+            base_fp_per_item, effective_fp_per_item, clearance_depth_m = (
+                _effective_footprint_m2_from_profile(
+                    profile,
+                    cand_tier,
+                    category=category,
+                    needs_front_clearance=needs_access,
+                )
+            )
+            footprint_options_by_tier[cand_tier] = {
+                "base_footprint_m2_per_item": base_fp_per_item,
+                "effective_footprint_m2_per_item": effective_fp_per_item,
+                "clearance_depth_m": clearance_depth_m,
+            }
+        except ValueError:
+            continue
+
+    if tier not in footprint_options_by_tier:
+        raise ValueError(f"Missing rep_dims_m for category={category}, tier={tier}")
+
+    chosen = footprint_options_by_tier[tier]
 
     return {
         "decision_id": next(
@@ -872,11 +856,15 @@ def _estimate_decision_footprint_detail(
         "priority": str(decision.get("priority", "secondary")),
         "needs_front_clearance": needs_access,
         "profile_source": profile_source,
-        "clearance_depth_m": clearance_depth_m,
-        "base_footprint_m2_per_item": base_fp_per_item,
-        "effective_footprint_m2_per_item": effective_fp_per_item,
-        "base_footprint_m2_total": base_fp_per_item * qty,
-        "effective_footprint_m2_total": effective_fp_per_item * qty,
+        "clearance_depth_m": float(chosen["clearance_depth_m"]),
+        "base_footprint_m2_per_item": float(chosen["base_footprint_m2_per_item"]),
+        "effective_footprint_m2_per_item": float(
+            chosen["effective_footprint_m2_per_item"]
+        ),
+        "base_footprint_m2_total": float(chosen["base_footprint_m2_per_item"]) * qty,
+        "effective_footprint_m2_total": float(chosen["effective_footprint_m2_per_item"])
+        * qty,
+        "footprint_options_by_tier": footprint_options_by_tier,
     }
 
 
@@ -906,14 +894,13 @@ def _sum_footprint_breakdown(
             cluster_id,
             {"anchor": 0.0, "primary": 0.0, "secondary": 0.0, "optional": 0.0},
         )
-
         if priority not in out[cluster_id]:
             priority = "secondary"
         out[cluster_id][priority] += float(d[field])
     return out
 
 
-def _choose_budget_ratio(style: str, user_notes: str) -> float:
+def _choose_budget_ratio_style_prior(style: str, user_notes: str) -> float:
     style_l = (style or "").lower()
     notes_l = (user_notes or "").lower()
 
@@ -931,6 +918,155 @@ def _choose_budget_ratio(style: str, user_notes: str) -> float:
         ratio = min(ratio, 0.45)
 
     return ratio
+
+
+def _smallest_available_tier(options: dict[str, Any]) -> str | None:
+    for t in ("S", "M", "L"):
+        if isinstance(options.get(t), dict):
+            return t
+    return None
+
+
+def _is_mandatory_priority(priority: str) -> bool:
+    return _norm_key(priority) in {"anchor", "primary"}
+
+
+def _summarize_constraint_pressure(
+    *,
+    decision_details: list[dict[str, Any]],
+    available_area_m2: float,
+    room_area_m2: float,
+    compactness: float,
+) -> dict[str, float]:
+    mandatory_base_m2 = 0.0
+    mandatory_effective_m2 = 0.0
+    mandatory_item_count = 0
+
+    for row in decision_details:
+        if not isinstance(row, dict):
+            continue
+        if not _is_mandatory_priority(str(row.get("priority", ""))):
+            continue
+
+        qty = max(0, int(row.get("quantity", 0)))
+        if qty <= 0:
+            continue
+
+        options = row.get("footprint_options_by_tier") or {}
+        if not isinstance(options, dict):
+            continue
+
+        tier = _smallest_available_tier(options)
+        if tier is None:
+            continue
+
+        opt = options.get(tier)
+        if not isinstance(opt, dict):
+            continue
+
+        base_per_item = float(opt.get("base_footprint_m2_per_item", 0.0))
+        effective_per_item = float(opt.get("effective_footprint_m2_per_item", 0.0))
+        mandatory_base_m2 += base_per_item * qty
+        mandatory_effective_m2 += effective_per_item * qty
+        mandatory_item_count += qty
+
+    obstacle_ratio = 0.0
+    if room_area_m2 > 1e-9:
+        obstacle_ratio = _clamp(
+            max(0.0, room_area_m2 - available_area_m2) / room_area_m2,
+            0.0,
+            0.95,
+        )
+
+    mandatory_ratio = 0.0
+    if available_area_m2 > 1e-9:
+        mandatory_ratio = mandatory_effective_m2 / available_area_m2
+
+    access_extra_m2 = max(0.0, mandatory_effective_m2 - mandatory_base_m2)
+    access_pressure = 0.0
+    if mandatory_effective_m2 > 1e-9:
+        access_pressure = access_extra_m2 / mandatory_effective_m2
+
+    compactness_bonus = 0.05 * max(0.0, compactness - 0.60)
+
+    constraint_pressure_ratio = _clamp(
+        mandatory_ratio
+        + 0.06
+        + compactness_bonus
+        - 0.08 * obstacle_ratio
+        - 0.05 * access_pressure,
+        0.40,
+        0.68,
+    )
+
+    return {
+        "mandatory_base_footprint_m2": mandatory_base_m2,
+        "mandatory_effective_footprint_m2": mandatory_effective_m2,
+        "mandatory_item_count": float(mandatory_item_count),
+        "mandatory_ratio": mandatory_ratio,
+        "obstacle_ratio": obstacle_ratio,
+        "access_pressure": access_pressure,
+        "constraint_pressure_ratio": constraint_pressure_ratio,
+    }
+
+
+def _choose_budget_ratio_from_constraints(
+    *,
+    decision_details: list[dict[str, Any]],
+    room_model: dict[str, Any],
+    style: str,
+    user_notes: str,
+    rescue_mode: bool,
+) -> tuple[float, dict[str, float | bool | str]]:
+    room_pts = (room_model.get("room") or {}).get("polygon_ccw") or []
+    room_area_m2 = _polygon_area_m2(room_pts) if room_pts else 0.0
+    available_area_m2 = _available_area_m2(room_model) if room_pts else 0.0
+    compactness = _compactness(room_pts) if room_pts else 0.0
+
+    pressure = _summarize_constraint_pressure(
+        decision_details=decision_details,
+        available_area_m2=available_area_m2,
+        room_area_m2=room_area_m2,
+        compactness=compactness,
+    )
+
+    style_prior_ratio = _choose_budget_ratio_style_prior(style, user_notes)
+    style_bias = 0.5 * (style_prior_ratio - 0.50)
+
+    base_ratio = _clamp(
+        max(
+            float(pressure["constraint_pressure_ratio"]),
+            float(pressure["mandatory_ratio"]) + 0.04,
+        )
+        + style_bias,
+        0.40,
+        0.68,
+    )
+
+    base_ratio_source = "constraint_pressure"
+
+    if rescue_mode:
+        rescue_floor = _clamp(float(pressure["mandatory_ratio"]) + 0.10, 0.50, 0.78)
+        base_ratio = _clamp(max(base_ratio + 0.08, rescue_floor), 0.45, 0.78)
+        base_ratio_source = "constraint_pressure_rescue"
+
+    diagnostics: dict[str, float | bool | str] = {
+        "style_prior_ratio": style_prior_ratio,
+        "constraint_pressure_ratio": float(pressure["constraint_pressure_ratio"]),
+        "mandatory_ratio": float(pressure["mandatory_ratio"]),
+        "mandatory_base_footprint_m2": float(pressure["mandatory_base_footprint_m2"]),
+        "mandatory_effective_footprint_m2": float(
+            pressure["mandatory_effective_footprint_m2"]
+        ),
+        "mandatory_item_count": float(pressure["mandatory_item_count"]),
+        "obstacle_ratio": float(pressure["obstacle_ratio"]),
+        "access_pressure": float(pressure["access_pressure"]),
+        "available_area_m2": available_area_m2,
+        "gross_room_area_m2": room_area_m2,
+        "base_ratio_source": base_ratio_source,
+        "rescue_mode": rescue_mode,
+    }
+    return base_ratio, diagnostics
 
 
 def _cluster_ratio_multiplier(cluster_id: str) -> float:
@@ -970,21 +1106,6 @@ def _extract_zone_areas_m2(room_model: dict[str, Any]) -> dict[str, float]:
     return out
 
 
-def _priority_trim_rank(priority: str) -> int:
-    p = _norm_key(priority)
-    order = {
-        "optional": 0,
-        "secondary": 1,
-        "primary": 2,
-        "anchor": 3,
-    }
-    return order.get(p, 1)
-
-
-def _is_trimmable_priority(priority: str) -> bool:
-    return _norm_key(priority) in {"optional", "secondary"}
-
-
 def _check_budget_limits(
     *,
     limits_m2: dict[str, float],
@@ -1005,10 +1126,138 @@ def _check_budget_limits(
     return violations
 
 
+def _cluster_is_droppable(
+    cluster_id: str, clusters_json: dict[str, Any] | None
+) -> bool:
+    if not isinstance(clusters_json, dict):
+        return False
+
+    clusters = clusters_json.get("clusters")
+    if not isinstance(clusters, list):
+        return False
+
+    for c in clusters:
+        if not isinstance(c, dict):
+            continue
+        if str(c.get("cluster_id", "")) != str(cluster_id):
+            continue
+
+        tag = _norm_key(str(c.get("tag", "")))
+        rules = c.get("cluster_rules") or {}
+
+        if tag in {"misc", "decor", "accent", "accessory"}:
+            return True
+        if isinstance(rules, dict) and rules.get("allow_empty_cluster") is True:
+            return True
+        return False
+
+    return False
+
+
+def _minimal_required_cluster_footprint_m2(
+    decision_details: list[dict[str, Any]],
+    *,
+    clusters_json: dict[str, Any] | None,
+) -> dict[str, float]:
+    """
+    Minimum footprint that should survive per cluster after reasonable trimming:
+    - optional / secondary can go to 0
+    - primary / anchor keep quantity 1 if originally > 0
+    - use smallest available tier
+    - droppable clusters may be reduced fully to 0
+    """
+    out: dict[str, float] = {}
+
+    for row in decision_details:
+        if not isinstance(row, dict):
+            continue
+
+        cid = str(row.get("cluster_id", ""))
+        if not cid:
+            continue
+
+        if _cluster_is_droppable(cid, clusters_json):
+            out.setdefault(cid, 0.0)
+            continue
+
+        priority = _norm_key(str(row.get("priority", "")))
+        if priority not in {"anchor", "primary"}:
+            out.setdefault(cid, 0.0)
+            continue
+
+        qty = max(0, int(row.get("quantity", 0)))
+        if qty <= 0:
+            out.setdefault(cid, 0.0)
+            continue
+
+        options = row.get("footprint_options_by_tier") or {}
+        if not isinstance(options, dict):
+            out.setdefault(cid, 0.0)
+            continue
+
+        smallest = _smallest_available_tier(options)
+        if smallest is None:
+            out.setdefault(cid, 0.0)
+            continue
+
+        opt = options.get(smallest)
+        if not isinstance(opt, dict):
+            out.setdefault(cid, 0.0)
+            continue
+
+        eff_per_item = float(opt.get("effective_footprint_m2_per_item", 0.0))
+        out[cid] = out.get(cid, 0.0) + eff_per_item
+
+    return out
+
+
+def _rebalance_cluster_budget_limits(
+    *,
+    cluster_budget_limits_m2: dict[str, float],
+    min_required_cluster_limits_m2: dict[str, float],
+    raw_cluster_footprints_m2: dict[str, float],
+    global_budget_m2: float,
+) -> dict[str, float]:
+    cluster_ids = sorted(
+        set(cluster_budget_limits_m2.keys())
+        | set(min_required_cluster_limits_m2.keys())
+    )
+    mins = {
+        cid: max(0.0, float(min_required_cluster_limits_m2.get(cid, 0.0)))
+        for cid in cluster_ids
+    }
+
+    total_min = sum(mins.values())
+    if total_min > global_budget_m2 + 1e-9:
+        return {cid: mins[cid] for cid in cluster_ids}
+
+    limits = {cid: mins[cid] for cid in cluster_ids}
+    remaining = max(0.0, global_budget_m2 - total_min)
+
+    if remaining <= 1e-9:
+        return limits
+
+    demands: dict[str, float] = {}
+    for cid in cluster_ids:
+        raw = float(raw_cluster_footprints_m2.get(cid, 0.0))
+        extra_need = max(0.0, raw - mins[cid])
+        demands[cid] = extra_need
+
+    demand_sum = sum(demands.values())
+    if demand_sum <= 1e-9:
+        return limits
+
+    for cid in cluster_ids:
+        limits[cid] += remaining * (demands[cid] / demand_sum)
+
+    return limits
+
+
 def _derive_cluster_budget_limits(
     *,
     cluster_ids: list[str],
     raw_cluster_footprints_m2: dict[str, float],
+    min_required_cluster_limits_m2: dict[str, float],
     room_area_m2: float,
     base_ratio: float,
     shape_factor: float,
@@ -1017,16 +1266,6 @@ def _derive_cluster_budget_limits(
     adaptive_cluster_ratios: bool,
     cluster_ratio_overrides: dict[str, float] | None,
 ) -> tuple[float, dict[str, float], dict[str, float]]:
-    """
-    Returns:
-      global_budget_m2,
-      cluster_ratios,
-      cluster_budget_limits_m2
-
-    Main fix:
-    - no longer gives every cluster the whole room
-    - if zones are missing, budgets are distributed from ONE global room budget
-    """
     global_ratio = _clamp(base_ratio * shape_factor, 0.20, 0.75)
     global_budget_m2 = room_area_m2 * global_ratio
 
@@ -1079,7 +1318,45 @@ def _derive_cluster_budget_limits(
         for cid in list(limits.keys()):
             limits[cid] *= scale
 
+    limits = _rebalance_cluster_budget_limits(
+        cluster_budget_limits_m2=limits,
+        min_required_cluster_limits_m2=min_required_cluster_limits_m2,
+        raw_cluster_footprints_m2=raw_cluster_footprints_m2,
+        global_budget_m2=global_budget_m2,
+    )
+
     return global_budget_m2, cluster_ratios, limits
+
+
+def _next_smaller_tier(tier: str) -> str | None:
+    t = str(tier).upper()
+    if t == "L":
+        return "M"
+    if t == "M":
+        return "S"
+    return None
+
+
+def _recompute_recommended_row_totals(row: dict[str, Any]) -> None:
+    tier = str(row["recommended_size_tier"]).upper()
+    qty = max(0, int(row.get("recommended_quantity", 0)))
+
+    options = row.get("footprint_options_by_tier") or {}
+    opt = options.get(tier)
+    if not isinstance(opt, dict):
+        raise ValueError(
+            f"Missing footprint option for tier={tier}, row={row.get('decision_id', '')}"
+        )
+
+    base_per_item = float(opt["base_footprint_m2_per_item"])
+    eff_per_item = float(opt["effective_footprint_m2_per_item"])
+    clearance_depth = float(opt["clearance_depth_m"])
+
+    row["recommended_clearance_depth_m"] = clearance_depth
+    row["recommended_base_footprint_m2_per_item"] = base_per_item
+    row["recommended_effective_footprint_m2_per_item"] = eff_per_item
+    row["recommended_base_footprint_m2_total"] = base_per_item * qty
+    row["recommended_effective_footprint_m2_total"] = eff_per_item * qty
 
 
 def _fit_decisions_to_budget(
@@ -1087,27 +1364,34 @@ def _fit_decisions_to_budget(
     *,
     cluster_budget_limits_m2: dict[str, float],
     global_budget_m2: float,
+    clusters_json: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, float], float]:
     """
-    Greedy fitter:
-    - anchor / primary: keep
-    - optional trimmed first
-    - then secondary
-    - trims one item at a time until cluster/global budgets fit or cannot trim more
+    Repair order:
+    1. optional quantity
+    2. secondary quantity
+    3. optional size
+    4. secondary size
+    5. primary quantity
+    6. primary size
+    7. anchor quantity
+    8. anchor size
     """
+
     fitted: list[dict[str, Any]] = []
     for d in decision_details:
-        q = int(d.get("quantity", 0))
-        q = max(q, 0)
+        q = max(0, int(d.get("quantity", 0)))
+        original_tier = str(d.get("size_tier", "M")).upper()
+
         row = dict(d)
+        row["original_quantity"] = q
         row["recommended_quantity"] = q
         row["dropped_quantity"] = 0
-        row["recommended_effective_footprint_m2_total"] = (
-            float(d["effective_footprint_m2_per_item"]) * q
-        )
-        row["recommended_base_footprint_m2_total"] = (
-            float(d["base_footprint_m2_per_item"]) * q
-        )
+        row["original_size_tier"] = original_tier
+        row["recommended_size_tier"] = original_tier
+        row["size_reduction_steps"] = 0
+
+        _recompute_recommended_row_totals(row)
         fitted.append(row)
 
     def _cluster_totals() -> dict[str, float]:
@@ -1121,110 +1405,513 @@ def _fit_decisions_to_budget(
     def _global_total(cluster_totals: dict[str, float]) -> float:
         return sum(cluster_totals.values())
 
-    def _trim_one_from_cluster(cluster_id: str) -> bool:
-        candidates = [
-            row
-            for row in fitted
-            if str(row["cluster_id"]) == cluster_id
-            and int(row["recommended_quantity"]) > 0
-            and _is_trimmable_priority(str(row.get("priority", "secondary")))
-        ]
+    def _cluster_anchor_total_qty(cluster_id: str) -> int:
+        total = 0
+        for row in fitted:
+            if str(row["cluster_id"]) != cluster_id:
+                continue
+            if _norm_key(str(row.get("priority", ""))) != "anchor":
+                continue
+            total += int(row.get("recommended_quantity", 0))
+        return total
+
+    def _can_reduce_anchor_quantity(row: dict[str, Any]) -> bool:
+        if _norm_key(str(row.get("priority", ""))) != "anchor":
+            return True
+
+        cid = str(row["cluster_id"])
+        if _cluster_anchor_total_qty(cid) > 1:
+            return True
+
+        return _cluster_is_droppable(cid, clusters_json)
+
+    def _quantity_reduction_candidate_score(
+        row: dict[str, Any],
+        cluster_overruns: dict[str, float],
+    ) -> tuple[float, float, str]:
+        cid = str(row["cluster_id"])
+        over = float(cluster_overruns.get(cid, 0.0))
+        per_item = float(row["recommended_effective_footprint_m2_per_item"])
+        cat = str(row.get("category", ""))
+        return (1.0 if over > 0 else 0.0, per_item, cat)
+
+    def _size_saving_per_item(row: dict[str, Any]) -> float:
+        current_tier = str(row["recommended_size_tier"]).upper()
+        next_tier = _next_smaller_tier(current_tier)
+        if next_tier is None:
+            return 0.0
+
+        options = row.get("footprint_options_by_tier") or {}
+        cur = options.get(current_tier)
+        nxt = options.get(next_tier)
+        if not isinstance(cur, dict) or not isinstance(nxt, dict):
+            return 0.0
+
+        cur_eff = float(cur["effective_footprint_m2_per_item"])
+        nxt_eff = float(nxt["effective_footprint_m2_per_item"])
+        return max(0.0, cur_eff - nxt_eff)
+
+    def _size_reduction_candidate_score(
+        row: dict[str, Any],
+        cluster_overruns: dict[str, float],
+    ) -> tuple[float, float, int, str]:
+        cid = str(row["cluster_id"])
+        over = float(cluster_overruns.get(cid, 0.0))
+        saving_per_item = _size_saving_per_item(row)
+        qty = int(row.get("recommended_quantity", 0))
+        cat = str(row.get("category", ""))
+        return (1.0 if over > 0 else 0.0, saving_per_item, qty, cat)
+
+    def _reduce_quantity_once(
+        priority_names: set[str],
+        *,
+        cluster_id: str | None,
+        cluster_overruns: dict[str, float],
+    ) -> bool:
+        candidates: list[dict[str, Any]] = []
+
+        for row in fitted:
+            if cluster_id is not None and str(row["cluster_id"]) != cluster_id:
+                continue
+
+            pri = _norm_key(str(row.get("priority", "secondary")))
+            if pri not in priority_names:
+                continue
+
+            if int(row.get("recommended_quantity", 0)) <= 0:
+                continue
+
+            if pri == "anchor" and not _can_reduce_anchor_quantity(row):
+                continue
+
+            candidates.append(row)
+
         if not candidates:
             return False
 
         candidates.sort(
             key=lambda row: (
-                _priority_trim_rank(str(row.get("priority", "secondary"))),
-                -float(row["effective_footprint_m2_per_item"]),
-                str(row.get("category", "")),
+                -_quantity_reduction_candidate_score(row, cluster_overruns)[0],
+                -_quantity_reduction_candidate_score(row, cluster_overruns)[1],
+                _quantity_reduction_candidate_score(row, cluster_overruns)[2],
             )
         )
+
         row = candidates[0]
-        row["recommended_quantity"] = int(row["recommended_quantity"]) - 1
-        row["dropped_quantity"] = int(row["dropped_quantity"]) + 1
-        row["recommended_effective_footprint_m2_total"] = float(
-            row["effective_footprint_m2_per_item"]
-        ) * int(row["recommended_quantity"])
-        row["recommended_base_footprint_m2_total"] = float(
-            row["base_footprint_m2_per_item"]
-        ) * int(row["recommended_quantity"])
+        row["recommended_quantity"] = max(0, int(row["recommended_quantity"]) - 1)
+        row["dropped_quantity"] = int(row["original_quantity"]) - int(
+            row["recommended_quantity"]
+        )
+        _recompute_recommended_row_totals(row)
         return True
 
-    def _trim_one_global(cluster_overruns: dict[str, float]) -> bool:
-        candidates = [
-            row
-            for row in fitted
-            if int(row["recommended_quantity"]) > 0
-            and _is_trimmable_priority(str(row.get("priority", "secondary")))
-        ]
+    def _reduce_size_once(
+        priority_names: set[str],
+        *,
+        cluster_id: str | None,
+        cluster_overruns: dict[str, float],
+    ) -> bool:
+        candidates: list[dict[str, Any]] = []
+
+        for row in fitted:
+            if cluster_id is not None and str(row["cluster_id"]) != cluster_id:
+                continue
+
+            pri = _norm_key(str(row.get("priority", "secondary")))
+            if pri not in priority_names:
+                continue
+
+            if int(row.get("recommended_quantity", 0)) <= 0:
+                continue
+
+            next_tier = _next_smaller_tier(str(row["recommended_size_tier"]).upper())
+            if next_tier is None:
+                continue
+
+            saving_per_item = _size_saving_per_item(row)
+            if saving_per_item <= 1e-9:
+                continue
+
+            candidates.append(row)
+
         if not candidates:
             return False
 
-        def _score(row: dict[str, Any]) -> tuple[float, float, float, str]:
-            cid = str(row["cluster_id"])
-            over = float(cluster_overruns.get(cid, 0.0))
-            return (
-                1.0 if over > 0 else 0.0,
-                -float(_priority_trim_rank(str(row.get("priority", "secondary")))),
-                float(row["effective_footprint_m2_per_item"]),
-                cid,
+        candidates.sort(
+            key=lambda row: (
+                -_size_reduction_candidate_score(row, cluster_overruns)[0],
+                -_size_reduction_candidate_score(row, cluster_overruns)[1],
+                -_size_reduction_candidate_score(row, cluster_overruns)[2],
+                _size_reduction_candidate_score(row, cluster_overruns)[3],
             )
+        )
 
-        candidates.sort(key=_score, reverse=True)
         row = candidates[0]
-        row["recommended_quantity"] = int(row["recommended_quantity"]) - 1
-        row["dropped_quantity"] = int(row["dropped_quantity"]) + 1
-        row["recommended_effective_footprint_m2_total"] = float(
-            row["effective_footprint_m2_per_item"]
-        ) * int(row["recommended_quantity"])
-        row["recommended_base_footprint_m2_total"] = float(
-            row["base_footprint_m2_per_item"]
-        ) * int(row["recommended_quantity"])
+        next_tier = _next_smaller_tier(str(row["recommended_size_tier"]).upper())
+        if next_tier is None:
+            return False
+
+        row["recommended_size_tier"] = next_tier
+        row["size_reduction_steps"] = int(row.get("size_reduction_steps", 0)) + 1
+        _recompute_recommended_row_totals(row)
         return True
 
-    # Phase 1: trim per-cluster overruns
-    while True:
-        cluster_totals = _cluster_totals()
-        overruns = {
-            cid: cluster_totals.get(cid, 0.0)
-            - float(cluster_budget_limits_m2.get(cid, 0.0))
-            for cid in cluster_budget_limits_m2.keys()
-        }
-        active = sorted(
-            [cid for cid, over in overruns.items() if over > 1e-9],
-            key=lambda cid: overruns[cid],
-            reverse=True,
-        )
-        if not active:
-            break
+    repair_steps: list[tuple[str, set[str]]] = [
+        ("quantity", {"optional"}),
+        ("quantity", {"secondary"}),
+        ("size", {"optional"}),
+        ("size", {"secondary"}),
+        ("quantity", {"primary"}),
+        ("size", {"primary"}),
+        ("quantity", {"anchor"}),
+        ("size", {"anchor"}),
+    ]
 
-        changed = False
-        for cid in active:
-            if _trim_one_from_cluster(cid):
-                changed = True
+    for action, priorities in repair_steps:
+        while True:
+            cluster_totals = _cluster_totals()
+            total = _global_total(cluster_totals)
+
+            cluster_overruns = {
+                cid: cluster_totals.get(cid, 0.0)
+                - float(cluster_budget_limits_m2.get(cid, 0.0))
+                for cid in cluster_budget_limits_m2.keys()
+            }
+
+            if (
+                not any(over > 1e-9 for over in cluster_overruns.values())
+                and total <= global_budget_m2 + 1e-9
+            ):
+                return fitted, cluster_totals, total
+
+            changed = False
+
+            active_clusters = sorted(
+                [cid for cid, over in cluster_overruns.items() if over > 1e-9],
+                key=lambda cid: cluster_overruns[cid],
+                reverse=True,
+            )
+
+            for cid in active_clusters:
+                if action == "quantity":
+                    changed = _reduce_quantity_once(
+                        priorities,
+                        cluster_id=cid,
+                        cluster_overruns=cluster_overruns,
+                    )
+                else:
+                    changed = _reduce_size_once(
+                        priorities,
+                        cluster_id=cid,
+                        cluster_overruns=cluster_overruns,
+                    )
+                if changed:
+                    break
+
+            if changed:
+                continue
+
+            if total > global_budget_m2 + 1e-9:
+                if action == "quantity":
+                    changed = _reduce_quantity_once(
+                        priorities,
+                        cluster_id=None,
+                        cluster_overruns=cluster_overruns,
+                    )
+                else:
+                    changed = _reduce_size_once(
+                        priorities,
+                        cluster_id=None,
+                        cluster_overruns=cluster_overruns,
+                    )
+
+            if not changed:
                 break
-        if not changed:
-            break
-
-    # Phase 2: trim global overrun if still needed
-    while True:
-        cluster_totals = _cluster_totals()
-        total = _global_total(cluster_totals)
-        if total <= global_budget_m2 + 1e-9:
-            break
-
-        overruns = {
-            cid: cluster_totals.get(cid, 0.0)
-            - float(cluster_budget_limits_m2.get(cid, 0.0))
-            for cid in cluster_budget_limits_m2.keys()
-        }
-        changed = _trim_one_global(overruns)
-        if not changed:
-            break
 
     final_cluster_totals = _cluster_totals()
     final_global_total = _global_total(final_cluster_totals)
     return fitted, final_cluster_totals, final_global_total
+
+
+def _build_recommended_decisions_from_details(
+    original_decisions: list[dict[str, Any]],
+    fitted_details: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for row in fitted_details:
+        if not isinstance(row, dict):
+            continue
+        key = (
+            str(row.get("cluster_id", "")),
+            str(row.get("category", "")),
+        )
+        by_key[key] = row
+
+    out: list[dict[str, Any]] = []
+    for d in original_decisions:
+        if not isinstance(d, dict):
+            continue
+
+        cluster_id = str(d.get("cluster_id", ""))
+        category = str(d.get("category") or d.get("object_type") or "")
+        key = (cluster_id, category)
+
+        row = by_key.get(key)
+        if row is None:
+            out.append(dict(d))
+            continue
+
+        nd = dict(d)
+        if isinstance(row.get("recommended_quantity"), int):
+            nd["quantity"] = int(row["recommended_quantity"])
+        if isinstance(row.get("recommended_size_tier"), str):
+            nd["size_tier"] = str(row["recommended_size_tier"]).upper()
+        out.append(nd)
+
+    return out
+
+
+def _smallest_available_tier_in_row(row: dict[str, Any]) -> str:
+    options = row.get("footprint_options_by_tier") or {}
+    if isinstance(options, dict):
+        for t in ("S", "M", "L"):
+            if isinstance(options.get(t), dict):
+                return t
+    return str(row.get("recommended_size_tier") or row.get("size_tier") or "S").upper()
+
+
+def _row_can_reduce_further(
+    row: dict[str, Any],
+    *,
+    total_anchor_qty_in_cluster: int,
+    cluster_is_droppable: bool,
+) -> bool:
+    pri = _norm_key(str(row.get("priority", "secondary")))
+    qty = max(0, int(row.get("recommended_quantity", 0)))
+    cur_tier = str(
+        row.get("recommended_size_tier") or row.get("size_tier") or "S"
+    ).upper()
+    min_tier = _smallest_available_tier_in_row(row)
+    has_smaller_tier = cur_tier != min_tier and _next_smaller_tier(cur_tier) is not None
+
+    if pri in {"optional", "secondary"}:
+        return qty > 0
+
+    if pri == "primary":
+        return qty > 0 or has_smaller_tier
+
+    if pri == "anchor":
+        if qty <= 0:
+            return False
+        if cluster_is_droppable:
+            return True
+        if total_anchor_qty_in_cluster > 1:
+            return True
+        return has_smaller_tier
+
+    return False
+
+
+def _group_rows_by_cluster(
+    rows: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        cid = str(row.get("cluster_id", "unknown_cluster"))
+        out.setdefault(cid, []).append(row)
+    return out
+
+
+def _cluster_has_live_anchor(
+    rows: list[dict[str, Any]],
+    *,
+    qty_field: str,
+) -> bool:
+    for row in rows:
+        if _norm_key(str(row.get("priority", ""))) != "anchor":
+            continue
+        try:
+            if int(row.get(qty_field, 0)) > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _remove_clusters_without_live_anchor(
+    fitted_details: list[dict[str, Any]],
+) -> list[str]:
+    """
+    If a cluster no longer has any surviving anchor after fit,
+    zero out all remaining items in that cluster and treat it as removed.
+    """
+    removed: list[str] = []
+    by_cluster = _group_rows_by_cluster(fitted_details)
+
+    for cid, rows in by_cluster.items():
+        if _cluster_has_live_anchor(rows, qty_field="recommended_quantity"):
+            continue
+
+        removed.append(cid)
+        for row in rows:
+            row["recommended_quantity"] = 0
+            row["dropped_quantity"] = int(row.get("original_quantity", 0))
+            _recompute_recommended_row_totals(row)
+
+    return sorted(set(removed))
+
+
+def _filter_float_map_keys(
+    data: dict[str, float],
+    keep_keys: set[str],
+) -> dict[str, float]:
+    return {k: float(v) for k, v in data.items() if k in keep_keys}
+
+
+def _filter_nested_float_map_keys(
+    data: dict[str, dict[str, float]],
+    keep_keys: set[str],
+) -> dict[str, dict[str, float]]:
+    return {k: dict(v) for k, v in data.items() if k in keep_keys}
+
+
+def _filter_violations_by_cluster_ids(
+    violations: list[dict[str, Any]],
+    keep_keys: set[str],
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for v in violations:
+        cid = str(v.get("cluster_id", ""))
+        if cid in keep_keys:
+            out.append(v)
+    return out
+
+
+def _summarize_post_fit_feasibility(
+    *,
+    fitted_details: list[dict[str, Any]],
+    cluster_budget_limits_m2: dict[str, float],
+    global_budget_m2: float,
+    fitted_global_footprint: float,
+    clusters_json: dict[str, Any] | None,
+) -> dict[str, Any]:
+    by_cluster = _group_rows_by_cluster(fitted_details)
+
+    cluster_repair_status: dict[str, Any] = {}
+    repair_blocked_clusters: list[str] = []
+    core_minimum_infeasible_clusters: list[str] = []
+
+    any_further_capacity_anywhere = False
+
+    for cid, rows in by_cluster.items():
+        cluster_is_droppable = _cluster_is_droppable(cid, clusters_json)
+        limit = float(cluster_budget_limits_m2.get(cid, 0.0))
+        footprint = sum(
+            float(r.get("recommended_effective_footprint_m2_total", 0.0)) for r in rows
+        )
+        over_by = max(0.0, footprint - limit)
+
+        total_anchor_qty = sum(
+            max(0, int(r.get("recommended_quantity", 0)))
+            for r in rows
+            if _norm_key(str(r.get("priority", ""))) == "anchor"
+        )
+
+        positive_anchor_categories = [
+            str(r.get("category", ""))
+            for r in rows
+            if _norm_key(str(r.get("priority", ""))) == "anchor"
+            and int(r.get("recommended_quantity", 0)) > 0
+        ]
+        positive_primary_categories = [
+            str(r.get("category", ""))
+            for r in rows
+            if _norm_key(str(r.get("priority", ""))) == "primary"
+            and int(r.get("recommended_quantity", 0)) > 0
+        ]
+        positive_secondary_optional_categories = [
+            str(r.get("category", ""))
+            for r in rows
+            if _norm_key(str(r.get("priority", ""))) in {"secondary", "optional"}
+            and int(r.get("recommended_quantity", 0)) > 0
+        ]
+
+        further_capacity = any(
+            _row_can_reduce_further(
+                r,
+                total_anchor_qty_in_cluster=total_anchor_qty,
+                cluster_is_droppable=cluster_is_droppable,
+            )
+            for r in rows
+        )
+
+        if further_capacity:
+            any_further_capacity_anywhere = True
+
+        repair_blocked = over_by > 1e-9 and not further_capacity
+        if repair_blocked:
+            repair_blocked_clusters.append(cid)
+            if not cluster_is_droppable:
+                core_minimum_infeasible_clusters.append(cid)
+
+        if repair_blocked:
+            if cluster_is_droppable:
+                reason = (
+                    "droppable_cluster_still_over_limit_after_all_allowed_reductions"
+                )
+            else:
+                reason = (
+                    "core_cluster_minimum_surviving_set_still_exceeds_cluster_budget"
+                )
+        else:
+            reason = "repair_possible_or_cluster_within_budget"
+
+        cluster_repair_status[cid] = {
+            "cluster_id": cid,
+            "droppable": cluster_is_droppable,
+            "limit_m2": limit,
+            "footprint_m2": footprint,
+            "over_by_m2": over_by,
+            "total_anchor_quantity": total_anchor_qty,
+            "positive_anchor_categories": positive_anchor_categories,
+            "positive_primary_categories": positive_primary_categories,
+            "positive_secondary_optional_categories": positive_secondary_optional_categories,
+            "further_repair_capacity": further_capacity,
+            "repair_blocked": repair_blocked,
+            "reason": reason,
+        }
+
+    violating_cluster_ids = {
+        cid
+        for cid, info in cluster_repair_status.items()
+        if float(info.get("over_by_m2", 0.0)) > 1e-9
+    }
+    blocked_cluster_ids = {
+        cid
+        for cid, info in cluster_repair_status.items()
+        if bool(info.get("repair_blocked", False))
+    }
+
+    local_repairs_exhausted = bool(
+        violating_cluster_ids
+    ) and violating_cluster_ids.issubset(blocked_cluster_ids)
+
+    global_over_by = max(0.0, fitted_global_footprint - global_budget_m2)
+    global_repair_blocked = global_over_by > 1e-9 and not any_further_capacity_anywhere
+
+    repair_exhausted = local_repairs_exhausted or global_repair_blocked
+
+    return {
+        "cluster_repair_status": cluster_repair_status,
+        "repair_blocked_clusters": sorted(repair_blocked_clusters),
+        "core_minimum_infeasible": len(core_minimum_infeasible_clusters) > 0,
+        "core_minimum_infeasible_clusters": sorted(core_minimum_infeasible_clusters),
+        "local_repairs_exhausted": local_repairs_exhausted,
+        "global_repair_blocked": global_repair_blocked,
+        "global_over_by_m2": global_over_by,
+        "repair_exhausted": repair_exhausted,
+    }
 
 
 def estimate_budget(
@@ -1239,20 +1926,20 @@ def estimate_budget(
     clusters_json: dict[str, Any] | None = None,
     adaptive_cluster_ratios: bool = True,
     cluster_ratio_overrides: dict[str, float] | None = None,
+    frozen_cluster_budget_limits_m2: dict[str, float] | None = None,
+    rescue_mode: bool = True,
 ) -> dict[str, Any]:
     """
-    Improved budget estimator + quantity fitter.
+    Budget estimator + repair recommender.
 
-    Key changes:
+    Main changes:
     - access_clearance_ratio is FIXED to 0.25
-    - budgets are derived from ONE global room budget, not duplicated per cluster
-    - secondary/optional quantities are greedily trimmed to fit cluster/global limits
+    - base_ratio is chosen from constraint pressure
+    - rescue_mode can temporarily relax ratio selection and unfreeze limits
+    - per-cluster limits are rebalanced so minimum surviving CORE sets are not starved
+    - if a cluster has no surviving anchor after fit, the whole cluster is zeroed and
+      removed from cluster-level output maps
     """
-    base_ratio = (
-        float(ratio_override)
-        if ratio_override is not None
-        else _choose_budget_ratio(style, user_notes)
-    )
 
     access_requirements = (
         _extract_access_requirements(clusters_json)
@@ -1282,6 +1969,33 @@ def estimate_budget(
             missing_profile_categories.add(str(decision.get("category", "unknown")))
             raise ValueError(f"{e}. decision={decision}") from e
 
+    if ratio_override is not None:
+        base_ratio = float(ratio_override)
+        ratio_diagnostics: dict[str, float | bool | str] = {
+            "style_prior_ratio": _choose_budget_ratio_style_prior(style, user_notes),
+            "constraint_pressure_ratio": float("nan"),
+            "mandatory_ratio": float("nan"),
+            "mandatory_base_footprint_m2": float("nan"),
+            "mandatory_effective_footprint_m2": float("nan"),
+            "mandatory_item_count": float("nan"),
+            "obstacle_ratio": float("nan"),
+            "access_pressure": float("nan"),
+            "available_area_m2": _available_area_m2(room_model),
+            "gross_room_area_m2": _polygon_area_m2(
+                (room_model.get("room") or {}).get("polygon_ccw") or []
+            ),
+            "base_ratio_source": "ratio_override",
+            "rescue_mode": rescue_mode,
+        }
+    else:
+        base_ratio, ratio_diagnostics = _choose_budget_ratio_from_constraints(
+            decision_details=decision_details,
+            room_model=room_model,
+            style=style,
+            user_notes=user_notes,
+            rescue_mode=rescue_mode,
+        )
+
     room_poly = (room_model.get("room") or {}).get("polygon_ccw") or []
     room_area = _available_area_m2(room_model) if room_poly else 0.0
     compactness = _compactness(room_poly) if room_poly else 0.0
@@ -1298,19 +2012,34 @@ def estimate_budget(
     )
 
     cluster_ids = sorted(raw_cluster_footprints.keys())
-    global_budget_m2, cluster_ratios, cluster_budget_limits_m2 = (
-        _derive_cluster_budget_limits(
-            cluster_ids=cluster_ids,
-            raw_cluster_footprints_m2=raw_cluster_footprints,
-            room_area_m2=room_area,
-            base_ratio=base_ratio,
-            shape_factor=shape_factor,
-            cluster_area_mode=cluster_area_mode,
-            room_model=room_model,
-            adaptive_cluster_ratios=adaptive_cluster_ratios,
-            cluster_ratio_overrides=cluster_ratio_overrides,
-        )
+    min_required_cluster_limits_m2 = _minimal_required_cluster_footprint_m2(
+        decision_details,
+        clusters_json=clusters_json,
     )
+
+    use_frozen_limits = frozen_cluster_budget_limits_m2 is not None and not rescue_mode
+    if use_frozen_limits:
+        global_budget_m2 = room_area * ratio
+        cluster_ratios = {cid: 0.0 for cid in cluster_ids}
+        cluster_budget_limits_m2 = {
+            cid: float(frozen_cluster_budget_limits_m2.get(cid, 0.0))
+            for cid in cluster_ids
+        }
+    else:
+        global_budget_m2, cluster_ratios, cluster_budget_limits_m2 = (
+            _derive_cluster_budget_limits(
+                cluster_ids=cluster_ids,
+                raw_cluster_footprints_m2=raw_cluster_footprints,
+                min_required_cluster_limits_m2=min_required_cluster_limits_m2,
+                room_area_m2=room_area,
+                base_ratio=base_ratio,
+                shape_factor=shape_factor,
+                cluster_area_mode=cluster_area_mode,
+                room_model=room_model,
+                adaptive_cluster_ratios=adaptive_cluster_ratios,
+                cluster_ratio_overrides=cluster_ratio_overrides,
+            )
+        )
 
     violations_before_fit = _check_budget_limits(
         limits_m2=cluster_budget_limits_m2,
@@ -1325,9 +2054,17 @@ def estimate_budget(
             decision_details,
             cluster_budget_limits_m2=cluster_budget_limits_m2,
             global_budget_m2=global_budget_m2,
+            clusters_json=clusters_json,
         )
     )
 
+    removed_clusters_after_fit = _remove_clusters_without_live_anchor(fitted_details)
+
+    fitted_cluster_footprints = _sum_footprint_by_cluster_m2(
+        fitted_details,
+        field="recommended_effective_footprint_m2_total",
+    )
+    fitted_global_footprint = sum(fitted_cluster_footprints.values())
     fitted_breakdown = _sum_footprint_breakdown(
         fitted_details,
         field="recommended_effective_footprint_m2_total",
@@ -1339,18 +2076,83 @@ def estimate_budget(
     )
     global_violation_after_fit = max(0.0, fitted_global_footprint - global_budget_m2)
 
+    recommended_decisions = _build_recommended_decisions_from_details(
+        decisions,
+        fitted_details,
+    )
+
+    post_fit = _summarize_post_fit_feasibility(
+        fitted_details=fitted_details,
+        cluster_budget_limits_m2=cluster_budget_limits_m2,
+        global_budget_m2=global_budget_m2,
+        fitted_global_footprint=fitted_global_footprint,
+        clusters_json=clusters_json,
+    )
+
+    keep_cluster_ids = set(cluster_ids) - set(removed_clusters_after_fit)
+
+    raw_cluster_footprints = _filter_float_map_keys(
+        raw_cluster_footprints, keep_cluster_ids
+    )
+    raw_breakdown = _filter_nested_float_map_keys(raw_breakdown, keep_cluster_ids)
+    fitted_cluster_footprints = _filter_float_map_keys(
+        fitted_cluster_footprints, keep_cluster_ids
+    )
+    fitted_breakdown = _filter_nested_float_map_keys(fitted_breakdown, keep_cluster_ids)
+    cluster_ratios = _filter_float_map_keys(cluster_ratios, keep_cluster_ids)
+    cluster_budget_limits_m2 = _filter_float_map_keys(
+        cluster_budget_limits_m2, keep_cluster_ids
+    )
+    min_required_cluster_limits_m2 = _filter_float_map_keys(
+        min_required_cluster_limits_m2, keep_cluster_ids
+    )
+    violations_before_fit = _filter_violations_by_cluster_ids(
+        violations_before_fit, keep_cluster_ids
+    )
+    violations_after_fit = _filter_violations_by_cluster_ids(
+        violations_after_fit, keep_cluster_ids
+    )
+    post_fit["cluster_repair_status"] = {
+        cid: info
+        for cid, info in post_fit["cluster_repair_status"].items()
+        if cid in keep_cluster_ids
+    }
+    post_fit["repair_blocked_clusters"] = [
+        cid for cid in post_fit["repair_blocked_clusters"] if cid in keep_cluster_ids
+    ]
+    post_fit["core_minimum_infeasible_clusters"] = [
+        cid
+        for cid in post_fit["core_minimum_infeasible_clusters"]
+        if cid in keep_cluster_ids
+    ]
+
     return {
         "ratio": ratio,
         "base_ratio": base_ratio,
+        "style_prior_ratio": ratio_diagnostics["style_prior_ratio"],
+        "constraint_pressure_ratio": ratio_diagnostics["constraint_pressure_ratio"],
+        "mandatory_ratio": ratio_diagnostics["mandatory_ratio"],
+        "mandatory_base_footprint_m2": ratio_diagnostics["mandatory_base_footprint_m2"],
+        "mandatory_effective_footprint_m2": ratio_diagnostics[
+            "mandatory_effective_footprint_m2"
+        ],
+        "mandatory_item_count": ratio_diagnostics["mandatory_item_count"],
+        "obstacle_ratio": ratio_diagnostics["obstacle_ratio"],
+        "access_pressure": ratio_diagnostics["access_pressure"],
+        "gross_room_area_m2": ratio_diagnostics["gross_room_area_m2"],
+        "available_area_m2": ratio_diagnostics["available_area_m2"],
+        "base_ratio_source": ratio_diagnostics["base_ratio_source"],
+        "rescue_mode": ratio_diagnostics["rescue_mode"],
         "shape_compactness": compactness,
         "shape_factor": shape_factor,
         "cluster_area_mode": cluster_area_mode,
         "room_area_m2": room_area,
         "global_budget_m2": global_budget_m2,
         "global_requested_footprint_m2": sum(raw_cluster_footprints.values()),
-        "global_recommended_footprint_m2": fitted_global_footprint,
+        "global_recommended_footprint_m2": sum(fitted_cluster_footprints.values()),
         "cluster_ratios": cluster_ratios,
         "cluster_budget_limits_m2": cluster_budget_limits_m2,
+        "min_required_cluster_limits_m2": min_required_cluster_limits_m2,
         "cluster_requested_footprints_m2": raw_cluster_footprints,
         "cluster_recommended_footprints_m2": fitted_cluster_footprints,
         "cluster_requested_footprints_by_priority_m2": raw_breakdown,
@@ -1365,11 +2167,43 @@ def estimate_budget(
         "access_required_categories": sorted(access_requirements.categories),
         "access_clearance_ratio_fixed": FIXED_ACCESS_CLEARANCE_RATIO,
         "access_clearance_rule": (
-            "effective = L*W + L*clamp(W*(1/3), min_depth, max_depth)*occupancy_multiplier "
+            "effective = L*W + L*clamp(W*(0.25), min_depth, max_depth)*occupancy_multiplier "
             "for decisions requiring front_clearance"
         ),
         "adaptive_cluster_ratios": adaptive_cluster_ratios,
         "cluster_ratio_overrides": cluster_ratio_overrides or {},
+        "input_decisions_fit": (
+            len(violations_before_fit) == 0 and global_violation_before_fit <= 1e-9
+        ),
+        "recommended_decisions_fit": (
+            len(violations_after_fit) == 0 and global_violation_after_fit <= 1e-9
+        ),
+        "repair_policy_applied": [
+            "reduce_quantity_optional",
+            "reduce_quantity_secondary",
+            "reduce_size_optional",
+            "reduce_size_secondary",
+            "reduce_quantity_primary",
+            "reduce_size_primary",
+            "reduce_quantity_anchor",
+            "reduce_size_anchor",
+            "drop_cluster_if_no_anchor_survives",
+        ],
+        "cluster_budget_limits_source": (
+            "frozen_override" if use_frozen_limits else "derived"
+        ),
+        "recommended_decisions": recommended_decisions,
+        "removed_clusters_after_fit": removed_clusters_after_fit,
+        "cluster_repair_status": post_fit["cluster_repair_status"],
+        "repair_blocked_clusters": post_fit["repair_blocked_clusters"],
+        "core_minimum_infeasible": post_fit["core_minimum_infeasible"],
+        "core_minimum_infeasible_clusters": post_fit[
+            "core_minimum_infeasible_clusters"
+        ],
+        "local_repairs_exhausted": post_fit["local_repairs_exhausted"],
+        "global_repair_blocked": post_fit["global_repair_blocked"],
+        "global_over_by_m2": post_fit["global_over_by_m2"],
+        "repair_exhausted": post_fit["repair_exhausted"],
     }
 
 
@@ -1403,9 +2237,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "estimate_budget",
             "description": (
-                "Estimate cluster footprints (m^2), derive one global room budget, "
-                "allocate per-cluster budget limits, and greedily trim optional/secondary quantities "
-                "to fit space. Uses FIXED front-clearance ratio = 1/3."
+                "Estimate cluster footprints, choose budget ratio from constraint pressure, "
+                "derive one global budget, rebalance per-cluster limits so mandatory surviving sets are not starved, "
+                "and recommend repairs. Repair order: optional qty, secondary qty, optional size, secondary size, "
+                "primary qty, primary size, anchor qty, anchor size. Uses fixed front-clearance ratio 0.25. "
+                "If rescue_mode=true, frozen limits are ignored and the ratio can be relaxed."
             ),
             "parameters": {
                 "type": "object",
@@ -1423,6 +2259,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "type": ["object", "null"],
                         "additionalProperties": {"type": "number"},
                     },
+                    "frozen_cluster_budget_limits_m2": {
+                        "type": ["object", "null"],
+                        "additionalProperties": {"type": "number"},
+                    },
+                    "rescue_mode": {"type": "boolean"},
                 },
                 "required": [
                     "room_model",

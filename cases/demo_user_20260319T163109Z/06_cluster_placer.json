@@ -1,0 +1,33 @@
+{
+  "status": "OK",
+  "grid_mm": 50,
+  "cluster_transforms": [
+    {
+      "cluster_id": "living_area",
+      "x": 50,
+      "y": 3150,
+      "rot": 270
+    },
+    {
+      "cluster_id": "sleep_area",
+      "x": 1000,
+      "y": 1700,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_area",
+      "x": 4100,
+      "y": 4950,
+      "rot": 180
+    },
+    {
+      "cluster_id": "work_area",
+      "x": 2600,
+      "y": 50,
+      "rot": 90
+    }
+  ],
+  "notes": [
+    "Returned best verified valid layout (layout_score=-24134)."
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "sleep_area",
+      "prefer": [
+        "window_side",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Sleep area benefits from daylight and privacy."
+    },
+    {
+      "cluster_id": "work_area",
+      "prefer": [
+        "wall",
+        "window_side"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Work area needs wall support and daylight."
+    },
+    {
+      "cluster_id": "storage_area",
+      "prefer": [
+        "recess_or_edge",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "main_path"
+      ],
+      "priority": "medium",
+      "reason": "Storage should be out of main circulation and not block windows."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "sleep_area",
+      "intents": [
+        "face_window",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "high",
+      "reason": "Bed should face window for daylight and back to wall for stability."
+    },
+    {
+      "cluster_id": "work_area",
+      "intents": [
+        "axis_parallel_window",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk should align with window for light and back to wall for support."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "sleep_area",
+      "object_id": "bed",
+      "intents": [
+        "front_to_window",
+        "back_to_wall"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Bed should face window for daylight and back to wall for stability."
+    },
+    {
+      "cluster_id": "work_area",
+      "object_id": "desk",
+      "intents": [
+        "front_to_window",
+        "back_to_wall"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk should face window for light and back to wall for support."
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "sleep_area",
+      "b": "work_area",
+      "relation": "separate",
+      "priority": "medium",
+      "reason": "Separate sleep and work areas to maintain functional distinction."
+    }
+  ],
+  "cluster_directional_relations": [],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "sleep_area",
+        "priority": "high",
+        "reason": "Ensure clear path from entry to sleep area."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Keep entry area clear for usability."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Maintain open space near window for light access."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Prioritize sleep area near window for daylight.",
+    "Ensure work area is wall-bound and receives daylight.",
+    "Place storage in recess or edge to avoid blocking circulation."
+  ],
+  "notes": [
+    "Ensure sleep area maintains privacy and daylight access.",
+    "Work area should be functional with wall support and daylight."
+  ],
+  "missing": []
+}

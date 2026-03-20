@@ -1,0 +1,146 @@
+{
+  "status": "NEED_INFO",
+  "assumptions": [
+    "The room is a basic bedroom with a focus on minimalism and practicality."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "bed",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Main focal point of the bedroom, essential for sleep."
+    },
+    {
+      "object_type": "nightstand",
+      "category": "nightstand",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Provides storage and surface for bedside items."
+    },
+    {
+      "object_type": "bench",
+      "category": "bench",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Optional seating or storage at the foot of the bed."
+    },
+    {
+      "object_type": "desk",
+      "category": "desk",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Essential for work or study, main piece in work area."
+    },
+    {
+      "object_type": "chair",
+      "category": "chair",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Provides seating for the desk."
+    },
+    {
+      "object_type": "office_chair",
+      "category": "office_chair",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional ergonomic seating for extended work sessions."
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "wardrobe",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Essential for clothing storage, main piece in storage area."
+    },
+    {
+      "object_type": "dresser",
+      "category": "dresser",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Additional storage for clothing, optional."
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage_cabinet",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Additional storage for miscellaneous items, optional."
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Provides seating in the living area."
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional surface for items next to the armchair."
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional lighting for the living area."
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Main piece for entertainment setup."
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "bookshelf",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional storage for books and decor."
+    },
+    {
+      "object_type": "laundry_basket",
+      "category": "laundry_basket",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional for laundry storage."
+    }
+  ],
+  "global_notes": [
+    "The room layout focuses on essential items to maintain a minimal and practical design."
+  ]
+}

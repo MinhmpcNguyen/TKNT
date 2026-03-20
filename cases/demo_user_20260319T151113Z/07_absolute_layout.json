@@ -1,0 +1,117 @@
+{
+  "status": "NEED_INFO",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 3000,
+            "y": 1550
+          },
+          {
+            "x": 3000,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 1550
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 2600
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 3000,
+              "y": 1550
+            },
+            {
+              "x": 3000,
+              "y": 2450
+            }
+          ],
+          "swing_radius_mm": 600,
+          "hinge_hint": "UNKNOWN"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2600
+            },
+            {
+              "x": 0,
+              "y": 1400
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    }
+  },
+  "objects": [],
+  "notes": [],
+  "missing": [
+    "cluster_rects:sleep_area",
+    "cluster_rects:work_area",
+    "cluster_rects:storage_area",
+    "cluster_rects:living_area",
+    "cluster_rects:misc_items"
+  ]
+}

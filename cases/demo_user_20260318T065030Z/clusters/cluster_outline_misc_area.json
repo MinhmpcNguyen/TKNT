@@ -1,0 +1,152 @@
+{
+  "status": "OK",
+  "cluster_id": "misc_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "bench",
+      "x": 150,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "chair",
+      "x": 1100,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "laundry_basket",
+      "x": 1550,
+      "y": 0,
+      "rot": 90
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "bench",
+        "x": 150,
+        "y": 0,
+        "w": 930,
+        "h": 400
+      },
+      {
+        "id": "chair",
+        "x": 1100,
+        "y": 0,
+        "w": 450,
+        "h": 450
+      },
+      {
+        "id": "laundry_basket",
+        "x": 1550,
+        "y": 0,
+        "w": 360,
+        "h": 390
+      }
+    ],
+    "local_bbox": {
+      "min_x": 150,
+      "min_y": 0,
+      "max_x": 1910,
+      "max_y": 450
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 150,
+          "y": 0
+        },
+        {
+          "x": 1910,
+          "y": 0
+        },
+        {
+          "x": 1910,
+          "y": 390
+        },
+        {
+          "x": 1550,
+          "y": 390
+        },
+        {
+          "x": 1550,
+          "y": 450
+        },
+        {
+          "x": 1100,
+          "y": 450
+        },
+        {
+          "x": 1100,
+          "y": 400
+        },
+        {
+          "x": 150,
+          "y": 400
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "bench": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "chair": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "laundry_basket": {
+        "front_local": {
+          "dx": -1,
+          "dy": 0
+        },
+        "axis_local": {
+          "dx": 0,
+          "dy": 1
+        }
+      }
+    }
+  },
+  "notes": [
+    "Returned verified valid layout."
+  ],
+  "missing": []
+}

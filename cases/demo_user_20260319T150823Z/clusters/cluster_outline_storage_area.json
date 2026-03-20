@@ -1,0 +1,35 @@
+{
+  "status": "NEED_INFO",
+  "cluster_id": "storage_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 0,
+      "max_y": 0
+    },
+    "outline_polygons_ccw": [],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {},
+  "notes": [],
+  "missing": [
+    "rep_dims_m for wardrobe"
+  ]
+}

@@ -1,0 +1,85 @@
+key,value
+bbl.checked_instance_ids,"[""bed"", ""wardrobe"", ""desk""]"
+bbl.details,sum_intersection_area_mm2=0.0.
+bbl.mean_intersection_area_mm2,0.0
+bbl.pair_count,3
+bbl.status,passed
+max_score,160
+normalized_score_0_100,52.5
+numerical.accuracy,0.0
+numerical.comparison_accuracy,0.5
+numerical.comparisons,"[{""left"": ""nightstand"", ""right"": ""bed"", ""predicted_relation"": ""less"", ""allowed_relations"": [""equal"", ""greater""], ""correct"": false}, {""left"": ""wardrobe"", ""right"": ""bed"", ""predicted_relation"": ""equal"", ""allowed_relations"": [""equal""], ""correct"": true}]"
+numerical.details,pred_total=4; gt_total=7.
+numerical.fn,3
+numerical.fp,0
+numerical.gt_spec.bed.max,1
+numerical.gt_spec.bed.min,1
+numerical.gt_spec.bedside_lamp.max,1
+numerical.gt_spec.bedside_lamp.min,1
+numerical.gt_spec.ceiling_lamp.max,1
+numerical.gt_spec.ceiling_lamp.min,1
+numerical.gt_spec.curtain.max,1
+numerical.gt_spec.curtain.min,1
+numerical.gt_spec.nightstand.max,2
+numerical.gt_spec.nightstand.min,1
+numerical.gt_spec.side_table.max,1
+numerical.gt_spec.side_table.min,1
+numerical.gt_spec.wardrobe.max,1
+numerical.gt_spec.wardrobe.min,1
+numerical.precision,1.0
+numerical.pred_counts.bed,1
+numerical.pred_counts.bedside_lamp,0
+numerical.pred_counts.ceiling_lamp,1
+numerical.pred_counts.curtain,0
+numerical.pred_counts.nightstand,0
+numerical.pred_counts.side_table,1
+numerical.pred_counts.wardrobe,1
+numerical.recall,0.571429
+numerical.status,passed
+numerical.tp,4
+numerical_reasoning.accuracy,0.0
+numerical_reasoning.comparison_accuracy,0.5
+numerical_reasoning.comparisons,"[{""left"": ""nightstand"", ""right"": ""bed"", ""predicted_relation"": ""less"", ""allowed_relations"": [""equal"", ""greater""], ""correct"": false}, {""left"": ""wardrobe"", ""right"": ""bed"", ""predicted_relation"": ""equal"", ""allowed_relations"": [""equal""], ""correct"": true}]"
+numerical_reasoning.details,pred_total=4; gt_total=7.
+numerical_reasoning.fn,3
+numerical_reasoning.fp,0
+numerical_reasoning.gt_spec.bed.max,1
+numerical_reasoning.gt_spec.bed.min,1
+numerical_reasoning.gt_spec.bedside_lamp.max,1
+numerical_reasoning.gt_spec.bedside_lamp.min,1
+numerical_reasoning.gt_spec.ceiling_lamp.max,1
+numerical_reasoning.gt_spec.ceiling_lamp.min,1
+numerical_reasoning.gt_spec.curtain.max,1
+numerical_reasoning.gt_spec.curtain.min,1
+numerical_reasoning.gt_spec.nightstand.max,2
+numerical_reasoning.gt_spec.nightstand.min,1
+numerical_reasoning.gt_spec.side_table.max,1
+numerical_reasoning.gt_spec.side_table.min,1
+numerical_reasoning.gt_spec.wardrobe.max,1
+numerical_reasoning.gt_spec.wardrobe.min,1
+numerical_reasoning.precision,1.0
+numerical_reasoning.pred_counts.bed,1
+numerical_reasoning.pred_counts.bedside_lamp,0
+numerical_reasoning.pred_counts.ceiling_lamp,1
+numerical_reasoning.pred_counts.curtain,0
+numerical_reasoning.pred_counts.nightstand,0
+numerical_reasoning.pred_counts.side_table,1
+numerical_reasoning.pred_counts.wardrobe,1
+numerical_reasoning.recall,0.571429
+numerical_reasoning.status,passed
+numerical_reasoning.tp,4
+object_instances.bed,"[""bed""]"
+object_instances.ceiling_lamp,"[""ceiling_light_001""]"
+object_instances.side_table,"[""desk""]"
+object_instances.wardrobe,"[""wardrobe""]"
+oob.checked_instance_ids,"[""bed"", ""desk"", ""wardrobe"", ""tv_console"", ""ceiling_light_001"", ""wall_art_001""]"
+oob.details,out_of_bounds=0/6.
+oob.oob_rate,0.0
+oob.out_of_bounds_instance_ids,[]
+oob.out_of_bounds_objects,[]
+oob.scene_invalid,False
+oob.status,passed
+overall_score,84
+room_type,bedroom
+rules,"[{""rule_id"": ""bed/central"", ""name"": ""Bed is central anchor"", ""weight"": 10, ""earned"": 10, ""status"": ""passed"", ""details"": ""dist_to_center_mm=1345.1 (threshold=2250.0).""}, {""rule_id"": ""bed/against_wall"", ""name"": ""Bed near a wall"", ""weight"": 8, ""earned"": 8, ""status"": ""passed"", ""details"": ""min_distance_to_wall_mm=50.0 (threshold=200).""}, {""rule_id"": ""bed/headboard_against_wall"", ""name"": ""Headboard near a wall"", ""weight"": 9, ""earned"": 9, ""status"": ""passed"", ""details"": ""headboard_edge=bottom; min_distance_to_wall_mm=50.0 (threshold=200).""}, {""rule_id"": ""nightstand/adjacent_to_headboard"", ""name"": ""Nightstand(s) adjacent to headboard"", ""weight"": 10, ""earned"": 0, ""status"": ""failed"", ""details"": ""No nightstand found.""}, {""rule_id"": ""nightstand/preferred_side"", ""name"": ""Single nightstand on preferred side"", ""weight"": 6, ""earned"": 0, ""status"": ""failed"", ""details"": ""Single-side rule only applies when nightstand count is exactly 1.""}, {""rule_id"": ""nightstand/paired_with_bedside_lamp"", ""name"": ""Nightstand paired with bedside lamp"", ""weight"": 9, ""earned"": 0, ""status"": ""failed"", ""details"": ""No nightstand found.""}, {""rule_id"": ""bedside_lamp/on_nightstand_or_above"", ""name"": ""Bedside lamp on/above nightstand"", ""weight"": 9, ""earned"": 0, ""status"": ""failed"", ""details"": ""No bedside_lamp found.""}, {""rule_id"": ""bedside_lamp/not_independent"", ""name"": ""Bedside lamp near bed + nightstand"", ""weight"": 8, ""earned"": 0, ""status"": ""failed"", ""details"": ""No bedside_lamp found.""}, {""rule_id"": ""wardrobe/against_wall"", ""name"": ""Wardrobe near a wall"", ""weight"": 9, ""earned"": 9, ""status"": ""passed"", ""details"": ""wardrobe=wardrobe; min_distance_to_wall_mm=50.0.""}, {""rule_id"": ""wardrobe/near_door"", ""name"": ""Wardrobe closer to door than bed headboard"", ""weight"": 7, ""earned"": 7, ""status"": ""passed"", ""details"": ""dist_wardrobe_to_door_mm=2128.7; dist_headboard_to_door_mm=2448.0.""}, {""rule_id"": ""wardrobe/not_next_to_headboard"", ""name"": ""Wardrobe not next to headboard area"", ""weight"": 8, ""earned"": 8, ""status"": ""passed"", ""details"": ""min_distance_wardrobe_to_headboard_mm=3300.0 (min=800).""}, {""rule_id"": ""wardrobe/front_clearance"", ""name"": ""Wardrobe has front clearance"", ""weight"": 10, ""earned"": 0, ""status"": ""failed"", ""details"": ""clearance_depth_mm=800; blockers_in_clearance=['tv_console'].""}, {""rule_id"": ""side_table/near_window"", ""name"": ""Side table near window (if present)"", ""weight"": 7, ""earned"": 7, ""status"": ""passed"", ""details"": ""side_table=desk; min_distance_to_window_mm=848.2 (threshold=1500).""}, {""rule_id"": ""side_table/alternative_placement"", ""name"": ""Side table alternative placement when no window"", ""weight"": 6, ""earned"": 0, ""status"": ""failed"", ""details"": ""Window exists; fallback placement rule therefore fails by rubric standardization.""}, {""rule_id"": ""side_table/not_block_path"", ""name"": ""Side table does not block key paths"", ""weight"": 9, ""earned"": 9, ""status"": ""passed"", ""details"": ""intersections=[].""}, {""rule_id"": ""curtain/present_with_window"", ""name"": ""Curtain present when window exists"", ""weight"": 10, ""earned"": 0, ""status"": ""failed"", ""details"": ""No curtain found.""}, {""rule_id"": ""bed/avoid_window"", ""name"": ""Bed headboard not under a window"", ""weight"": 8, ""earned"": 8, ""status"": ""passed"", ""details"": ""min_headboard_to_window_mm=2033.0 (min=500).""}, {""rule_id"": ""ceiling_light/near_center"", ""name"": ""Ceiling light near room center"", ""weight"": 9, ""earned"": 9, ""status"": ""passed"", ""details"": ""closest_ceiling_light=ceiling_light_001; dist_to_center_mm=1300.8; diag_mm=5000.0.""}, {""rule_id"": ""ceiling_light/general_overhead"", ""name"": ""Ceiling light is general overhead lighting"", ""weight"": 8, ""earned"": 0, ""status"": ""failed"", ""details"": ""No ceiling light satisfied both conditions: hung on ceiling and not tied to a single object. ceiling_light_001: hung_on_ceiling=True, tied_to_single_object=True""}]"
+status,OK

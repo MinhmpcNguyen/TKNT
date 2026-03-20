@@ -1,0 +1,267 @@
+{
+  "status": "OK",
+  "assumptions": [
+    "Size profiles fetched successfully."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "sleep",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main focal point of the bedroom.",
+      "rep_dims_m": {
+        "L": 2.06,
+        "W": 1.21,
+        "H": 0.33,
+        "A": 2.4926,
+        "R": 1.7024793388429753,
+        "source_id": "bed_012"
+      }
+    },
+    {
+      "object_type": "nightstand",
+      "category": "sleep",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Provides symmetry and functionality beside the bed.",
+      "rep_dims_m": {
+        "L": 0.43,
+        "W": 0.35,
+        "H": 0.53,
+        "A": 0.1505,
+        "R": 1.2285714285714286,
+        "source_id": "nightstand_003"
+      }
+    },
+    {
+      "object_type": "bench",
+      "category": "sleep",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional seating at the foot of the bed.",
+      "rep_dims_m": {
+        "L": 0.93,
+        "W": 0.4,
+        "H": 0.41,
+        "A": 0.37200000000000005,
+        "R": 2.325,
+        "source_id": "bench_004"
+      }
+    },
+    {
+      "object_type": "desk",
+      "category": "work",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Essential for work area functionality.",
+      "rep_dims_m": {
+        "L": 1.09,
+        "W": 0.5,
+        "H": 0.75,
+        "A": 0.545,
+        "R": 2.18,
+        "source_id": "desk_005"
+      }
+    },
+    {
+      "object_type": "chair",
+      "category": "work",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "M",
+      "priority": "primary",
+      "rationale": "Necessary seating for desk use.",
+      "rep_dims_m": {
+        "L": 0.56,
+        "W": 0.52,
+        "H": 0.92,
+        "A": 0.2912,
+        "R": 1.076923076923077,
+        "source_id": "chair_018"
+      }
+    },
+    {
+      "object_type": "office_chair",
+      "category": "work",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "M",
+      "priority": "secondary",
+      "rationale": "Provides ergonomic seating option.",
+      "rep_dims_m": {
+        "L": 0.71,
+        "W": 0.55,
+        "H": 1.11,
+        "A": 0.3905,
+        "R": 1.2909090909090908,
+        "source_id": "office_chair_004"
+      }
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main storage solution for clothing.",
+      "rep_dims_m": {
+        "L": 0.81,
+        "W": 0.6,
+        "H": 2.4,
+        "A": 0.486,
+        "R": 1.35,
+        "source_id": "wardrobe_008"
+      }
+    },
+    {
+      "object_type": "dresser",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Additional storage for folded items.",
+      "rep_dims_m": {
+        "L": 0.88,
+        "W": 0.48,
+        "H": 0.8,
+        "A": 0.4224,
+        "R": 1.8333333333333335,
+        "source_id": "dresser_009"
+      }
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Optional storage for miscellaneous items.",
+      "rep_dims_m": {
+        "L": 0.61,
+        "W": 0.41,
+        "H": 1.78,
+        "A": 0.2501,
+        "R": 1.4878048780487805,
+        "source_id": "storage_cabinet_002"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "living",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "primary",
+      "rationale": "Provides comfortable seating in living area.",
+      "rep_dims_m": {
+        "L": 0.9,
+        "W": 0.73,
+        "H": 0.83,
+        "A": 0.657,
+        "R": 1.2328767123287672,
+        "source_id": "armchair_003"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "living",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "secondary",
+      "rationale": "Optional surface for items near seating.",
+      "rep_dims_m": {
+        "L": 0.5,
+        "W": 0.49,
+        "H": 0.48,
+        "A": 0.245,
+        "R": 1.0204081632653061,
+        "source_id": "side_table_003"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "living",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "secondary",
+      "rationale": "Provides lighting in living area.",
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.45,
+        "H": 1.45,
+        "A": 0.2025,
+        "R": 1.0,
+        "source_id": "floor_lamp_001"
+      }
+    },
+    {
+      "object_type": "tv_console",
+      "category": "living",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "L",
+      "priority": "anchor",
+      "rationale": "Main entertainment unit.",
+      "rep_dims_m": {
+        "L": 1.59,
+        "W": 0.46,
+        "H": 0.4,
+        "A": 0.7314,
+        "R": 3.4565217391304346,
+        "source_id": "tv_console_011"
+      }
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "misc",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Droppable item due to space constraints.",
+      "rep_dims_m": {
+        "L": 0.63,
+        "W": 0.25,
+        "H": 2.22,
+        "A": 0.1575,
+        "R": 2.52,
+        "source_id": "bookshelf_001"
+      }
+    },
+    {
+      "object_type": "laundry_basket",
+      "category": "misc",
+      "cluster_id": "misc_items",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "optional",
+      "rationale": "Droppable item due to space constraints.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.36,
+        "H": 0.58,
+        "A": 0.1404,
+        "R": 1.0833333333333335,
+        "source_id": "laundry_basket_002"
+      }
+    }
+  ],
+  "global_notes": [
+    "Initial decisions based on user intent and room constraints."
+  ],
+  "budget_valid": true
+}

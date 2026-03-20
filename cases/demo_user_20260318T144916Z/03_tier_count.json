@@ -1,0 +1,235 @@
+{
+  "status": "UNSAT",
+  "assumptions": [
+    "The room's dimensions and constraints are fixed.",
+    "All clusters are required to maintain at least one anchor item.",
+    "The size profiles and constraints provided are accurate."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "bed",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main sleeping furniture, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 2.06,
+        "W": 1.21,
+        "H": 0.33,
+        "A": 2.4926,
+        "R": 1.7024793388429753,
+        "source_id": "bed_012"
+      }
+    },
+    {
+      "object_type": "nightstand",
+      "category": "nightstand",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Essential for bedside use, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 0.43,
+        "W": 0.35,
+        "H": 0.53,
+        "A": 0.1505,
+        "R": 1.2285714285714286,
+        "source_id": "nightstand_003"
+      }
+    },
+    {
+      "object_type": "bench",
+      "category": "bench",
+      "cluster_id": "sleep_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.93,
+        "W": 0.4,
+        "H": 0.41,
+        "A": 0.37200000000000005,
+        "R": 2.325,
+        "source_id": "bench_004"
+      }
+    },
+    {
+      "object_type": "desk",
+      "category": "desk",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main work furniture, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 0.98,
+        "W": 0.51,
+        "H": 0.78,
+        "A": 0.4998,
+        "R": 1.9215686274509802,
+        "source_id": "desk_004"
+      }
+    },
+    {
+      "object_type": "chair",
+      "category": "chair",
+      "cluster_id": "work_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.45,
+        "H": 0.85,
+        "A": 0.2025,
+        "R": 1.0,
+        "source_id": "chair_008"
+      }
+    },
+    {
+      "object_type": "office_chair",
+      "category": "office_chair",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Essential for desk use, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 0.58,
+        "W": 0.55,
+        "H": 1.01,
+        "A": 0.319,
+        "R": 1.0545454545454545,
+        "source_id": "office_chair_001"
+      }
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "wardrobe",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main storage furniture, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 0.81,
+        "W": 0.6,
+        "H": 2.4,
+        "A": 0.486,
+        "R": 1.35,
+        "source_id": "wardrobe_008"
+      }
+    },
+    {
+      "object_type": "dresser",
+      "category": "dresser",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.88,
+        "W": 0.48,
+        "H": 0.8,
+        "A": 0.4224,
+        "R": 1.8333333333333335,
+        "source_id": "dresser_009"
+      }
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage_cabinet",
+      "cluster_id": "storage_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.61,
+        "W": 0.41,
+        "H": 1.78,
+        "A": 0.2501,
+        "R": 1.4878048780487805,
+        "source_id": "storage_cabinet_002"
+      }
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Main living area furniture, reduced to S for budget.",
+      "rep_dims_m": {
+        "L": 1.26,
+        "W": 0.38,
+        "H": 0.58,
+        "A": 0.4788,
+        "R": 3.3157894736842106,
+        "source_id": "tv_console_002"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.84,
+        "W": 0.71,
+        "H": 0.85,
+        "A": 0.5963999999999999,
+        "R": 1.1830985915492958,
+        "source_id": "armchair_007"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.37,
+        "H": 0.58,
+        "A": 0.1443,
+        "R": 1.0540540540540542,
+        "source_id": "side_table_007"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "living_area",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Removed to fit budget.",
+      "rep_dims_m": {
+        "L": 0.35,
+        "W": 0.32,
+        "H": 1.51,
+        "A": 0.11199999999999999,
+        "R": 1.09375,
+        "source_id": "floor_lamp_004"
+      }
+    }
+  ],
+  "global_notes": [
+    "Despite reducing all items to the smallest size and removing non-essential items, the budget constraints could not be met.",
+    "Further reduction is not possible without removing essential anchor items."
+  ]
+}

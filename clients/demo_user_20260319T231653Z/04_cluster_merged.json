@@ -1,0 +1,237 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_area",
+      "tag": "living",
+      "members": [
+        "sofa",
+        "armchair",
+        "coffee_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sofa",
+        "coffee_table"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "armchair"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "coffee_table",
+          "b": "sofa",
+          "b_edge": "front",
+          "span": "any",
+          "gap_min": 0,
+          "gap_max": 300
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "floor_lamp",
+          "b": "armchair",
+          "weight": 5
+        },
+        {
+          "type": "prefer_align_edge",
+          "a": "sofa",
+          "b": "coffee_table",
+          "edge": "front",
+          "weight": 3
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sofa": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          },
+          "armchair": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "sofa",
+          "category": "living",
+          "cluster_id": "seating_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Main seating area anchor.",
+          "rep_dims_m": {
+            "L": 2.06,
+            "W": 0.96,
+            "H": 0.86,
+            "A": 1.9776,
+            "R": 2.1458333333333335,
+            "source_id": "sofa_001"
+          }
+        },
+        {
+          "object_type": "armchair",
+          "category": "living",
+          "cluster_id": "seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Additional seating for comfort.",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          }
+        },
+        {
+          "object_type": "coffee_table",
+          "category": "living",
+          "cluster_id": "seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Essential for seating area functionality.",
+          "rep_dims_m": {
+            "L": 0.9,
+            "W": 0.5,
+            "H": 0.44,
+            "A": 0.45,
+            "R": 1.8,
+            "source_id": "coffee_table_006"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "living",
+          "cluster_id": "seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "optional",
+          "rationale": "Provides lighting near seating.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "media_area",
+      "tag": "living",
+      "members": [
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "Front faces the seating area."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console",
+          "category": "living",
+          "cluster_id": "media_area",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Essential for media setup.",
+          "rep_dims_m": {
+            "L": 1.59,
+            "W": 0.46,
+            "H": 0.4,
+            "A": 0.7314,
+            "R": 3.4565217391304346,
+            "source_id": "tv_console_011"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters are organized based on typical living room functions: seating, media, and miscellaneous items."
+  ],
+  "missing": []
+}

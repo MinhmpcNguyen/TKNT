@@ -73,6 +73,7 @@ class MacroClusterPlacer:
             grid_mm=grid_mm,
         )
         payload = _parse_json(raw)
+        payload = _sanitize_placer_payload(payload)
         return MacroClusterPlacerOutput.model_validate(payload).model_dump()
 
 
@@ -104,6 +105,25 @@ def _json_block(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=True, indent=2)
 
 
+def _sanitize_placer_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        notes = []
+    reason = payload.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        notes.append(reason.strip())
+
+    sanitized = {
+        "status": payload.get("status"),
+        "grid_mm": payload.get("grid_mm"),
+        "cluster_transforms": payload.get("cluster_transforms", []),
+        "notes": notes,
+    }
+    return sanitized
+
+
 def _run_with_tools(
     *,
     messages: list[dict[str, Any]],
@@ -129,6 +149,10 @@ def _run_with_tools(
     best_valid_score: int | None = None
     best_valid_quality: dict[str, Any] | None = None
     best_valid_transforms: list[dict[str, Any]] | None = None
+    best_invalid_score: int | None = None
+    best_invalid_quality: dict[str, Any] | None = None
+    best_invalid_transforms: list[dict[str, Any]] | None = None
+    best_invalid_rank: tuple[Any, ...] | None = None
 
     improve_rounds_used = 0
     no_improve_streak = 0
@@ -163,6 +187,12 @@ def _run_with_tools(
                         grid_mm=grid_mm,
                         transforms=best_valid_transforms,
                         quality=best_valid_quality,
+                    )
+                if best_invalid_transforms is not None:
+                    return _build_best_invalid_json(
+                        grid_mm=grid_mm,
+                        transforms=best_invalid_transforms,
+                        quality=best_invalid_quality,
                     )
                 return json.dumps(
                     {
@@ -606,6 +636,14 @@ def _run_with_tools(
             )
             invalid_state_trace = invalid_state_trace[-8:]
 
+            invalid_rank = _quality_rank(score, quality)
+            if transforms:
+                if best_invalid_rank is None or invalid_rank > best_invalid_rank:
+                    best_invalid_rank = invalid_rank
+                    best_invalid_score = score
+                    best_invalid_quality = quality
+                    best_invalid_transforms = transforms
+
             stagnation = _detect_invalid_stagnation(invalid_state_trace, window=4)
             blocked_cluster_ids = set(stagnation.get("blocked_cluster_ids") or [])
 
@@ -847,6 +885,12 @@ def _run_with_tools(
                         transforms=best_valid_transforms,
                         quality=best_valid_quality,
                     )
+                if best_invalid_transforms is not None:
+                    return _build_best_invalid_json(
+                        grid_mm=grid_mm,
+                        transforms=best_invalid_transforms,
+                        quality=best_invalid_quality,
+                    )
                 return content
 
             quality = tool_output.get("quality")
@@ -920,6 +964,12 @@ def _run_with_tools(
                         transforms=best_valid_transforms,
                         quality=best_valid_quality,
                     )
+                if best_invalid_transforms is not None:
+                    return _build_best_invalid_json(
+                        grid_mm=grid_mm,
+                        transforms=best_invalid_transforms,
+                        quality=best_invalid_quality,
+                    )
 
             return content
 
@@ -930,6 +980,12 @@ def _run_with_tools(
                     transforms=best_valid_transforms,
                     quality=best_valid_quality,
                 )
+            if best_invalid_transforms is not None:
+                return _build_best_invalid_json(
+                    grid_mm=grid_mm,
+                    transforms=best_invalid_transforms,
+                    quality=best_invalid_quality,
+                )
             return content
 
         if transforms_list is None:
@@ -938,6 +994,12 @@ def _run_with_tools(
                     grid_mm=grid_mm,
                     transforms=best_valid_transforms,
                     quality=best_valid_quality,
+                )
+            if best_invalid_transforms is not None:
+                return _build_best_invalid_json(
+                    grid_mm=grid_mm,
+                    transforms=best_invalid_transforms,
+                    quality=best_invalid_quality,
                 )
             return content
 
@@ -1060,6 +1122,12 @@ def _run_with_tools(
                     )
                     return best_json
 
+        if best_valid_transforms is None and best_invalid_transforms is not None:
+            return _build_best_invalid_json(
+                grid_mm=grid_mm,
+                transforms=best_invalid_transforms,
+                quality=best_invalid_quality,
+            )
         return content
 
     if best_valid_transforms is not None:
@@ -1074,6 +1142,20 @@ def _run_with_tools(
             grid_mm=grid_mm,
             transforms=best_valid_transforms,
             quality=best_valid_quality,
+        )
+
+    if best_invalid_transforms is not None:
+        logger.warning(
+            "MacroClusterPlacer hit max_steps; returning best invalid state with score=%s quality=%s",
+            best_invalid_score,
+            json.dumps(best_invalid_quality, ensure_ascii=True)
+            if isinstance(best_invalid_quality, dict)
+            else None,
+        )
+        return _build_best_invalid_json(
+            grid_mm=grid_mm,
+            transforms=best_invalid_transforms,
+            quality=best_invalid_quality,
         )
 
     logger.warning("MacroClusterPlacer hit max_steps with no valid layout.")
@@ -2265,6 +2347,29 @@ def _build_best_valid_json(
 
     payload = {
         "status": "OK",
+        "grid_mm": int(grid_mm),
+        "cluster_transforms": _canonicalize_cluster_transforms(transforms),
+        "notes": notes,
+    }
+    return json.dumps(payload, ensure_ascii=True)
+
+
+def _build_best_invalid_json(
+    *,
+    grid_mm: int,
+    transforms: list[dict[str, Any]],
+    quality: dict[str, Any] | None,
+) -> str:
+    notes = ["Returned best available INVALID layout (no valid layout found)."]
+    if isinstance(quality, dict):
+        score = quality.get("layout_score")
+        if isinstance(score, (int, float)):
+            notes = [
+                f"Returned best available INVALID layout (layout_score={int(round(score))})."
+            ]
+
+    payload = {
+        "status": "UNSAT",
         "grid_mm": int(grid_mm),
         "cluster_transforms": _canonicalize_cluster_transforms(transforms),
         "notes": notes,

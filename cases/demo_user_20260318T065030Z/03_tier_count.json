@@ -1,0 +1,266 @@
+{
+  "status": "OK",
+  "assumptions": [
+    "Room is a standard bedroom with typical furniture needs."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "bed",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Bed is the focal point of the sleep area.",
+      "rep_dims_m": {
+        "L": 1.96,
+        "W": 1.69,
+        "H": 0.48,
+        "A": 3.3124,
+        "R": 1.1597633136094674,
+        "source_id": "bed_014"
+      }
+    },
+    {
+      "object_type": "nightstand",
+      "category": "nightstand",
+      "cluster_id": "sleep_area",
+      "quantity": 2,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Nightstands are needed on both sides of the bed.",
+      "rep_dims_m": {
+        "L": 0.43,
+        "W": 0.35,
+        "H": 0.53,
+        "A": 0.1505,
+        "R": 1.2285714285714286,
+        "source_id": "nightstand_003"
+      }
+    },
+    {
+      "object_type": "dresser",
+      "category": "dresser",
+      "cluster_id": "sleep_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "secondary",
+      "rationale": "Dresser provides essential storage without crowding.",
+      "rep_dims_m": {
+        "L": 1.16,
+        "W": 0.49,
+        "H": 0.84,
+        "A": 0.5683999999999999,
+        "R": 2.36734693877551,
+        "source_id": "dresser_007"
+      }
+    },
+    {
+      "object_type": "desk",
+      "category": "desk",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Desk is the main component of the work area.",
+      "rep_dims_m": {
+        "L": 0.98,
+        "W": 0.51,
+        "H": 0.78,
+        "A": 0.4998,
+        "R": 1.9215686274509802,
+        "source_id": "desk_004"
+      }
+    },
+    {
+      "object_type": "office_chair",
+      "category": "office_chair",
+      "cluster_id": "work_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Office chair complements the desk for work.",
+      "rep_dims_m": {
+        "L": 0.58,
+        "W": 0.55,
+        "H": 1.01,
+        "A": 0.319,
+        "R": 1.0545454545454545,
+        "source_id": "office_chair_001"
+      }
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "wardrobe",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "Wardrobe is essential for clothing storage.",
+      "rep_dims_m": {
+        "L": 1.75,
+        "W": 0.51,
+        "H": 2.02,
+        "A": 0.8925000000000001,
+        "R": 3.4313725490196076,
+        "source_id": "wardrobe_007"
+      }
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "bookshelf",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Bookshelf provides additional storage.",
+      "rep_dims_m": {
+        "L": 0.63,
+        "W": 0.25,
+        "H": 2.22,
+        "A": 0.1575,
+        "R": 2.52,
+        "source_id": "bookshelf_001"
+      }
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage_cabinet",
+      "cluster_id": "storage_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Storage cabinet offers versatile storage options.",
+      "rep_dims_m": {
+        "L": 0.61,
+        "W": 0.41,
+        "H": 1.78,
+        "A": 0.2501,
+        "R": 1.4878048780487805,
+        "source_id": "storage_cabinet_002"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Armchair provides seating in the living area.",
+      "rep_dims_m": {
+        "L": 0.84,
+        "W": 0.71,
+        "H": 0.85,
+        "A": 0.5963999999999999,
+        "R": 1.1830985915492958,
+        "source_id": "armchair_007"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Side table complements the armchair.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.37,
+        "H": 0.58,
+        "A": 0.1443,
+        "R": 1.0540540540540542,
+        "source_id": "side_table_007"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Floor lamp provides lighting in the living area.",
+      "rep_dims_m": {
+        "L": 0.35,
+        "W": 0.32,
+        "H": 1.51,
+        "A": 0.11199999999999999,
+        "R": 1.09375,
+        "source_id": "floor_lamp_004"
+      }
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "living_area",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "rationale": "TV console is the focal point of the living area.",
+      "rep_dims_m": {
+        "L": 1.59,
+        "W": 0.46,
+        "H": 0.4,
+        "A": 0.7314,
+        "R": 3.4565217391304346,
+        "source_id": "tv_console_011"
+      }
+    },
+    {
+      "object_type": "bench",
+      "category": "bench",
+      "cluster_id": "misc_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Bench provides additional seating.",
+      "rep_dims_m": {
+        "L": 0.93,
+        "W": 0.4,
+        "H": 0.41,
+        "A": 0.37200000000000005,
+        "R": 2.325,
+        "source_id": "bench_004"
+      }
+    },
+    {
+      "object_type": "chair",
+      "category": "chair",
+      "cluster_id": "misc_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Chair complements the bench for seating.",
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.45,
+        "H": 0.85,
+        "A": 0.2025,
+        "R": 1.0,
+        "source_id": "chair_008"
+      }
+    },
+    {
+      "object_type": "laundry_basket",
+      "category": "laundry_basket",
+      "cluster_id": "misc_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Laundry basket is practical for clothing management.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.36,
+        "H": 0.58,
+        "A": 0.1404,
+        "R": 1.0833333333333335,
+        "source_id": "laundry_basket_002"
+      }
+    }
+  ],
+  "global_notes": [
+    "Decisions are based on typical bedroom layout requirements."
+  ]
+}

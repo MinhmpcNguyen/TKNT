@@ -1,0 +1,284 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "living_area",
+      "prefer": [
+        "window_side",
+        "long_wall"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Seating and media setup benefits from window proximity and long wall placement."
+    },
+    {
+      "cluster_id": "misc_items",
+      "prefer": [
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "center"
+      ],
+      "priority": "medium",
+      "reason": "Storage items can be placed in less prominent areas."
+    },
+    {
+      "cluster_id": "sleep_area",
+      "prefer": [
+        "far_from_entry",
+        "window_side"
+      ],
+      "avoid": [
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Sleep area benefits from quiet and daylight."
+    },
+    {
+      "cluster_id": "storage_area",
+      "prefer": [
+        "long_wall"
+      ],
+      "avoid": [
+        "window_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Storage items should utilize wall space without blocking windows."
+    },
+    {
+      "cluster_id": "work_area",
+      "prefer": [
+        "window_side",
+        "entry_side"
+      ],
+      "avoid": [
+        "door_swing"
+      ],
+      "priority": "medium",
+      "reason": "Work area benefits from daylight and proximity to entry."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "living_area",
+      "intents": [
+        "face_window",
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster"
+      ],
+      "target_cluster_id": "work_area",
+      "priority": "high",
+      "reason": "Enhances viewing experience and utilizes wall for media setup."
+    },
+    {
+      "cluster_id": "sleep_area",
+      "intents": [
+        "face_window",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "high",
+      "reason": "Oriented for daylight exposure and privacy."
+    },
+    {
+      "cluster_id": "work_area",
+      "intents": [
+        "face_window",
+        "access_to_open_space",
+        "inward_to_room",
+        "face_cluster"
+      ],
+      "target_cluster_id": "living_area",
+      "priority": "high",
+      "reason": "Work area benefits from daylight and open access."
+    },
+    {
+      "cluster_id": "storage_area",
+      "intents": [
+        "access_to_open_space",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "access-sensitive cluster should expose usable front toward open space"
+    },
+    {
+      "cluster_id": "misc_items",
+      "intents": [
+        "access_to_open_space",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "access-sensitive cluster should expose usable front toward open space"
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "living_area",
+      "object_id": "armchair",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensures seating faces media focal point."
+    },
+    {
+      "cluster_id": "living_area",
+      "object_id": "tv_console",
+      "intents": [
+        "front_to_open_space",
+        "face_object",
+        "preserve_front_access"
+      ],
+      "target_object_id": "chair",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Media console should be accessible and visible."
+    },
+    {
+      "cluster_id": "misc_items",
+      "object_id": "bookshelf",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensures usability of storage."
+    },
+    {
+      "cluster_id": "storage_area",
+      "object_id": "wardrobe",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensures usability of storage."
+    },
+    {
+      "cluster_id": "work_area",
+      "object_id": "chair",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "important seating anchor should face focal/media anchor"
+    },
+    {
+      "cluster_id": "work_area",
+      "object_id": "office_chair",
+      "intents": [
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "important seating anchor should face focal/media anchor"
+    },
+    {
+      "cluster_id": "storage_area",
+      "object_id": "dresser",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "object has meaningful front usability and should preserve access"
+    },
+    {
+      "cluster_id": "storage_area",
+      "object_id": "storage_cabinet",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "object has meaningful front usability and should preserve access"
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "living_area",
+      "b": "work_area",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Both benefit from window proximity and open space."
+    },
+    {
+      "a": "sleep_area",
+      "b": "storage_area",
+      "relation": "separate",
+      "priority": "medium",
+      "reason": "Preserves quiet and privacy for sleep area."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "living_area",
+      "b": "work_area",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Aligns both clusters along window side for daylight."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "work_area",
+        "priority": "high",
+        "reason": "Ensures easy access to work area from entry."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Preserves entry usability."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Ensures daylight access and visual openness."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Ensure living area faces window and utilizes long wall.",
+    "Position sleep area far from entry for privacy.",
+    "Align work area near entry and window for daylight access.",
+    "Preserve a clear viewing relationship between chair and tv_console.",
+    "Do not orient chair away from tv_console.",
+    "Keep living_area readable from work_area.",
+    "Preserve front usability for dresser.",
+    "Preserve front usability for storage_cabinet.",
+    "Preserve front usability for wardrobe.",
+    "Preserve front usability for tv_console.",
+    "Preserve front usability for bookshelf."
+  ],
+  "notes": [
+    "Living area and work area benefit from window proximity.",
+    "Storage clusters should avoid blocking window clearance."
+  ],
+  "missing": []
+}

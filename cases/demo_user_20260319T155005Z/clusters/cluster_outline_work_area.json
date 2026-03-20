@@ -1,0 +1,90 @@
+{
+  "status": "OK",
+  "cluster_id": "work_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "desk",
+      "x": 0,
+      "y": 0,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "desk",
+        "x": 0,
+        "y": 0,
+        "w": 1090,
+        "h": 500
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 1090,
+      "max_y": 500
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1090,
+          "y": 0
+        },
+        {
+          "x": 1090,
+          "y": 500
+        },
+        {
+          "x": 0,
+          "y": 500
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "desk": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "Returned best verified valid layout from controller."
+  ],
+  "missing": []
+}

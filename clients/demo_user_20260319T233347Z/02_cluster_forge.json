@@ -1,0 +1,329 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_area",
+      "tag": "living",
+      "members": [
+        "sofa",
+        "armchair",
+        "recliner",
+        "coffee_table",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sofa",
+        "coffee_table"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "armchair"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "recliner"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "recliner"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "recliner",
+          "b": "coffee_table"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "coffee_table",
+          "b": "sofa",
+          "b_edge": "front",
+          "span": "any",
+          "gap_min": 100,
+          "gap_max": 300
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "side_table",
+          "b": "sofa",
+          "weight": 5
+        },
+        {
+          "type": "prefer_align_edge",
+          "a": "sofa",
+          "b": "coffee_table",
+          "edge": "front",
+          "weight": 3
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "recliner": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sofa": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          },
+          "armchair": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          },
+          "recliner": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "recliner",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media_area",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "media_shelf",
+        "bookshelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "tv_console",
+          "b": "media_shelf"
+        },
+        {
+          "type": "no_overlap",
+          "a": "tv_console",
+          "b": "bookshelf"
+        },
+        {
+          "type": "no_overlap",
+          "a": "media_shelf",
+          "b": "bookshelf"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "media_shelf",
+          "b": "tv_console",
+          "weight": 4
+        },
+        {
+          "type": "prefer_align_edge",
+          "a": "tv_console",
+          "b": "media_shelf",
+          "edge": "front",
+          "weight": 2
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "media_shelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "Front faces the seating area."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "misc_items",
+      "tag": "misc",
+      "members": [
+        "sectional_sofa",
+        "console_table",
+        "storage_cabinet",
+        "bean_bag",
+        "pet_bed"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "console_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "storage_cabinet"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "bean_bag"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "pet_bed"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "console_table",
+          "b": "sectional_sofa",
+          "weight": 3
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "console_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bean_bag": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "pet_bed": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "top",
+            "notes": "Front faces the main viewing area."
+          },
+          "storage_cabinet": {
+            "front": "top",
+            "notes": "Front requires access for storage."
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Clusters are organized based on typical living room arrangements."
+  ],
+  "missing": []
+}

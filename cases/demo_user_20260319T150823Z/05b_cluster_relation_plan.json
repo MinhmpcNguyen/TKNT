@@ -1,0 +1,111 @@
+{
+  "status": "NEED_INFO",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "work_area",
+      "prefer": [
+        "wall",
+        "window_side"
+      ],
+      "avoid": [
+        "door_swing",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Work area needs natural light and wall support for desk."
+    },
+    {
+      "cluster_id": "sleep_area",
+      "prefer": [
+        "far_from_entry",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_blocking",
+        "main_path"
+      ],
+      "priority": "medium",
+      "reason": "Sleep area should be quiet and away from entry traffic."
+    },
+    {
+      "cluster_id": "storage_area",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_clearance"
+      ],
+      "priority": "medium",
+      "reason": "Storage area benefits from wall support and should not block window."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "work_area",
+      "intents": [
+        "back_to_wall",
+        "face_window"
+      ],
+      "target_cluster_id": null,
+      "priority": "high",
+      "reason": "Desk should face window for light and have wall support."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "work_area",
+      "object_id": "desk",
+      "intents": [
+        "front_to_window",
+        "back_to_wall"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Desk should face window for light and have wall support."
+    },
+    {
+      "cluster_id": "work_area",
+      "object_id": "chair",
+      "intents": [
+        "align_with_cluster_axis"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "medium",
+      "reason": "Chair should align with desk orientation."
+    }
+  ],
+  "cluster_relations": [],
+  "cluster_directional_relations": [],
+  "circulation_plan": {
+    "main_paths": [],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Entry area should remain clear for access."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Window area should remain open for light and view."
+      }
+    ]
+  },
+  "placement_guidelines": [
+    "Ensure work area is positioned to utilize natural light from window.",
+    "Keep sleep area away from entry to minimize noise."
+  ],
+  "notes": [
+    "Missing information on living_area and misc_items prevents full planning."
+  ],
+  "missing": [
+    "living_area",
+    "misc_items"
+  ]
+}

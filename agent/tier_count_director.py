@@ -62,7 +62,6 @@ class TierCountDirector:
             "special_notes": special_notes,
             "clusters_json": clusters_json_clean,
             "tenant_id": tenant_id or None,
-            # NOTE: clearance ratio is fixed inside estimate_budget (see tier_count/tools.py)
         }
 
         size_profiles_by_category: dict[str, Any] | None = None
@@ -161,8 +160,11 @@ def _run_with_tools(
     required_types = _extract_member_types(clusters_json)
     members_by_cluster = _extract_members_by_cluster(clusters_json)
     anchors_by_cluster = _extract_anchors_by_cluster(clusters_json)
-    estimate_budget_called = False
+    droppable_clusters = _extract_droppable_clusters(clusters_json)
+
     last_draft: dict[str, Any] | None = None
+    frozen_cluster_budget_limits_m2: dict[str, float] | None = None
+    rescue_mode_used = False
 
     for step in range(max_steps):
         logger.info("TierCount step %s/%s", step + 1, max_steps)
@@ -195,7 +197,6 @@ def _run_with_tools(
             prepared_calls: list[dict[str, Any]] = []
             preflight_error_message: str | None = None
 
-            # -------- PREPARE / PREFLIGHT ALL CALLS FIRST --------
             for idx, call in enumerate(tool_calls):
                 call_id = call.get("id") or f"tool_{idx}"
                 fn = call.get("function", {}) or {}
@@ -244,6 +245,7 @@ def _run_with_tools(
                         context=context,
                         size_profiles_by_category=size_profiles_by_category,
                         last_draft=last_draft,
+                        frozen_cluster_budget_limits_m2=frozen_cluster_budget_limits_m2,
                     )
 
                     ok, detail = _validate_decisions(
@@ -251,6 +253,7 @@ def _run_with_tools(
                         required_types,
                         members_by_cluster=members_by_cluster,
                         anchors_by_cluster=anchors_by_cluster,
+                        droppable_clusters=droppable_clusters,
                     )
                     if not ok:
                         logger.warning(
@@ -262,8 +265,9 @@ def _run_with_tools(
                         preflight_error_message = (
                             "Before calling estimate_budget, you MUST provide a valid decisions list. "
                             "Requirement: exactly one decision per member type across all clusters, "
-                            "quantity must be an integer >= 0, and each cluster must keep at least one anchor "
+                            "quantity must be an integer >= 0, and each CORE cluster must keep at least one anchor "
                             "(quantity >= 1, using CLUSTERS_JSON.anchors when present). "
+                            "DROPPABLE clusters (for example misc/decor/accent/accessory) may be reduced to all quantities = 0. "
                             f"Issue: {detail}. "
                             "You can either include decisions in the tool arguments, or output a JSON draft "
                             "with decisions first so the controller can reuse it."
@@ -286,6 +290,10 @@ def _run_with_tools(
                                 categories=cats,
                                 tenant_id=context.get("tenant_id"),
                             )
+                            if _tool_output_has_error(sp_out):
+                                raise RuntimeError(
+                                    f"get_size_profiles failed during preflight: {_tool_error_text(sp_out)}"
+                                )
                             sp = sp_out.get("size_profiles_by_category")
                             if isinstance(sp, dict):
                                 size_profiles_by_category = sp
@@ -310,17 +318,10 @@ def _run_with_tools(
                     }
                 )
 
-            # -------- DO NOT APPEND assistant tool_calls IF PREFLIGHT FAILED --------
             if preflight_error_message is not None:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": preflight_error_message,
-                    }
-                )
+                messages.append({"role": "user", "content": preflight_error_message})
                 continue
 
-            # Safe to append now: every tool_call will receive a tool response
             messages.append(
                 {
                     "role": "assistant",
@@ -329,7 +330,6 @@ def _run_with_tools(
                 }
             )
 
-            # -------- EXECUTE PREPARED CALLS --------
             for item in prepared_calls:
                 call_id = item["call_id"]
                 name = item["name"]
@@ -351,13 +351,25 @@ def _run_with_tools(
                     json.dumps(tool_output, ensure_ascii=True),
                 )
 
+                if _tool_output_has_error(tool_output):
+                    raise RuntimeError(
+                        f"{name} failed: {_tool_error_text(tool_output)}"
+                    )
+
                 if name == "get_size_profiles":
                     sp = tool_output.get("size_profiles_by_category")
                     if isinstance(sp, dict):
                         size_profiles_by_category = sp
 
-                if name == "estimate_budget":
-                    estimate_budget_called = True
+                if (
+                    name == "estimate_budget"
+                    and frozen_cluster_budget_limits_m2 is None
+                    and isinstance(tool_output.get("cluster_budget_limits_m2"), dict)
+                    and not bool(tool_output.get("rescue_mode", False))
+                ):
+                    frozen_cluster_budget_limits_m2 = tool_output[
+                        "cluster_budget_limits_m2"
+                    ]
 
                 messages.append(
                     {
@@ -368,28 +380,127 @@ def _run_with_tools(
                     }
                 )
 
-                if name == "estimate_budget":
-                    violations = tool_output.get("violations")
-                    if isinstance(violations, list) and violations:
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Budget check found violations. Revise decisions minimally and re-check. "
-                                    "Prefer reducing size_tier before reducing quantity unless the item is optional. "
-                                    f"Violations: {json.dumps(_preview_budget_violations(violations), ensure_ascii=True)}"
-                                ),
-                            }
+                if name != "estimate_budget":
+                    continue
+
+                active_budget_out = tool_output
+                active_decisions = args.get("decisions")
+                if not isinstance(active_decisions, list):
+                    active_decisions = []
+
+                input_fit = bool(active_budget_out.get("input_decisions_fit", False))
+                recommended_fit = bool(
+                    active_budget_out.get("recommended_decisions_fit", False)
+                )
+                repair_exhausted = _tool_reports_repair_exhausted(active_budget_out)
+                hard_unsat = _tool_reports_hard_unsat(active_budget_out)
+
+                repair_hints = _preview_budget_repair_hints(active_budget_out)
+                violations_after = active_budget_out.get("violations_after_fit") or []
+                recommended_decisions = active_budget_out.get("recommended_decisions")
+
+                if (
+                    not input_fit
+                    and not recommended_fit
+                    and not rescue_mode_used
+                    and repair_exhausted
+                ):
+                    rescue_args = dict(args)
+                    if (
+                        isinstance(recommended_decisions, list)
+                        and recommended_decisions
+                    ):
+                        rescue_args["decisions"] = recommended_decisions
+                    rescue_args["rescue_mode"] = True
+                    rescue_args.pop("frozen_cluster_budget_limits_m2", None)
+
+                    rescue_budget_out = _safe_run_tool("estimate_budget", rescue_args)
+                    if _tool_output_has_error(rescue_budget_out):
+                        raise RuntimeError(
+                            f"estimate_budget rescue failed: {_tool_error_text(rescue_budget_out)}"
                         )
-                    else:
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Budget check passed. If your decisions are complete, you may now output final JSON only."
-                                ),
-                            }
-                        )
+
+                    rescue_mode_used = True
+
+                    logger.info(
+                        "Rescue estimate_budget output: %s",
+                        json.dumps(rescue_budget_out, ensure_ascii=True),
+                    )
+
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": f"{call_id}_rescue",
+                            "name": "estimate_budget",
+                            "content": json.dumps(rescue_budget_out, ensure_ascii=True),
+                        }
+                    )
+
+                    active_budget_out = rescue_budget_out
+                    input_fit = bool(
+                        active_budget_out.get("input_decisions_fit", False)
+                    )
+                    recommended_fit = bool(
+                        active_budget_out.get("recommended_decisions_fit", False)
+                    )
+                    repair_exhausted = _tool_reports_repair_exhausted(active_budget_out)
+                    hard_unsat = _tool_reports_hard_unsat(active_budget_out)
+
+                    repair_hints = _preview_budget_repair_hints(active_budget_out)
+                    violations_after = (
+                        active_budget_out.get("violations_after_fit") or []
+                    )
+                    recommended_decisions = active_budget_out.get(
+                        "recommended_decisions"
+                    )
+
+                if input_fit:
+                    result = _build_ok_result(
+                        decisions=active_decisions,
+                        base_draft=last_draft,
+                        size_profiles_by_category=size_profiles_by_category,
+                        budget_mode="rescue"
+                        if bool(active_budget_out.get("rescue_mode", False))
+                        else None,
+                    )
+                    return result
+
+                if recommended_fit and isinstance(recommended_decisions, list):
+                    result = _build_ok_result(
+                        decisions=recommended_decisions,
+                        base_draft=last_draft,
+                        size_profiles_by_category=size_profiles_by_category,
+                        budget_mode="rescue"
+                        if bool(active_budget_out.get("rescue_mode", False))
+                        else None,
+                    )
+                    return result
+
+                if hard_unsat:
+                    result = _build_unsat_result(
+                        base_draft=last_draft,
+                        fallback_decisions=recommended_decisions
+                        if isinstance(recommended_decisions, list)
+                        else active_decisions,
+                        budget_out=active_budget_out,
+                        size_profiles_by_category=size_profiles_by_category,
+                    )
+                    return result
+
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Budget check still fails. "
+                            "You must continue revising until input_decisions_fit=true. "
+                            "Use the recommended_decisions below as the new base draft and make stronger minimal reductions if needed "
+                            "(you may change multiple non-anchor items in one revision). "
+                            f"Remaining violations: {json.dumps(_preview_budget_violations(violations_after), ensure_ascii=True)}. "
+                            f"Recommended decisions: {json.dumps(recommended_decisions, ensure_ascii=True)}. "
+                            f"Repair hints: {json.dumps(repair_hints, ensure_ascii=True)}"
+                        ),
+                    }
+                )
 
             continue
 
@@ -406,6 +517,7 @@ def _run_with_tools(
 
         try:
             result = _parse_json(content)
+            status = str(result.get("status") or "").upper()
         except ValueError:
             messages.append(
                 {
@@ -415,11 +527,27 @@ def _run_with_tools(
             )
             continue
 
+        # IMPORTANT FIX:
+        # Only return NEED_INFO if it truly has no valid decision set to continue with.
+        if status == "NEED_INFO":
+            ok_needinfo, _ = _validate_decisions(
+                result.get("decisions"),
+                required_types,
+                members_by_cluster=members_by_cluster,
+                anchors_by_cluster=anchors_by_cluster,
+                droppable_clusters=droppable_clusters,
+            )
+            if not ok_needinfo:
+                return result
+            result["status"] = "OK"
+            status = "OK"
+
         ok, detail = _validate_decisions(
             result.get("decisions"),
             required_types,
             members_by_cluster=members_by_cluster,
             anchors_by_cluster=anchors_by_cluster,
+            droppable_clusters=droppable_clusters,
         )
         if not ok:
             messages.append(
@@ -428,8 +556,9 @@ def _run_with_tools(
                     "content": (
                         "Decisions are required before final output. "
                         "You MUST output exactly one decision per member type across all clusters, "
-                        "quantity must be an integer >= 0, and each cluster must keep at least one anchor "
+                        "quantity must be an integer >= 0, and each CORE cluster must keep at least one anchor "
                         "(quantity >= 1, using CLUSTERS_JSON.anchors when present). "
+                        "DROPPABLE clusters (for example misc/decor/accent/accessory) may be reduced to all quantities = 0. "
                         f"Issue: {detail}"
                     ),
                 }
@@ -449,6 +578,10 @@ def _run_with_tools(
                     categories=cats,
                     tenant_id=context.get("tenant_id"),
                 )
+                if _tool_output_has_error(sp_out):
+                    raise RuntimeError(
+                        f"get_size_profiles failed during finalization: {_tool_error_text(sp_out)}"
+                    )
                 sp = sp_out.get("size_profiles_by_category")
                 if isinstance(sp, dict):
                     size_profiles_by_category = sp
@@ -465,36 +598,259 @@ def _run_with_tools(
             )
             continue
 
-        budget_out = _run_budget_check_for_result(
-            result=result,
-            context=context,
-            size_profiles_by_category=size_profiles_by_category,
-        )
-        logger.info(
-            "Finalization budget check output: %s",
-            json.dumps(budget_out, ensure_ascii=True),
-        )
-        estimate_budget_called = True
-
-        violations = budget_out.get("violations")
-        if isinstance(violations, list) and violations:
+        if status == "UNSAT":
+            budget_out_unsat = _run_budget_check_for_result(
+                result=result,
+                context=context,
+                size_profiles_by_category=size_profiles_by_category,
+                frozen_cluster_budget_limits_m2=frozen_cluster_budget_limits_m2,
+                rescue_mode=False,
+            )
+            if _tool_output_has_error(budget_out_unsat):
+                raise RuntimeError(
+                    f"estimate_budget failed while verifying UNSAT: {_tool_error_text(budget_out_unsat)}"
+                )
+            if _tool_reports_hard_unsat(budget_out_unsat):
+                return _build_unsat_result(
+                    base_draft=result,
+                    fallback_decisions=result.get("decisions", []),
+                    budget_out=budget_out_unsat,
+                    size_profiles_by_category=size_profiles_by_category,
+                )
             messages.append(
                 {
                     "role": "user",
                     "content": (
-                        "Your current decisions violate the area budget. "
-                        "Revise them minimally and return updated JSON after re-checking budget. "
-                        "Prefer reducing size_tier first for secondary/optional items. "
-                        f"Violations: {json.dumps(_preview_budget_violations(violations), ensure_ascii=True)}"
+                        "Do not stop with status='UNSAT' yet. "
+                        "Continue revising unless the budget tool explicitly confirms true infeasibility."
                     ),
                 }
             )
             continue
 
-        _attach_rep_dims(result, size_profiles_by_category)
-        return result
+        budget_out = _run_budget_check_for_result(
+            result=result,
+            context=context,
+            size_profiles_by_category=size_profiles_by_category,
+            frozen_cluster_budget_limits_m2=frozen_cluster_budget_limits_m2,
+            rescue_mode=False,
+        )
+        if _tool_output_has_error(budget_out):
+            raise RuntimeError(
+                f"estimate_budget failed during finalization: {_tool_error_text(budget_out)}"
+            )
 
-    raise TimeoutError("TierCountDirector exceeded max_steps without final JSON.")
+        logger.info(
+            "Finalization budget check output: %s",
+            json.dumps(budget_out, ensure_ascii=True),
+        )
+
+        if (
+            frozen_cluster_budget_limits_m2 is None
+            and isinstance(budget_out.get("cluster_budget_limits_m2"), dict)
+            and not bool(budget_out.get("rescue_mode", False))
+        ):
+            frozen_cluster_budget_limits_m2 = budget_out["cluster_budget_limits_m2"]
+
+        input_fit = bool(budget_out.get("input_decisions_fit", False))
+        recommended_fit = bool(budget_out.get("recommended_decisions_fit", False))
+        repair_exhausted = _tool_reports_repair_exhausted(budget_out)
+        hard_unsat = _tool_reports_hard_unsat(budget_out)
+
+        if input_fit:
+            return _build_ok_result(
+                decisions=result.get("decisions", []),
+                base_draft=result,
+                size_profiles_by_category=size_profiles_by_category,
+                budget_mode=None,
+            )
+
+        recommended_decisions = budget_out.get("recommended_decisions")
+        if recommended_fit and isinstance(recommended_decisions, list):
+            return _build_ok_result(
+                decisions=recommended_decisions,
+                base_draft=result,
+                size_profiles_by_category=size_profiles_by_category,
+                budget_mode=None,
+            )
+
+        if repair_exhausted and not rescue_mode_used:
+            rescue_budget_out = _run_budget_check_for_result(
+                result=result,
+                context=context,
+                size_profiles_by_category=size_profiles_by_category,
+                frozen_cluster_budget_limits_m2=None,
+                rescue_mode=True,
+            )
+            if _tool_output_has_error(rescue_budget_out):
+                raise RuntimeError(
+                    f"estimate_budget rescue failed during finalization: {_tool_error_text(rescue_budget_out)}"
+                )
+
+            rescue_mode_used = True
+            logger.info(
+                "Finalization rescue budget check output: %s",
+                json.dumps(rescue_budget_out, ensure_ascii=True),
+            )
+
+            rescue_input_fit = bool(rescue_budget_out.get("input_decisions_fit", False))
+            rescue_recommended_fit = bool(
+                rescue_budget_out.get("recommended_decisions_fit", False)
+            )
+            rescue_hard_unsat = _tool_reports_hard_unsat(rescue_budget_out)
+            rescue_recommended_decisions = rescue_budget_out.get(
+                "recommended_decisions"
+            )
+
+            if rescue_input_fit:
+                return _build_ok_result(
+                    decisions=result.get("decisions", []),
+                    base_draft=result,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode="rescue",
+                )
+
+            if rescue_recommended_fit and isinstance(
+                rescue_recommended_decisions, list
+            ):
+                return _build_ok_result(
+                    decisions=rescue_recommended_decisions,
+                    base_draft=result,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode="rescue",
+                )
+
+            if rescue_hard_unsat:
+                return _build_unsat_result(
+                    base_draft=result,
+                    fallback_decisions=rescue_recommended_decisions
+                    if isinstance(rescue_recommended_decisions, list)
+                    else result.get("decisions", []),
+                    budget_out=rescue_budget_out,
+                    size_profiles_by_category=size_profiles_by_category,
+                )
+
+            budget_out = rescue_budget_out
+            recommended_decisions = budget_out.get("recommended_decisions")
+
+        if hard_unsat:
+            return _build_unsat_result(
+                base_draft=result,
+                fallback_decisions=recommended_decisions
+                if isinstance(recommended_decisions, list)
+                else result.get("decisions", []),
+                budget_out=budget_out,
+                size_profiles_by_category=size_profiles_by_category,
+            )
+
+        violations_after = budget_out.get("violations_after_fit") or []
+        repair_hints = _preview_budget_repair_hints(budget_out)
+
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Your current decisions still fail budget. "
+                    "Do not return UNSAT. Continue revising until input_decisions_fit=true. "
+                    "Use the recommended_decisions below as the next base draft and make stronger minimal corrections if needed "
+                    "(you may reduce several non-anchor items in one revision). "
+                    f"Remaining violations: {json.dumps(_preview_budget_violations(violations_after), ensure_ascii=True)}. "
+                    f"Recommended decisions: {json.dumps(recommended_decisions, ensure_ascii=True)}. "
+                    f"Repair hints: {json.dumps(repair_hints, ensure_ascii=True)}"
+                ),
+            }
+        )
+
+    # --------------------------------------------------------
+    # Timeout fallback
+    # --------------------------------------------------------
+    if isinstance(last_draft, dict) and isinstance(size_profiles_by_category, dict):
+        try:
+            budget_out = _run_budget_check_for_result(
+                result=last_draft,
+                context=context,
+                size_profiles_by_category=size_profiles_by_category,
+                frozen_cluster_budget_limits_m2=frozen_cluster_budget_limits_m2,
+                rescue_mode=False,
+            )
+            if _tool_output_has_error(budget_out):
+                raise RuntimeError(_tool_error_text(budget_out))
+
+            logger.info(
+                "Timeout fallback budget check output: %s",
+                json.dumps(budget_out, ensure_ascii=True),
+            )
+
+            if bool(budget_out.get("input_decisions_fit", False)):
+                return _build_ok_result(
+                    decisions=last_draft.get("decisions", []),
+                    base_draft=last_draft,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode=None,
+                )
+
+            recommended_decisions = budget_out.get("recommended_decisions")
+            if bool(budget_out.get("recommended_decisions_fit", False)) and isinstance(
+                recommended_decisions, list
+            ):
+                return _build_ok_result(
+                    decisions=recommended_decisions,
+                    base_draft=last_draft,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode=None,
+                )
+
+            rescue_budget_out = _run_budget_check_for_result(
+                result=last_draft,
+                context=context,
+                size_profiles_by_category=size_profiles_by_category,
+                frozen_cluster_budget_limits_m2=None,
+                rescue_mode=True,
+            )
+            if _tool_output_has_error(rescue_budget_out):
+                raise RuntimeError(_tool_error_text(rescue_budget_out))
+
+            logger.info(
+                "Timeout fallback rescue budget check output: %s",
+                json.dumps(rescue_budget_out, ensure_ascii=True),
+            )
+
+            if bool(rescue_budget_out.get("input_decisions_fit", False)):
+                return _build_ok_result(
+                    decisions=last_draft.get("decisions", []),
+                    base_draft=last_draft,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode="rescue",
+                )
+
+            rescue_recommended_decisions = rescue_budget_out.get(
+                "recommended_decisions"
+            )
+            if bool(
+                rescue_budget_out.get("recommended_decisions_fit", False)
+            ) and isinstance(rescue_recommended_decisions, list):
+                return _build_ok_result(
+                    decisions=rescue_recommended_decisions,
+                    base_draft=last_draft,
+                    size_profiles_by_category=size_profiles_by_category,
+                    budget_mode="rescue",
+                )
+
+            if _tool_reports_hard_unsat(rescue_budget_out):
+                return _build_unsat_result(
+                    base_draft=last_draft,
+                    fallback_decisions=rescue_recommended_decisions
+                    if isinstance(rescue_recommended_decisions, list)
+                    else last_draft.get("decisions", []),
+                    budget_out=rescue_budget_out,
+                    size_profiles_by_category=size_profiles_by_category,
+                )
+        except Exception as exc:
+            logger.warning("Timeout fallback failed: %s", exc)
+
+    raise TimeoutError(
+        "TierCountDirector exceeded max_steps without reaching a budget-valid final JSON."
+    )
 
 
 # ============================================================
@@ -524,6 +880,16 @@ def _safe_run_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"error": "tool_failed", "tool": name, "message": str(exc), "args": args}
 
 
+def _tool_output_has_error(tool_output: dict[str, Any]) -> bool:
+    return isinstance(tool_output, dict) and isinstance(tool_output.get("error"), str)
+
+
+def _tool_error_text(tool_output: dict[str, Any]) -> str:
+    if not isinstance(tool_output, dict):
+        return "unknown tool error"
+    return json.dumps(tool_output, ensure_ascii=True)
+
+
 def _coerce_get_size_profiles_args(
     *,
     args: dict[str, Any],
@@ -533,14 +899,72 @@ def _coerce_get_size_profiles_args(
 ) -> dict[str, Any]:
     out = dict(args)
 
-    cats = out.get("categories")
-    if not isinstance(cats, list) or not cats:
-        cats = []
-        if isinstance(last_draft, dict):
-            cats = _extract_categories_from_decisions(last_draft)
-        if not cats:
-            cats = required_types[:]
-        out["categories"] = cats
+    # get_size_profiles expects furniture/object categories, not cluster tags (e.g. living/storage/misc).
+    # Use CLUSTERS_JSON members as the primary source of truth when available.
+    if required_types:
+        cluster_tags: set[str] = set()
+        clusters_json = context.get("clusters_json")
+        if isinstance(clusters_json, dict):
+            clusters = clusters_json.get("clusters")
+            if isinstance(clusters, list):
+                for cluster in clusters:
+                    if not isinstance(cluster, dict):
+                        continue
+                    tag = cluster.get("tag")
+                    if isinstance(tag, str) and tag.strip():
+                        cluster_tags.add(tag.strip().lower())
+
+        provided = out.get("categories")
+        provided_cats: list[str] = []
+        if isinstance(provided, list):
+            for c in provided:
+                if isinstance(c, str) and c.strip():
+                    provided_cats.append(c.strip())
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for c in provided_cats:
+            key = c.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(c)
+
+        required_set = {t.lower() for t in required_types if t}
+        filtered: list[str] = []
+        dropped: list[str] = []
+        for c in deduped:
+            ck = c.lower()
+            if ck in cluster_tags and ck not in required_set:
+                dropped.append(c)
+                continue
+            filtered.append(c)
+
+        if dropped:
+            logger.info(
+                "Dropping cluster tags from get_size_profiles.categories: dropped=%s kept=%s",
+                dropped,
+                filtered,
+            )
+
+        if filtered and all(c.lower() in required_set for c in filtered):
+            out["categories"] = filtered
+        else:
+            if filtered:
+                logger.info(
+                    "Ignoring get_size_profiles.categories not present in CLUSTERS_JSON.members: %s",
+                    filtered,
+                )
+            out["categories"] = required_types[:]
+    else:
+        cats = out.get("categories")
+        if not isinstance(cats, list) or not cats:
+            cats = []
+            if isinstance(last_draft, dict):
+                cats = _extract_categories_from_decisions(last_draft)
+            if not cats:
+                cats = required_types[:]
+            out["categories"] = cats
 
     if "tenant_id" not in out:
         out["tenant_id"] = context.get("tenant_id")
@@ -554,6 +978,7 @@ def _coerce_estimate_budget_args(
     context: dict[str, Any],
     size_profiles_by_category: dict[str, Any] | None,
     last_draft: dict[str, Any] | None,
+    frozen_cluster_budget_limits_m2: dict[str, float] | None,
 ) -> dict[str, Any]:
     out = dict(args)
 
@@ -602,6 +1027,14 @@ def _coerce_estimate_budget_args(
         if parsed:
             out["clusters_json"] = parsed
 
+    rescue_mode = bool(out.get("rescue_mode", False))
+    if (
+        "frozen_cluster_budget_limits_m2" not in out
+        and isinstance(frozen_cluster_budget_limits_m2, dict)
+        and not rescue_mode
+    ):
+        out["frozen_cluster_budget_limits_m2"] = frozen_cluster_budget_limits_m2
+
     return out
 
 
@@ -610,6 +1043,8 @@ def _run_budget_check_for_result(
     result: dict[str, Any],
     context: dict[str, Any],
     size_profiles_by_category: dict[str, Any],
+    frozen_cluster_budget_limits_m2: dict[str, float] | None,
+    rescue_mode: bool,
 ) -> dict[str, Any]:
     args = {
         "room_model": context.get("room_model_json", {}),
@@ -618,7 +1053,10 @@ def _run_budget_check_for_result(
         "style": _infer_style(context),
         "user_notes": str(context.get("special_notes") or ""),
         "clusters_json": context.get("clusters_json"),
+        "rescue_mode": rescue_mode,
     }
+    if frozen_cluster_budget_limits_m2 is not None and not rescue_mode:
+        args["frozen_cluster_budget_limits_m2"] = frozen_cluster_budget_limits_m2
     return _safe_run_tool("estimate_budget", args)
 
 
@@ -724,6 +1162,97 @@ def _extract_json_object(text: str) -> str:
     if start == -1 or end == -1 or end <= start:
         return text
     return text[start : end + 1]
+
+
+# ============================================================
+# Draft / result helpers
+# ============================================================
+
+
+def _merge_recommended_decisions_into_draft(
+    draft: dict[str, Any] | None,
+    recommended_decisions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    base = dict(draft) if isinstance(draft, dict) else {}
+    base["status"] = "OK"
+    base["decisions"] = recommended_decisions
+    if not isinstance(base.get("assumptions"), list):
+        base["assumptions"] = []
+    if not isinstance(base.get("global_notes"), list):
+        base["global_notes"] = []
+    return base
+
+
+def _build_ok_result(
+    *,
+    decisions: list[dict[str, Any]],
+    base_draft: dict[str, Any] | None,
+    size_profiles_by_category: dict[str, Any] | None,
+    budget_mode: str | None,
+) -> dict[str, Any]:
+    result = _merge_recommended_decisions_into_draft(base_draft, decisions)
+    result["status"] = "OK"
+    result["budget_valid"] = True
+    if budget_mode:
+        result["budget_mode"] = budget_mode
+    if isinstance(size_profiles_by_category, dict):
+        _attach_rep_dims(result, size_profiles_by_category)
+    return result
+
+
+def _build_unsat_result(
+    *,
+    base_draft: dict[str, Any] | None,
+    fallback_decisions: list[dict[str, Any]],
+    budget_out: dict[str, Any],
+    size_profiles_by_category: dict[str, Any] | None,
+) -> dict[str, Any]:
+    result = dict(base_draft) if isinstance(base_draft, dict) else {}
+    result["status"] = "UNSAT"
+    result["decisions"] = (
+        fallback_decisions if isinstance(fallback_decisions, list) else []
+    )
+    if not isinstance(result.get("assumptions"), list):
+        result["assumptions"] = []
+    if not isinstance(result.get("global_notes"), list):
+        result["global_notes"] = []
+
+    core_clusters = budget_out.get("core_minimum_infeasible_clusters")
+    blocked_clusters = budget_out.get("repair_blocked_clusters")
+
+    notes = list(result.get("global_notes") or [])
+    if isinstance(core_clusters, list) and core_clusters:
+        notes.append(
+            f"Minimum surviving CORE clusters still exceed budget: {core_clusters}"
+        )
+    elif isinstance(blocked_clusters, list) and blocked_clusters:
+        notes.append(f"Repair blocked clusters: {blocked_clusters}")
+    else:
+        notes.append("Budget remained infeasible after allowed minimal repairs.")
+
+    result["global_notes"] = notes
+    result["budget_valid"] = False
+    result["budget_reason"] = "hard_unsat"
+
+    if isinstance(size_profiles_by_category, dict):
+        _attach_rep_dims(result, size_profiles_by_category)
+    return result
+
+
+def _tool_reports_repair_exhausted(budget_out: dict[str, Any]) -> bool:
+    if bool(budget_out.get("repair_exhausted", False)):
+        return True
+    return _budget_repair_exhausted(budget_out)
+
+
+def _tool_reports_hard_unsat(budget_out: dict[str, Any]) -> bool:
+    if bool(budget_out.get("core_minimum_infeasible", False)):
+        return True
+    if bool(budget_out.get("repair_exhausted", False)) and bool(
+        budget_out.get("global_repair_blocked", False)
+    ):
+        return True
+    return False
 
 
 # ============================================================
@@ -842,12 +1371,42 @@ def _extract_anchors_by_cluster(clusters_json: Any) -> dict[str, set[str]]:
     return out
 
 
+def _extract_droppable_clusters(clusters_json: Any) -> set[str]:
+    if not isinstance(clusters_json, dict):
+        return set()
+
+    clusters = clusters_json.get("clusters")
+    if not isinstance(clusters, list):
+        return set()
+
+    out: set[str] = set()
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+
+        cluster_id = cluster.get("cluster_id")
+        if not isinstance(cluster_id, str) or not cluster_id:
+            continue
+
+        tag = str(cluster.get("tag") or "").strip().lower()
+        rules = cluster.get("cluster_rules") or {}
+        allow_empty = (
+            isinstance(rules, dict) and rules.get("allow_empty_cluster") is True
+        )
+
+        if tag in {"misc", "decor", "accent", "accessory"} or allow_empty:
+            out.add(cluster_id)
+
+    return out
+
+
 def _validate_decisions(
     decisions: Any,
     required_types: list[str],
     *,
     members_by_cluster: dict[str, set[str]] | None = None,
     anchors_by_cluster: dict[str, set[str]] | None = None,
+    droppable_clusters: set[str] | None = None,
 ) -> tuple[bool, str]:
     if not isinstance(decisions, list) or not decisions:
         return False, "decisions list is missing or empty"
@@ -887,7 +1446,9 @@ def _validate_decisions(
             elif t not in members:
                 bad_cluster_assignment.append(f"{t}->{cluster_id}")
 
-        decisions_by_cluster.setdefault(cluster_id, {})[t] = qty if isinstance(qty, int) else 0
+        decisions_by_cluster.setdefault(cluster_id, {})[t] = (
+            qty if isinstance(qty, int) else 0
+        )
 
     if bad_qty:
         return False, f"quantity must be an integer >= 0 for: {sorted(set(bad_qty))}"
@@ -917,8 +1478,13 @@ def _validate_decisions(
     if duplicates:
         return False, f"multiple decisions found for types: {sorted(duplicates)}"
 
+    droppable_clusters = droppable_clusters or set()
+
     if isinstance(members_by_cluster, dict) and members_by_cluster:
         for cluster_id in sorted(members_by_cluster.keys()):
+            if cluster_id in droppable_clusters:
+                continue
+
             members = members_by_cluster.get(cluster_id) or set()
             anchors = (
                 anchors_by_cluster.get(cluster_id, set())
@@ -927,26 +1493,95 @@ def _validate_decisions(
             )
             cluster_decisions = decisions_by_cluster.get(cluster_id, {})
 
-            # If a cluster has anchors, require at least one anchor kept.
             if anchors:
                 kept = any(cluster_decisions.get(a, 0) >= 1 for a in anchors)
                 if not kept:
                     return (
                         False,
-                        f"cluster {cluster_id} must keep at least one anchor with quantity >= 1: {sorted(anchors)}",
+                        f"CORE cluster {cluster_id} must keep at least one anchor with quantity >= 1: {sorted(anchors)}",
                     )
             else:
-                # Fallback: require at least one member kept so the cluster isn't empty.
                 kept = any(
-                    cluster_decisions.get(m, 0) >= 1 for m in members if isinstance(m, str)
+                    cluster_decisions.get(m, 0) >= 1
+                    for m in members
+                    if isinstance(m, str)
                 )
                 if not kept and members:
                     return (
                         False,
-                        f"cluster {cluster_id} must keep at least one member with quantity >= 1",
+                        f"CORE cluster {cluster_id} must keep at least one member with quantity >= 1",
                     )
 
     return True, "ok"
+
+
+def _preview_budget_repair_hints(
+    budget_out: dict[str, Any],
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    details = budget_out.get("decision_footprint_details")
+    if not isinstance(details, list):
+        return []
+
+    out: list[dict[str, Any]] = []
+    for row in details:
+        if not isinstance(row, dict):
+            continue
+
+        orig_qty = row.get("quantity")
+        rec_qty = row.get("recommended_quantity")
+        orig_tier = row.get("size_tier")
+        rec_tier = row.get("recommended_size_tier")
+
+        changed_qty = (
+            isinstance(orig_qty, int)
+            and isinstance(rec_qty, int)
+            and orig_qty != rec_qty
+        )
+        changed_tier = (
+            isinstance(orig_tier, str)
+            and isinstance(rec_tier, str)
+            and orig_tier != rec_tier
+        )
+
+        if not changed_qty and not changed_tier:
+            continue
+
+        out.append(
+            {
+                "cluster_id": row.get("cluster_id"),
+                "category": row.get("category"),
+                "priority": row.get("priority"),
+                "quantity": orig_qty,
+                "recommended_quantity": rec_qty,
+                "size_tier": orig_tier,
+                "recommended_size_tier": rec_tier,
+            }
+        )
+
+        if len(out) >= limit:
+            break
+
+    return out
+
+
+def _budget_repair_exhausted(budget_out: dict[str, Any]) -> bool:
+    if bool(budget_out.get("recommended_decisions_fit", False)):
+        return False
+
+    details = budget_out.get("decision_footprint_details")
+    if not isinstance(details, list):
+        return False
+
+    for row in details:
+        if not isinstance(row, dict):
+            continue
+        if row.get("quantity") != row.get("recommended_quantity"):
+            return False
+        if row.get("size_tier") != row.get("recommended_size_tier"):
+            return False
+
+    return True
 
 
 def _preview_budget_violations(

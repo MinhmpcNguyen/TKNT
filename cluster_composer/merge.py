@@ -16,6 +16,7 @@ def merge_cluster_outputs(
     - Drops any `raw_text` field found in the merged output.
     - Filters cluster members/constraints/rules so ClusterComposer only receives objects that
       exist in BOTH ClusterForge.members and TierCount.decisions (and have quantity >= 1).
+    - Drops any cluster whose anchors become empty after filtering.
     """
     cluster_payload = _unwrap_payload(cluster_forge, key="clusters")
     tier_payload = _unwrap_payload(tier_count, key="decisions")
@@ -55,8 +56,14 @@ def merge_cluster_outputs(
         merged["members"] = kept_members
 
         anchors = cluster.get("anchors")
+        filtered_anchors: list[str] = []
         if isinstance(anchors, list):
-            merged["anchors"] = [a for a in anchors if isinstance(a, str) and a in kept_set]
+            filtered_anchors = [
+                a for a in anchors if isinstance(a, str) and a.strip() and a in kept_set
+            ]
+        if not filtered_anchors:
+            continue
+        merged["anchors"] = filtered_anchors
 
         merged["decisions"] = [
             dict(decision_by_type[m], cluster_id=cluster_id) for m in kept_members

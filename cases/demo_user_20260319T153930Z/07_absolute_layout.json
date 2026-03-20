@@ -1,0 +1,254 @@
+{
+  "status": "NEED_INFO",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 3000,
+            "y": 1550
+          },
+          {
+            "x": 3000,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 1550
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 1400
+          },
+          {
+            "x": 100,
+            "y": 2600
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 3000,
+              "y": 1550
+            },
+            {
+              "x": 3000,
+              "y": 2450
+            }
+          ],
+          "swing_radius_mm": 600,
+          "hinge_hint": "UNKNOWN"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2600
+            },
+            {
+              "x": 0,
+              "y": 1400
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "object_id": "bed",
+      "cluster_id": "sleep_area",
+      "polygon_ccw": [
+        {
+          "x": 2100,
+          "y": 3950
+        },
+        {
+          "x": 40,
+          "y": 3950
+        },
+        {
+          "x": 40,
+          "y": 2740
+        },
+        {
+          "x": 2100,
+          "y": 2740
+        }
+      ],
+      "bbox": {
+        "min_x": 40,
+        "min_y": 2740,
+        "max_x": 2100,
+        "max_y": 3950
+      },
+      "rotation_ccw": 180,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 2060,
+        "h": 1210
+      }
+    },
+    {
+      "object_id": "desk",
+      "cluster_id": "work_area",
+      "polygon_ccw": [
+        {
+          "x": 50,
+          "y": 50
+        },
+        {
+          "x": 1140,
+          "y": 50
+        },
+        {
+          "x": 1140,
+          "y": 550
+        },
+        {
+          "x": 50,
+          "y": 550
+        }
+      ],
+      "bbox": {
+        "min_x": 50,
+        "min_y": 50,
+        "max_x": 1140,
+        "max_y": 550
+      },
+      "rotation_ccw": 0,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1090,
+        "h": 500
+      }
+    },
+    {
+      "object_id": "wardrobe",
+      "cluster_id": "storage_area",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 50
+        },
+        {
+          "x": 2960,
+          "y": 50
+        },
+        {
+          "x": 2960,
+          "y": 650
+        },
+        {
+          "x": 2150,
+          "y": 650
+        }
+      ],
+      "bbox": {
+        "min_x": 2150,
+        "min_y": 50,
+        "max_x": 2960,
+        "max_y": 650
+      },
+      "rotation_ccw": 0,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 810,
+        "h": 600
+      }
+    },
+    {
+      "object_id": "tv_console",
+      "cluster_id": "living_area",
+      "polygon_ccw": [
+        {
+          "x": 2200,
+          "y": 2450
+        },
+        {
+          "x": 610,
+          "y": 2450
+        },
+        {
+          "x": 610,
+          "y": 1990
+        },
+        {
+          "x": 2200,
+          "y": 1990
+        }
+      ],
+      "bbox": {
+        "min_x": 610,
+        "min_y": 1990,
+        "max_x": 2200,
+        "max_y": 2450
+      },
+      "rotation_ccw": 180,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1590,
+        "h": 460
+      }
+    }
+  ],
+  "notes": [],
+  "missing": [
+    "cluster_rects:misc_area"
+  ]
+}

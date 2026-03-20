@@ -1,0 +1,159 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "living_area",
+      "tag": "living",
+      "members": [
+        "armchair",
+        "side_table",
+        "floor_lamp",
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "side_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "tv_console"
+        },
+        {
+          "type": "contain_in",
+          "a": "floor_lamp",
+          "b": "side_table"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "armchair",
+          "b": "tv_console",
+          "weight": 10
+        },
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "tv_console",
+          "mode": "face_each_other",
+          "weight": 10
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90
+          ],
+          "floor_lamp": [
+            0,
+            90
+          ],
+          "tv_console": [
+            0,
+            90
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "Front is where the TV screen faces"
+          }
+        },
+        "access_requirements": []
+      },
+      "decisions": [
+        {
+          "object_type": "armchair",
+          "category": "living",
+          "cluster_id": "living_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "primary",
+          "rationale": "Provides comfortable seating.",
+          "rep_dims_m": {
+            "L": 0.9,
+            "W": 0.73,
+            "H": 0.83,
+            "A": 0.657,
+            "R": 1.2328767123287672,
+            "source_id": "armchair_003"
+          }
+        },
+        {
+          "object_type": "side_table",
+          "category": "living",
+          "cluster_id": "living_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "secondary",
+          "rationale": "Optional surface for items near seating.",
+          "rep_dims_m": {
+            "L": 0.5,
+            "W": 0.49,
+            "H": 0.48,
+            "A": 0.245,
+            "R": 1.0204081632653061,
+            "source_id": "side_table_003"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "living",
+          "cluster_id": "living_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "secondary",
+          "rationale": "Provides lighting near seating area.",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 1.45,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "floor_lamp_001"
+          }
+        },
+        {
+          "object_type": "tv_console",
+          "category": "living",
+          "cluster_id": "living_area",
+          "quantity": 1,
+          "size_tier": "L",
+          "priority": "anchor",
+          "rationale": "Main unit for entertainment setup.",
+          "rep_dims_m": {
+            "L": 1.59,
+            "W": 0.46,
+            "H": 0.4,
+            "A": 0.7314,
+            "R": 3.4565217391304346,
+            "source_id": "tv_console_011"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters are organized based on typical functional groupings in a bedroom."
+  ],
+  "missing": []
+}

@@ -1,0 +1,123 @@
+{
+  "status": "NEED_INFO",
+  "room": {
+    "unit": "mm",
+    "room_id": "room_1",
+    "name": "Main",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 4200,
+        "y": 0
+      },
+      {
+        "x": 4200,
+        "y": 5200
+      },
+      {
+        "x": 0,
+        "y": 5200
+      }
+    ]
+  },
+  "openings": {
+    "doors": [
+      {
+        "id": "door_1",
+        "segment_mm": [
+          {
+            "x": 4200,
+            "y": 2150
+          },
+          {
+            "x": 4200,
+            "y": 3050
+          }
+        ],
+        "swing_radius_mm": 600,
+        "hinge_hint": "UNKNOWN"
+      }
+    ],
+    "windows": [
+      {
+        "id": "window_1",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 3200
+          },
+          {
+            "x": 0,
+            "y": 2000
+          }
+        ],
+        "clearance_mm": 100
+      }
+    ]
+  },
+  "obstacles": [
+    {
+      "id": "door_1_swing",
+      "type": "door_swing",
+      "polygon_ccw": [
+        {
+          "x": 4200,
+          "y": 2150
+        },
+        {
+          "x": 4200,
+          "y": 3050
+        },
+        {
+          "x": 3600,
+          "y": 3050
+        },
+        {
+          "x": 3600,
+          "y": 2150
+        }
+      ],
+      "hard": true
+    },
+    {
+      "id": "window_1_clearance",
+      "type": "window_clearance",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 3200
+        },
+        {
+          "x": 0,
+          "y": 2000
+        },
+        {
+          "x": 100,
+          "y": 2000
+        },
+        {
+          "x": 100,
+          "y": 3200
+        }
+      ],
+      "hard": true
+    }
+  ],
+  "meta": {
+    "room_type": "living_room",
+    "style": "minimal",
+    "height_mm": 2400,
+    "window_direction": "SE",
+    "max_iterations": 12
+  },
+  "notes": [],
+  "missing": [
+    "floorplan_geometry.room.polygon_mm",
+    "floorplan_geometry.openings.doors",
+    "floorplan_geometry.openings.windows"
+  ],
+  "conflicts": []
+}
