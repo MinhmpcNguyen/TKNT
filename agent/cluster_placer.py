@@ -1,64 +1,169 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
-from dataclasses import dataclass
-from typing import Any
-
-from agent_schema.cluster_placer_schema import MacroClusterPlacerOutput
-from clients.openai_client import OpenAIClient
-from cluster_placer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
-from prompt.cluster_placer import MACRO_CLUSTER_PLACER_PROMPT
-from prompt.system import SYSTEM_PROMPT
+from copy import deepcopy
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
+
+try:
+    from agent_schema.cluster_placer_schema import (
+        MacroClusterPlacerOutput,  # type: ignore
+    )
+except Exception:
+    MacroClusterPlacerOutput = None  # type: ignore
+
+
+def _load_local_module(module_name: str, filename: str):
+    path = Path(__file__).with_name(filename)
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load local module: {filename}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+try:
+    from cluster_placer.tools import (  # type: ignore
+        BuildGenericClusterVariants,
+        EnumerateClusterCandidates,
+        GlobalClusterVerifier,
+        MaterializeVariantizedClusters,
+        RankClusterPlacementOrder,
+    )
+except Exception:
+    _tools_mod = _load_local_module(
+        "tools_converge_fast_local", "tools_converge_fast.py"
+    )
+    GlobalClusterVerifier = _tools_mod.GlobalClusterVerifier
+    EnumerateClusterCandidates = _tools_mod.EnumerateClusterCandidates
+    RankClusterPlacementOrder = _tools_mod.RankClusterPlacementOrder
+    BuildGenericClusterVariants = _tools_mod.BuildGenericClusterVariants
+    MaterializeVariantizedClusters = _tools_mod.MaterializeVariantizedClusters
+
+
+@dataclass(frozen=True)
+class SearchConfig:
+    grid_mm: int = 50
+    max_variants_per_cluster: int = 6
+    max_candidates_per_cluster: int = 48
+    max_search_candidates_per_cluster: int = 16
+    exact_search_combo_limit: int = 3000
+    beam_width: int = 16
+    beam_branch_per_state: int = 8
+    local_repair_iterations: int = 16
+    local_repair_branch: int = 8
+    acceptable_critical_orientation_threshold_mm: int = 260
+    acceptable_focal_pair_threshold_mm: int = 260
+    acceptable_max_item_penalty_mm: int = 220
+
+
+@dataclass
+class SearchState:
+    transforms_by_id: dict[str, dict[str, int]] = field(default_factory=dict)
+    variants_by_id: dict[str, str] = field(default_factory=dict)
+    score_tuple: tuple = field(default_factory=tuple)
+    quality: dict[str, Any] = field(default_factory=dict)
+    quality_gate: dict[str, Any] = field(default_factory=dict)
+    repair_guidance: dict[str, Any] = field(default_factory=dict)
+    state_signature: str = ""
+    notes: list[str] = field(default_factory=list)
+
+    def transforms_list(self) -> list[dict[str, int | str]]:
+        out = []
+        for cid in sorted(self.transforms_by_id):
+            t = self.transforms_by_id[cid]
+            out.append(
+                {
+                    "cluster_id": cid,
+                    "x": int(t["x"]),
+                    "y": int(t["y"]),
+                    "rot": int(t["rot"]) % 360,
+                }
+            )
+        return out
+
+    def selected_variants_list(self) -> list[dict[str, str]]:
+        out = []
+        for cid in sorted(self.variants_by_id):
+            vid = self.variants_by_id[cid]
+            if isinstance(vid, str) and vid:
+                out.append({"cluster_id": cid, "variant_id": vid})
+        return out
 
 
 @dataclass(frozen=True)
 class MacroClusterPlacer:
-    system_prompt: str = SYSTEM_PROMPT
-    prompt_template: str = MACRO_CLUSTER_PLACER_PROMPT
+    config: SearchConfig = SearchConfig()
+    system_prompt: str = ""
+    prompt_template: str = ""
 
     def generate_raw(
         self,
         *,
         room_model_json: dict[str, Any],
-        clusters_outlines_json: dict[str, Any],
+        clusters_outlines_json: dict[str, Any] | list[Any],
         relation_plan_json: dict[str, Any] | None = None,
         existing_transforms_json: dict[str, Any] | None = None,
         verifier_feedback_json: dict[str, Any] | None = None,
         grid_mm: int = 50,
     ) -> str:
-        user_prompt = _build_prompt(
-            template=self.prompt_template,
-            room_model_json=room_model_json,
-            clusters_outlines_json=clusters_outlines_json,
-            relation_plan_json=relation_plan_json,
-            existing_transforms_json=existing_transforms_json,
-            verifier_feedback_json=verifier_feedback_json,
-        )
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt},
-            {
-                "role": "user",
-                "content": f"Use grid_mm={grid_mm} for all placements and output.",
-            },
-        ]
-        return _run_with_tools(
-            messages=messages,
-            room_model=room_model_json,
+        del verifier_feedback_json
+        (
+            clusters_outlines_json,
+            filtered_relation_plan,
+            existing_transforms_json,
+        ) = _filter_unsat_input_clusters(
             clusters_outlines=clusters_outlines_json,
-            relation_plan_json=relation_plan_json,
-            grid_mm=grid_mm,
-            existing_transforms_json=existing_transforms_json,
+            relation_plan=relation_plan_json,
+            existing_transforms=existing_transforms_json,
         )
+
+        cfg = SearchConfig(
+            grid_mm=int(grid_mm or self.config.grid_mm),
+            max_variants_per_cluster=self.config.max_variants_per_cluster,
+            max_candidates_per_cluster=self.config.max_candidates_per_cluster,
+            max_search_candidates_per_cluster=self.config.max_search_candidates_per_cluster,
+            exact_search_combo_limit=self.config.exact_search_combo_limit,
+            beam_width=self.config.beam_width,
+            beam_branch_per_state=self.config.beam_branch_per_state,
+            local_repair_iterations=self.config.local_repair_iterations,
+            local_repair_branch=self.config.local_repair_branch,
+            acceptable_critical_orientation_threshold_mm=self.config.acceptable_critical_orientation_threshold_mm,
+            acceptable_focal_pair_threshold_mm=self.config.acceptable_focal_pair_threshold_mm,
+            acceptable_max_item_penalty_mm=self.config.acceptable_max_item_penalty_mm,
+        )
+
+        normalized_clusters, applied_offsets = _normalize_clusters_outlines_for_solver(
+            clusters_outlines_json
+        )
+        normalized_existing = _normalize_existing_transforms_for_canonical_origins(
+            existing_transforms_json,
+            applied_offsets,
+        )
+
+        payload = _solve_layout(
+            room_model=room_model_json,
+            clusters_outlines=normalized_clusters,
+            relation_plan=filtered_relation_plan,
+            existing_transforms_json=normalized_existing,
+            cfg=cfg,
+        )
+        payload = _denormalize_payload_from_canonical_origins(
+            payload, normalized_clusters
+        )
+        return json.dumps(payload, ensure_ascii=True)
 
     def generate(
         self,
         *,
         room_model_json: dict[str, Any],
-        clusters_outlines_json: dict[str, Any],
+        clusters_outlines_json: dict[str, Any] | list[Any],
         relation_plan_json: dict[str, Any] | None = None,
         existing_transforms_json: dict[str, Any] | None = None,
         verifier_feedback_json: dict[str, Any] | None = None,
@@ -73,2703 +178,1460 @@ class MacroClusterPlacer:
             grid_mm=grid_mm,
         )
         payload = _parse_json(raw)
-        payload = _sanitize_placer_payload(payload)
-        return MacroClusterPlacerOutput.model_validate(payload).model_dump()
-
-
-def _build_prompt(
-    *,
-    template: str,
-    room_model_json: dict[str, Any],
-    clusters_outlines_json: dict[str, Any],
-    relation_plan_json: dict[str, Any] | None,
-    existing_transforms_json: dict[str, Any] | None,
-    verifier_feedback_json: dict[str, Any] | None,
-) -> str:
-    mapping = {
-        "ROOM_MODEL_JSON": _json_block(room_model_json),
-        "CLUSTERS_OUTLINES_JSON": _json_block(clusters_outlines_json),
-        "RELATION_PLAN_JSON": _json_block(relation_plan_json),
-        "EXISTING_TRANSFORMS_JSON": _json_block(existing_transforms_json),
-        "VERIFIER_FEEDBACK_JSON": _json_block(verifier_feedback_json),
-    }
-    output = template
-    for key, value in mapping.items():
-        output = output.replace("{" + key + "}", value)
-    return output
-
-
-def _json_block(obj: Any) -> str:
-    if obj is None:
-        return "null"
-    return json.dumps(obj, ensure_ascii=True, indent=2)
-
-
-def _sanitize_placer_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        return {}
-    notes = payload.get("notes")
-    if not isinstance(notes, list):
-        notes = []
-    reason = payload.get("reason")
-    if isinstance(reason, str) and reason.strip():
-        notes.append(reason.strip())
-
-    sanitized = {
-        "status": payload.get("status"),
-        "grid_mm": payload.get("grid_mm"),
-        "cluster_transforms": payload.get("cluster_transforms", []),
-        "notes": notes,
-    }
-    return sanitized
-
-
-def _run_with_tools(
-    *,
-    messages: list[dict[str, Any]],
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any],
-    relation_plan_json: dict[str, Any] | None,
-    grid_mm: int,
-    existing_transforms_json: dict[str, Any] | None = None,
-    max_steps: int = 30,
-    soft_improve_budget: int = 30,
-    min_explore_valid_rounds: int = 2,
-    history_keep_last_blocks: int = 12,
-) -> str:
-    client = OpenAIClient()
-
-    verifier_called = False
-    forced_check = False
-    last_verifier_result: str | None = None
-    last_draft_transforms: list[dict[str, Any]] | None = None
-
-    expected_cluster_ids = _cluster_ids(clusters_outlines)
-
-    best_valid_score: int | None = None
-    best_valid_quality: dict[str, Any] | None = None
-    best_valid_transforms: list[dict[str, Any]] | None = None
-    best_invalid_score: int | None = None
-    best_invalid_quality: dict[str, Any] | None = None
-    best_invalid_transforms: list[dict[str, Any]] | None = None
-    best_invalid_rank: tuple[Any, ...] | None = None
-
-    improve_rounds_used = 0
-    no_improve_streak = 0
-
-    verified_states: dict[str, dict[str, Any]] = {}
-    tried_patch_keys_by_state: dict[str, set[str]] = {}
-    invalid_state_trace: list[dict[str, Any]] = []
-
-    for step in range(1, max_steps + 1):
-        messages = _prune_messages_block_safe(
-            messages,
-            prefix_count=3,
-            keep_last_blocks=history_keep_last_blocks,
-        )
-        logger.info("MacroClusterPlacer step %s/%s", step, max_steps)
-
-        try:
-            response = client.chat_completion(
-                messages,
-                model_key="gpt_4o",
-                temperature=0.0,
-                tools=TOOL_SCHEMAS,
-            )
-        except Exception as exc:
-            if _is_context_length_exceeded(exc):
+        payload = _sanitize_output_payload(payload)
+        if MacroClusterPlacerOutput is not None:
+            try:
+                return MacroClusterPlacerOutput.model_validate(payload).model_dump()  # type: ignore[attr-defined]
+            except Exception:
                 logger.warning(
-                    "MacroClusterPlacer stopped early due to context length exceeded.",
-                    exc_info=exc,
+                    "MacroClusterPlacerOutput schema validation failed; returning raw payload with selected_variants preserved."
                 )
-                if best_valid_transforms is not None:
-                    return _build_best_valid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_valid_transforms,
-                        quality=best_valid_quality,
-                    )
-                if best_invalid_transforms is not None:
-                    return _build_best_invalid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_invalid_transforms,
-                        quality=best_invalid_quality,
-                    )
-                return json.dumps(
-                    {
-                        "status": "UNSAT",
-                        "grid_mm": int(grid_mm),
-                        "cluster_transforms": [],
-                        "notes": [
-                            "Stopped due to context length exceeded before finding a valid layout."
-                        ],
-                    },
-                    ensure_ascii=True,
-                )
-            raise
+        return payload
 
-        message = _extract_message(response)
-        tool_calls = _extract_tool_calls(message)
-        assistant_content = getattr(message, "content", "") or ""
 
-        draft = _try_parse_json_object(assistant_content)
-        if isinstance(draft, dict) and isinstance(
-            draft.get("cluster_transforms"), list
-        ):
-            last_draft_transforms = _canonicalize_cluster_transforms(
-                draft.get("cluster_transforms")
-            )
-
-        if tool_calls:
-            logger.info(
-                "Tool calls requested: %s",
-                [(c.get("function", {}) or {}).get("name") for c in tool_calls],
-            )
-
-            assistant_history_msg = {
-                "role": "assistant",
-                "content": assistant_content,
-                "tool_calls": tool_calls,
-            }
-            messages.append(assistant_history_msg)
-
-            prepared_calls: list[dict[str, Any]] = []
-            preflight_error: str | None = None
-
-            for idx, call in enumerate(tool_calls):
-                call_id = call.get("id") or f"tool_{idx}"
-                fn = call.get("function", {}) or {}
-                name = fn.get("name")
-                args_text = fn.get("arguments") or "{}"
-                args = _safe_json_loads(args_text)
-
-                if not isinstance(name, str) or name not in TOOL_REGISTRY:
-                    prepared_calls.append(
-                        {
-                            "call_id": call_id,
-                            "name": name,
-                            "args": args,
-                            "kind": "unknown_tool",
-                            "state_key": None,
-                            "canonical_transforms": None,
-                        }
-                    )
-                    continue
-
-                state_key = None
-                canonical_transforms: list[dict[str, Any]] | None = None
-
-                if name == "GlobalClusterVerifier":
-                    args = _coerce_verifier_args(
-                        args=args,
-                        room_model=room_model,
-                        clusters_outlines=clusters_outlines,
-                        grid_mm=grid_mm,
-                        assistant_content=assistant_content,
-                        existing_transforms_json=existing_transforms_json,
-                        last_draft_transforms=last_draft_transforms,
-                        relation_plan_json=relation_plan_json,
-                    )
-
-                    canonical_transforms = (
-                        _canonicalize_cluster_transforms(args["cluster_transforms"])
-                        if isinstance(args.get("cluster_transforms"), list)
-                        else []
-                    )
-                    args["cluster_transforms"] = canonical_transforms
-
-                    ok, detail = _validate_transforms_full(
-                        canonical_transforms,
-                        expected_cluster_ids,
-                    )
-                    if not ok:
-                        preflight_error = (
-                            "Before calling GlobalClusterVerifier you MUST provide cluster_transforms for EVERY cluster_id "
-                            f"exactly once. Required IDs: {expected_cluster_ids}. Issue: {detail}"
-                        )
-                        break
-
-                    state_key = _state_key(canonical_transforms)
-                    prior = verified_states.get(state_key)
-                    if prior is not None:
-                        prior_result = prior.get("result")
-                        if prior_result == "VALID":
-                            preflight_error = (
-                                "This exact cluster_transforms state was already verified VALID. "
-                                "Do NOT call GlobalClusterVerifier again. Output final JSON now using that verified state."
-                            )
-                            break
-
-                        errs_preview = prior.get("errors_preview") or []
-                        preflight_error = (
-                            "This exact cluster_transforms state was already verified INVALID. "
-                            "Do NOT repeat it. Change at least one cluster and re-check. "
-                            f"Previous errors (preview): {json.dumps(errs_preview, ensure_ascii=True)}"
-                        )
-                        break
-
-                prepared_calls.append(
-                    {
-                        "call_id": call_id,
-                        "name": name,
-                        "args": args,
-                        "kind": "normal",
-                        "state_key": state_key,
-                        "canonical_transforms": canonical_transforms,
-                    }
-                )
-
-            if preflight_error is not None:
-                for idx, call in enumerate(tool_calls):
-                    call_id = call.get("id") or f"tool_{idx}"
-                    fn = call.get("function", {}) or {}
-                    name = fn.get("name")
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call_id,
-                            "content": json.dumps(
-                                {
-                                    "error": "preflight_failed",
-                                    "tool": name,
-                                    "message": preflight_error,
-                                },
-                                ensure_ascii=True,
-                            ),
-                        }
-                    )
-
-                messages.append({"role": "user", "content": preflight_error})
-                continue
-
-            tool_results: list[dict[str, Any]] = []
-            any_tool_failed = False
-
-            for item in prepared_calls:
-                call_id = item["call_id"]
-                name = item["name"]
-                args = item["args"]
-                kind = item["kind"]
-
-                if kind == "unknown_tool":
-                    tool_output = {"error": "unknown_tool", "tool": name, "args": args}
-                else:
-                    tool_output = _safe_run_tool(name, args)
-
-                if name == "GlobalClusterVerifier":
-                    verifier_called = True
-                    last_verifier_result = tool_output.get("result")
-
-                logger.info(
-                    "Tool %s output: %s",
-                    name,
-                    json.dumps(tool_output, ensure_ascii=True),
-                )
-
-                tool_output_for_llm = _compact_tool_output_for_llm(tool_output)
-
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": json.dumps(tool_output_for_llm, ensure_ascii=True),
-                    }
-                )
-
-                if tool_output.get("error") is not None:
-                    any_tool_failed = True
-
-                tool_results.append(
-                    {
-                        "name": name,
-                        "args": args,
-                        "raw_output": tool_output,
-                        "state_key": item.get("state_key"),
-                        "canonical_transforms": item.get("canonical_transforms"),
-                    }
-                )
-
-            if any_tool_failed:
-                first_failed = None
-                for tr in tool_results:
-                    raw = tr["raw_output"]
-                    if isinstance(raw, dict) and raw.get("error") is not None:
-                        first_failed = raw
-                        break
-
-                fail_msg = (
-                    str(first_failed.get("message") or first_failed.get("error"))
-                    if isinstance(first_failed, dict)
-                    else "tool_failed"
-                )
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "A tool call failed. Fix your next tool call or JSON draft instead of repeating the same call. "
-                            f"Failure: {fail_msg}. "
-                            "Important: provide complete cluster_transforms, keep all ids exactly once, and avoid null/invalid scalar values."
-                        ),
-                    }
-                )
-                continue
-
-            gv_results = [
-                tr for tr in tool_results if tr.get("name") == "GlobalClusterVerifier"
-            ]
-
-            if not gv_results:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "You used tools, but did not call GlobalClusterVerifier. Call it before final output.",
-                    }
-                )
-                continue
-
-            tr = gv_results[-1]
-            tool_output = tr["raw_output"]
-            result = tool_output.get("result")
-            quality = tool_output.get("quality")
-            quality = quality if isinstance(quality, dict) else None
-            score = _extract_layout_score(tool_output)
-
-            transforms = tr.get("canonical_transforms")
-            transforms = transforms if isinstance(transforms, list) else []
-            state_key = tr.get("state_key")
-
-            if isinstance(state_key, str):
-                errs = tool_output.get("errors", [])
-                verified_states[state_key] = {
-                    "result": result,
-                    "score": score,
-                    "quality": quality,
-                    "errors_preview": errs[:8] if isinstance(errs, list) else errs,
-                }
-                tried_patch_keys_by_state.setdefault(state_key, set())
-
-            if result == "VALID":
-                invalid_state_trace.clear()
-
-                improved = _is_better_valid_candidate(
-                    new_score=score,
-                    new_quality=quality,
-                    old_score=best_valid_score,
-                    old_quality=best_valid_quality,
-                )
-
-                if improved or best_valid_transforms is None:
-                    best_valid_score = score
-                    best_valid_quality = quality
-                    best_valid_transforms = transforms
-                    no_improve_streak = 0
-                else:
-                    no_improve_streak += 1
-
-                logger.info(
-                    "VALID placement found: score=%s improved=%s no_improve_streak=%s improve_rounds_used=%s",
-                    score,
-                    improved,
-                    no_improve_streak,
-                    improve_rounds_used,
-                )
-
-                improve_allowed = _should_try_soft_improve(
-                    quality=quality,
-                    improve_rounds_used=improve_rounds_used,
-                    soft_improve_budget=soft_improve_budget,
-                    no_improve_streak=no_improve_streak,
-                    min_explore_valid_rounds=min_explore_valid_rounds,
-                )
-
-                tried_patch_keys = (
-                    tried_patch_keys_by_state[state_key]
-                    if isinstance(state_key, str)
-                    else set()
-                )
-
-                selected_improve_patch = None
-                if improve_allowed:
-                    selected_improve_patch = _select_single_global_improve_patch(
-                        tool_output=tool_output,
-                        transforms=transforms,
-                        seen_state_keys=set(verified_states.keys()),
-                        tried_patch_keys=tried_patch_keys,
-                        blocked_cluster_ids=set(),
-                    )
-
-                if selected_improve_patch is not None:
-                    patched = _apply_global_patch(transforms, selected_improve_patch)
-                    ok, detail = _validate_transforms_full(
-                        patched,
-                        expected_cluster_ids,
-                    )
-                    patched_state_key = _state_key(patched)
-
-                    if ok and patched_state_key not in verified_states:
-                        if isinstance(state_key, str):
-                            tried_patch_keys_by_state[state_key].add(
-                                _global_patch_key(selected_improve_patch)
-                            )
-
-                        improve_rounds_used += 1
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "GlobalClusterVerifier returned VALID. "
-                                    "A deterministic SINGLE-CLUSTER improvement candidate is available. "
-                                    "Use it as your next attempt. Do NOT combine it with any other move in the same iteration. "
-                                    "Re-call GlobalClusterVerifier with EXACTLY these cluster_transforms unless you have one clearly better single-cluster improvement.\n\n"
-                                    f"selected_improve_patch={json.dumps(selected_improve_patch, ensure_ascii=True)}\n"
-                                    f"patched_cluster_transforms={json.dumps(patched, ensure_ascii=True)}"
-                                ),
-                            }
-                        )
-                        continue
-
-                    logger.info(
-                        "Discarded improve patch due to invalid structure or repeated state: %s",
-                        detail,
-                    )
-
-                if not _can_finalize_valid_layout(quality):
-                    if improve_rounds_used < soft_improve_budget:
-                        improve_rounds_used += 1
-                        orientation_preview = _compact_orientation_preview(
-                            quality.get("orientation_debug")
-                            if isinstance(quality, dict)
-                            else None,
-                            max_items=8,
-                        )
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "GlobalClusterVerifier returned VALID but the layout still has CRITICAL orientation mismatch. "
-                                    "Do NOT finalize. Change only ONE cluster to reduce the orientation mismatch and re-check. "
-                                    "Prefer fixing face_each_other / face_cluster / access_faces_other problems first.\n\n"
-                                    f"orientation_preview={json.dumps(orientation_preview, ensure_ascii=True)}"
-                                ),
-                            }
-                        )
-                        continue
-
-                    if best_valid_transforms is not None:
-                        return _build_best_valid_json(
-                            grid_mm=grid_mm,
-                            transforms=best_valid_transforms,
-                            quality=best_valid_quality,
-                        )
-
-                if improve_allowed:
-                    improve_rounds_used += 1
-                    quality_preview = _compact_quality_for_llm(quality)
-                    improve_hints_preview = _compact_improve_hints_preview(
-                        tool_output.get("improve_hints"),
-                        max_items=2,
-                        max_candidates=2,
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned VALID. "
-                                f"Current layout_score={score}. "
-                                "Do NOT finalize yet. Explore ONE alternative VALID layout by changing only ONE cluster "
-                                "if it can improve layout_score, total_soft_penalty_mm, orientation, circulation, or affinity. "
-                                "Re-call GlobalClusterVerifier after that single-cluster change. "
-                                "If no clearly better VALID alternative exists, then output final JSON.\n\n"
-                                f"quality_preview={json.dumps(quality_preview, ensure_ascii=True)}\n"
-                                f"improve_hints_preview={json.dumps(improve_hints_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                else:
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned VALID. "
-                                "Keep this as the current best valid layout. "
-                                "If there is any unseen SINGLE-CLUSTER valid improvement for orientation / layout_score, try it next. "
-                                "Otherwise you may output final JSON."
-                            ),
-                        }
-                    )
-                continue
-
-            errs = tool_output.get("errors", [])
-            errs_preview = errs[:8] if isinstance(errs, list) else errs
-            hints_preview = _compact_repair_hints_preview(
-                tool_output.get("repair_hints"),
-                max_items=2,
-                max_candidates=2,
-            )
-            improve_hints_preview = _compact_improve_hints_preview(
-                tool_output.get("improve_hints"),
-                max_items=2,
-                max_candidates=2,
-            )
-
-            if isinstance(state_key, str):
-                tried_patch_keys_by_state.setdefault(state_key, set())
-            tried_patch_keys = (
-                tried_patch_keys_by_state[state_key]
-                if isinstance(state_key, str)
-                else set()
-            )
-
-            remaining_hard_issues = _count_geometry_hard_errors(errs)
-            orientation_only = _orientation_only_invalid(errs)
-
-            invalid_state_trace.append(
-                {
-                    "state_key": state_key,
-                    "result": "INVALID",
-                    "transforms": transforms,
-                    "errors": errs if isinstance(errs, list) else [],
-                    "remaining_hard_issues": remaining_hard_issues,
-                    "orientation_only": orientation_only,
-                    "layout_score": score,
-                    "quality": quality,
-                }
-            )
-            invalid_state_trace = invalid_state_trace[-8:]
-
-            invalid_rank = _quality_rank(score, quality)
-            if transforms:
-                if best_invalid_rank is None or invalid_rank > best_invalid_rank:
-                    best_invalid_rank = invalid_rank
-                    best_invalid_score = score
-                    best_invalid_quality = quality
-                    best_invalid_transforms = transforms
-
-            stagnation = _detect_invalid_stagnation(invalid_state_trace, window=4)
-            blocked_cluster_ids = set(stagnation.get("blocked_cluster_ids") or [])
-
-            # Chỉ cho pairwise khi:
-            # - hiện tại chỉ còn ORIENTATION_HARD
-            # - và search đang stuck thật sự
-            allow_pairwise_patch = bool(orientation_only and stagnation.get("is_stuck"))
-
-            selected_patch = _select_single_global_patch(
-                tool_output=tool_output,
-                transforms=transforms,
-                seen_state_keys=set(verified_states.keys()),
-                tried_patch_keys=tried_patch_keys,
-                blocked_cluster_ids=blocked_cluster_ids,
-                allow_pairwise=allow_pairwise_patch,
-            )
-
-            # Chỉ dùng improve_hints để rescue khi INVALID mà chỉ còn orientation.
-            if selected_patch is None and orientation_only:
-                selected_patch = _select_single_global_invalid_improve_patch(
-                    tool_output=tool_output,
-                    transforms=transforms,
-                    seen_state_keys=set(verified_states.keys()),
-                    tried_patch_keys=tried_patch_keys,
-                    blocked_cluster_ids=blocked_cluster_ids,
-                )
-
-            if selected_patch is not None:
-                patched = _apply_global_patch(transforms, selected_patch)
-                ok, detail = _validate_transforms_full(
-                    patched,
-                    expected_cluster_ids,
-                )
-                patched_state_key = _state_key(patched)
-
-                if ok and patched_state_key not in verified_states:
-                    if isinstance(state_key, str):
-                        tried_patch_keys_by_state[state_key].add(
-                            _global_patch_key(selected_patch)
-                        )
-
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned INVALID. "
-                                "Use the following SINGLE patched candidate as your next attempt. "
-                                "Do NOT combine it with other moves in the same iteration. "
-                                "Re-call GlobalClusterVerifier with EXACTLY these cluster_transforms unless you have one clearly better single-cluster patch.\n\n"
-                                f"selected_patch={json.dumps(selected_patch, ensure_ascii=True)}\n"
-                                f"patched_cluster_transforms={json.dumps(patched, ensure_ascii=True)}\n"
-                                f"repair_hints_preview={json.dumps(hints_preview, ensure_ascii=True)}\n"
-                                f"improve_hints_preview={json.dumps(improve_hints_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                else:
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned INVALID. "
-                                "A deterministic patch was considered but would still repeat an already verified state or became invalid structurally. "
-                                "Choose a DIFFERENT single-cluster repair and re-check. "
-                                f"Errors (preview): {json.dumps(errs_preview, ensure_ascii=True)} "
-                                f"Repair hints (preview): {json.dumps(hints_preview, ensure_ascii=True)} "
-                                f"Patch issue: {detail}"
-                            ),
-                        }
-                    )
-            else:
-                if stagnation.get("is_stuck"):
-                    repeated_cluster_id = stagnation.get("repeated_cluster_id")
-                    preferred_other_clusters = (
-                        stagnation.get("preferred_other_clusters") or []
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned INVALID and the search is STUCK in a local crawl. "
-                                "The same cluster was changed repeatedly across recent invalid rounds without reducing hard issue count. "
-                                "Do NOT nudge that same cluster again by a tiny step. "
-                                f"blocked_cluster_id={json.dumps(repeated_cluster_id, ensure_ascii=True)} "
-                                f"preferred_other_clusters={json.dumps(preferred_other_clusters, ensure_ascii=True)} "
-                                "Change a DIFFERENT cluster next and re-check. "
-                                f"Errors (preview): {json.dumps(errs_preview, ensure_ascii=True)} "
-                                f"Repair hints (preview): {json.dumps(hints_preview, ensure_ascii=True)} "
-                                f"Improve hints (preview): {json.dumps(improve_hints_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                else:
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "GlobalClusterVerifier returned INVALID. "
-                                "Fix ONLY the reported hard issues and re-check. "
-                                "Change one cluster if possible, and do NOT repeat previous invalid states. "
-                                f"Errors (preview): {json.dumps(errs_preview, ensure_ascii=True)} "
-                                f"Repair hints (preview): {json.dumps(hints_preview, ensure_ascii=True)} "
-                                f"Improve hints (preview): {json.dumps(improve_hints_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-            continue
-
-        content = getattr(message, "content", None)
-        if not isinstance(content, str) or not content.strip():
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Return a JSON object only (no markdown).",
-                }
-            )
-            continue
-
-        logger.info("Assistant content length: %s", len(content))
-
-        if not verifier_called and not forced_check:
-            forced_check = True
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "You MUST call GlobalClusterVerifier before final output.",
-                }
-            )
-            continue
-
-        draft = _try_parse_json_object(content)
-        if not isinstance(draft, dict):
-            if best_valid_transforms is not None:
-                return _build_best_valid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_valid_transforms,
-                    quality=best_valid_quality,
-                )
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Your output must be valid JSON only.",
-                }
-            )
-            continue
-
-        status = draft.get("status")
-        if status not in {"OK", "UNSAT", "NEED_INFO"}:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Top-level field status must be one of OK|UNSAT|NEED_INFO.",
-                }
-            )
-            continue
-
-        transforms = draft.get("cluster_transforms")
-        transforms_list = (
-            _canonicalize_cluster_transforms(transforms)
-            if isinstance(transforms, list)
-            else None
-        )
-
-        if status == "OK":
-            ok, detail = _validate_transforms_full(
-                transforms_list,
-                expected_cluster_ids,
-            )
-            if not ok:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "For status=OK, cluster_transforms must contain every cluster exactly once. "
-                            f"Issue: {detail}"
-                        ),
-                    }
-                )
-                continue
-
-        if last_verifier_result != "VALID":
-            tool_output = _safe_run_tool(
-                "GlobalClusterVerifier",
-                {
-                    "room_model": room_model,
-                    "clusters_outlines": clusters_outlines,
-                    "cluster_transforms": transforms_list
-                    if transforms_list is not None
-                    else [],
-                    "grid_mm": grid_mm,
-                    "forbid_obstacle_touch": True,
-                    "relation_plan": relation_plan_json
-                    if isinstance(relation_plan_json, dict)
-                    else None,
-                    "generate_hints": True,
-                    "consider_rotations": True,
-                    "hard_orientation_gate": False,
-                    "orientation_hard_threshold_mm": 220,
-                    "min_preferred_gap_mm": 180,
-                    "max_preferred_gap_mm": 450,
-                },
-            )
-
-            if tool_output.get("error") is not None:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "GlobalClusterVerifier failed on your final draft. "
-                            "Do NOT finalize. Fix the transforms or the tool-call inputs and verify again. "
-                            f"Failure: {tool_output.get('message') or tool_output.get('error')}"
-                        ),
-                    }
-                )
-                continue
-
-            verifier_called = True
-            last_verifier_result = tool_output.get("result")
-
-            if status == "OK" and last_verifier_result != "VALID":
-                errs = tool_output.get("errors", [])
-                errs_preview = errs[:8] if isinstance(errs, list) else errs
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Your final JSON is still INVALID according to GlobalClusterVerifier. "
-                            "Fix ONLY these errors and re-check by calling GlobalClusterVerifier again. "
-                            f"Errors (preview): {json.dumps(errs_preview, ensure_ascii=True)}"
-                        ),
-                    }
-                )
-                continue
-
-            if status != "OK":
-                if best_valid_transforms is not None:
-                    return _build_best_valid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_valid_transforms,
-                        quality=best_valid_quality,
-                    )
-                if best_invalid_transforms is not None:
-                    return _build_best_invalid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_invalid_transforms,
-                        quality=best_invalid_quality,
-                    )
-                return content
-
-            quality = tool_output.get("quality")
-            quality = quality if isinstance(quality, dict) else None
-            score = _extract_layout_score(tool_output)
-
-            if transforms_list is not None and _is_better_valid_candidate(
-                new_score=score,
-                new_quality=quality,
-                old_score=best_valid_score,
-                old_quality=best_valid_quality,
-            ):
-                best_valid_score = score
-                best_valid_quality = quality
-                best_valid_transforms = transforms_list
-
-            if not _can_finalize_valid_layout(quality):
-                tried_patch_keys = set()
-                selected_improve_patch = _select_single_global_improve_patch(
-                    tool_output=tool_output,
-                    transforms=transforms_list or [],
-                    seen_state_keys=set(verified_states.keys()),
-                    tried_patch_keys=tried_patch_keys,
-                    blocked_cluster_ids=set(),
-                )
-
-                if (
-                    selected_improve_patch is not None
-                    and improve_rounds_used < soft_improve_budget
-                ):
-                    improve_rounds_used += 1
-                    patched = _apply_global_patch(
-                        transforms_list or [], selected_improve_patch
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your latest VALID layout still has critical orientation mismatch. "
-                                "Use this deterministic SINGLE-CLUSTER improvement next and re-call GlobalClusterVerifier.\n\n"
-                                f"selected_improve_patch={json.dumps(selected_improve_patch, ensure_ascii=True)}\n"
-                                f"patched_cluster_transforms={json.dumps(patched, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                    continue
-
-                if improve_rounds_used < soft_improve_budget:
-                    improve_rounds_used += 1
-                    orientation_preview = _compact_orientation_preview(
-                        quality.get("orientation_debug")
-                        if isinstance(quality, dict)
-                        else None,
-                        max_items=8,
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your latest VALID layout still has critical orientation mismatch. "
-                                "Do NOT finalize. Change only ONE cluster and re-call GlobalClusterVerifier. "
-                                f"orientation_preview={json.dumps(orientation_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                    continue
-
-                if best_valid_transforms is not None:
-                    return _build_best_valid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_valid_transforms,
-                        quality=best_valid_quality,
-                    )
-                if best_invalid_transforms is not None:
-                    return _build_best_invalid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_invalid_transforms,
-                        quality=best_invalid_quality,
-                    )
-
-            return content
-
-        if status != "OK":
-            if best_valid_transforms is not None:
-                return _build_best_valid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_valid_transforms,
-                    quality=best_valid_quality,
-                )
-            if best_invalid_transforms is not None:
-                return _build_best_invalid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_invalid_transforms,
-                    quality=best_invalid_quality,
-                )
-            return content
-
-        if transforms_list is None:
-            if best_valid_transforms is not None:
-                return _build_best_valid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_valid_transforms,
-                    quality=best_valid_quality,
-                )
-            if best_invalid_transforms is not None:
-                return _build_best_invalid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_invalid_transforms,
-                    quality=best_invalid_quality,
-                )
-            return content
-
-        tool_output = _safe_run_tool(
-            "GlobalClusterVerifier",
-            {
-                "room_model": room_model,
-                "clusters_outlines": clusters_outlines,
-                "cluster_transforms": transforms_list,
-                "grid_mm": grid_mm,
-                "forbid_obstacle_touch": True,
-                "relation_plan": relation_plan_json
-                if isinstance(relation_plan_json, dict)
-                else None,
-                "generate_hints": True,
-                "consider_rotations": True,
-                "hard_orientation_gate": False,
-                "orientation_hard_threshold_mm": 220,
-                "min_preferred_gap_mm": 180,
-                "max_preferred_gap_mm": 450,
-            },
-        )
-
-        if tool_output.get("error") is not None:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "GlobalClusterVerifier failed on your latest draft. "
-                        "Do NOT finalize. Fix the transforms or verifier inputs and verify again. "
-                        f"Failure: {tool_output.get('message') or tool_output.get('error')}"
-                    ),
-                }
-            )
-            continue
-
-        if tool_output.get("result") == "VALID":
-            quality = tool_output.get("quality")
-            quality = quality if isinstance(quality, dict) else None
-            score = _extract_layout_score(tool_output)
-
-            if _is_better_valid_candidate(
-                new_score=score,
-                new_quality=quality,
-                old_score=best_valid_score,
-                old_quality=best_valid_quality,
-            ):
-                best_valid_score = score
-                best_valid_quality = quality
-                best_valid_transforms = transforms_list
-
-            if not _can_finalize_valid_layout(quality):
-                selected_improve_patch = _select_single_global_improve_patch(
-                    tool_output=tool_output,
-                    transforms=transforms_list,
-                    seen_state_keys=set(verified_states.keys()),
-                    tried_patch_keys=set(),
-                    blocked_cluster_ids=set(),
-                )
-
-                if (
-                    selected_improve_patch is not None
-                    and improve_rounds_used < soft_improve_budget
-                ):
-                    improve_rounds_used += 1
-                    patched = _apply_global_patch(
-                        transforms_list, selected_improve_patch
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your latest VALID layout still has critical orientation mismatch. "
-                                "Use this deterministic SINGLE-CLUSTER improvement next and re-call GlobalClusterVerifier.\n\n"
-                                f"selected_improve_patch={json.dumps(selected_improve_patch, ensure_ascii=True)}\n"
-                                f"patched_cluster_transforms={json.dumps(patched, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                    continue
-
-                if improve_rounds_used < soft_improve_budget:
-                    improve_rounds_used += 1
-                    orientation_preview = _compact_orientation_preview(
-                        quality.get("orientation_debug")
-                        if isinstance(quality, dict)
-                        else None,
-                        max_items=8,
-                    )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your latest VALID layout still has critical orientation mismatch. "
-                                "Do NOT finalize. Change only ONE cluster and re-call GlobalClusterVerifier. "
-                                f"orientation_preview={json.dumps(orientation_preview, ensure_ascii=True)}"
-                            ),
-                        }
-                    )
-                    continue
-
-                if best_valid_transforms is not None:
-                    return _build_best_valid_json(
-                        grid_mm=grid_mm,
-                        transforms=best_valid_transforms,
-                        quality=best_valid_quality,
-                    )
-
-            if best_valid_transforms is not None:
-                best_json = _build_best_valid_json(
-                    grid_mm=grid_mm,
-                    transforms=best_valid_transforms,
-                    quality=best_valid_quality,
-                )
-                if best_json != content:
-                    logger.info(
-                        "Returning previously seen better valid state: best_score=%s current_score=%s",
-                        best_valid_score,
-                        score,
-                    )
-                    return best_json
-
-        if best_valid_transforms is None and best_invalid_transforms is not None:
-            return _build_best_invalid_json(
-                grid_mm=grid_mm,
-                transforms=best_invalid_transforms,
-                quality=best_invalid_quality,
-            )
-        return content
-
-    if best_valid_transforms is not None:
-        logger.warning(
-            "MacroClusterPlacer hit max_steps; returning best valid state with score=%s quality=%s",
-            best_valid_score,
-            json.dumps(best_valid_quality, ensure_ascii=True)
-            if isinstance(best_valid_quality, dict)
-            else None,
-        )
-        return _build_best_valid_json(
-            grid_mm=grid_mm,
-            transforms=best_valid_transforms,
-            quality=best_valid_quality,
-        )
-
-    if best_invalid_transforms is not None:
-        logger.warning(
-            "MacroClusterPlacer hit max_steps; returning best invalid state with score=%s quality=%s",
-            best_invalid_score,
-            json.dumps(best_invalid_quality, ensure_ascii=True)
-            if isinstance(best_invalid_quality, dict)
-            else None,
-        )
-        return _build_best_invalid_json(
-            grid_mm=grid_mm,
-            transforms=best_invalid_transforms,
-            quality=best_invalid_quality,
-        )
-
-    logger.warning("MacroClusterPlacer hit max_steps with no valid layout.")
-    return json.dumps(
-        {
-            "status": "UNSAT",
-            "grid_mm": int(grid_mm),
-            "cluster_transforms": [],
-            "notes": ["Stopped due to max_steps with no verified valid layout."],
-        },
-        ensure_ascii=True,
-    )
-
-
-def _extract_message(response: object) -> object:
-    choices = getattr(response, "choices", None)
-    if isinstance(choices, list) and choices:
-        return getattr(choices[0], "message", None)
-    raise ValueError("OpenAI response missing message")
-
-
-def _extract_tool_calls(message: object) -> list[dict[str, Any]]:
-    tool_calls = getattr(message, "tool_calls", None)
-    if not tool_calls:
-        return []
-    output: list[dict[str, Any]] = []
-    for call in tool_calls:
-        if isinstance(call, dict):
-            output.append(call)
-            continue
-        fn = getattr(call, "function", None)
-        output.append(
-            {
-                "id": getattr(call, "id", None),
-                "type": getattr(call, "type", "function"),
-                "function": {
-                    "name": getattr(fn, "name", None) if fn is not None else None,
-                    "arguments": getattr(fn, "arguments", None)
-                    if fn is not None
-                    else None,
-                },
-            }
-        )
-    return output
-
-
-def _safe_json_loads(value: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
-def _safe_run_tool(name: str | None, args: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(name, str) or name not in TOOL_REGISTRY:
-        return {"error": "unknown_tool", "tool": name, "args": args}
-    try:
-        result = TOOL_REGISTRY[name](**args)
-        if result is None:
-            return {"error": "tool_returned_none", "tool": name, "args": args}
-        if isinstance(result, dict):
-            return result
-        return {"error": "tool_returned_non_dict", "tool": name, "result": str(result)}
-    except Exception as exc:
-        return {"error": "tool_failed", "tool": name, "message": str(exc), "args": args}
-
-
-def _coerce_verifier_args(
+def _solve_layout(
     *,
-    args: dict[str, Any],
     room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any],
-    grid_mm: int,
-    assistant_content: str,
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
     existing_transforms_json: dict[str, Any] | None,
-    last_draft_transforms: list[dict[str, Any]] | None,
-    relation_plan_json: dict[str, Any] | None,
+    cfg: SearchConfig,
 ) -> dict[str, Any]:
-    output = dict(args)
-
-    if "room_model" not in output:
-        output["room_model"] = room_model
-    if "clusters_outlines" not in output:
-        output["clusters_outlines"] = clusters_outlines
-    if "grid_mm" not in output:
-        output["grid_mm"] = int(grid_mm)
-
-    if "relation_plan" not in output:
-        output["relation_plan"] = (
-            relation_plan_json if isinstance(relation_plan_json, dict) else None
+    cluster_ids = _cluster_ids(clusters_outlines)
+    materialization_cache: dict[str, Any] = {}
+    if not cluster_ids:
+        return _build_need_info_json(
+            grid_mm=cfg.grid_mm,
+            notes=["No valid cluster entries were found in clusters_outlines_json."],
         )
 
-    if "cluster_transforms" not in output or not isinstance(
-        output.get("cluster_transforms"), list
-    ):
-        draft = _try_parse_json_object(assistant_content)
-        if isinstance(draft, dict) and isinstance(
-            draft.get("cluster_transforms"), list
-        ):
-            output["cluster_transforms"] = draft.get("cluster_transforms")
-
-    if "cluster_transforms" not in output or not isinstance(
-        output.get("cluster_transforms"), list
-    ):
-        if existing_transforms_json and isinstance(
-            existing_transforms_json.get("cluster_transforms"), list
-        ):
-            output["cluster_transforms"] = existing_transforms_json.get(
-                "cluster_transforms"
-            )
-
-    if "cluster_transforms" not in output or not isinstance(
-        output.get("cluster_transforms"), list
-    ):
-        if isinstance(last_draft_transforms, list) and last_draft_transforms:
-            output["cluster_transforms"] = last_draft_transforms
-
-    if "cluster_transforms" not in output:
-        output["cluster_transforms"] = []
-
-    if isinstance(output.get("cluster_transforms"), list):
-        output["cluster_transforms"] = _canonicalize_cluster_transforms(
-            output["cluster_transforms"]
-        )
-
-    output["generate_hints"] = bool(output.get("generate_hints", True))
-    output["consider_rotations"] = bool(output.get("consider_rotations", True))
-    output["forbid_obstacle_touch"] = bool(output.get("forbid_obstacle_touch", True))
-    # output["hard_orientation_gate"] = bool(output.get("hard_orientation_gate", False))
-    output["hard_orientation_gate"] = False
-    output["orientation_hard_threshold_mm"] = int(
-        output.get("orientation_hard_threshold_mm", 220) or 220
+    seed_state, seed_notes = _build_seed_state(
+        room_model=room_model,
+        clusters_outlines=clusters_outlines,
+        relation_plan=relation_plan,
+        existing_transforms_json=existing_transforms_json,
+        cfg=cfg,
     )
 
-    min_gap = output.get("min_preferred_gap_mm", 180)
-    max_gap = output.get("max_preferred_gap_mm", 450)
-
-    if min_gap is None:
-        min_gap = 180
-    if max_gap is None:
-        max_gap = 450
-
-    try:
-        min_gap = int(min_gap)
-    except Exception:
-        min_gap = 180
-
-    try:
-        max_gap = int(max_gap)
-    except Exception:
-        max_gap = 450
-
-    if max_gap < min_gap:
-        max_gap = min_gap
-
-    output["min_preferred_gap_mm"] = min_gap
-    output["max_preferred_gap_mm"] = max_gap
-
-    if (
-        "base_preferred_gap_mm" in output
-        and output["base_preferred_gap_mm"] is not None
-    ):
-        try:
-            output["base_preferred_gap_mm"] = int(output["base_preferred_gap_mm"])
-        except Exception:
-            output["base_preferred_gap_mm"] = None
-    else:
-        output["base_preferred_gap_mm"] = None
-
-    return output
-
-
-def _validate_transforms_full(
-    transforms: Any,
-    expected_cluster_ids: list[str],
-) -> tuple[bool, str]:
-    if not isinstance(transforms, list) or not transforms:
-        return False, "cluster_transforms is missing or empty"
-
-    seen: list[str] = []
-    for t in transforms:
-        if not isinstance(t, dict):
-            continue
-        cid = t.get("cluster_id")
-        if isinstance(cid, str) and cid:
-            seen.append(cid)
-
-    if not seen:
-        return False, "cluster_transforms has no valid cluster_id entries"
-
-    missing = [cid for cid in expected_cluster_ids if cid not in seen]
-    extra = [cid for cid in seen if cid not in expected_cluster_ids]
-    dups = sorted({cid for cid in seen if seen.count(cid) > 1})
-
-    if missing:
-        return False, f"missing cluster_ids: {missing}"
-    if extra:
-        return False, f"unexpected cluster_ids: {extra}"
-    if dups:
-        return False, f"duplicate cluster_ids: {dups}"
-    if len(seen) != len(expected_cluster_ids):
-        return False, "cluster_transforms count mismatch"
-    return True, "ok"
-
-
-def _canonicalize_cluster_transforms(
-    transforms: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for t in transforms:
-        if not isinstance(t, dict):
-            continue
-        cid = t.get("cluster_id")
-        if not isinstance(cid, str) or not cid:
-            continue
-        out.append(
-            {
-                "cluster_id": cid,
-                "x": int(t.get("x", 0) or 0),
-                "y": int(t.get("y", 0) or 0),
-                "rot": int(t.get("rot", 0) or 0) % 360,
-            }
+    if len(seed_state.transforms_by_id) == len(cluster_ids):
+        final_verify = _verify_layout(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            transforms=seed_state.transforms_list(),
+            selected_variants=seed_state.variants_by_id,
+            cfg=cfg,
+            mode="complete",
+            materialization_cache=materialization_cache,
         )
-    out.sort(key=lambda item: item["cluster_id"])
-    return out
+        if bool(final_verify.get("acceptable_valid")):
+            return _build_ok_json(
+                grid_mm=cfg.grid_mm,
+                transforms=seed_state.transforms_list(),
+                selected_variants=seed_state.selected_variants_list(),
+                notes=[
+                    *seed_notes,
+                    "Existing transforms already formed an acceptable valid layout.",
+                ],
+            )
+
+    enum = EnumerateClusterCandidates(
+        room_model=room_model,
+        clusters_outlines=clusters_outlines,
+        grid_mm=cfg.grid_mm,
+        relation_plan=relation_plan,
+        max_candidates_per_cluster=cfg.max_candidates_per_cluster,
+        max_variants_per_cluster=cfg.max_variants_per_cluster,
+        acceptable_critical_orientation_threshold_mm=cfg.acceptable_critical_orientation_threshold_mm,
+        acceptable_focal_pair_threshold_mm=cfg.acceptable_focal_pair_threshold_mm,
+        acceptable_max_item_penalty_mm=cfg.acceptable_max_item_penalty_mm,
+    )
+    if enum.get("result") != "OK":
+        notes = [*seed_notes, "Candidate enumeration failed."]
+        for err in enum.get("errors") or []:
+            if isinstance(err, dict):
+                notes.append(f"{err.get('code')}: {err.get('detail')}")
+        return _build_unsat_json(grid_mm=cfg.grid_mm, notes=_dedupe_str_list(notes))
+
+    order_result = RankClusterPlacementOrder(
+        room_model=room_model,
+        clusters_outlines=clusters_outlines,
+        grid_mm=cfg.grid_mm,
+        relation_plan=relation_plan,
+        max_variants_per_cluster=cfg.max_variants_per_cluster,
+    )
+    order = _derive_cluster_order(
+        order_result, enum, cluster_ids, seed_state.transforms_by_id
+    )
+    candidate_map = _prepare_candidate_map(
+        enum=enum,
+        existing_transforms=seed_state.transforms_by_id,
+        max_search_candidates_per_cluster=cfg.max_search_candidates_per_cluster,
+    )
+
+    missing_candidate_ids = [
+        cid
+        for cid in order
+        if cid not in seed_state.transforms_by_id and not candidate_map.get(cid)
+    ]
+    if missing_candidate_ids:
+        return _build_unsat_json(
+            grid_mm=cfg.grid_mm,
+            notes=_dedupe_str_list(
+                [
+                    *seed_notes,
+                    f"No hard-valid candidates were found for clusters: {', '.join(missing_candidate_ids)}.",
+                ]
+            ),
+        )
+
+    remaining_ids = [cid for cid in order if cid not in seed_state.transforms_by_id]
+    combo_count = 1
+    for cid in remaining_ids:
+        combo_count *= max(1, len(candidate_map.get(cid, [])))
+
+    logger.info(
+        "Deterministic MacroClusterPlacer: %s clusters, %s remaining after seed, estimated candidate product=%s",
+        len(cluster_ids),
+        len(remaining_ids),
+        combo_count,
+    )
+
+    best_acceptable: SearchState | None = None
+    best_hard: SearchState | None = None
+
+    if not remaining_ids:
+        verify = _verify_layout(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            transforms=seed_state.transforms_list(),
+            selected_variants=seed_state.variants_by_id,
+            cfg=cfg,
+            mode="complete",
+            materialization_cache=materialization_cache,
+        )
+        candidate = _state_from_verify(
+            seed_state.transforms_by_id, seed_state.variants_by_id, verify
+        )
+        if bool(verify.get("acceptable_valid")):
+            best_acceptable = candidate
+        elif bool(verify.get("hard_valid")):
+            best_hard = candidate
+    elif combo_count <= cfg.exact_search_combo_limit:
+        best_acceptable, best_hard = _exact_search(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            order=remaining_ids,
+            candidate_map=candidate_map,
+            seed_state=seed_state,
+            cfg=cfg,
+            materialization_cache=materialization_cache,
+        )
+    else:
+        best_acceptable, best_hard = _beam_search(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            order=remaining_ids,
+            candidate_map=candidate_map,
+            seed_state=seed_state,
+            cfg=cfg,
+            materialization_cache=materialization_cache,
+        )
+
+    if best_acceptable is None and best_hard is not None:
+        repaired = _conflict_directed_repair(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            candidate_map=candidate_map,
+            seed_state=best_hard,
+            cfg=cfg,
+            materialization_cache=materialization_cache,
+        )
+        if repaired is not None and bool(repaired.quality_gate.get("pass")):
+            best_acceptable = repaired
+        elif repaired is not None and _better_state(repaired, best_hard):
+            best_hard = repaired
+
+    if best_acceptable is not None:
+        return _build_ok_json(
+            grid_mm=cfg.grid_mm,
+            transforms=best_acceptable.transforms_list(),
+            selected_variants=best_acceptable.selected_variants_list(),
+            notes=_dedupe_str_list(
+                [
+                    *seed_notes,
+                    "Solved with deterministic candidate+variant search.",
+                    f"state_signature={best_acceptable.state_signature}",
+                ]
+            ),
+        )
+
+    if best_hard is not None:
+        gate = best_hard.quality_gate or {}
+        reasons = gate.get("reasons") or []
+        return _build_unsat_json(
+            grid_mm=cfg.grid_mm,
+            notes=_dedupe_str_list(
+                [
+                    *seed_notes,
+                    "Only hard-valid layouts were found; none passed the acceptable quality gate.",
+                    f"quality_gate_reasons={json.dumps(reasons, ensure_ascii=True)}",
+                    f"state_signature={best_hard.state_signature}",
+                ]
+            ),
+        )
+
+    return _build_unsat_json(
+        grid_mm=cfg.grid_mm,
+        notes=_dedupe_str_list(
+            [
+                *seed_notes,
+                "Search terminated with no complete hard-valid layout.",
+            ]
+        ),
+    )
 
 
-def _canonicalize_patch_clusters(
-    patch_clusters: Any,
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    if not isinstance(patch_clusters, list):
-        return out
+def _exact_search(
+    *,
+    room_model: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    order: list[str],
+    candidate_map: dict[str, list[dict[str, Any]]],
+    seed_state: SearchState,
+    cfg: SearchConfig,
+    materialization_cache: dict[str, Any],
+) -> tuple[SearchState | None, SearchState | None]:
+    best_acceptable: SearchState | None = None
+    best_hard: SearchState | None = None
+    visited: set[str] = set()
 
-    seen = set()
-    for item in patch_clusters:
+    def dfs(idx: int, state: SearchState) -> None:
+        nonlocal best_acceptable, best_hard
+        if idx >= len(order):
+            verify = _verify_layout(
+                room_model=room_model,
+                clusters_outlines=clusters_outlines,
+                relation_plan=relation_plan,
+                transforms=state.transforms_list(),
+                selected_variants=state.variants_by_id,
+                cfg=cfg,
+                mode="complete",
+                materialization_cache=materialization_cache,
+            )
+            candidate = _state_from_verify(
+                state.transforms_by_id, state.variants_by_id, verify
+            )
+            if bool(verify.get("acceptable_valid")):
+                if _better_state(candidate, best_acceptable):
+                    best_acceptable = candidate
+            elif bool(verify.get("hard_valid")):
+                if _better_state(candidate, best_hard):
+                    best_hard = candidate
+            return
+
+        cid = order[idx]
+        for cand in candidate_map.get(cid, []):
+            next_transforms = dict(state.transforms_by_id)
+            next_transforms[cid] = {
+                "x": int(cand["x"]),
+                "y": int(cand["y"]),
+                "rot": int(cand["rot"]),
+            }
+            next_variants = dict(state.variants_by_id)
+            next_variants[cid] = str(cand.get("variant_id") or _base_variant_id(cid))
+            signature_seed = _state_key(next_transforms, next_variants)
+            if signature_seed in visited:
+                continue
+            verify = _verify_layout(
+                room_model=room_model,
+                clusters_outlines=clusters_outlines,
+                relation_plan=relation_plan,
+                transforms=_transforms_dict_to_list(next_transforms),
+                selected_variants=next_variants,
+                cfg=cfg,
+                mode="partial",
+                materialization_cache=materialization_cache,
+            )
+            if not bool(verify.get("hard_valid")):
+                continue
+            next_state = _state_from_verify(next_transforms, next_variants, verify)
+            sig = next_state.state_signature or signature_seed
+            if sig in visited:
+                continue
+            visited.add(sig)
+            dfs(idx + 1, next_state)
+
+    dfs(0, seed_state)
+    return best_acceptable, best_hard
+
+
+def _beam_search(
+    *,
+    room_model: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    order: list[str],
+    candidate_map: dict[str, list[dict[str, Any]]],
+    seed_state: SearchState,
+    cfg: SearchConfig,
+    materialization_cache: dict[str, Any],
+) -> tuple[SearchState | None, SearchState | None]:
+    beam: list[SearchState] = [seed_state]
+    best_acceptable: SearchState | None = None
+    best_hard: SearchState | None = None
+
+    for cid in order:
+        expanded: dict[str, SearchState] = {}
+        for state in beam:
+            taken = 0
+            for cand in candidate_map.get(cid, []):
+                next_transforms = dict(state.transforms_by_id)
+                next_transforms[cid] = {
+                    "x": int(cand["x"]),
+                    "y": int(cand["y"]),
+                    "rot": int(cand["rot"]),
+                }
+                next_variants = dict(state.variants_by_id)
+                next_variants[cid] = str(
+                    cand.get("variant_id") or _base_variant_id(cid)
+                )
+                verify = _verify_layout(
+                    room_model=room_model,
+                    clusters_outlines=clusters_outlines,
+                    relation_plan=relation_plan,
+                    transforms=_transforms_dict_to_list(next_transforms),
+                    selected_variants=next_variants,
+                    cfg=cfg,
+                    mode="partial",
+                    materialization_cache=materialization_cache,
+                )
+                if not bool(verify.get("hard_valid")):
+                    continue
+                next_state = _state_from_verify(next_transforms, next_variants, verify)
+                sig = next_state.state_signature or _state_key(
+                    next_transforms, next_variants
+                )
+                prev = expanded.get(sig)
+                if _better_state(next_state, prev):
+                    expanded[sig] = next_state
+                taken += 1
+                if taken >= cfg.beam_branch_per_state:
+                    break
+        if not expanded:
+            return best_acceptable, best_hard
+        beam = sorted(expanded.values(), key=_state_sort_key)[: cfg.beam_width]
+
+    for state in beam:
+        verify = _verify_layout(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            transforms=state.transforms_list(),
+            selected_variants=state.variants_by_id,
+            cfg=cfg,
+            mode="complete",
+            materialization_cache=materialization_cache,
+        )
+        done = _state_from_verify(state.transforms_by_id, state.variants_by_id, verify)
+        if bool(verify.get("acceptable_valid")):
+            if _better_state(done, best_acceptable):
+                best_acceptable = done
+        elif bool(verify.get("hard_valid")):
+            if _better_state(done, best_hard):
+                best_hard = done
+
+    return best_acceptable, best_hard
+
+
+def _conflict_directed_repair(
+    *,
+    room_model: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    candidate_map: dict[str, list[dict[str, Any]]],
+    seed_state: SearchState,
+    cfg: SearchConfig,
+    materialization_cache: dict[str, Any],
+) -> SearchState | None:
+    current = seed_state
+    seen: set[str] = {current.state_signature or _state_key(current.transforms_by_id)}
+
+    for _ in range(cfg.local_repair_iterations):
+        prioritized = (current.repair_guidance or {}).get("prioritized_clusters") or []
+        target_ids: list[str] = []
+        for rec in prioritized:
+            if isinstance(rec, dict):
+                cid = rec.get("cluster_id")
+                if isinstance(cid, str) and cid:
+                    target_ids.append(cid)
+        if not target_ids:
+            break
+
+        improved: SearchState | None = None
+        for target_cid in target_ids[:3]:
+            base_transforms = dict(current.transforms_by_id)
+            base_variants = dict(current.variants_by_id)
+            old = base_transforms.pop(target_cid, None)
+            base_variants.pop(target_cid, None)
+            if old is None:
+                continue
+            tried = 0
+            for cand in candidate_map.get(target_cid, []):
+                replacement = {
+                    "x": int(cand["x"]),
+                    "y": int(cand["y"]),
+                    "rot": int(cand["rot"]),
+                }
+                replacement_variant = str(
+                    cand.get("variant_id") or _base_variant_id(target_cid)
+                )
+                if (
+                    replacement == old
+                    and replacement_variant == current.variants_by_id.get(target_cid)
+                ):
+                    continue
+                next_transforms = dict(base_transforms)
+                next_transforms[target_cid] = replacement
+                next_variants = dict(base_variants)
+                next_variants[target_cid] = replacement_variant
+                sig0 = _state_key(next_transforms, next_variants)
+                if sig0 in seen:
+                    continue
+                verify = _verify_layout(
+                    room_model=room_model,
+                    clusters_outlines=clusters_outlines,
+                    relation_plan=relation_plan,
+                    transforms=_transforms_dict_to_list(next_transforms),
+                    selected_variants=next_variants,
+                    cfg=cfg,
+                    mode="complete",
+                    materialization_cache=materialization_cache,
+                )
+                if not bool(verify.get("hard_valid")):
+                    continue
+                candidate = _state_from_verify(next_transforms, next_variants, verify)
+                seen.add(candidate.state_signature or sig0)
+                if _better_state(candidate, improved):
+                    improved = candidate
+                if bool(candidate.quality_gate.get("pass")):
+                    return candidate
+                tried += 1
+                if tried >= cfg.local_repair_branch:
+                    break
+        if improved is None or not _better_state(improved, current):
+            break
+        current = improved
+        if bool(current.quality_gate.get("pass")):
+            return current
+    return current
+
+
+def _prepare_candidate_map(
+    *,
+    enum: dict[str, Any],
+    existing_transforms: dict[str, dict[str, int]],
+    max_search_candidates_per_cluster: int,
+) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for item in enum.get("clusters") or []:
         if not isinstance(item, dict):
             continue
         cid = item.get("cluster_id")
         if not isinstance(cid, str) or not cid:
             continue
-        row = {
-            "cluster_id": cid,
-            "x": int(item.get("x", 0) or 0),
-            "y": int(item.get("y", 0) or 0),
-            "rot": int(item.get("rot", 0) or 0) % 360,
-        }
-        key = (row["cluster_id"], row["x"], row["y"], row["rot"])
-        if key in seen:
+        if cid in existing_transforms:
+            out[cid] = []
             continue
-        seen.add(key)
-        out.append(row)
-
-    out.sort(key=lambda r: r["cluster_id"])
+        raw_candidates = [
+            c
+            for c in (item.get("candidates") or [])
+            if isinstance(c, dict) and bool(c.get("hard_valid"))
+        ]
+        out[cid] = _stratify_candidates(
+            raw_candidates, max_search_candidates_per_cluster
+        )
     return out
 
 
-def _candidate_patch_clusters(
-    candidate: dict[str, Any],
-    *,
-    default_cluster_id: str | None = None,
+def _stratify_candidates(
+    candidates: list[dict[str, Any]],
+    max_count: int,
 ) -> list[dict[str, Any]]:
-    if not isinstance(candidate, dict):
-        return []
+    if len(candidates) <= max_count:
+        return candidates
 
-    if isinstance(candidate.get("patch_clusters"), list):
-        patch_clusters = _canonicalize_patch_clusters(candidate.get("patch_clusters"))
-        if patch_clusters:
-            return patch_clusters
-
-    cid = (
-        default_cluster_id
-        if isinstance(default_cluster_id, str) and default_cluster_id
-        else candidate.get("cluster_id")
-    )
-    x = candidate.get("x")
-    y = candidate.get("y")
-    rot = candidate.get("rot")
-
-    if (
-        isinstance(cid, str)
-        and cid
-        and all(isinstance(v, (int, float)) for v in (x, y, rot))
-    ):
-        return _canonicalize_patch_clusters(
-            [{"cluster_id": cid, "x": x, "y": y, "rot": rot}]
+    def cand_key(c: dict[str, Any]) -> tuple:
+        return (
+            0 if c.get("acceptable_valid") else 1,
+            -float(c.get("variant_priority") or 0.0),
+            -int(c.get("anchor_priority") or 0),
+            -int(c.get("rough_score") or -(10**9)),
+            int(c.get("critical_orientation_penalty_mm") or 0),
+            int(c.get("orientation_penalty_mm") or 0),
+            str(c.get("variant_family") or ""),
+            str(c.get("anchor_kind") or ""),
+            int(c.get("rot") or 0),
         )
 
-    return []
+    candidates = sorted(candidates, key=cand_key)
+    chosen: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
 
-
-def _state_key(transforms: list[dict[str, Any]]) -> str:
-    return json.dumps(
-        _canonicalize_cluster_transforms(transforms),
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-
-
-def _global_patch_key(patch: dict[str, Any]) -> str:
-    patch_clusters = _candidate_patch_clusters(
-        patch,
-        default_cluster_id=patch.get("cluster_id") if isinstance(patch, dict) else None,
-    )
-    payload = {
-        "trigger": patch.get("trigger"),
-        "with_id": patch.get("with_id"),
-        "reason": patch.get("reason"),
-        "patch_clusters": patch_clusters,
-    }
-    return json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-
-
-def _extract_transforms_map(
-    transforms: list[dict[str, Any]] | None,
-) -> dict[str, tuple[int, int, int]]:
-    out: dict[str, tuple[int, int, int]] = {}
-    if not isinstance(transforms, list):
-        return out
-    for t in transforms:
-        if not isinstance(t, dict):
-            continue
-        cid = t.get("cluster_id")
-        if not isinstance(cid, str) or not cid:
-            continue
-        out[cid] = (
-            int(t.get("x", 0) or 0),
-            int(t.get("y", 0) or 0),
-            int(t.get("rot", 0) or 0) % 360,
+    for cand in candidates:
+        bucket = (
+            str(cand.get("variant_family") or cand.get("variant_id") or ""),
+            str(cand.get("anchor_kind") or ""),
+            int(cand.get("rot") or 0) % 360,
         )
-    return out
+        if bucket in seen:
+            continue
+        seen.add(bucket)
+        chosen.append(cand)
+        if len(chosen) >= max_count:
+            return chosen
+
+    for cand in candidates:
+        sig = (
+            str(cand.get("cluster_id") or ""),
+            int(cand.get("x") or 0),
+            int(cand.get("y") or 0),
+            int(cand.get("rot") or 0),
+            str(cand.get("variant_id") or ""),
+        )
+        if any(
+            sig
+            == (
+                str(x.get("cluster_id") or ""),
+                int(x.get("x") or 0),
+                int(x.get("y") or 0),
+                int(x.get("rot") or 0),
+                str(x.get("variant_id") or ""),
+            )
+            for x in chosen
+        ):
+            continue
+        chosen.append(cand)
+        if len(chosen) >= max_count:
+            break
+    return chosen
 
 
-def _changed_cluster_ids(
-    prev_transforms: list[dict[str, Any]] | None,
-    curr_transforms: list[dict[str, Any]] | None,
+def _derive_cluster_order(
+    order_result: dict[str, Any],
+    enum: dict[str, Any],
+    cluster_ids: list[str],
+    locked: dict[str, dict[str, int]],
 ) -> list[str]:
-    prev_map = _extract_transforms_map(prev_transforms)
-    curr_map = _extract_transforms_map(curr_transforms)
-    ids = sorted(set(prev_map.keys()) | set(curr_map.keys()))
-    changed: list[str] = []
-    for cid in ids:
-        if prev_map.get(cid) != curr_map.get(cid):
-            changed.append(cid)
-    return changed
+    ranked: list[str] = []
+    if isinstance(order_result, dict) and order_result.get("result") == "OK":
+        for row in order_result.get("order") or []:
+            if isinstance(row, dict):
+                cid = row.get("cluster_id")
+                if isinstance(cid, str) and cid in cluster_ids and cid not in ranked:
+                    ranked.append(cid)
+    for item in enum.get("clusters") or []:
+        if isinstance(item, dict):
+            cid = item.get("cluster_id")
+            if isinstance(cid, str) and cid in cluster_ids and cid not in ranked:
+                ranked.append(cid)
+    for cid in sorted(cluster_ids):
+        if cid not in ranked:
+            ranked.append(cid)
+    return [cid for cid in ranked if cid not in locked]
 
 
-def _count_geometry_hard_errors(errors: Any) -> int:
-    if not isinstance(errors, list):
-        return 0
-    count = 0
-    for e in errors:
-        if not isinstance(e, dict):
-            continue
-        code = e.get("code")
-        if code == "CLUSTER_OUT_OF_BOUNDS":
-            count += 1
-        elif code == "CLUSTER_OVERLAP":
-            count += 1
-        elif code == "CLUSTER_INTERSECTS_OBSTACLE":
-            obs = e.get("obstacles")
-            if isinstance(obs, list) and obs:
-                count += len(obs)
-            else:
-                count += 1
-    return count
-
-
-def _orientation_only_invalid(errors: Any) -> bool:
-    if not isinstance(errors, list) or not errors:
-        return False
-    has_orientation = False
-    for e in errors:
-        if not isinstance(e, dict):
-            continue
-        code = e.get("code")
-        if code == "ORIENTATION_HARD":
-            has_orientation = True
-            continue
-        return False
-    return has_orientation
-
-
-def _dominant_error_clusters(errors: Any, max_items: int = 3) -> list[str]:
-    if not isinstance(errors, list):
-        return []
-
-    scores: dict[str, int] = {}
-    for e in errors:
-        if not isinstance(e, dict):
-            continue
-        cid = e.get("cluster_id")
-        if not isinstance(cid, str) or not cid:
-            continue
-
-        code = e.get("code")
-        penalty = int(e.get("penalty_mm", 0) or 0)
-
-        if code == "ORIENTATION_HARD":
-            scores[cid] = scores.get(cid, 0) + max(1, penalty)
-        else:
-            scores[cid] = scores.get(cid, 0) + 5000 + max(1, penalty)
-
-    ranked = sorted(scores.items(), key=lambda x: (-x[1], x[0]))
-    return [cid for cid, _ in ranked[:max_items]]
-
-
-def _detect_invalid_stagnation(
-    invalid_state_trace: list[dict[str, Any]],
+def _build_seed_state(
     *,
-    window: int = 4,
+    room_model: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    existing_transforms_json: dict[str, Any] | None,
+    cfg: SearchConfig,
+) -> tuple[SearchState, list[str]]:
+    notes: list[str] = []
+    seed_transforms: dict[str, dict[str, int]] = {}
+
+    raw = []
+    if isinstance(existing_transforms_json, dict):
+        raw = existing_transforms_json.get("cluster_transforms") or []
+    parsed = _canonicalize_cluster_transforms(raw)
+    if not parsed:
+        return SearchState(), notes
+
+    for item in parsed:
+        cid = item["cluster_id"]
+        candidate_transforms = dict(seed_transforms)
+        candidate_transforms[cid] = {
+            "x": item["x"],
+            "y": item["y"],
+            "rot": item["rot"],
+        }
+        candidate_variants = {
+            **{k: _base_variant_id(k) for k in candidate_transforms.keys()}
+        }
+        verify = _verify_layout(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            transforms=_transforms_dict_to_list(candidate_transforms),
+            selected_variants=candidate_variants,
+            cfg=cfg,
+            mode="partial",
+            materialization_cache={},
+        )
+        if bool(verify.get("hard_valid")):
+            seed_transforms[cid] = candidate_transforms[cid]
+        else:
+            notes.append(f"Ignored invalid existing transform for cluster '{cid}'.")
+
+    if seed_transforms:
+        seed_variants = {cid: _base_variant_id(cid) for cid in seed_transforms.keys()}
+        verify = _verify_layout(
+            room_model=room_model,
+            clusters_outlines=clusters_outlines,
+            relation_plan=relation_plan,
+            transforms=_transforms_dict_to_list(seed_transforms),
+            selected_variants=seed_variants,
+            cfg=cfg,
+            mode="partial",
+            materialization_cache={},
+        )
+        return _state_from_verify(
+            seed_transforms, seed_variants, verify
+        ), _dedupe_str_list(notes)
+
+    return SearchState(), _dedupe_str_list(notes)
+
+
+def _verify_layout(
+    *,
+    room_model: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    transforms: list[dict[str, Any]],
+    selected_variants: dict[str, str] | None,
+    cfg: SearchConfig,
+    mode: str,
+    materialization_cache: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if len(invalid_state_trace) < window:
-        return {
-            "is_stuck": False,
-            "blocked_cluster_ids": [],
-            "repeated_cluster_id": None,
-            "preferred_other_clusters": [],
-            "orientation_only": False,
-        }
-
-    tail = invalid_state_trace[-window:]
-    if any(item.get("result") != "INVALID" for item in tail):
-        return {
-            "is_stuck": False,
-            "blocked_cluster_ids": [],
-            "repeated_cluster_id": None,
-            "preferred_other_clusters": [],
-            "orientation_only": False,
-        }
-
-    changed_seq: list[str] = []
-    for prev, curr in zip(tail, tail[1:]):
-        changed = _changed_cluster_ids(prev.get("transforms"), curr.get("transforms"))
-        if len(changed) != 1:
-            return {
-                "is_stuck": False,
-                "blocked_cluster_ids": [],
-                "repeated_cluster_id": None,
-                "preferred_other_clusters": [],
-                "orientation_only": False,
-            }
-        changed_seq.append(changed[0])
-
-    if not changed_seq or len(set(changed_seq)) != 1:
-        return {
-            "is_stuck": False,
-            "blocked_cluster_ids": [],
-            "repeated_cluster_id": None,
-            "preferred_other_clusters": [],
-            "orientation_only": False,
-        }
-
-    repeated_cluster_id = changed_seq[0]
-    hard_counts = [
-        int(item.get("remaining_hard_issues", 10**9) or 10**9) for item in tail
-    ]
-    orientation_only = all(bool(item.get("orientation_only")) for item in tail)
-
-    # Kẹt kiểu local crawl: cùng 1 cluster bị chỉnh liên tiếp,
-    # số hard geometry issue không giảm.
-    if len(set(hard_counts)) != 1:
-        return {
-            "is_stuck": False,
-            "blocked_cluster_ids": [],
-            "repeated_cluster_id": None,
-            "preferred_other_clusters": [],
-            "orientation_only": orientation_only,
-        }
-
-    preferred = _dominant_error_clusters(tail[-1].get("errors"), max_items=3)
-    preferred = [cid for cid in preferred if cid != repeated_cluster_id]
-
-    return {
-        "is_stuck": True,
-        "blocked_cluster_ids": [repeated_cluster_id],
-        "repeated_cluster_id": repeated_cluster_id,
-        "preferred_other_clusters": preferred,
-        "orientation_only": orientation_only,
-    }
-
-
-def _apply_global_patch(
-    transforms: list[dict[str, Any]],
-    patch: dict[str, Any],
-) -> list[dict[str, Any]]:
-    base = _canonicalize_cluster_transforms(transforms)
-    patch_clusters = _candidate_patch_clusters(
-        patch,
-        default_cluster_id=patch.get("cluster_id") if isinstance(patch, dict) else None,
+    materialized_clusters = _materialize_clusters_for_variants(
+        clusters_outlines=clusters_outlines,
+        selected_variants=selected_variants,
+        materialization_cache=materialization_cache,
     )
-    if not patch_clusters:
-        return base
-
-    patch_map = {p["cluster_id"]: p for p in patch_clusters}
-    out: list[dict[str, Any]] = []
-
-    seen_ids = set()
-    for t in base:
-        cid = t["cluster_id"]
-        seen_ids.add(cid)
-        if cid in patch_map:
-            p = patch_map[cid]
-            out.append(
-                {
-                    "cluster_id": cid,
-                    "x": int(p["x"]),
-                    "y": int(p["y"]),
-                    "rot": int(p["rot"]) % 360,
-                }
-            )
-        else:
-            out.append(dict(t))
-
-    for cid, p in patch_map.items():
-        if cid in seen_ids:
-            continue
-        out.append(
-            {
-                "cluster_id": cid,
-                "x": int(p["x"]),
-                "y": int(p["y"]),
-                "rot": int(p["rot"]) % 360,
-            }
-        )
-
-    out.sort(key=lambda item: item["cluster_id"])
-    return out
-
-
-def _select_single_global_patch(
-    *,
-    tool_output: dict[str, Any],
-    transforms: list[dict[str, Any]],
-    seen_state_keys: set[str],
-    tried_patch_keys: set[str],
-    blocked_cluster_ids: set[str] | None = None,
-    allow_pairwise: bool | None = None,
-) -> dict[str, Any] | None:
-    repair_hints = tool_output.get("repair_hints")
-    if not isinstance(repair_hints, list) or not repair_hints:
-        return None
-
-    blocked_cluster_ids = blocked_cluster_ids or set()
-
-    errors = tool_output.get("errors")
-    current_geometry_hard_count = _count_geometry_hard_errors(errors)
-    orientation_only = _orientation_only_invalid(errors)
-
-    def _current_geometry_hard_score(errs: Any) -> int:
-        if not isinstance(errs, list):
-            return 10**9
-        score = 0
-        for e in errs:
-            if not isinstance(e, dict):
-                continue
-            code = e.get("code")
-            if code == "CLUSTER_OUT_OF_BOUNDS":
-                score += 1000
-            elif code == "CLUSTER_INTERSECTS_OBSTACLE":
-                obs = e.get("obstacles")
-                if isinstance(obs, list) and obs:
-                    score += 200 * len(obs)
-                else:
-                    score += 200
-            elif code == "CLUSTER_OVERLAP":
-                score += 300
-        return score
-
-    current_geometry_hard_score = _current_geometry_hard_score(errors)
-
-    # Chỉ cho pairwise khi caller cho phép rõ ràng.
-    # Fallback an toàn: nếu không truyền thì mặc định KHÔNG cho.
-    if allow_pairwise is None:
-        allow_pairwise = False
-
-    error_priority = {
-        "CLUSTER_OUT_OF_BOUNDS": 0,
-        "CLUSTER_INTERSECTS_OBSTACLE": 1,
-        "CLUSTER_OVERLAP": 2,
-        "PAIRWISE_ORIENTATION_HARD": 3,
-        "ORIENTATION_HARD": 4,
+    log_args = {
+        "mode": mode,
+        "grid_mm": cfg.grid_mm,
+        "cluster_transforms_count": len(transforms),
+        "selected_variants_count": len(selected_variants or {}),
+        "cluster_ids": [t.get("cluster_id") for t in transforms if isinstance(t, dict)],
     }
-
-    candidates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
-
-    for hint_idx, hint in enumerate(repair_hints):
-        if not isinstance(hint, dict):
-            continue
-
-        cid = hint.get("cluster_id")
-        trigger = hint.get("trigger")
-        with_id = hint.get("with_id")
-        hint_candidates = hint.get("candidates")
-
-        if not isinstance(cid, str) or not cid:
-            continue
-        if not isinstance(hint_candidates, list):
-            continue
-
-        trig_rank = error_priority.get(trigger, 99)
-
-        for cand_idx, cand in enumerate(hint_candidates):
-            if not isinstance(cand, dict):
-                continue
-
-            patch_clusters = _candidate_patch_clusters(cand, default_cluster_id=cid)
-            if not patch_clusters:
-                continue
-
-            patch_cluster_ids = [p["cluster_id"] for p in patch_clusters]
-            is_pair_patch = len(patch_cluster_ids) > 1
-
-            # Mặc định chỉ cho single patch.
-            if is_pair_patch and not allow_pairwise:
-                continue
-
-            # Nếu cluster đang bị block vì crawl lặp, chặn single patch vào nó.
-            # Pairwise chỉ được đi qua khi caller cố tình allow_pairwise=True.
-            if (not is_pair_patch) and any(
-                x in blocked_cluster_ids for x in patch_cluster_ids
-            ):
-                continue
-
-            post = cand.get("postcheck")
-            post = post if isinstance(post, dict) else {}
-
-            all_hard_clear = bool(post.get("all_hard_clear", False))
-            remaining_hard = int(post.get("remaining_hard_issues", 10**9) or 10**9)
-            solves_trigger = bool(post.get("solves_trigger", False))
-            hard_score = int(
-                post.get("hard_violation_score", post.get("violation_score", 10**9))
-                or 10**9
-            )
-
-            cluster_orient_rank = int(
-                post.get("cluster_orientation_penalty_mm", 10**9) or 10**9
-            )
-            global_orient_rank = int(
-                post.get("global_orientation_penalty_mm", 10**9) or 10**9
-            )
-            soft_rank = int(post.get("soft_penalty_mm", 10**9) or 10**9)
-            cost_rank = int(cand.get("cost", 10**9) or 10**9)
-
-            # ---- HARD MONOTONIC GATE ----
-            # Nếu hiện tại chỉ còn orientation lỗi, thì patch tiếp theo
-            # BẮT BUỘC phải giữ all_hard_clear, không được tái sinh hard geometry.
-            if orientation_only:
-                if (not all_hard_clear) or (remaining_hard != 0) or (hard_score != 0):
-                    continue
-            else:
-                # Nếu còn hard geometry, patch phải làm tốt hơn:
-                # hoặc clear sạch, hoặc giảm số hard issues,
-                # hoặc cùng số issue nhưng hard_score phải giảm.
-                improves_hard = False
-                if all_hard_clear and remaining_hard == 0 and hard_score == 0:
-                    improves_hard = True
-                elif remaining_hard < current_geometry_hard_count:
-                    improves_hard = True
-                elif (
-                    remaining_hard == current_geometry_hard_count
-                    and hard_score < current_geometry_hard_score
-                ):
-                    improves_hard = True
-
-                if not improves_hard:
-                    continue
-
-            patch = {
-                "cluster_id": cid,
-                "trigger": trigger,
-                "with_id": with_id,
-                "reason": cand.get("reason"),
-                "cost": cost_rank,
-                "postcheck": post,
-                "patch_clusters": patch_clusters,
-            }
-
-            patch_key = _global_patch_key(patch)
-            if patch_key in tried_patch_keys:
-                continue
-
-            patched = _apply_global_patch(transforms, patch)
-            patched_state_key = _state_key(patched)
-            if patched_state_key in seen_state_keys:
-                continue
-
-            # Single trước pair. Geometry trước orientation.
-            # Chỉ sau khi hard ổn mới xét orientation / soft / cost.
-            score = (
-                0 if all_hard_clear else 1,
-                remaining_hard,
-                hard_score,
-                0 if not is_pair_patch else 1,
-                0 if solves_trigger else 1,
-                trig_rank,
-                cluster_orient_rank,
-                global_orient_rank,
-                soft_rank,
-                cost_rank,
-                hint_idx,
-                cand_idx,
-                cid,
-            )
-            candidates.append((score, patch))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda item: item[0])
-    return candidates[0][1]
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Tool calls requested: %s", ["GlobalClusterVerifier"])
+        logger.info(
+            "Tool GlobalClusterVerifier args: %s",
+            _short_json(log_args),
+        )
+    result = GlobalClusterVerifier(
+        room_model=room_model,
+        clusters_outlines=materialized_clusters,
+        cluster_transforms=transforms,
+        grid_mm=cfg.grid_mm,
+        mode=mode,
+        relation_plan=relation_plan,
+        acceptable_critical_orientation_threshold_mm=cfg.acceptable_critical_orientation_threshold_mm,
+        acceptable_focal_pair_threshold_mm=cfg.acceptable_focal_pair_threshold_mm,
+        acceptable_max_item_penalty_mm=cfg.acceptable_max_item_penalty_mm,
+        return_debug=True,
+    )
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Tool GlobalClusterVerifier output: %s",
+            _short_json(result),
+        )
+    return result
 
 
-def _select_single_global_improve_patch(
-    *,
-    tool_output: dict[str, Any],
-    transforms: list[dict[str, Any]],
-    seen_state_keys: set[str],
-    tried_patch_keys: set[str],
-    blocked_cluster_ids: set[str] | None = None,
-) -> dict[str, Any] | None:
-    improve_hints = tool_output.get("improve_hints")
-    if not isinstance(improve_hints, list) or not improve_hints:
-        return None
-
-    blocked_cluster_ids = blocked_cluster_ids or set()
-
-    base_score = _extract_layout_score(tool_output)
-    base_quality = tool_output.get("quality")
-    base_quality = base_quality if isinstance(base_quality, dict) else {}
-
-    candidates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
-
-    for hint_idx, hint in enumerate(improve_hints):
-        if not isinstance(hint, dict):
-            continue
-
-        cid = hint.get("cluster_id")
-        hint_candidates = hint.get("candidates")
-
-        if not isinstance(cid, str) or not cid:
-            continue
-        if cid in blocked_cluster_ids:
-            continue
-        if not isinstance(hint_candidates, list):
-            continue
-
-        for cand_idx, cand in enumerate(hint_candidates):
-            if not isinstance(cand, dict):
-                continue
-
-            patch_clusters = _candidate_patch_clusters(cand, default_cluster_id=cid)
-            if not patch_clusters:
-                continue
-
-            # VALID improve chỉ cho SINGLE-CLUSTER patch.
-            if len(patch_clusters) != 1:
-                continue
-
-            postcheck = cand.get("postcheck")
-            postcheck = postcheck if isinstance(postcheck, dict) else {}
-
-            hard_score = int(
-                postcheck.get(
-                    "hard_violation_score", postcheck.get("violation_score", 10**9)
-                )
-                or 10**9
-            )
-            remaining_hard = int(postcheck.get("remaining_hard_issues", 10**9) or 10**9)
-            all_hard_clear = bool(postcheck.get("all_hard_clear", False))
-
-            # VALID improve tuyệt đối không được làm bẩn hard geometry.
-            if hard_score != 0 or remaining_hard != 0 or not all_hard_clear:
-                continue
-
-            post_layout_score = postcheck.get("layout_score")
-            if isinstance(post_layout_score, float):
-                post_layout_score = int(round(post_layout_score))
-            elif not isinstance(post_layout_score, int):
-                post_layout_score = -(10**9)
-
-            post_quality = postcheck.get("quality")
-            if not isinstance(post_quality, dict):
-                post_quality = {
-                    "layout_score": postcheck.get("layout_score"),
-                    "total_soft_penalty_mm": postcheck.get("soft_penalty_mm"),
-                    "orientation_penalty_mm": postcheck.get(
-                        "global_orientation_penalty_mm"
-                    ),
-                    "circulation_penalty_mm": None,
-                    "affinity_penalty_mm": None,
-                    "relation_penalty_mm": None,
-                    "spread_penalty_mm": None,
-                    "min_cluster_gap_mm": None,
-                    "avg_cluster_gap_mm": None,
-                    "tight_gap_pairs": [],
-                    "orientation_debug": [],
-                }
-
-            # Phải tốt hơn valid state hiện tại thật sự.
-            if not _is_better_valid_candidate(
-                new_score=post_layout_score,
-                new_quality=post_quality,
-                old_score=base_score,
-                old_quality=base_quality,
-            ):
-                continue
-
-            x = cand.get("x")
-            y = cand.get("y")
-            rot = cand.get("rot")
-            if not all(isinstance(v, (int, float)) for v in (x, y, rot)):
-                # fallback từ patch_clusters
-                only_patch = patch_clusters[0]
-                x = only_patch["x"]
-                y = only_patch["y"]
-                rot = only_patch["rot"]
-
-            cost = int(cand.get("cost", 10**9) or 10**9)
-
-            patch = {
-                "cluster_id": cid,
-                "trigger": "IMPROVE_VALID",
-                "with_id": None,
-                "x": int(x),
-                "y": int(y),
-                "rot": int(rot) % 360,
-                "reason": cand.get("reason", "IMPROVE_VALID"),
-                "cost": cost,
-                "postcheck": postcheck,
-            }
-
-            patch_key = _global_patch_key(patch)
-            if patch_key in tried_patch_keys:
-                continue
-
-            patched = _apply_global_patch(transforms, patch)
-            patched_state_key = _state_key(patched)
-            if patched_state_key in seen_state_keys:
-                continue
-
-            # _quality_rank: tuple càng lớn càng tốt
-            quality_rank = _quality_rank(post_layout_score, post_quality)
-
-            rank = (
-                *quality_rank,
-                -float(cost),  # cost nhỏ hơn tốt hơn
-                -float(hint_idx),
-                -float(cand_idx),
-            )
-            candidates.append((rank, patch))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    return candidates[0][1]
-
-
-def _select_single_global_invalid_improve_patch(
-    *,
-    tool_output: dict[str, Any],
-    transforms: list[dict[str, Any]],
-    seen_state_keys: set[str],
-    tried_patch_keys: set[str],
-    blocked_cluster_ids: set[str] | None = None,
-) -> dict[str, Any] | None:
-    improve_hints = tool_output.get("improve_hints")
-    if not isinstance(improve_hints, list) or not improve_hints:
-        return None
-
-    blocked_cluster_ids = blocked_cluster_ids or set()
-    base_quality = tool_output.get("quality")
-    base_quality = base_quality if isinstance(base_quality, dict) else {}
-    base_global_orientation = int(
-        base_quality.get("orientation_penalty_mm", 10**9) or 10**9
+def _state_from_verify(
+    transforms_by_id: dict[str, dict[str, int]],
+    variants_by_id: dict[str, str],
+    verify: dict[str, Any],
+) -> SearchState:
+    quality = verify.get("quality") or {}
+    gate = verify.get("quality_gate") or {}
+    metrics = gate.get("metrics") or {}
+    layout_score = int(quality.get("layout_score") or -(10**9))
+    pass_flag = bool(gate.get("pass"))
+    hard_valid = bool(verify.get("hard_valid"))
+    complete = bool(verify.get("complete"))
+    reasons = tuple(sorted(str(r) for r in (gate.get("reasons") or [])))
+    score_tuple = (
+        0 if pass_flag else 1,
+        0 if hard_valid else 1,
+        0 if complete else 1,
+        len(reasons),
+        int(metrics.get("critical_orientation_penalty_mm") or 0),
+        int(metrics.get("focal_pair_penalty_mm") or 0),
+        int(metrics.get("max_critical_item_penalty_mm") or 0),
+        -layout_score,
+    )
+    return SearchState(
+        transforms_by_id={cid: dict(v) for cid, v in transforms_by_id.items()},
+        variants_by_id={
+            cid: str(v) for cid, v in variants_by_id.items() if isinstance(v, str) and v
+        },
+        score_tuple=score_tuple,
+        quality=quality,
+        quality_gate=gate,
+        repair_guidance=verify.get("repair_guidance") or {},
+        state_signature=str(
+            verify.get("state_signature")
+            or _state_key(transforms_by_id, variants_by_id)
+        ),
+        notes=[],
     )
 
-    candidates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-    for hint_idx, hint in enumerate(improve_hints):
-        if not isinstance(hint, dict):
-            continue
-        cid = hint.get("cluster_id")
-        hint_candidates = hint.get("candidates")
-        base_cluster_pen = int(
-            hint.get("baseline_cluster_orientation_penalty_mm", 10**9) or 10**9
-        )
-
-        if not isinstance(cid, str) or not cid:
-            continue
-        if cid in blocked_cluster_ids:
-            continue
-        if not isinstance(hint_candidates, list):
-            continue
-
-        for cand_idx, cand in enumerate(hint_candidates):
-            if not isinstance(cand, dict):
-                continue
-
-            x = cand.get("x")
-            y = cand.get("y")
-            rot = cand.get("rot")
-            if not all(isinstance(v, (int, float)) for v in (x, y, rot)):
-                continue
-
-            postcheck = cand.get("postcheck")
-            postcheck = postcheck if isinstance(postcheck, dict) else {}
-
-            hard_score = int(
-                postcheck.get(
-                    "hard_violation_score", postcheck.get("violation_score", 10**9)
-                )
-            )
-            if hard_score != 0:
-                continue
-            if not bool(postcheck.get("all_hard_clear", True)):
-                continue
-
-            cluster_orient_pen = int(
-                postcheck.get("cluster_orientation_penalty_mm", 10**9) or 10**9
-            )
-            global_orient_pen = int(
-                postcheck.get("global_orientation_penalty_mm", 10**9) or 10**9
-            )
-            soft_pen = int(postcheck.get("soft_penalty_mm", 10**9) or 10**9)
-            cost = int(cand.get("cost", 10**9))
-
-            improved = cluster_orient_pen < base_cluster_pen or (
-                cluster_orient_pen == base_cluster_pen
-                and global_orient_pen < base_global_orientation
-            )
-            if not improved:
-                continue
-
-            patch = {
-                "cluster_id": cid,
-                "trigger": "INVALID_ORIENTATION_IMPROVE",
-                "with_id": None,
-                "x": int(x),
-                "y": int(y),
-                "rot": int(rot) % 360,
-                "reason": cand.get("reason", "INVALID_ORIENTATION_IMPROVE"),
-                "cost": cost,
-                "postcheck": postcheck,
-            }
-
-            patch_key = _global_patch_key(patch)
-            if patch_key in tried_patch_keys:
-                continue
-
-            patched = _apply_global_patch(transforms, patch)
-            patched_state_key = _state_key(patched)
-            if patched_state_key in seen_state_keys:
-                continue
-
-            score = (
-                cluster_orient_pen,
-                global_orient_pen,
-                soft_pen,
-                cost,
-                hint_idx,
-                cand_idx,
-                cid,
-            )
-            candidates.append((score, patch))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda item: item[0])
-    return candidates[0][1]
+def _state_sort_key(state: SearchState) -> tuple:
+    return state.score_tuple
 
 
-def _extract_layout_score(tool_output: dict[str, Any]) -> int | None:
-    if not isinstance(tool_output, dict):
-        return None
-
-    quality = tool_output.get("quality")
-    if isinstance(quality, dict):
-        score = quality.get("layout_score")
-        if isinstance(score, int):
-            return score
-        if isinstance(score, float):
-            return int(round(score))
-
-    debug = tool_output.get("debug")
-    if isinstance(debug, dict):
-        q = debug.get("quality")
-        if isinstance(q, dict):
-            score = q.get("layout_score")
-            if isinstance(score, int):
-                return score
-            if isinstance(score, float):
-                return int(round(score))
-
-    return None
-
-
-def _critical_orientation_metrics(
-    quality: dict[str, Any] | None,
-) -> tuple[int, int]:
-    if not isinstance(quality, dict):
-        return (0, 0)
-
-    debug = quality.get("orientation_debug")
-    if not isinstance(debug, list):
-        return (0, 0)
-
-    critical_count = 0
-    worst_penalty = 0
-
-    for item in debug:
-        if not isinstance(item, dict):
-            continue
-
-        kind = str(item.get("kind") or "")
-        relation = str(item.get("relation") or item.get("intent") or "")
-        penalty = int(item.get("penalty_mm", 0) or 0)
-
-        is_critical = False
-
-        if kind == "cluster_directional_relation" and relation in {
-            "face_each_other",
-            "access_faces_other",
-            "turn_toward",
-        }:
-            is_critical = penalty >= 250
-
-        elif kind == "cluster_orientation" and relation in {
-            "face_cluster",
-            "face_center",
-            "face_entry",
-            "face_window",
-            "inward_to_room",
-            "access_to_open_space",
-        }:
-            is_critical = penalty >= 220
-
-        elif kind == "object_orientation" and relation in {
-            "face_object",
-            "front_to_open_space",
-            "front_to_room_center",
-            "front_to_cluster_center",
-            "preserve_front_access",
-        }:
-            is_critical = penalty >= 220
-
-        if is_critical:
-            critical_count += 1
-            worst_penalty = max(worst_penalty, penalty)
-
-    return critical_count, worst_penalty
-
-
-def _can_finalize_valid_layout(quality: dict[str, Any] | None) -> bool:
-    critical_count, worst_critical = _critical_orientation_metrics(quality)
-    if critical_count > 0:
+def _better_state(candidate: SearchState | None, incumbent: SearchState | None) -> bool:
+    if candidate is None:
         return False
-    if worst_critical >= 250:
-        return False
-    return True
-
-
-def _quality_rank(
-    score: int | None,
-    quality: dict[str, Any] | None,
-) -> tuple[float, float, float, float, float, float, float, float, float, float]:
-    if not isinstance(quality, dict):
-        quality = {}
-
-    critical_count, worst_critical = _critical_orientation_metrics(quality)
-
-    tight_pairs = quality.get("tight_gap_pairs")
-    tight_count = len(tight_pairs) if isinstance(tight_pairs, list) else 0
-
-    min_gap = quality.get("min_cluster_gap_mm")
-    avg_gap = quality.get("avg_cluster_gap_mm")
-    total_soft_penalty = quality.get("total_soft_penalty_mm")
-    orientation_penalty = quality.get("orientation_penalty_mm")
-    circulation_penalty = quality.get("circulation_penalty_mm")
-    affinity_penalty = quality.get("affinity_penalty_mm")
-
-    score_v = float(score) if isinstance(score, int) else -1e12
-    min_gap_v = float(min_gap) if isinstance(min_gap, (int, float)) else -1.0
-    avg_gap_v = float(avg_gap) if isinstance(avg_gap, (int, float)) else -1.0
-    total_soft_v = (
-        float(total_soft_penalty)
-        if isinstance(total_soft_penalty, (int, float))
-        else 1e12
-    )
-    orientation_v = (
-        float(orientation_penalty)
-        if isinstance(orientation_penalty, (int, float))
-        else 1e12
-    )
-    circulation_v = (
-        float(circulation_penalty)
-        if isinstance(circulation_penalty, (int, float))
-        else 1e12
-    )
-    affinity_v = (
-        float(affinity_penalty) if isinstance(affinity_penalty, (int, float)) else 1e12
-    )
-
-    return (
-        score_v,  # ưu tiên layout_score cao nhất
-        -float(critical_count),  # tie-break: ít critical orientation hơn
-        -float(worst_critical),
-        -orientation_v,
-        -total_soft_v,
-        -circulation_v,
-        -affinity_v,
-        -float(tight_count),
-        min_gap_v,
-        avg_gap_v,
-    )
-
-
-def _is_better_valid_candidate(
-    *,
-    new_score: int | None,
-    new_quality: dict[str, Any] | None,
-    old_score: int | None,
-    old_quality: dict[str, Any] | None,
-) -> bool:
-    return _quality_rank(new_score, new_quality) > _quality_rank(old_score, old_quality)
-
-
-def _should_try_soft_improve(
-    *,
-    quality: dict[str, Any] | None,
-    improve_rounds_used: int,
-    soft_improve_budget: int,
-    no_improve_streak: int,
-    min_explore_valid_rounds: int = 2,
-) -> bool:
-    if improve_rounds_used >= soft_improve_budget:
-        return False
-
-    critical_count, worst_critical = _critical_orientation_metrics(quality)
-
-    if critical_count > 0 or worst_critical >= 250:
+    if incumbent is None:
         return True
-
-    if no_improve_streak >= 2:
-        return False
-
-    if improve_rounds_used < min_explore_valid_rounds:
-        return True
-
-    if not isinstance(quality, dict):
-        return False
-
-    tight_pairs = quality.get("tight_gap_pairs")
-    orientation_penalty = quality.get("orientation_penalty_mm")
-    circulation_penalty = quality.get("circulation_penalty_mm")
-    affinity_penalty = quality.get("affinity_penalty_mm")
-    total_soft_penalty = quality.get("total_soft_penalty_mm")
-
-    if isinstance(tight_pairs, list) and len(tight_pairs) > 0:
-        return True
-    if isinstance(orientation_penalty, (int, float)) and orientation_penalty > 80:
-        return True
-    if isinstance(circulation_penalty, (int, float)) and circulation_penalty > 120:
-        return True
-    if isinstance(affinity_penalty, (int, float)) and affinity_penalty > 120:
-        return True
-    if isinstance(total_soft_penalty, (int, float)) and total_soft_penalty > 0:
-        return True
-
-    return False
-
-
-def _build_best_valid_json(
-    *,
-    grid_mm: int,
-    transforms: list[dict[str, Any]],
-    quality: dict[str, Any] | None,
-) -> str:
-    notes = ["Returned best verified valid layout."]
-    if isinstance(quality, dict):
-        score = quality.get("layout_score")
-        if isinstance(score, (int, float)):
-            notes = [
-                f"Returned best verified valid layout (layout_score={int(round(score))})."
-            ]
-
-    payload = {
-        "status": "OK",
-        "grid_mm": int(grid_mm),
-        "cluster_transforms": _canonicalize_cluster_transforms(transforms),
-        "notes": notes,
-    }
-    return json.dumps(payload, ensure_ascii=True)
-
-
-def _build_best_invalid_json(
-    *,
-    grid_mm: int,
-    transforms: list[dict[str, Any]],
-    quality: dict[str, Any] | None,
-) -> str:
-    notes = ["Returned best available INVALID layout (no valid layout found)."]
-    if isinstance(quality, dict):
-        score = quality.get("layout_score")
-        if isinstance(score, (int, float)):
-            notes = [
-                f"Returned best available INVALID layout (layout_score={int(round(score))})."
-            ]
-
-    payload = {
-        "status": "UNSAT",
-        "grid_mm": int(grid_mm),
-        "cluster_transforms": _canonicalize_cluster_transforms(transforms),
-        "notes": notes,
-    }
-    return json.dumps(payload, ensure_ascii=True)
-
-
-def _compact_quality_for_llm(quality: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(quality, dict):
-        return {}
-
-    return {
-        "layout_score": quality.get("layout_score"),
-        "total_soft_penalty_mm": quality.get("total_soft_penalty_mm"),
-        "orientation_penalty_mm": quality.get("orientation_penalty_mm"),
-        "circulation_penalty_mm": quality.get("circulation_penalty_mm"),
-        "affinity_penalty_mm": quality.get("affinity_penalty_mm"),
-        "relation_penalty_mm": quality.get("relation_penalty_mm"),
-        "spread_penalty_mm": quality.get("spread_penalty_mm"),
-        "min_cluster_gap_mm": quality.get("min_cluster_gap_mm"),
-        "avg_cluster_gap_mm": quality.get("avg_cluster_gap_mm"),
-        "tight_gap_pairs_preview": (
-            quality.get("tight_gap_pairs", [])[:3]
-            if isinstance(quality.get("tight_gap_pairs"), list)
-            else []
-        ),
-        "orientation_debug_preview": _compact_orientation_preview(
-            quality.get("orientation_debug"), max_items=5
-        ),
-        "circulation_debug_preview": (
-            quality.get("circulation_debug", [])[:4]
-            if isinstance(quality.get("circulation_debug"), list)
-            else []
-        ),
-        "affinity_debug_preview": (
-            quality.get("affinity_debug", [])[:4]
-            if isinstance(quality.get("affinity_debug"), list)
-            else []
-        ),
-    }
-
-
-def _compact_postcheck_for_llm(postcheck: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(postcheck, dict):
-        return {}
-
-    q = postcheck.get("quality")
-    q = q if isinstance(q, dict) else {}
-
-    return {
-        "valid_geom": postcheck.get("valid_geom"),
-        "in_room": postcheck.get("in_room"),
-        "hit_obstacles": postcheck.get("hit_obstacles", [])[:3]
-        if isinstance(postcheck.get("hit_obstacles"), list)
-        else [],
-        "overlaps": postcheck.get("overlaps", [])[:3]
-        if isinstance(postcheck.get("overlaps"), list)
-        else [],
-        "solves_trigger": postcheck.get("solves_trigger"),
-        "hard_violation_score": postcheck.get("hard_violation_score"),
-        "violation_score": postcheck.get("violation_score"),
-        "remaining_hard_issues": postcheck.get("remaining_hard_issues"),
-        "all_hard_clear": postcheck.get("all_hard_clear"),
-        "soft_penalty_mm": postcheck.get("soft_penalty_mm"),
-        "layout_score": postcheck.get("layout_score"),
-        "cluster_orientation_penalty_mm": postcheck.get(
-            "cluster_orientation_penalty_mm"
-        ),
-        "global_orientation_penalty_mm": postcheck.get("global_orientation_penalty_mm"),
-        "orientation_penalty_mm": (
-            q.get("orientation_penalty_mm")
-            if isinstance(q, dict)
-            else postcheck.get("global_orientation_penalty_mm")
-        ),
-    }
-
-
-def _compact_hint_candidates_for_llm(
-    candidates: Any,
-    max_items: int = 3,
-) -> list[dict[str, Any]]:
-    if not isinstance(candidates, list):
-        return []
-
-    out: list[dict[str, Any]] = []
-    for cand in candidates[:max_items]:
-        if not isinstance(cand, dict):
-            continue
-
-        payload = {
-            "reason": cand.get("reason"),
-            "cost": cand.get("cost"),
-            "postcheck": _compact_postcheck_for_llm(
-                cand.get("postcheck") if isinstance(cand.get("postcheck"), dict) else {}
-            ),
-        }
-
-        patch_clusters = _candidate_patch_clusters(
-            cand,
-            default_cluster_id=None,
-        )
-        if patch_clusters:
-            payload["patch_clusters"] = patch_clusters
-        else:
-            payload.update(
-                {
-                    "x": cand.get("x"),
-                    "y": cand.get("y"),
-                    "rot": cand.get("rot"),
-                    "dx": cand.get("dx"),
-                    "dy": cand.get("dy"),
-                }
-            )
-
-        out.append(payload)
-
-    return out
-
-
-def _compact_tool_output_for_llm(tool_output: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(tool_output, dict):
-        return {"result": "INVALID", "errors": [{"code": "BAD_TOOL_OUTPUT"}]}
-
-    if tool_output.get("error") is not None:
-        return {
-            "error": tool_output.get("error"),
-            "tool": tool_output.get("tool"),
-            "message": tool_output.get("message"),
-        }
-
-    errors = tool_output.get("errors")
-    errors_preview = errors[:8] if isinstance(errors, list) else []
-
-    repair_hints = tool_output.get("repair_hints")
-    improve_hints = tool_output.get("improve_hints")
-
-    compact_repair_hints: list[dict[str, Any]] = []
-    if isinstance(repair_hints, list):
-        for item in repair_hints[:3]:
-            if not isinstance(item, dict):
-                continue
-            compact_repair_hints.append(
-                {
-                    "cluster_id": item.get("cluster_id"),
-                    "trigger": item.get("trigger"),
-                    "with_id": item.get("with_id"),
-                    "base_transform": item.get("base_transform"),
-                    "candidates": _compact_hint_candidates_for_llm(
-                        item.get("candidates"), max_items=3
-                    ),
-                }
-            )
-
-    compact_improve_hints: list[dict[str, Any]] = []
-    if isinstance(improve_hints, list):
-        for item in improve_hints[:2]:
-            if not isinstance(item, dict):
-                continue
-            compact_improve_hints.append(
-                {
-                    "cluster_id": item.get("cluster_id"),
-                    "trigger": item.get("trigger"),
-                    "baseline_cluster_orientation_penalty_mm": item.get(
-                        "baseline_cluster_orientation_penalty_mm"
-                    ),
-                    "baseline_orientation_penalty_mm": item.get(
-                        "baseline_orientation_penalty_mm"
-                    ),
-                    "base_transform": item.get("base_transform"),
-                    "candidates": _compact_hint_candidates_for_llm(
-                        item.get("candidates"), max_items=2
-                    ),
-                }
-            )
-
-    return {
-        "result": tool_output.get("result"),
-        "errors": errors_preview,
-        "quality": _compact_quality_for_llm(
-            tool_output.get("quality")
-            if isinstance(tool_output.get("quality"), dict)
-            else {}
-        ),
-        "repair_hints": compact_repair_hints,
-        "improve_hints": compact_improve_hints,
-    }
-
-
-def _compact_repair_hints_preview(
-    repair_hints: Any,
-    *,
-    max_items: int = 2,
-    max_candidates: int = 2,
-) -> list[dict[str, Any]]:
-    if not isinstance(repair_hints, list):
-        return []
-
-    out: list[dict[str, Any]] = []
-    for item in repair_hints[:max_items]:
-        if not isinstance(item, dict):
-            continue
-        out.append(
-            {
-                "cluster_id": item.get("cluster_id"),
-                "trigger": item.get("trigger"),
-                "with_id": item.get("with_id"),
-                "candidates": _compact_hint_candidates_for_llm(
-                    item.get("candidates"), max_items=max_candidates
-                ),
-            }
-        )
-    return out
-
-
-def _compact_improve_hints_preview(
-    improve_hints: Any,
-    *,
-    max_items: int = 2,
-    max_candidates: int = 2,
-) -> list[dict[str, Any]]:
-    if not isinstance(improve_hints, list):
-        return []
-
-    out: list[dict[str, Any]] = []
-    for item in improve_hints[:max_items]:
-        if not isinstance(item, dict):
-            continue
-        out.append(
-            {
-                "cluster_id": item.get("cluster_id"),
-                "trigger": item.get("trigger"),
-                "baseline_cluster_orientation_penalty_mm": item.get(
-                    "baseline_cluster_orientation_penalty_mm"
-                ),
-                "baseline_orientation_penalty_mm": item.get(
-                    "baseline_orientation_penalty_mm"
-                ),
-                "candidates": _compact_hint_candidates_for_llm(
-                    item.get("candidates"), max_items=max_candidates
-                ),
-            }
-        )
-    return out
-
-
-def _compact_orientation_preview(
-    orientation_debug: Any,
-    *,
-    max_items: int = 8,
-) -> list[dict[str, Any]]:
-    if not isinstance(orientation_debug, list):
-        return []
-
-    out: list[dict[str, Any]] = []
-    for item in orientation_debug[:max_items]:
-        if not isinstance(item, dict):
-            continue
-        out.append(
-            {
-                "kind": item.get("kind"),
-                "cluster_id": item.get("cluster_id"),
-                "object_id": item.get("object_id"),
-                "a": item.get("a"),
-                "b": item.get("b"),
-                "intent": item.get("intent"),
-                "relation": item.get("relation"),
-                "target_cluster_id": item.get("target_cluster_id"),
-                "target_object_id": item.get("target_object_id"),
-                "resolved_target_cluster_id": item.get("resolved_target_cluster_id"),
-                "penalty_mm": item.get("penalty_mm"),
-                "dot": item.get("dot"),
-            }
-        )
-    return out
-
-
-def _prune_messages_block_safe(
-    messages: list[dict[str, Any]],
-    *,
-    prefix_count: int = 3,
-    keep_last_blocks: int = 12,
-) -> list[dict[str, Any]]:
-    if len(messages) <= prefix_count:
-        return messages
-
-    prefix = messages[:prefix_count]
-    tail = messages[prefix_count:]
-
-    if not tail:
-        return messages
-
-    blocks: list[list[dict[str, Any]]] = []
-    i = 0
-    while i < len(tail):
-        msg = tail[i]
-        role = msg.get("role")
-
-        if role == "assistant" and msg.get("tool_calls"):
-            block = [msg]
-            i += 1
-            while i < len(tail) and tail[i].get("role") == "tool":
-                block.append(tail[i])
-                i += 1
-            blocks.append(block)
-            continue
-
-        blocks.append([msg])
-        i += 1
-
-    if len(blocks) <= keep_last_blocks:
-        kept_tail = [m for block in blocks for m in block]
-        return prefix + kept_tail
-
-    kept_blocks = blocks[-keep_last_blocks:]
-    kept_tail = [m for block in kept_blocks for m in block]
-    return prefix + kept_tail
-
-
-def _is_context_length_exceeded(exc: Exception) -> bool:
-    code = getattr(exc, "code", None)
-    if code == "context_length_exceeded":
-        return True
-    text = str(exc)
-    return ("context_length_exceeded" in text) or ("maximum context length" in text)
-
-
-def _try_parse_json_object(text: str) -> dict[str, Any] | None:
-    if not text:
-        return None
-    try:
-        parsed = json.loads(_extract_json_object(_coerce_json_text(text)))
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    return _state_sort_key(candidate) < _state_sort_key(incumbent)
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
-    text = _coerce_json_text(raw)
     try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        text = _extract_json_object(text)
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise ValueError("MacroClusterPlacer returned invalid JSON") from exc
+        payload = json.loads(raw)
+    except Exception as exc:
+        raise ValueError("MacroClusterPlacer returned invalid JSON") from exc
     if not isinstance(payload, dict):
         raise ValueError("MacroClusterPlacer response must be a JSON object")
     return payload
 
 
-def _coerce_json_text(raw: str) -> str:
-    text = raw.strip()
-    if not text.startswith("```"):
+def _truncate_text(text: str, max_len: int = 1200) -> str:
+    if len(text) <= max_len:
         return text
-    parts = text.split("```")
-    for idx in range(1, len(parts), 2):
-        candidate = parts[idx].strip()
-        if candidate.startswith("json"):
-            candidate = candidate[4:].lstrip("\n").strip()
-        if candidate.startswith("{") and candidate.endswith("}"):
-            return candidate
-    return text
+    return text[: max_len - 3] + "..."
 
 
-def _extract_json_object(text: str) -> str:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return text
-    return text[start : end + 1]
+def _short_json(obj: Any, max_len: int = 1200) -> str:
+    try:
+        dumped = json.dumps(obj, ensure_ascii=True)
+    except Exception:
+        dumped = str(obj)
+    return _truncate_text(dumped, max_len=max_len)
 
 
-def _cluster_ids(clusters_outlines: dict[str, Any]) -> list[str]:
-    if not isinstance(clusters_outlines, dict):
-        return []
+def _sanitize_output_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    status = payload.get("status")
+    if status not in {"OK", "UNSAT", "NEED_INFO"}:
+        status = "UNSAT"
+    notes = payload.get("notes") if isinstance(payload.get("notes"), list) else []
+    transforms = _canonicalize_cluster_transforms(
+        payload.get("cluster_transforms") or []
+    )
+    selected_variants = _canonicalize_selected_variants(
+        payload.get("selected_variants") or []
+    )
+    try:
+        grid_mm = int(payload.get("grid_mm") or 50)
+    except Exception:
+        grid_mm = 50
+    return {
+        "status": status,
+        "grid_mm": grid_mm,
+        "cluster_transforms": transforms,
+        "selected_variants": _selected_variants_dict_to_list(selected_variants),
+        "notes": _dedupe_str_list([n for n in notes if isinstance(n, str)]),
+    }
 
-    direct_ids = [key for key in clusters_outlines.keys() if isinstance(key, str)]
-    direct_cluster_like = []
-    for key in direct_ids:
-        value = clusters_outlines.get(key)
-        if isinstance(value, dict) and (
-            "cluster_footprint" in value
-            or "outline_polygons_ccw" in value
-            or value.get("cluster_id") == key
+
+def _filter_unsat_input_clusters(
+    *,
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    existing_transforms: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | list[Any], dict[str, Any] | None, dict[str, Any] | None]:
+    filtered_outlines, removed_ids = _filter_unsat_clusters_outlines(
+        clusters_outlines
+    )
+    if not removed_ids:
+        return clusters_outlines, relation_plan, existing_transforms
+    filtered_relation_plan = _filter_relation_plan_clusters(relation_plan, removed_ids)
+    filtered_existing = _filter_existing_transforms(existing_transforms, removed_ids)
+    return filtered_outlines, filtered_relation_plan, filtered_existing
+
+
+def _filter_unsat_clusters_outlines(
+    clusters_outlines: dict[str, Any] | list[Any],
+) -> tuple[dict[str, Any] | list[Any], set[str]]:
+    removed_ids: set[str] = set()
+
+    def is_unsat_status(value: Any) -> bool:
+        return isinstance(value, str) and value.strip().upper() == "UNSAT"
+
+    if isinstance(clusters_outlines, dict):
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            kept = []
+            for item in clusters:
+                if isinstance(item, dict) and is_unsat_status(item.get("status")):
+                    cid = item.get("cluster_id")
+                    if isinstance(cid, str) and cid:
+                        removed_ids.add(cid)
+                    continue
+                kept.append(item)
+            out = dict(clusters_outlines)
+            out["clusters"] = kept
+            return out, removed_ids
+
+        out: dict[str, Any] = {}
+        for cid, payload in clusters_outlines.items():
+            if isinstance(payload, dict) and is_unsat_status(payload.get("status")):
+                if isinstance(cid, str) and cid:
+                    removed_ids.add(cid)
+                continue
+            out[cid] = payload
+        return out, removed_ids
+
+    if isinstance(clusters_outlines, list):
+        kept_list: list[Any] = []
+        for item in clusters_outlines:
+            if isinstance(item, dict) and is_unsat_status(item.get("status")):
+                cid = item.get("cluster_id")
+                if isinstance(cid, str) and cid:
+                    removed_ids.add(cid)
+                continue
+            kept_list.append(item)
+        return kept_list, removed_ids
+
+    return clusters_outlines, removed_ids
+
+
+def _filter_relation_plan_clusters(
+    relation_plan: dict[str, Any] | None, removed_ids: set[str]
+) -> dict[str, Any] | None:
+    if not removed_ids or not isinstance(relation_plan, dict):
+        return relation_plan
+
+    def _keep_cluster_id(value: Any) -> bool:
+        return not (isinstance(value, str) and value in removed_ids)
+
+    out = dict(relation_plan)
+
+    def _filter_list(key: str, predicate) -> None:
+        items = out.get(key)
+        if not isinstance(items, list):
+            return
+        out[key] = [item for item in items if isinstance(item, dict) and predicate(item)]
+
+    _filter_list("cluster_affinities", lambda i: _keep_cluster_id(i.get("cluster_id")))
+    _filter_list(
+        "cluster_orientations",
+        lambda i: _keep_cluster_id(i.get("cluster_id"))
+        and _keep_cluster_id(i.get("target_cluster_id")),
+    )
+    _filter_list(
+        "object_orientations",
+        lambda i: _keep_cluster_id(i.get("cluster_id"))
+        and _keep_cluster_id(i.get("target_cluster_id"))
+        and _keep_cluster_id(i.get("target_object_cluster_id")),
+    )
+    _filter_list(
+        "cluster_relations",
+        lambda i: _keep_cluster_id(i.get("a")) and _keep_cluster_id(i.get("b")),
+    )
+    _filter_list(
+        "cluster_directional_relations",
+        lambda i: _keep_cluster_id(i.get("a")) and _keep_cluster_id(i.get("b")),
+    )
+
+    circ = out.get("circulation_plan")
+    if isinstance(circ, dict):
+        circ_out = dict(circ)
+        main_paths = circ.get("main_paths")
+        if isinstance(main_paths, list):
+            circ_out["main_paths"] = [
+                item
+                for item in main_paths
+                if isinstance(item, dict) and _keep_cluster_id(item.get("to_cluster"))
+            ]
+        keep_open = circ.get("keep_open_regions")
+        if isinstance(keep_open, list):
+            circ_out["keep_open_regions"] = [
+                item
+                for item in keep_open
+                if isinstance(item, dict) and _keep_cluster_id(item.get("near"))
+            ]
+        out["circulation_plan"] = circ_out
+
+    return out
+
+
+def _filter_existing_transforms(
+    existing_transforms: dict[str, Any] | None, removed_ids: set[str]
+) -> dict[str, Any] | None:
+    if not removed_ids or not isinstance(existing_transforms, dict):
+        return existing_transforms
+    transforms = existing_transforms.get("cluster_transforms")
+    if not isinstance(transforms, list):
+        return existing_transforms
+    kept = [
+        item
+        for item in transforms
+        if not (
+            isinstance(item, dict)
+            and isinstance(item.get("cluster_id"), str)
+            and item.get("cluster_id") in removed_ids
+        )
+    ]
+    out = dict(existing_transforms)
+    out["cluster_transforms"] = kept
+    return out
+
+
+def _build_ok_json(
+    *,
+    grid_mm: int,
+    transforms: list[dict[str, Any]],
+    selected_variants: list[dict[str, str]],
+    notes: list[str],
+) -> dict[str, Any]:
+    return {
+        "status": "OK",
+        "grid_mm": int(grid_mm),
+        "cluster_transforms": _canonicalize_cluster_transforms(transforms),
+        "selected_variants": _selected_variants_dict_to_list(
+            _canonicalize_selected_variants(selected_variants)
+        ),
+        "notes": _dedupe_str_list(notes),
+    }
+
+
+def _build_unsat_json(*, grid_mm: int, notes: list[str]) -> dict[str, Any]:
+    return {
+        "status": "UNSAT",
+        "grid_mm": int(grid_mm),
+        "cluster_transforms": [],
+        "selected_variants": [],
+        "notes": _dedupe_str_list(notes),
+    }
+
+
+def _build_need_info_json(*, grid_mm: int, notes: list[str]) -> dict[str, Any]:
+    return {
+        "status": "NEED_INFO",
+        "grid_mm": int(grid_mm),
+        "cluster_transforms": [],
+        "selected_variants": [],
+        "notes": _dedupe_str_list(notes),
+    }
+
+
+def _canonicalize_cluster_transforms(raw: Iterable[Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        cid = item.get("cluster_id")
+        if not isinstance(cid, str) or not cid or cid in seen:
+            continue
+        try:
+            x = int(round(float(item.get("x", 0))))
+            y = int(round(float(item.get("y", 0))))
+            rot = int(item.get("rot", 0)) % 360
+        except Exception:
+            continue
+        if rot not in {0, 90, 180, 270}:
+            continue
+        out.append({"cluster_id": cid, "x": x, "y": y, "rot": rot})
+        seen.add(cid)
+    out.sort(key=lambda item: item["cluster_id"])
+    return out
+
+
+def _state_key(
+    transforms_by_id: dict[str, dict[str, int]],
+    variants_by_id: dict[str, str] | None = None,
+) -> str:
+    payload = []
+    variants_by_id = variants_by_id or {}
+    for cid in sorted(transforms_by_id):
+        t = transforms_by_id[cid]
+        payload.append(
+            (
+                cid,
+                int(t["x"]),
+                int(t["y"]),
+                int(t["rot"]) % 360,
+                str(variants_by_id.get(cid) or _base_variant_id(cid)),
+            )
+        )
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+
+
+def _transforms_dict_to_list(
+    transforms_by_id: dict[str, dict[str, int]],
+) -> list[dict[str, Any]]:
+    out = []
+    for cid in sorted(transforms_by_id):
+        t = transforms_by_id[cid]
+        out.append(
+            {
+                "cluster_id": cid,
+                "x": int(t["x"]),
+                "y": int(t["y"]),
+                "rot": int(t["rot"]) % 360,
+            }
+        )
+    return out
+
+
+def _canonicalize_selected_variants(raw: Iterable[Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if isinstance(raw, dict):
+        for cid, vid in raw.items():
+            if isinstance(cid, str) and cid and isinstance(vid, str) and vid:
+                out[cid] = vid
+        return out
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        cid = item.get("cluster_id")
+        vid = item.get("variant_id")
+        if isinstance(cid, str) and cid and isinstance(vid, str) and vid:
+            out[cid] = vid
+    return out
+
+
+def _selected_variants_dict_to_list(
+    selected_variants: dict[str, str],
+) -> list[dict[str, str]]:
+    out = []
+    for cid in sorted(selected_variants):
+        vid = selected_variants[cid]
+        if isinstance(vid, str) and vid:
+            out.append({"cluster_id": cid, "variant_id": vid})
+    return out
+
+
+def _base_variant_id(cluster_id: str) -> str:
+    return f"{cluster_id}::base"
+
+
+def _materialize_clusters_for_variants(
+    *,
+    clusters_outlines: dict[str, Any] | list[Any],
+    selected_variants: dict[str, str] | None,
+    materialization_cache: dict[str, Any] | None,
+) -> dict[str, Any] | list[Any]:
+    selected_variants = {
+        cid: vid
+        for cid, vid in (selected_variants or {}).items()
+        if isinstance(cid, str) and cid and isinstance(vid, str) and vid
+    }
+    # keep explicit base variants too so downstream signatures stay deterministic
+    signature = json.dumps(
+        sorted((cid, vid) for cid, vid in selected_variants.items()),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    if materialization_cache is not None and signature in materialization_cache:
+        return materialization_cache[signature]
+    if not selected_variants:
+        if materialization_cache is not None:
+            materialization_cache[signature] = clusters_outlines
+        return clusters_outlines
+    try:
+        result = MaterializeVariantizedClusters(
+            clusters_outlines=clusters_outlines,
+            selected_variants=selected_variants,
+        )
+        if (
+            isinstance(result, dict)
+            and result.get("result") == "OK"
+            and result.get("clusters_outlines") is not None
         ):
-            direct_cluster_like.append(key)
+            payload = result.get("clusters_outlines")
+            if materialization_cache is not None:
+                materialization_cache[signature] = payload
+            return payload
+    except Exception:
+        logger.exception(
+            "MaterializeVariantizedClusters failed; falling back to original clusters_outlines"
+        )
+    if materialization_cache is not None:
+        materialization_cache[signature] = clusters_outlines
+    return clusters_outlines
 
-    if direct_cluster_like:
-        return sorted(direct_cluster_like)
 
-    clusters = clusters_outlines.get("clusters")
-    if isinstance(clusters, list):
-        out: list[str] = []
-        for item in clusters:
+def _dedupe_str_list(items: Iterable[Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        s = item.strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
+def _cluster_ids(clusters_outlines: dict[str, Any] | list[Any]) -> list[str]:
+    return [cid for cid, _ in _iter_cluster_entries_for_index(clusters_outlines)]
+
+
+def _iter_cluster_entries_for_index(clusters_outlines: dict[str, Any] | list[Any]):
+    if isinstance(clusters_outlines, dict):
+        direct = []
+        for cid, value in clusters_outlines.items():
+            if (
+                isinstance(cid, str)
+                and isinstance(value, dict)
+                and _looks_like_cluster_payload(value, cid)
+            ):
+                direct.append((cid, value))
+        if direct:
+            for item in sorted(direct, key=lambda x: x[0]):
+                yield item
+            return
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            for item in clusters:
+                if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
+                    yield (str(item["cluster_id"]), item)
+            return
+    elif isinstance(clusters_outlines, list):
+        for item in clusters_outlines:
+            if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
+                yield (str(item["cluster_id"]), item)
+
+
+def _looks_like_cluster_payload(
+    value: dict[str, Any], fallback_cluster_id: str
+) -> bool:
+    cid = value.get("cluster_id")
+    if isinstance(cid, str) and cid:
+        return True
+    if (
+        value.get("cluster_footprint")
+        or value.get("local_placements")
+        or value.get("orientation_meta")
+    ):
+        return True
+    return bool(fallback_cluster_id)
+
+
+def _normalize_clusters_outlines_for_solver(
+    clusters_outlines: dict[str, Any] | list[Any],
+) -> tuple[dict[str, Any] | list[Any], dict[str, tuple[int, int]]]:
+    applied_offsets: dict[str, tuple[int, int]] = {}
+
+    if isinstance(clusters_outlines, dict):
+        direct_out: dict[str, Any] = {}
+        for cid, value in clusters_outlines.items():
+            if not isinstance(cid, str) or not isinstance(value, dict):
+                continue
+            if not _looks_like_cluster_payload(value, cid):
+                continue
+            row = deepcopy(value)
+            if not isinstance(row.get("cluster_id"), str) or not row.get("cluster_id"):
+                row["cluster_id"] = cid
+            row, applied = _canonicalize_cluster_payload_local_origin(row)
+            direct_out[cid] = row
+            applied_offsets[cid] = applied
+        if direct_out:
+            return direct_out, applied_offsets
+
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            out_list: list[dict[str, Any]] = []
+            for item in clusters:
+                if not isinstance(item, dict):
+                    continue
+                cid = item.get("cluster_id")
+                if not isinstance(cid, str) or not cid:
+                    continue
+                row, applied = _canonicalize_cluster_payload_local_origin(
+                    deepcopy(item)
+                )
+                out_list.append(row)
+                applied_offsets[cid] = applied
+            if out_list:
+                return out_list, applied_offsets
+
+    if isinstance(clusters_outlines, list):
+        out_list = []
+        for item in clusters_outlines:
             if not isinstance(item, dict):
                 continue
             cid = item.get("cluster_id")
-            if isinstance(cid, str) and cid:
-                out.append(cid)
-        return sorted(out)
+            if not isinstance(cid, str) or not cid:
+                continue
+            row, applied = _canonicalize_cluster_payload_local_origin(deepcopy(item))
+            out_list.append(row)
+            applied_offsets[cid] = applied
+        return out_list, applied_offsets
 
-    return []
+    return clusters_outlines, applied_offsets
+
+
+def _canonicalize_cluster_payload_local_origin(
+    cluster_payload: dict[str, Any],
+) -> tuple[dict[str, Any], tuple[int, int]]:
+    row = deepcopy(cluster_payload)
+    min_x, min_y = _infer_cluster_local_origin_offset(row)
+    applied = (int(min_x), int(min_y))
+    if min_x != 0 or min_y != 0:
+        _shift_cluster_payload_local_geometry(row, dx=-min_x, dy=-min_y)
+    prior_offset = _read_cluster_canonical_local_origin_offset(row)
+    total_offset = (prior_offset[0] + min_x, prior_offset[1] + min_y)
+    row["canonical_local_origin_offset"] = {
+        "dx": int(total_offset[0]),
+        "dy": int(total_offset[1]),
+    }
+    row["canonical_local_origin_normalized"] = True
+    local_frame = row.get("local_frame")
+    if isinstance(local_frame, dict):
+        local_frame["origin_note"] = (
+            "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
+        )
+    return row, applied
+
+
+def _infer_cluster_local_origin_offset(
+    cluster_payload: dict[str, Any],
+) -> tuple[int, int]:
+    xs: list[float] = []
+    ys: list[float] = []
+    fp = cluster_payload.get("cluster_footprint")
+    if isinstance(fp, dict):
+        rects = fp.get("rects")
+        if isinstance(rects, list):
+            for r in rects:
+                if not isinstance(r, dict):
+                    continue
+                try:
+                    x = float(r.get("x", 0))
+                    y = float(r.get("y", 0))
+                    w = float(r.get("w", 0))
+                    h = float(r.get("h", 0))
+                except Exception:
+                    continue
+                xs.extend([x, x + max(w, 0.0)])
+                ys.extend([y, y + max(h, 0.0)])
+        outlines = fp.get("outline_polygons_ccw") or cluster_payload.get(
+            "outline_polygons_ccw"
+        )
+        if isinstance(outlines, list):
+            for poly in outlines:
+                if not isinstance(poly, list):
+                    continue
+                for p in poly:
+                    if not isinstance(p, dict):
+                        continue
+                    try:
+                        xs.append(float(p.get("x", 0)))
+                        ys.append(float(p.get("y", 0)))
+                    except Exception:
+                        continue
+        bbox = fp.get("local_bbox")
+        if isinstance(bbox, dict):
+            try:
+                xs.append(float(bbox.get("min_x", 0)))
+                ys.append(float(bbox.get("min_y", 0)))
+            except Exception:
+                pass
+    placements = cluster_payload.get("local_placements")
+    if isinstance(placements, list):
+        for p in placements:
+            if not isinstance(p, dict):
+                continue
+            try:
+                xs.append(float(p.get("x", 0)))
+                ys.append(float(p.get("y", 0)))
+            except Exception:
+                continue
+    if not xs or not ys:
+        return (0, 0)
+    return (int(round(min(xs))), int(round(min(ys))))
+
+
+def _shift_cluster_payload_local_geometry(
+    cluster_payload: dict[str, Any], *, dx: int, dy: int
+) -> None:
+    placements = cluster_payload.get("local_placements")
+    if isinstance(placements, list):
+        for p in placements:
+            if not isinstance(p, dict):
+                continue
+            if isinstance(p.get("x"), (int, float)):
+                p["x"] = int(round(float(p.get("x", 0)) + dx))
+            if isinstance(p.get("y"), (int, float)):
+                p["y"] = int(round(float(p.get("y", 0)) + dy))
+    fp = cluster_payload.get("cluster_footprint")
+    if not isinstance(fp, dict):
+        return
+    rects = fp.get("rects")
+    if isinstance(rects, list):
+        for r in rects:
+            if not isinstance(r, dict):
+                continue
+            if isinstance(r.get("x"), (int, float)):
+                r["x"] = int(round(float(r.get("x", 0)) + dx))
+            if isinstance(r.get("y"), (int, float)):
+                r["y"] = int(round(float(r.get("y", 0)) + dy))
+    bbox = fp.get("local_bbox")
+    if isinstance(bbox, dict):
+        for key, delta in (("min_x", dx), ("max_x", dx), ("min_y", dy), ("max_y", dy)):
+            if isinstance(bbox.get(key), (int, float)):
+                bbox[key] = int(round(float(bbox.get(key, 0)) + delta))
+    outlines = fp.get("outline_polygons_ccw")
+    if isinstance(outlines, list):
+        for poly in outlines:
+            if not isinstance(poly, list):
+                continue
+            for p in poly:
+                if not isinstance(p, dict):
+                    continue
+                if isinstance(p.get("x"), (int, float)):
+                    p["x"] = int(round(float(p.get("x", 0)) + dx))
+                if isinstance(p.get("y"), (int, float)):
+                    p["y"] = int(round(float(p.get("y", 0)) + dy))
+
+
+def _read_cluster_canonical_local_origin_offset(
+    cluster_payload: dict[str, Any],
+) -> tuple[int, int]:
+    raw = cluster_payload.get("canonical_local_origin_offset")
+    if isinstance(raw, dict):
+        try:
+            return (int(raw.get("dx", 0) or 0), int(raw.get("dy", 0) or 0))
+        except Exception:
+            return (0, 0)
+    return (0, 0)
+
+
+def _normalize_existing_transforms_for_canonical_origins(
+    existing_transforms_json: dict[str, Any] | None,
+    applied_offsets: dict[str, tuple[int, int]],
+) -> dict[str, Any] | None:
+    if not isinstance(existing_transforms_json, dict):
+        return existing_transforms_json
+    transforms = existing_transforms_json.get("cluster_transforms")
+    if not isinstance(transforms, list):
+        return existing_transforms_json
+    out = dict(existing_transforms_json)
+    out["cluster_transforms"] = _remap_cluster_transforms_by_local_origin(
+        transforms,
+        offsets=applied_offsets,
+        to_canonical=True,
+    )
+    return out
+
+
+def _denormalize_payload_from_canonical_origins(
+    payload: dict[str, Any],
+    clusters_outlines: dict[str, Any] | list[Any],
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    transforms = out.get("cluster_transforms")
+    if not isinstance(transforms, list):
+        return out
+    offsets = _collect_cluster_local_origin_offsets(clusters_outlines)
+    out["cluster_transforms"] = _remap_cluster_transforms_by_local_origin(
+        transforms,
+        offsets=offsets,
+        to_canonical=False,
+    )
+    return out
+
+
+def _collect_cluster_local_origin_offsets(
+    clusters_outlines: dict[str, Any] | list[Any],
+) -> dict[str, tuple[int, int]]:
+    offsets: dict[str, tuple[int, int]] = {}
+    for cid, cinfo in _iter_cluster_entries_for_index(clusters_outlines):
+        offsets[cid] = _read_cluster_canonical_local_origin_offset(cinfo)
+    return offsets
+
+
+def _remap_cluster_transforms_by_local_origin(
+    transforms: list[dict[str, Any]],
+    *,
+    offsets: dict[str, tuple[int, int]],
+    to_canonical: bool,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for t in _canonicalize_cluster_transforms(transforms):
+        cid = t["cluster_id"]
+        off_x, off_y = offsets.get(cid, (0, 0))
+        rdx, rdy = _rotate_local_offset_ccw_90s(off_x, off_y, t["rot"])
+        sign = 1 if to_canonical else -1
+        out.append(
+            {
+                "cluster_id": cid,
+                "x": int(t["x"] + sign * rdx),
+                "y": int(t["y"] + sign * rdy),
+                "rot": int(t["rot"]) % 360,
+            }
+        )
+    out.sort(key=lambda item: item["cluster_id"])
+    return out
+
+
+def _rotate_local_offset_ccw_90s(x: int, y: int, rot: int) -> tuple[int, int]:
+    r = int(rot or 0) % 360
+    if r == 0:
+        return (int(x), int(y))
+    if r == 90:
+        return (-int(y), int(x))
+    if r == 180:
+        return (-int(x), -int(y))
+    if r == 270:
+        return (int(y), -int(x))
+    return (int(x), int(y))
+
+
+# if __name__ == "__main__":
+#     import argparse
+
+#     parser = argparse.ArgumentParser(description="Deterministic MacroClusterPlacer")
+#     parser.add_argument("room_json")
+#     parser.add_argument("clusters_json")
+#     parser.add_argument("relation_json")
+#     parser.add_argument("--existing", default=None)
+#     parser.add_argument("--grid", type=int, default=50)
+#     args = parser.parse_args()
+
+#     room = json.loads(Path(args.room_json).read_text())
+#     clusters = json.loads(Path(args.clusters_json).read_text())
+#     relation = json.loads(Path(args.relation_json).read_text())
+#     existing = json.loads(Path(args.existing).read_text()) if args.existing else None
+
+#     placer = MacroClusterPlacer()
+#     raw = placer.generate_raw(
+#         room_model_json=room,
+#         clusters_outlines_json=clusters,
+#         relation_plan_json=relation,
+#         existing_transforms_json=existing,
+#         grid_mm=args.grid,
+#     )
+#     print(raw)

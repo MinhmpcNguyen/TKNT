@@ -15,6 +15,7 @@ def setup_logging(level: str | None = None) -> None:
         force=True,
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    _setup_console_log()
     _setup_all_log_file()
     _setup_extra_loggers()
 
@@ -39,6 +40,17 @@ def _setup_all_log_file() -> None:
     if _has_file_handler(root, log_path):
         return
     handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    )
+    root.addHandler(handler)
+
+
+def _setup_console_log() -> None:
+    root = logging.getLogger()
+    if any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+        return
+    handler = logging.StreamHandler()
     handler.setFormatter(
         logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     )

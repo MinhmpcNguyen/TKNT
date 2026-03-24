@@ -29,12 +29,30 @@ class ClusterTransform(BaseModel):
         return _strip_required_str(value, "cluster_id")
 
 
+class ClusterVariantSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cluster_id: str
+    variant_id: str
+
+    @field_validator("cluster_id")
+    @classmethod
+    def _cluster_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "cluster_id")
+
+    @field_validator("variant_id")
+    @classmethod
+    def _variant_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "variant_id")
+
+
 class MacroClusterPlacerOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: PlacerStatus
     grid_mm: int | None = None
     cluster_transforms: list[ClusterTransform] = Field(default_factory=list)
+    selected_variants: list[ClusterVariantSelection] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
     @field_validator("grid_mm")
@@ -56,12 +74,22 @@ class MacroClusterPlacerOutput(BaseModel):
 
     @field_validator("cluster_transforms")
     @classmethod
-    def _unique_cluster_ids(
+    def _unique_cluster_transform_ids(
         cls, value: list[ClusterTransform]
     ) -> list[ClusterTransform]:
         ids = [item.cluster_id for item in value]
         if len(ids) != len(set(ids)):
             raise ValueError("cluster_transforms cluster_id must be unique")
+        return value
+
+    @field_validator("selected_variants")
+    @classmethod
+    def _unique_selected_variant_ids(
+        cls, value: list[ClusterVariantSelection]
+    ) -> list[ClusterVariantSelection]:
+        ids = [item.cluster_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("selected_variants cluster_id must be unique")
         return value
 
     @model_validator(mode="after")
@@ -73,4 +101,15 @@ class MacroClusterPlacerOutput(BaseModel):
                 raise ValueError("grid_mm must be > 0 when status=OK")
             if not self.cluster_transforms:
                 raise ValueError("cluster_transforms required when status=OK")
+            if not self.selected_variants:
+                raise ValueError("selected_variants required when status=OK")
+
+            transform_ids = {item.cluster_id for item in self.cluster_transforms}
+            variant_ids = {item.cluster_id for item in self.selected_variants}
+
+            if transform_ids != variant_ids:
+                raise ValueError(
+                    "selected_variants cluster_id set must match cluster_transforms cluster_id set when status=OK"
+                )
+
         return self

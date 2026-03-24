@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,12 +13,13 @@ from agent.cluster_forge import ClusterForge
 from agent.tier_count_director import TierCountDirector
 from agent.cluster_composer import ClusterComposer
 from agent.cluster_relation_planner import ClusterRelationPlanner
-from agent.cluster_placer import MacroClusterPlacer
+from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
 from layout.tools import build_absolute_layout
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CasePaths:
@@ -184,22 +186,25 @@ def run_case(
 
     _update_status(paths, "cluster_placer")
 
-    # 7) Cluster placement
-    placer = MacroClusterPlacer()
-    placer_output = placer.generate(
+    # 7) Cluster placement (solver)
+    filtered_cluster_outlines = _filter_unsat_cluster_outlines(cluster_outlines)
+    solver = MacroClusterSolver()
+    solver_output = solver.generate(
         room_model_json=room_output,
-        clusters_outlines_json=cluster_outlines,
+        clusters_outlines_json=filtered_cluster_outlines,
         relation_plan_json=relation_plan,
+        cluster_constraints_json=cluster_output,
+        grid_mm=50,
     )
-    placer_output = _strip_raw_text(placer_output)
-    _write_json(paths.cluster_placer, placer_output)
+    solver_output = _strip_raw_text(solver_output)
+    _write_json(paths.cluster_placer, solver_output)
 
-    placer_status = placer_output.get("status") if isinstance(placer_output, dict) else None
-    if placer_status != "OK":
+    solver_status = solver_output.get("status") if isinstance(solver_output, dict) else None
+    if solver_status != "OK":
         absolute_layout = build_absolute_layout(
             room_model=room_output,
-            clusters_outlines=cluster_outlines,
-            cluster_transforms=placer_output.get("cluster_transforms", []),
+            clusters_outlines=filtered_cluster_outlines,
+            cluster_transforms=solver_output.get("cluster_transforms", []),
         )
         absolute_layout = _strip_raw_text(absolute_layout)
         _write_json(paths.absolute_layout, absolute_layout)
@@ -208,15 +213,15 @@ def run_case(
             paths,
             "error",
             error=(
-                "cluster_placer returned "
-                f"{placer_status!s}; cannot build a valid absolute layout or run stylist."
+                "cluster_solver returned "
+                f"{solver_status!s}; cannot build a valid absolute layout or run stylist."
             ),
         )
         return {
             "case_id": case_id,
             "case_dir": str(case_root),
             "final_output": None,
-            "error": placer_status,
+            "error": solver_status,
         }
 
     _update_status(paths, "absolute_layout")
@@ -224,8 +229,8 @@ def run_case(
     # 8) Absolute layout
     absolute_layout = build_absolute_layout(
         room_model=room_output,
-        clusters_outlines=cluster_outlines,
-        cluster_transforms=placer_output.get("cluster_transforms", []),
+        clusters_outlines=filtered_cluster_outlines,
+        cluster_transforms=solver_output.get("cluster_transforms", []),
     )
     absolute_layout = _strip_raw_text(absolute_layout)
     _write_json(paths.absolute_layout, absolute_layout)
@@ -326,6 +331,74 @@ def _strip_raw_text(payload: Any) -> Any:
     if isinstance(payload, list):
         return [_strip_raw_text(item) for item in payload]
     return payload
+
+
+def _filter_unsat_cluster_outlines(
+    clusters_outlines: dict[str, Any] | list[Any],
+) -> dict[str, Any] | list[Any]:
+    removed_ids: list[str] = []
+
+    def is_unsat_status(value: Any) -> bool:
+        return isinstance(value, str) and value.strip().upper() == "UNSAT"
+
+    if isinstance(clusters_outlines, dict):
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            kept = [
+                item
+                for item in clusters
+                if not (
+                    isinstance(item, dict)
+                    and is_unsat_status(item.get("status"))
+                )
+            ]
+            for item in clusters:
+                if isinstance(item, dict) and is_unsat_status(item.get("status")):
+                    cid = item.get("cluster_id")
+                    if isinstance(cid, str) and cid:
+                        removed_ids.append(cid)
+            out = dict(clusters_outlines)
+            out["clusters"] = kept
+            if removed_ids:
+                logger.info(
+                    "Orchestrator filtered UNSAT clusters: %s",
+                    sorted(set(removed_ids)),
+                )
+            return out
+
+        out: dict[str, Any] = {}
+        for cid, payload in clusters_outlines.items():
+            if isinstance(payload, dict) and is_unsat_status(payload.get("status")):
+                if isinstance(cid, str) and cid:
+                    removed_ids.append(cid)
+                continue
+            out[cid] = payload
+        if removed_ids:
+            logger.info(
+                "Orchestrator filtered UNSAT clusters: %s",
+                sorted(set(removed_ids)),
+            )
+        return out
+
+    if isinstance(clusters_outlines, list):
+        kept_list = [
+            item
+            for item in clusters_outlines
+            if not (isinstance(item, dict) and is_unsat_status(item.get("status")))
+        ]
+        for item in clusters_outlines:
+            if isinstance(item, dict) and is_unsat_status(item.get("status")):
+                cid = item.get("cluster_id")
+                if isinstance(cid, str) and cid:
+                    removed_ids.append(cid)
+        if removed_ids:
+            logger.info(
+                "Orchestrator filtered UNSAT clusters: %s",
+                sorted(set(removed_ids)),
+            )
+        return kept_list
+
+    return clusters_outlines
 
 
 def _write_json(path: Path, payload: Any) -> None:
