@@ -1,1637 +1,1203 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import logging
+import re
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, List, Literal, Protocol
 
-logger = logging.getLogger(__name__)
+# type: ignore
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-try:
-    from agent_schema.cluster_placer_schema import (
-        MacroClusterPlacerOutput,  # type: ignore
-    )
-except Exception:
-    MacroClusterPlacerOutput = None  # type: ignore
-
-
-def _load_local_module(module_name: str, filename: str):
-    path = Path(__file__).with_name(filename)
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load local module: {filename}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
+from cluster_placer.tools_v2 import (  # type: ignore
+    DiagnosePhase2Seed,
+    EnumeratePhase2RepairMoves,
+    PreviewPhase2Repair,
+    ScorePhase2Repair,
+)
 
 try:
-    from cluster_placer.tools import (  # type: ignore
-        BuildGenericClusterVariants,
-        EnumerateClusterCandidates,
-        GlobalClusterVerifier,
-        MaterializeVariantizedClusters,
-        RankClusterPlacementOrder,
+    from clients.openai_client import OpenAIClient  # type: ignore
+except Exception:  # pragma: no cover
+    OpenAIClient = None  # type: ignore
+
+try:
+    from prompt.cluster_placer import (
+        MACRO_CLUSTER_PLACER_PROMPT as DEFAULT_PHASE2_PLACER_PROMPT,  # type: ignore
     )
-except Exception:
-    _tools_mod = _load_local_module(
-        "tools_converge_fast_local", "tools_converge_fast.py"
-    )
-    GlobalClusterVerifier = _tools_mod.GlobalClusterVerifier
-    EnumerateClusterCandidates = _tools_mod.EnumerateClusterCandidates
-    RankClusterPlacementOrder = _tools_mod.RankClusterPlacementOrder
-    BuildGenericClusterVariants = _tools_mod.BuildGenericClusterVariants
-    MaterializeVariantizedClusters = _tools_mod.MaterializeVariantizedClusters
+except Exception:  # pragma: no cover
+    DEFAULT_PHASE2_PLACER_PROMPT = "You are a phase-2 placer. Return JSON only."
 
 
-@dataclass(frozen=True)
-class SearchConfig:
-    grid_mm: int = 50
-    max_variants_per_cluster: int = 6
-    max_candidates_per_cluster: int = 48
-    max_search_candidates_per_cluster: int = 16
-    exact_search_combo_limit: int = 3000
-    beam_width: int = 16
-    beam_branch_per_state: int = 8
-    local_repair_iterations: int = 16
-    local_repair_branch: int = 8
-    acceptable_critical_orientation_threshold_mm: int = 260
-    acceptable_focal_pair_threshold_mm: int = 260
-    acceptable_max_item_penalty_mm: int = 220
+AllowedRotation = Literal[0, 90, 180, 270]
+RepairStatus = Literal["REPAIRED", "NO_IMPROVEMENT", "NEED_INFO"]
+AllowedObjectOp = Literal[
+    "rotate_object",
+    "mirror_object",
+    "nudge_object",
+    "swap_objects",
+    "set_anchor",
+    "set_front_override",
+]
 
 
-@dataclass
-class SearchState:
-    transforms_by_id: dict[str, dict[str, int]] = field(default_factory=dict)
-    variants_by_id: dict[str, str] = field(default_factory=dict)
-    score_tuple: tuple = field(default_factory=tuple)
-    quality: dict[str, Any] = field(default_factory=dict)
-    quality_gate: dict[str, Any] = field(default_factory=dict)
-    repair_guidance: dict[str, Any] = field(default_factory=dict)
-    state_signature: str = ""
-    notes: list[str] = field(default_factory=list)
+class LLMCallable(Protocol):
+    def __call__(
+        self, *, system_prompt: str, user_payload_json: str
+    ) -> str | Dict[str, Any]: ...
 
-    def transforms_list(self) -> list[dict[str, int | str]]:
-        out = []
-        for cid in sorted(self.transforms_by_id):
-            t = self.transforms_by_id[cid]
-            out.append(
+
+# -----------------------------------------------------------------------------
+# Output schema
+# -----------------------------------------------------------------------------
+def _strip_required_str(value: str, field_name: str) -> str:
+    value = value.strip()
+    if not value:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value
+
+
+class ClusterTransform(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cluster_id: str
+    x: int
+    y: int
+    rot: AllowedRotation
+
+    @field_validator("cluster_id")
+    @classmethod
+    def _cluster_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "cluster_id")
+
+
+class ClusterVariantSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cluster_id: str
+    variant_id: str
+
+    @field_validator("cluster_id")
+    @classmethod
+    def _cluster_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "cluster_id")
+
+    @field_validator("variant_id")
+    @classmethod
+    def _variant_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "variant_id")
+
+
+class ObjectRepair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cluster_id: str
+    object_id: str
+    op: AllowedObjectOp
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("cluster_id")
+    @classmethod
+    def _cluster_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "cluster_id")
+
+    @field_validator("object_id")
+    @classmethod
+    def _object_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "object_id")
+
+
+class Phase2RepairOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: RepairStatus
+    cluster_transforms: List[ClusterTransform] = Field(default_factory=list)
+    selected_variants: List[ClusterVariantSelection] = Field(default_factory=list)
+    object_repairs: List[ObjectRepair] = Field(default_factory=list)
+    notes: List[str] = Field(default_factory=list)
+
+    @field_validator("notes")
+    @classmethod
+    def _notes_non_empty(cls, value: List[str]) -> List[str]:
+        out: List[str] = []
+        for item in value:
+            out.append(_strip_required_str(item, "notes item"))
+        return out
+
+    @field_validator("cluster_transforms")
+    @classmethod
+    def _unique_cluster_transform_ids(
+        cls, value: List[ClusterTransform]
+    ) -> List[ClusterTransform]:
+        ids = [item.cluster_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("cluster_transforms cluster_id must be unique")
+        return value
+
+    @field_validator("selected_variants")
+    @classmethod
+    def _unique_selected_variant_ids(
+        cls, value: List[ClusterVariantSelection]
+    ) -> List[ClusterVariantSelection]:
+        ids = [item.cluster_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("selected_variants cluster_id must be unique")
+        return value
+
+
+# -----------------------------------------------------------------------------
+# Payload helpers
+# -----------------------------------------------------------------------------
+def build_phase2_payload(
+    room_01: Dict[str, Any],
+    clusters_04: Dict[str, Any],
+    outlines_05: Dict[str, Any],
+    relation_05b: Dict[str, Any],
+    placer_06: Dict[str, Any],
+    cluster_constraints: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    from copy import deepcopy
+
+    # -------------------------------------------------------------------------
+    # local helpers
+    # -------------------------------------------------------------------------
+    def _normalize_vec(vec: tuple[float, float] | None) -> tuple[float, float] | None:
+        if vec is None:
+            return None
+        x, y = float(vec[0]), float(vec[1])
+        norm = (x * x + y * y) ** 0.5
+        if norm <= 1e-9:
+            return None
+        return (x / norm, y / norm)
+
+    def _parse_vec2(value: Any) -> tuple[float, float] | None:
+        if isinstance(value, dict):
+            dx = value.get("dx")
+            dy = value.get("dy")
+        elif isinstance(value, (list, tuple)) and len(value) == 2:
+            dx, dy = value[0], value[1]
+        else:
+            return None
+        try:
+            return _normalize_vec((float(dx), float(dy)))
+        except Exception:
+            return None
+
+    def _rotate_point_ccw_90s(x: float, y: float, rot: int) -> tuple[float, float]:
+        r = int(rot) % 360
+        if r == 0:
+            return x, y
+        if r == 90:
+            return -y, x
+        if r == 180:
+            return -x, -y
+        if r == 270:
+            return y, -x
+        raise ValueError(f"Unsupported rot={rot}")
+
+    def _rotate_vec_ccw_90s(
+        vec: tuple[float, float] | None, rot: int
+    ) -> tuple[float, float] | None:
+        if vec is None:
+            return None
+        return _normalize_vec(
+            _rotate_point_ccw_90s(float(vec[0]), float(vec[1]), int(rot))
+        )
+
+    def _transform_rect_world(
+        rect: Dict[str, Any], tx: int, ty: int, rot: int
+    ) -> Dict[str, Any]:
+        x = float(rect.get("x", 0))
+        y = float(rect.get("y", 0))
+        w = float(rect.get("w", 0))
+        h = float(rect.get("h", 0))
+        corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+        world = [_rotate_point_ccw_90s(px, py, rot) for px, py in corners]
+        world = [(px + tx, py + ty) for px, py in world]
+        xs = [p[0] for p in world]
+        ys = [p[1] for p in world]
+        return {
+            "polygon_ccw": [
+                {"x": int(round(px)), "y": int(round(py))} for px, py in world
+            ],
+            "bbox": {
+                "min_x": int(round(min(xs))),
+                "min_y": int(round(min(ys))),
+                "max_x": int(round(max(xs))),
+                "max_y": int(round(max(ys))),
+            },
+            "world_center": {
+                "x": int(round(sum(xs) / 4.0)),
+                "y": int(round(sum(ys) / 4.0)),
+            },
+        }
+
+    def _extract_room_context() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        room_model_used = seed.get("room_model_used")
+        if isinstance(room_model_used, dict) and room_model_used:
+            return {"room_model_used": deepcopy(room_model_used)}
+        return {"room_model_used": deepcopy(room_01)}
+
+    def _extract_phase_control() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        solver_debug = (placer_06 or {}).get("solver_debug") or {}
+        best_verify = solver_debug.get("best_verify") or {}
+
+        ready = bool(seed.get("ready"))
+        needed = bool(seed.get("needed", True))
+        seed_kind = str(seed.get("seed_kind") or "")
+        if not seed_kind:
+            if best_verify.get("hard_valid") and best_verify.get("complete"):
+                seed_kind = "hard_valid_complete"
+            elif best_verify.get("hard_valid"):
+                seed_kind = "hard_valid_partial"
+            else:
+                seed_kind = "none"
+
+        return {
+            "phase": "micro_repair",
+            "ready": ready or bool(best_verify),
+            "needed": needed,
+            "seed_kind": seed_kind,
+            "solver_status": str((placer_06 or {}).get("status") or "UNKNOWN"),
+        }
+
+    def _extract_seed_layout() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        if isinstance(seed.get("seed_layout"), dict):
+            data = seed["seed_layout"]
+            return {
+                "cluster_transforms": deepcopy(data.get("cluster_transforms") or []),
+                "selected_variants": deepcopy(data.get("selected_variants") or []),
+            }
+
+        solver_debug = (placer_06 or {}).get("solver_debug") or {}
+        return {
+            "cluster_transforms": deepcopy(
+                solver_debug.get("best_transforms")
+                or (placer_06 or {}).get("cluster_transforms")
+                or []
+            ),
+            "selected_variants": deepcopy(
+                solver_debug.get("best_selected_variants")
+                or (placer_06 or {}).get("selected_variants")
+                or []
+            ),
+        }
+
+    def _extract_goals() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        relation_plan_used = seed.get("relation_plan_used")
+        cluster_constraints_used = seed.get("cluster_constraints_used")
+
+        if not isinstance(relation_plan_used, dict) or not relation_plan_used:
+            relation_plan_used = deepcopy(relation_05b)
+        if not isinstance(cluster_constraints_used, dict):
+            cluster_constraints_used = (
+                deepcopy(cluster_constraints)
+                if isinstance(cluster_constraints, dict)
+                else None
+            )
+
+        return {
+            "relation_plan_used": relation_plan_used,
+            "cluster_constraints_used": cluster_constraints_used,
+        }
+
+    def _extract_repair_debug() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        solver_debug = (placer_06 or {}).get("solver_debug") or {}
+        seed_verify = deepcopy(
+            seed.get("seed_verify") or solver_debug.get("best_verify") or {}
+        )
+        return {
+            "seed_metrics": deepcopy(seed.get("seed_metrics") or {}),
+            "seed_verify": seed_verify,
+            "repair_targets": deepcopy(
+                seed.get("repair_targets") or seed_verify.get("repair_guidance") or {}
+            ),
+            "candidate_counts": deepcopy(
+                seed.get("candidate_counts")
+                or solver_debug.get("candidate_counts")
+                or {}
+            ),
+            "quality_gate": deepcopy(seed_verify.get("quality_gate") or {}),
+        }
+
+    def _extract_edit_contract() -> Dict[str, Any]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        contract = seed.get("edit_contract")
+        if isinstance(contract, dict) and contract:
+            return deepcopy(contract)
+        return {
+            "must_preserve_hard_valid": True,
+            "hard_constraints_must_hold": [
+                "out_of_bounds",
+                "overlap",
+                "door_swing",
+            ],
+            "primary_soft_targets": [
+                "critical_orientation_penalty_mm",
+                "focal_pair_penalty_mm",
+                "max_critical_item_penalty_mm",
+            ],
+            "allowed_edit_levels": [
+                "cluster_variant",
+                "cluster_pose",
+                "object_pose",
+                "object_swap",
+                "object_nudge",
+            ],
+        }
+
+    def _index_clusters_by_id(
+        clusters_json: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in (clusters_json or {}).get("clusters") or []:
+            if isinstance(row, dict) and isinstance(row.get("cluster_id"), str):
+                out[row["cluster_id"]] = deepcopy(row)
+        return out
+
+    def _index_outlines_by_id() -> Dict[str, Dict[str, Any]]:
+        seed = (placer_06 or {}).get("placer_seed") or {}
+        mat = seed.get("materialized_clusters_outlines")
+        if isinstance(mat, dict) and mat:
+            return deepcopy(mat)
+
+        if isinstance(outlines_05, dict):
+            # already keyed by cluster_id
+            direct = {}
+            for cid, row in outlines_05.items():
+                if isinstance(cid, str) and isinstance(row, dict):
+                    direct[cid] = deepcopy(row)
+            if direct:
+                return direct
+            # or wrapped in {"clusters": [...]}
+            if isinstance(outlines_05.get("clusters"), list):
+                out = {}
+                for row in outlines_05["clusters"]:
+                    if isinstance(row, dict) and isinstance(row.get("cluster_id"), str):
+                        out[row["cluster_id"]] = deepcopy(row)
+                return out
+        return {}
+
+    def _build_cluster_cards(seed_layout: Dict[str, Any]) -> List[Dict[str, Any]]:
+        merged = _index_clusters_by_id(clusters_04)
+        outlines = _index_outlines_by_id()
+
+        active_ids = {
+            str(x.get("cluster_id"))
+            for x in seed_layout.get("cluster_transforms") or []
+            if isinstance(x, dict) and isinstance(x.get("cluster_id"), str)
+        }
+        if not active_ids:
+            active_ids = set(merged.keys()) | set(outlines.keys())
+
+        cards: List[Dict[str, Any]] = []
+        for cid in sorted(active_ids):
+            merged_row = merged.get(cid, {})
+            outline_row = outlines.get(cid, {})
+            if not merged_row and not outline_row:
+                continue
+
+            decisions = (
+                merged_row.get("decisions")
+                if isinstance(merged_row.get("decisions"), list)
+                else []
+            )
+
+            object_sizes: Dict[str, Dict[str, int]] = {}
+            for d in decisions:
+                if not isinstance(d, dict):
+                    continue
+                oid = d.get("id")
+                dims = d.get("rep_dims_m")
+                if isinstance(oid, str) and isinstance(dims, dict):
+                    try:
+                        object_sizes[oid] = {
+                            "w_mm": int(round(float(dims.get("w", 0)) * 1000.0)),
+                            "h_mm": int(round(float(dims.get("h", 0)) * 1000.0)),
+                        }
+                    except Exception:
+                        pass
+
+            # keep variants if present on either merged or outline side
+            available_variants = []
+            for key in ("available_variants", "variants"):
+                src = None
+                if isinstance(outline_row.get(key), list):
+                    src = outline_row.get(key)
+                elif isinstance(merged_row.get(key), list):
+                    src = merged_row.get(key)
+                if isinstance(src, list):
+                    available_variants = deepcopy(src)
+                    break
+
+            cards.append(
                 {
                     "cluster_id": cid,
-                    "x": int(t["x"]),
-                    "y": int(t["y"]),
-                    "rot": int(t["rot"]) % 360,
+                    "tag": merged_row.get("tag"),
+                    "members": deepcopy(merged_row.get("members") or []),
+                    "anchors": deepcopy(merged_row.get("anchors") or []),
+                    "hard_constraints": deepcopy(
+                        merged_row.get("hard_constraints") or []
+                    ),
+                    "soft_constraints": deepcopy(
+                        merged_row.get("soft_constraints") or []
+                    ),
+                    "cluster_rules": deepcopy(merged_row.get("cluster_rules") or {}),
+                    "decisions": deepcopy(decisions),
+                    "object_sizes": object_sizes,
+                    "local_placements": deepcopy(
+                        outline_row.get("local_placements") or []
+                    ),
+                    "cluster_footprint": deepcopy(
+                        outline_row.get("cluster_footprint") or {}
+                    ),
+                    "orientation_meta": deepcopy(
+                        outline_row.get("orientation_meta") or {}
+                    ),
+                    "available_variants": available_variants,
+                    "source": {
+                        "merged_from_04": bool(merged_row),
+                        "outline_from_05_or_solver": bool(outline_row),
+                    },
                 }
             )
+        return cards
+
+    def _top_object_debug(
+        seed_verify: Dict[str, Any], max_items: int = 24
+    ) -> Dict[tuple[str, str], Dict[str, Any]]:
+        out: Dict[tuple[str, str], Dict[str, Any]] = {}
+        quality = (seed_verify or {}).get("quality") or {}
+        dbg = (quality.get("orientation_debug") or []) + (
+            quality.get("critical_orientation_debug") or []
+        )
+        for item in dbg:
+            if not isinstance(item, dict):
+                continue
+            cid = item.get("cluster_id")
+            oid = item.get("object_id")
+            if not isinstance(cid, str) or not isinstance(oid, str):
+                continue
+            key = (cid, oid)
+            prev = out.get(key)
+            pen = int(item.get("penalty_mm") or 0)
+            if prev is None or pen > int(prev.get("penalty_mm") or 0):
+                out[key] = {
+                    "intent": item.get("intent"),
+                    "penalty_mm": pen,
+                    "front_clear_mm": item.get("front_clear_mm"),
+                    "back_clear_mm": item.get("back_clear_mm"),
+                    "best_clear_mm": item.get("best_clear_mm"),
+                    "dot": item.get("dot"),
+                }
+        ranked = sorted(out.items(), key=lambda kv: -int(kv[1].get("penalty_mm") or 0))[
+            :max_items
+        ]
+        return {k: v for k, v in ranked}
+
+    def _build_objects_world(
+        cluster_cards: List[Dict[str, Any]],
+        seed_layout: Dict[str, Any],
+        seed_verify: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        tf_by_id = {
+            str(x.get("cluster_id")): x
+            for x in seed_layout.get("cluster_transforms") or []
+            if isinstance(x, dict) and isinstance(x.get("cluster_id"), str)
+        }
+        object_dbg = _top_object_debug(seed_verify)
+        out: List[Dict[str, Any]] = []
+
+        for card in cluster_cards:
+            cid = str(card.get("cluster_id"))
+            tf = tf_by_id.get(cid)
+            if not isinstance(tf, dict):
+                continue
+            tx = int(tf.get("x") or 0)
+            ty = int(tf.get("y") or 0)
+            rot = int(tf.get("rot") or 0) % 360
+
+            fp = card.get("cluster_footprint") or {}
+            rects = fp.get("rects") or []
+            important = (card.get("orientation_meta") or {}).get(
+                "important_objects"
+            ) or {}
+            cluster_front = _parse_vec2(
+                (card.get("orientation_meta") or {}).get("cluster_front_local")
+            )
+
+            for rect in rects:
+                if not isinstance(rect, dict) or not isinstance(rect.get("id"), str):
+                    continue
+                oid = rect["id"]
+                world_geom = _transform_rect_world(rect, tx, ty, rot)
+
+                obj_meta = important.get(oid) if isinstance(important, dict) else {}
+                front_local = (
+                    _parse_vec2((obj_meta or {}).get("front_local")) or cluster_front
+                )
+                axis_local = _parse_vec2((obj_meta or {}).get("axis_local"))
+                front_world = _rotate_vec_ccw_90s(front_local, rot)
+                axis_world = _rotate_vec_ccw_90s(axis_local, rot)
+
+                w = int(round(float(rect.get("w", 0))))
+                h = int(round(float(rect.get("h", 0))))
+                if front_local is None:
+                    size_along_access = max(w, h)
+                else:
+                    dx, dy = abs(front_local[0]), abs(front_local[1])
+                    size_along_access = w if dx >= dy else h
+                required_clearance = int(round(0.25 * size_along_access))
+
+                dbg = object_dbg.get((cid, oid), {})
+                out.append(
+                    {
+                        "cluster_id": cid,
+                        "object_id": oid,
+                        "cluster_rot": rot,
+                        "local_rect": {
+                            "x": int(round(float(rect.get("x", 0)))),
+                            "y": int(round(float(rect.get("y", 0)))),
+                            "w": w,
+                            "h": h,
+                        },
+                        "polygon_ccw": world_geom["polygon_ccw"],
+                        "bbox": world_geom["bbox"],
+                        "world_center": world_geom["world_center"],
+                        "size_mm": {"w": w, "h": h},
+                        "front_world": None
+                        if front_world is None
+                        else {
+                            "dx": round(front_world[0], 3),
+                            "dy": round(front_world[1], 3),
+                        },
+                        "axis_world": None
+                        if axis_world is None
+                        else {
+                            "dx": round(axis_world[0], 3),
+                            "dy": round(axis_world[1], 3),
+                        },
+                        "required_clearance_mm": required_clearance,
+                        "current_front_clear_mm": dbg.get("front_clear_mm"),
+                        "current_back_clear_mm": dbg.get("back_clear_mm"),
+                        "best_clear_mm": dbg.get("best_clear_mm"),
+                        "dominant_debug_intent": dbg.get("intent"),
+                        "dominant_penalty_mm": dbg.get("penalty_mm"),
+                        "dominant_dot": dbg.get("dot"),
+                    }
+                )
+
+        out.sort(
+            key=lambda x: (
+                x["cluster_id"],
+                -int(x.get("dominant_penalty_mm") or 0),
+                x["object_id"],
+            )
+        )
         return out
 
-    def selected_variants_list(self) -> list[dict[str, str]]:
-        out = []
-        for cid in sorted(self.variants_by_id):
-            vid = self.variants_by_id[cid]
-            if isinstance(vid, str) and vid:
-                out.append({"cluster_id": cid, "variant_id": vid})
+    # -------------------------------------------------------------------------
+    # build payload
+    # -------------------------------------------------------------------------
+    room_context = _extract_room_context()
+    phase_control = _extract_phase_control()
+    seed_layout = _extract_seed_layout()
+    goals = _extract_goals()
+    repair_debug = _extract_repair_debug()
+    edit_contract = _extract_edit_contract()
+    cluster_cards = _build_cluster_cards(seed_layout)
+    objects_world = _build_objects_world(
+        cluster_cards,
+        seed_layout,
+        repair_debug.get("seed_verify") or {},
+    )
+
+    return {
+        "phase_control": phase_control,
+        "room_context": room_context,
+        "seed_layout": seed_layout,
+        "cluster_cards": cluster_cards,
+        "goals": goals,
+        "repair_debug": repair_debug,
+        "edit_contract": edit_contract,
+        "objects_world": objects_world,
+    }
+
+
+def load_json(path: str | Path) -> Any:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def dump_json(path: str | Path, data: Any) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _cluster_cards_as_map(cluster_cards: Any) -> Dict[str, Dict[str, Any]]:
+    if isinstance(cluster_cards, dict):
+        return {
+            str(k): deepcopy(v)
+            for k, v in cluster_cards.items()
+            if isinstance(k, str) and isinstance(v, dict)
+        }
+    if isinstance(cluster_cards, list):
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in cluster_cards:
+            if isinstance(row, dict) and isinstance(row.get("cluster_id"), str):
+                out[row["cluster_id"]] = deepcopy(row)
         return out
+    return {}
+
+
+def _seed_transform_map(seed_layout: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    out = {}
+    for item in seed_layout.get("cluster_transforms") or []:
+        if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
+            out[item["cluster_id"]] = deepcopy(item)
+    return out
+
+
+def _seed_variant_map(seed_layout: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    out = {}
+    for item in seed_layout.get("selected_variants") or []:
+        if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
+            out[item["cluster_id"]] = deepcopy(item)
+    return out
+
+
+def _allowed_object_ids_by_cluster(payload: Dict[str, Any]) -> Dict[str, set[str]]:
+    out: Dict[str, set[str]] = {}
+    for row in payload.get("objects_world") or []:
+        if not isinstance(row, dict):
+            continue
+        cid = row.get("cluster_id")
+        oid = row.get("object_id")
+        if isinstance(cid, str) and isinstance(oid, str):
+            out.setdefault(cid, set()).add(oid)
+    return out
+
+
+def _allowed_variant_ids_by_cluster(payload: Dict[str, Any]) -> Dict[str, set[str]]:
+    out: Dict[str, set[str]] = {}
+    cards = _cluster_cards_as_map(payload.get("cluster_cards") or {})
+    current_seed = _seed_variant_map(payload.get("seed_layout") or {})
+    for cid, card in cards.items():
+        allowed: set[str] = set()
+        variants = card.get("available_variants") or card.get("variants") or []
+        if isinstance(variants, list):
+            for item in variants:
+                if isinstance(item, dict) and isinstance(item.get("variant_id"), str):
+                    allowed.add(item["variant_id"])
+                elif isinstance(item, str):
+                    allowed.add(item)
+        if not allowed and cid in current_seed:
+            allowed.add(str(current_seed[cid].get("variant_id") or ""))
+        if allowed:
+            out[cid] = allowed
+    return out
+
+
+def _allowed_cluster_rotations(payload: Dict[str, Any]) -> Dict[str, set[int]]:
+    out: Dict[str, set[int]] = {}
+    cards = _cluster_cards_as_map(payload.get("cluster_cards") or {})
+    for cid, card in cards.items():
+        vals: set[int] = set()
+        rules = card.get("cluster_rules") or {}
+        rots = rules.get("allowed_rotations") or []
+        for r in rots:
+            try:
+                rv = int(r)
+            except Exception:
+                continue
+            if rv in {0, 90, 180, 270}:
+                vals.add(rv)
+        if not vals:
+            vals = {0, 90, 180, 270}
+        out[cid] = vals
+    return out
+
+
+def _allowed_object_ops(payload: Dict[str, Any]) -> set[str]:
+    contract = payload.get("edit_contract") or {}
+    levels = contract.get("allowed_edit_levels") or {}
+    allowed = set()
+    if isinstance(levels, list):
+        levels = {str(x): True for x in levels}
+    if levels.get("object_pose", False) or levels.get("object_rotation", True):
+        allowed.update({"rotate_object", "mirror_object", "set_front_override"})
+    if levels.get("object_nudge", False) or levels.get("object_local_nudge", True):
+        allowed.add("nudge_object")
+    if levels.get("object_swap", False) or levels.get(
+        "object_swap_within_cluster", True
+    ):
+        allowed.add("swap_objects")
+    if levels.get("object_anchor", False):
+        allowed.add("set_anchor")
+    return allowed
+
+
+# -----------------------------------------------------------------------------
+# Compact payload + tool context
+# -----------------------------------------------------------------------------
+def prepare_phase2_llm_payload(
+    full_payload: Dict[str, Any], move_limit: int = 20
+) -> Dict[str, Any]:
+    compact = deepcopy(full_payload)
+    diagnosis = DiagnosePhase2Seed(payload=compact)
+    moves = EnumeratePhase2RepairMoves(payload=compact, limit=move_limit)
+    compact["tool_context"] = {
+        "diagnosis": diagnosis,
+        "enumerated_moves": moves.get("moves") or [],
+        "scoring_hints": {
+            "baseline_score": diagnosis.get("score"),
+            "hard_valid": diagnosis.get("hard_valid"),
+            "priority_clusters": diagnosis.get("prioritized_clusters") or [],
+            "priority_objects": diagnosis.get("prioritized_objects") or [],
+        },
+    }
+    return compact
+
+
+# -----------------------------------------------------------------------------
+# JSON extraction / parse
+# -----------------------------------------------------------------------------
+def _extract_json_like(text: str) -> str:
+    text = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.DOTALL)
+    if fenced:
+        return fenced.group(1).strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        return text[start : end + 1]
+    return text
+
+
+def parse_llm_output(raw: str | Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    blob = _extract_json_like(str(raw))
+    return json.loads(blob)
+
+
+# -----------------------------------------------------------------------------
+# Proposal normalization / validation
+# -----------------------------------------------------------------------------
+def _normalize_object_repair_params(op: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    params = deepcopy(params or {})
+
+    def _first(*keys: str) -> Any:
+        for key in keys:
+            if key in params and params.get(key) is not None:
+                return params.get(key)
+        return None
+
+    def _parse_int(value: Any, field_name: str) -> int:
+        if value is None:
+            raise ValueError(f"{field_name} is required")
+        if isinstance(value, str):
+            value = value.strip().lower().replace("deg", "").strip()
+        try:
+            return int(float(value))
+        except Exception as e:
+            raise ValueError(f"{field_name} must be numeric") from e
+
+    def _parse_float(value: Any, field_name: str) -> float:
+        if value is None:
+            raise ValueError(f"{field_name} is required")
+        try:
+            return float(value)
+        except Exception as e:
+            raise ValueError(f"{field_name} must be numeric") from e
+
+    if op == "rotate_object":
+        rot_raw = _first("rot", "rotation", "angle", "degrees")
+        rot = _parse_int(rot_raw, "rotate_object.params.rot") % 360
+        if rot not in {0, 90, 180, 270}:
+            raise ValueError("rotate_object.params.rot must be one of 0/90/180/270")
+        return {"rot": rot}
+
+    if op == "mirror_object":
+        axis = str(_first("axis", "mirror_axis", "direction") or "x").strip().lower()
+        if axis not in {"x", "y"}:
+            raise ValueError("mirror_object.params.axis must be 'x' or 'y'")
+        return {"axis": axis}
+
+    if op == "nudge_object":
+        dx = _parse_int(_first("dx", "x", "offset_x"), "nudge_object.params.dx")
+        dy = _parse_int(_first("dy", "y", "offset_y"), "nudge_object.params.dy")
+        return {"dx": dx, "dy": dy}
+
+    if op == "swap_objects":
+        other = str(
+            _first("other_object_id", "target_object_id", "swap_with", "other") or ""
+        ).strip()
+        if not other:
+            raise ValueError("swap_objects.params.other_object_id is required")
+        return {"other_object_id": other}
+
+    if op == "set_anchor":
+        anchor = str(_first("anchor", "anchor_id", "anchor_name", "side") or "").strip()
+        if not anchor:
+            raise ValueError("set_anchor.params.anchor is required")
+        return {"anchor": anchor}
+
+    if op == "set_front_override":
+        fx = _first("dx", "fx", "front_dx", "x")
+        fy = _first("dy", "fy", "front_dy", "y")
+        return {
+            "dx": _parse_float(fx, "set_front_override.params.dx"),
+            "dy": _parse_float(fy, "set_front_override.params.dy"),
+        }
+
+    return params
+
+
+def normalize_and_validate_repair_output(
+    payload: Dict[str, Any], raw_output: str | Dict[str, Any]
+) -> Dict[str, Any]:
+    parsed = parse_llm_output(raw_output)
+    try:
+        proposal = Phase2RepairOutput.model_validate(parsed)
+    except ValidationError as e:
+        raise ValueError(f"LLM repair output schema invalid: {e}") from e
+
+    seed_layout = payload.get("seed_layout") or {}
+    seed_tmap = _seed_transform_map(seed_layout)
+    seed_vmap = _seed_variant_map(seed_layout)
+    seed_cluster_ids = set(seed_tmap.keys())
+
+    out_tmap = {**seed_tmap}
+    for item in proposal.cluster_transforms:
+        out_tmap[item.cluster_id] = item.model_dump()
+
+    out_vmap = {**seed_vmap}
+    for item in proposal.selected_variants:
+        out_vmap[item.cluster_id] = item.model_dump()
+
+    if set(out_tmap.keys()) != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - set(out_tmap.keys()))
+        extra = sorted(set(out_tmap.keys()) - seed_cluster_ids)
+        raise ValueError(
+            f"cluster_transforms cluster-id set mismatch. missing={missing}, extra={extra}"
+        )
+
+    if set(out_vmap.keys()) != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - set(out_vmap.keys()))
+        extra = sorted(set(out_vmap.keys()) - seed_cluster_ids)
+        raise ValueError(
+            f"selected_variants cluster-id set mismatch. missing={missing}, extra={extra}"
+        )
+
+    allowed_rots = _allowed_cluster_rotations(payload)
+    for cid, item in out_tmap.items():
+        rot = int(item.get("rot") or 0)
+        if cid in allowed_rots and rot not in allowed_rots[cid]:
+            raise ValueError(f"cluster {cid} rot={rot} not allowed by cluster rules")
+
+    allowed_variants = _allowed_variant_ids_by_cluster(payload)
+    for cid, item in out_vmap.items():
+        vid = str(item.get("variant_id") or "")
+        if cid in allowed_variants and vid not in allowed_variants[cid]:
+            raise ValueError(f"cluster {cid} variant_id={vid} not allowed")
+
+    allowed_obj_ids = _allowed_object_ids_by_cluster(payload)
+    allowed_ops = _allowed_object_ops(payload)
+
+    normalized_object_repairs: List[Dict[str, Any]] = []
+    seen_object_repairs: set[tuple] = set()
+
+    for item in proposal.object_repairs:
+        row = item.model_dump()
+        cid = row["cluster_id"]
+        oid = row["object_id"]
+        op = row["op"]
+
+        if cid not in seed_cluster_ids:
+            raise ValueError(f"object_repair references unknown cluster_id={cid}")
+        cluster_obj_ids = allowed_obj_ids.get(cid, set())
+        if oid not in cluster_obj_ids:
+            raise ValueError(
+                f"object_repair references unknown object_id={oid} in cluster={cid}"
+            )
+        if op not in allowed_ops:
+            raise ValueError(f"object_repair op={op} not allowed by edit_contract")
+
+        row["params"] = _normalize_object_repair_params(op, row.get("params") or {})
+
+        if op == "swap_objects":
+            other = str(row["params"]["other_object_id"]).strip()
+            if other == oid:
+                raise ValueError(
+                    f"swap_objects cannot swap object_id={oid} with itself in cluster={cid}"
+                )
+            if other not in cluster_obj_ids:
+                for other_cid, obj_ids in allowed_obj_ids.items():
+                    if other in obj_ids and other_cid != cid:
+                        raise ValueError(
+                            f"swap_objects cross-cluster swap is not allowed: {cid}.{oid} cannot swap with {other_cid}.{other}"
+                        )
+                raise ValueError(
+                    f"swap_objects.params.other_object_id={other} not found in cluster={cid}"
+                )
+
+        repair_sig = (
+            cid,
+            oid,
+            op,
+            json.dumps(row["params"], sort_keys=True, ensure_ascii=True),
+        )
+        if repair_sig in seen_object_repairs:
+            continue
+        seen_object_repairs.add(repair_sig)
+        normalized_object_repairs.append(row)
+
+    notes: List[str] = []
+    seen_notes = set()
+    for note in proposal.notes:
+        if note not in seen_notes:
+            seen_notes.add(note)
+            notes.append(note)
+
+    return {
+        "status": proposal.status,
+        "cluster_transforms": [out_tmap[cid] for cid in sorted(out_tmap.keys())],
+        "selected_variants": [out_vmap[cid] for cid in sorted(out_vmap.keys())],
+        "object_repairs": normalized_object_repairs,
+        "notes": notes,
+    }
+
+
+# -----------------------------------------------------------------------------
+# Compile using the same scorer/preview state
+# -----------------------------------------------------------------------------
+def compile_phase2_to_final_output(full_payload: Dict[str, Any]) -> Dict[str, Any]:
+    phase2 = full_payload.get("phase2_placer") or {}
+    repair = phase2.get("phase2_repair")
+    if not isinstance(repair, dict):
+        repair = {
+            "status": "NO_IMPROVEMENT",
+            "cluster_transforms": deepcopy(
+                (full_payload.get("seed_layout") or {}).get("cluster_transforms") or []
+            ),
+            "selected_variants": deepcopy(
+                (full_payload.get("seed_layout") or {}).get("selected_variants") or []
+            ),
+            "object_repairs": [],
+            "notes": [],
+        }
+    preview = PreviewPhase2Repair(payload=full_payload, repair=repair)
+    compiled = preview.get("compiled") or {}
+    if not isinstance(compiled, dict):
+        raise ValueError("PreviewPhase2Repair compiled output missing")
+    _ensure_room_type(compiled, full_payload)
+    return compiled
+
+
+def _ensure_room_type(compiled: Dict[str, Any], full_payload: Dict[str, Any]) -> None:
+    room = compiled.get("room")
+    if not isinstance(room, dict):
+        return
+    if room.get("room_type"):
+        return
+
+    room_model = (full_payload.get("room_context") or {}).get("room_model_used") or {}
+    meta = room_model.get("meta") if isinstance(room_model, dict) else None
+    user_input = room_model.get("user_input") if isinstance(room_model, dict) else None
+
+    room_type = None
+    if isinstance(meta, dict):
+        room_type = meta.get("room_type")
+    if not room_type and isinstance(user_input, dict):
+        room_type = user_input.get("room_type")
+
+    if isinstance(room_type, str) and room_type:
+        room["room_type"] = room_type
+    else:
+        room["room_type"] = "unknown"
+
+
+# -----------------------------------------------------------------------------
+# LLM runtime
+# -----------------------------------------------------------------------------
+def _extract_message(response: object) -> object:
+    choices = getattr(response, "choices", None)
+    if isinstance(choices, list) and choices:
+        return getattr(choices[0], "message", None)
+    raise ValueError("OpenAI response missing message")
+
+
+def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:
+    if OpenAIClient is None:
+        raise RuntimeError("OpenAIClient is unavailable")
+    client = OpenAIClient()
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_payload_json},
+    ]
+    response = client.chat_completion(messages, model_key="gpt_4o", temperature=0.0)
+    message = _extract_message(response)
+    content = getattr(message, "content", None)
+    if not isinstance(content, str):
+        raise ValueError("OpenAI response content missing")
+    return content
+
+
+# -----------------------------------------------------------------------------
+# Main orchestration
+# -----------------------------------------------------------------------------
+def _default_no_improvement(
+    payload: Dict[str, Any], note: str | None = None
+) -> Dict[str, Any]:
+    seed = payload.get("seed_layout") or {}
+    out = {
+        "status": "NO_IMPROVEMENT",
+        "cluster_transforms": deepcopy(seed.get("cluster_transforms") or []),
+        "selected_variants": deepcopy(seed.get("selected_variants") or []),
+        "object_repairs": [],
+        "notes": [],
+    }
+    if note:
+        out["notes"].append(str(note))
+    return out
+
+
+def run_phase2_placer(
+    *,
+    full_payload: Dict[str, Any],
+    llm_call: LLMCallable,
+    system_prompt: str = DEFAULT_PHASE2_PLACER_PROMPT,
+    attach_result_to_payload: bool = True,
+    max_attempts: int = 3,
+) -> Dict[str, Any]:
+    compact_payload = prepare_phase2_llm_payload(full_payload)
+    diagnosis = (compact_payload.get("tool_context") or {}).get("diagnosis") or {}
+    baseline_score = int(diagnosis.get("score") or 0)
+    best_repair = _default_no_improvement(compact_payload)
+    best_scored = ScorePhase2Repair(payload=compact_payload, repair=best_repair)
+    best_score = int(
+        (best_scored.get("candidate") or {}).get("score") or baseline_score
+    )
+
+    attempt_errors: List[str] = []
+    for attempt in range(max(1, int(max_attempts))):
+        try:
+            raw = llm_call(
+                system_prompt=system_prompt,
+                user_payload_json=json.dumps(
+                    compact_payload, ensure_ascii=False, indent=2
+                ),
+            )
+            normalized = normalize_and_validate_repair_output(compact_payload, raw)
+            scored = ScorePhase2Repair(payload=compact_payload, repair=normalized)
+            cand = scored.get("candidate") or {}
+            cand_score = int(cand.get("score") or -(10**9))
+            cand_valid = bool(cand.get("hard_valid"))
+            if cand_valid and cand_score > best_score:
+                best_repair = normalized
+                best_scored = scored
+                best_score = cand_score
+        except Exception as e:
+            attempt_errors.append(str(e))
+
+    attached = deepcopy(full_payload)
+    attached["phase2_placer"] = {
+        "phase2_input": compact_payload,
+        "phase2_repair": best_repair,
+        "phase2_score": best_scored,
+        "attempt_errors": attempt_errors,
+    }
+    attached["phase2_compiled_output"] = compile_phase2_to_final_output(attached)
+    return attached if attach_result_to_payload else attached["phase2_placer"]
 
 
 @dataclass(frozen=True)
 class MacroClusterPlacer:
-    config: SearchConfig = SearchConfig()
-    system_prompt: str = ""
-    prompt_template: str = ""
+    system_prompt: str = DEFAULT_PHASE2_PLACER_PROMPT
+    llm_call: LLMCallable = _call_openai
 
     def generate_raw(
         self,
         *,
-        room_model_json: dict[str, Any],
-        clusters_outlines_json: dict[str, Any] | list[Any],
-        relation_plan_json: dict[str, Any] | None = None,
-        existing_transforms_json: dict[str, Any] | None = None,
-        verifier_feedback_json: dict[str, Any] | None = None,
-        grid_mm: int = 50,
+        room_interpreter_json: Dict[str, Any],
+        cluster_merged_json: Dict[str, Any],
+        cluster_outlines_json: Dict[str, Any],
+        relation_plan_json: Dict[str, Any],
+        placer_output_json: Dict[str, Any],
+        cluster_constraints_json: Dict[str, Any] | None = None,
     ) -> str:
-        del verifier_feedback_json
-        (
-            clusters_outlines_json,
-            filtered_relation_plan,
-            existing_transforms_json,
-        ) = _filter_unsat_input_clusters(
-            clusters_outlines=clusters_outlines_json,
-            relation_plan=relation_plan_json,
-            existing_transforms=existing_transforms_json,
+        payload = build_phase2_payload(
+            room_01=room_interpreter_json,
+            clusters_04=cluster_merged_json,
+            outlines_05=cluster_outlines_json,
+            relation_05b=relation_plan_json,
+            placer_06=placer_output_json,
+            cluster_constraints=cluster_constraints_json,
         )
-
-        cfg = SearchConfig(
-            grid_mm=int(grid_mm or self.config.grid_mm),
-            max_variants_per_cluster=self.config.max_variants_per_cluster,
-            max_candidates_per_cluster=self.config.max_candidates_per_cluster,
-            max_search_candidates_per_cluster=self.config.max_search_candidates_per_cluster,
-            exact_search_combo_limit=self.config.exact_search_combo_limit,
-            beam_width=self.config.beam_width,
-            beam_branch_per_state=self.config.beam_branch_per_state,
-            local_repair_iterations=self.config.local_repair_iterations,
-            local_repair_branch=self.config.local_repair_branch,
-            acceptable_critical_orientation_threshold_mm=self.config.acceptable_critical_orientation_threshold_mm,
-            acceptable_focal_pair_threshold_mm=self.config.acceptable_focal_pair_threshold_mm,
-            acceptable_max_item_penalty_mm=self.config.acceptable_max_item_penalty_mm,
+        result = run_phase2_placer(
+            full_payload=payload,
+            llm_call=self.llm_call,
+            system_prompt=self.system_prompt,
+            attach_result_to_payload=True,
         )
-
-        normalized_clusters, applied_offsets = _normalize_clusters_outlines_for_solver(
-            clusters_outlines_json
-        )
-        normalized_existing = _normalize_existing_transforms_for_canonical_origins(
-            existing_transforms_json,
-            applied_offsets,
-        )
-
-        payload = _solve_layout(
-            room_model=room_model_json,
-            clusters_outlines=normalized_clusters,
-            relation_plan=filtered_relation_plan,
-            existing_transforms_json=normalized_existing,
-            cfg=cfg,
-        )
-        payload = _denormalize_payload_from_canonical_origins(
-            payload, normalized_clusters
-        )
-        return json.dumps(payload, ensure_ascii=True)
+        compiled = result.get("phase2_compiled_output")
+        if not isinstance(compiled, dict):
+            raise ValueError("Phase-2 compiled output missing or invalid")
+        return json.dumps(compiled, ensure_ascii=True)
 
     def generate(
         self,
         *,
-        room_model_json: dict[str, Any],
-        clusters_outlines_json: dict[str, Any] | list[Any],
-        relation_plan_json: dict[str, Any] | None = None,
-        existing_transforms_json: dict[str, Any] | None = None,
-        verifier_feedback_json: dict[str, Any] | None = None,
-        grid_mm: int = 50,
-    ) -> dict[str, Any]:
+        room_interpreter_json: Dict[str, Any],
+        cluster_merged_json: Dict[str, Any],
+        cluster_outlines_json: Dict[str, Any],
+        relation_plan_json: Dict[str, Any],
+        placer_output_json: Dict[str, Any],
+        cluster_constraints_json: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         raw = self.generate_raw(
-            room_model_json=room_model_json,
-            clusters_outlines_json=clusters_outlines_json,
+            room_interpreter_json=room_interpreter_json,
+            cluster_merged_json=cluster_merged_json,
+            cluster_outlines_json=cluster_outlines_json,
             relation_plan_json=relation_plan_json,
-            existing_transforms_json=existing_transforms_json,
-            verifier_feedback_json=verifier_feedback_json,
-            grid_mm=grid_mm,
+            placer_output_json=placer_output_json,
+            cluster_constraints_json=cluster_constraints_json,
         )
-        payload = _parse_json(raw)
-        payload = _sanitize_output_payload(payload)
-        if MacroClusterPlacerOutput is not None:
-            try:
-                return MacroClusterPlacerOutput.model_validate(payload).model_dump()  # type: ignore[attr-defined]
-            except Exception:
-                logger.warning(
-                    "MacroClusterPlacerOutput schema validation failed; returning raw payload with selected_variants preserved."
-                )
-        return payload
-
-
-def _solve_layout(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    existing_transforms_json: dict[str, Any] | None,
-    cfg: SearchConfig,
-) -> dict[str, Any]:
-    cluster_ids = _cluster_ids(clusters_outlines)
-    materialization_cache: dict[str, Any] = {}
-    if not cluster_ids:
-        return _build_need_info_json(
-            grid_mm=cfg.grid_mm,
-            notes=["No valid cluster entries were found in clusters_outlines_json."],
-        )
-
-    seed_state, seed_notes = _build_seed_state(
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        relation_plan=relation_plan,
-        existing_transforms_json=existing_transforms_json,
-        cfg=cfg,
-    )
-
-    if len(seed_state.transforms_by_id) == len(cluster_ids):
-        final_verify = _verify_layout(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            transforms=seed_state.transforms_list(),
-            selected_variants=seed_state.variants_by_id,
-            cfg=cfg,
-            mode="complete",
-            materialization_cache=materialization_cache,
-        )
-        if bool(final_verify.get("acceptable_valid")):
-            return _build_ok_json(
-                grid_mm=cfg.grid_mm,
-                transforms=seed_state.transforms_list(),
-                selected_variants=seed_state.selected_variants_list(),
-                notes=[
-                    *seed_notes,
-                    "Existing transforms already formed an acceptable valid layout.",
-                ],
-            )
-
-    enum = EnumerateClusterCandidates(
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        grid_mm=cfg.grid_mm,
-        relation_plan=relation_plan,
-        max_candidates_per_cluster=cfg.max_candidates_per_cluster,
-        max_variants_per_cluster=cfg.max_variants_per_cluster,
-        acceptable_critical_orientation_threshold_mm=cfg.acceptable_critical_orientation_threshold_mm,
-        acceptable_focal_pair_threshold_mm=cfg.acceptable_focal_pair_threshold_mm,
-        acceptable_max_item_penalty_mm=cfg.acceptable_max_item_penalty_mm,
-    )
-    if enum.get("result") != "OK":
-        notes = [*seed_notes, "Candidate enumeration failed."]
-        for err in enum.get("errors") or []:
-            if isinstance(err, dict):
-                notes.append(f"{err.get('code')}: {err.get('detail')}")
-        return _build_unsat_json(grid_mm=cfg.grid_mm, notes=_dedupe_str_list(notes))
-
-    order_result = RankClusterPlacementOrder(
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        grid_mm=cfg.grid_mm,
-        relation_plan=relation_plan,
-        max_variants_per_cluster=cfg.max_variants_per_cluster,
-    )
-    order = _derive_cluster_order(
-        order_result, enum, cluster_ids, seed_state.transforms_by_id
-    )
-    candidate_map = _prepare_candidate_map(
-        enum=enum,
-        existing_transforms=seed_state.transforms_by_id,
-        max_search_candidates_per_cluster=cfg.max_search_candidates_per_cluster,
-    )
-
-    missing_candidate_ids = [
-        cid
-        for cid in order
-        if cid not in seed_state.transforms_by_id and not candidate_map.get(cid)
-    ]
-    if missing_candidate_ids:
-        return _build_unsat_json(
-            grid_mm=cfg.grid_mm,
-            notes=_dedupe_str_list(
-                [
-                    *seed_notes,
-                    f"No hard-valid candidates were found for clusters: {', '.join(missing_candidate_ids)}.",
-                ]
-            ),
-        )
-
-    remaining_ids = [cid for cid in order if cid not in seed_state.transforms_by_id]
-    combo_count = 1
-    for cid in remaining_ids:
-        combo_count *= max(1, len(candidate_map.get(cid, [])))
-
-    logger.info(
-        "Deterministic MacroClusterPlacer: %s clusters, %s remaining after seed, estimated candidate product=%s",
-        len(cluster_ids),
-        len(remaining_ids),
-        combo_count,
-    )
-
-    best_acceptable: SearchState | None = None
-    best_hard: SearchState | None = None
-
-    if not remaining_ids:
-        verify = _verify_layout(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            transforms=seed_state.transforms_list(),
-            selected_variants=seed_state.variants_by_id,
-            cfg=cfg,
-            mode="complete",
-            materialization_cache=materialization_cache,
-        )
-        candidate = _state_from_verify(
-            seed_state.transforms_by_id, seed_state.variants_by_id, verify
-        )
-        if bool(verify.get("acceptable_valid")):
-            best_acceptable = candidate
-        elif bool(verify.get("hard_valid")):
-            best_hard = candidate
-    elif combo_count <= cfg.exact_search_combo_limit:
-        best_acceptable, best_hard = _exact_search(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            order=remaining_ids,
-            candidate_map=candidate_map,
-            seed_state=seed_state,
-            cfg=cfg,
-            materialization_cache=materialization_cache,
-        )
-    else:
-        best_acceptable, best_hard = _beam_search(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            order=remaining_ids,
-            candidate_map=candidate_map,
-            seed_state=seed_state,
-            cfg=cfg,
-            materialization_cache=materialization_cache,
-        )
-
-    if best_acceptable is None and best_hard is not None:
-        repaired = _conflict_directed_repair(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            candidate_map=candidate_map,
-            seed_state=best_hard,
-            cfg=cfg,
-            materialization_cache=materialization_cache,
-        )
-        if repaired is not None and bool(repaired.quality_gate.get("pass")):
-            best_acceptable = repaired
-        elif repaired is not None and _better_state(repaired, best_hard):
-            best_hard = repaired
-
-    if best_acceptable is not None:
-        return _build_ok_json(
-            grid_mm=cfg.grid_mm,
-            transforms=best_acceptable.transforms_list(),
-            selected_variants=best_acceptable.selected_variants_list(),
-            notes=_dedupe_str_list(
-                [
-                    *seed_notes,
-                    "Solved with deterministic candidate+variant search.",
-                    f"state_signature={best_acceptable.state_signature}",
-                ]
-            ),
-        )
-
-    if best_hard is not None:
-        gate = best_hard.quality_gate or {}
-        reasons = gate.get("reasons") or []
-        return _build_unsat_json(
-            grid_mm=cfg.grid_mm,
-            notes=_dedupe_str_list(
-                [
-                    *seed_notes,
-                    "Only hard-valid layouts were found; none passed the acceptable quality gate.",
-                    f"quality_gate_reasons={json.dumps(reasons, ensure_ascii=True)}",
-                    f"state_signature={best_hard.state_signature}",
-                ]
-            ),
-        )
-
-    return _build_unsat_json(
-        grid_mm=cfg.grid_mm,
-        notes=_dedupe_str_list(
-            [
-                *seed_notes,
-                "Search terminated with no complete hard-valid layout.",
-            ]
-        ),
-    )
-
-
-def _exact_search(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    order: list[str],
-    candidate_map: dict[str, list[dict[str, Any]]],
-    seed_state: SearchState,
-    cfg: SearchConfig,
-    materialization_cache: dict[str, Any],
-) -> tuple[SearchState | None, SearchState | None]:
-    best_acceptable: SearchState | None = None
-    best_hard: SearchState | None = None
-    visited: set[str] = set()
-
-    def dfs(idx: int, state: SearchState) -> None:
-        nonlocal best_acceptable, best_hard
-        if idx >= len(order):
-            verify = _verify_layout(
-                room_model=room_model,
-                clusters_outlines=clusters_outlines,
-                relation_plan=relation_plan,
-                transforms=state.transforms_list(),
-                selected_variants=state.variants_by_id,
-                cfg=cfg,
-                mode="complete",
-                materialization_cache=materialization_cache,
-            )
-            candidate = _state_from_verify(
-                state.transforms_by_id, state.variants_by_id, verify
-            )
-            if bool(verify.get("acceptable_valid")):
-                if _better_state(candidate, best_acceptable):
-                    best_acceptable = candidate
-            elif bool(verify.get("hard_valid")):
-                if _better_state(candidate, best_hard):
-                    best_hard = candidate
-            return
-
-        cid = order[idx]
-        for cand in candidate_map.get(cid, []):
-            next_transforms = dict(state.transforms_by_id)
-            next_transforms[cid] = {
-                "x": int(cand["x"]),
-                "y": int(cand["y"]),
-                "rot": int(cand["rot"]),
-            }
-            next_variants = dict(state.variants_by_id)
-            next_variants[cid] = str(cand.get("variant_id") or _base_variant_id(cid))
-            signature_seed = _state_key(next_transforms, next_variants)
-            if signature_seed in visited:
-                continue
-            verify = _verify_layout(
-                room_model=room_model,
-                clusters_outlines=clusters_outlines,
-                relation_plan=relation_plan,
-                transforms=_transforms_dict_to_list(next_transforms),
-                selected_variants=next_variants,
-                cfg=cfg,
-                mode="partial",
-                materialization_cache=materialization_cache,
-            )
-            if not bool(verify.get("hard_valid")):
-                continue
-            next_state = _state_from_verify(next_transforms, next_variants, verify)
-            sig = next_state.state_signature or signature_seed
-            if sig in visited:
-                continue
-            visited.add(sig)
-            dfs(idx + 1, next_state)
-
-    dfs(0, seed_state)
-    return best_acceptable, best_hard
-
-
-def _beam_search(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    order: list[str],
-    candidate_map: dict[str, list[dict[str, Any]]],
-    seed_state: SearchState,
-    cfg: SearchConfig,
-    materialization_cache: dict[str, Any],
-) -> tuple[SearchState | None, SearchState | None]:
-    beam: list[SearchState] = [seed_state]
-    best_acceptable: SearchState | None = None
-    best_hard: SearchState | None = None
-
-    for cid in order:
-        expanded: dict[str, SearchState] = {}
-        for state in beam:
-            taken = 0
-            for cand in candidate_map.get(cid, []):
-                next_transforms = dict(state.transforms_by_id)
-                next_transforms[cid] = {
-                    "x": int(cand["x"]),
-                    "y": int(cand["y"]),
-                    "rot": int(cand["rot"]),
-                }
-                next_variants = dict(state.variants_by_id)
-                next_variants[cid] = str(
-                    cand.get("variant_id") or _base_variant_id(cid)
-                )
-                verify = _verify_layout(
-                    room_model=room_model,
-                    clusters_outlines=clusters_outlines,
-                    relation_plan=relation_plan,
-                    transforms=_transforms_dict_to_list(next_transforms),
-                    selected_variants=next_variants,
-                    cfg=cfg,
-                    mode="partial",
-                    materialization_cache=materialization_cache,
-                )
-                if not bool(verify.get("hard_valid")):
-                    continue
-                next_state = _state_from_verify(next_transforms, next_variants, verify)
-                sig = next_state.state_signature or _state_key(
-                    next_transforms, next_variants
-                )
-                prev = expanded.get(sig)
-                if _better_state(next_state, prev):
-                    expanded[sig] = next_state
-                taken += 1
-                if taken >= cfg.beam_branch_per_state:
-                    break
-        if not expanded:
-            return best_acceptable, best_hard
-        beam = sorted(expanded.values(), key=_state_sort_key)[: cfg.beam_width]
-
-    for state in beam:
-        verify = _verify_layout(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            transforms=state.transforms_list(),
-            selected_variants=state.variants_by_id,
-            cfg=cfg,
-            mode="complete",
-            materialization_cache=materialization_cache,
-        )
-        done = _state_from_verify(state.transforms_by_id, state.variants_by_id, verify)
-        if bool(verify.get("acceptable_valid")):
-            if _better_state(done, best_acceptable):
-                best_acceptable = done
-        elif bool(verify.get("hard_valid")):
-            if _better_state(done, best_hard):
-                best_hard = done
-
-    return best_acceptable, best_hard
-
-
-def _conflict_directed_repair(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    candidate_map: dict[str, list[dict[str, Any]]],
-    seed_state: SearchState,
-    cfg: SearchConfig,
-    materialization_cache: dict[str, Any],
-) -> SearchState | None:
-    current = seed_state
-    seen: set[str] = {current.state_signature or _state_key(current.transforms_by_id)}
-
-    for _ in range(cfg.local_repair_iterations):
-        prioritized = (current.repair_guidance or {}).get("prioritized_clusters") or []
-        target_ids: list[str] = []
-        for rec in prioritized:
-            if isinstance(rec, dict):
-                cid = rec.get("cluster_id")
-                if isinstance(cid, str) and cid:
-                    target_ids.append(cid)
-        if not target_ids:
-            break
-
-        improved: SearchState | None = None
-        for target_cid in target_ids[:3]:
-            base_transforms = dict(current.transforms_by_id)
-            base_variants = dict(current.variants_by_id)
-            old = base_transforms.pop(target_cid, None)
-            base_variants.pop(target_cid, None)
-            if old is None:
-                continue
-            tried = 0
-            for cand in candidate_map.get(target_cid, []):
-                replacement = {
-                    "x": int(cand["x"]),
-                    "y": int(cand["y"]),
-                    "rot": int(cand["rot"]),
-                }
-                replacement_variant = str(
-                    cand.get("variant_id") or _base_variant_id(target_cid)
-                )
-                if (
-                    replacement == old
-                    and replacement_variant == current.variants_by_id.get(target_cid)
-                ):
-                    continue
-                next_transforms = dict(base_transforms)
-                next_transforms[target_cid] = replacement
-                next_variants = dict(base_variants)
-                next_variants[target_cid] = replacement_variant
-                sig0 = _state_key(next_transforms, next_variants)
-                if sig0 in seen:
-                    continue
-                verify = _verify_layout(
-                    room_model=room_model,
-                    clusters_outlines=clusters_outlines,
-                    relation_plan=relation_plan,
-                    transforms=_transforms_dict_to_list(next_transforms),
-                    selected_variants=next_variants,
-                    cfg=cfg,
-                    mode="complete",
-                    materialization_cache=materialization_cache,
-                )
-                if not bool(verify.get("hard_valid")):
-                    continue
-                candidate = _state_from_verify(next_transforms, next_variants, verify)
-                seen.add(candidate.state_signature or sig0)
-                if _better_state(candidate, improved):
-                    improved = candidate
-                if bool(candidate.quality_gate.get("pass")):
-                    return candidate
-                tried += 1
-                if tried >= cfg.local_repair_branch:
-                    break
-        if improved is None or not _better_state(improved, current):
-            break
-        current = improved
-        if bool(current.quality_gate.get("pass")):
-            return current
-    return current
-
-
-def _prepare_candidate_map(
-    *,
-    enum: dict[str, Any],
-    existing_transforms: dict[str, dict[str, int]],
-    max_search_candidates_per_cluster: int,
-) -> dict[str, list[dict[str, Any]]]:
-    out: dict[str, list[dict[str, Any]]] = {}
-    for item in enum.get("clusters") or []:
-        if not isinstance(item, dict):
-            continue
-        cid = item.get("cluster_id")
-        if not isinstance(cid, str) or not cid:
-            continue
-        if cid in existing_transforms:
-            out[cid] = []
-            continue
-        raw_candidates = [
-            c
-            for c in (item.get("candidates") or [])
-            if isinstance(c, dict) and bool(c.get("hard_valid"))
-        ]
-        out[cid] = _stratify_candidates(
-            raw_candidates, max_search_candidates_per_cluster
-        )
-    return out
-
-
-def _stratify_candidates(
-    candidates: list[dict[str, Any]],
-    max_count: int,
-) -> list[dict[str, Any]]:
-    if len(candidates) <= max_count:
-        return candidates
-
-    def cand_key(c: dict[str, Any]) -> tuple:
-        return (
-            0 if c.get("acceptable_valid") else 1,
-            -float(c.get("variant_priority") or 0.0),
-            -int(c.get("anchor_priority") or 0),
-            -int(c.get("rough_score") or -(10**9)),
-            int(c.get("critical_orientation_penalty_mm") or 0),
-            int(c.get("orientation_penalty_mm") or 0),
-            str(c.get("variant_family") or ""),
-            str(c.get("anchor_kind") or ""),
-            int(c.get("rot") or 0),
-        )
-
-    candidates = sorted(candidates, key=cand_key)
-    chosen: list[dict[str, Any]] = []
-    seen: set[tuple[str, int]] = set()
-
-    for cand in candidates:
-        bucket = (
-            str(cand.get("variant_family") or cand.get("variant_id") or ""),
-            str(cand.get("anchor_kind") or ""),
-            int(cand.get("rot") or 0) % 360,
-        )
-        if bucket in seen:
-            continue
-        seen.add(bucket)
-        chosen.append(cand)
-        if len(chosen) >= max_count:
-            return chosen
-
-    for cand in candidates:
-        sig = (
-            str(cand.get("cluster_id") or ""),
-            int(cand.get("x") or 0),
-            int(cand.get("y") or 0),
-            int(cand.get("rot") or 0),
-            str(cand.get("variant_id") or ""),
-        )
-        if any(
-            sig
-            == (
-                str(x.get("cluster_id") or ""),
-                int(x.get("x") or 0),
-                int(x.get("y") or 0),
-                int(x.get("rot") or 0),
-                str(x.get("variant_id") or ""),
-            )
-            for x in chosen
-        ):
-            continue
-        chosen.append(cand)
-        if len(chosen) >= max_count:
-            break
-    return chosen
-
-
-def _derive_cluster_order(
-    order_result: dict[str, Any],
-    enum: dict[str, Any],
-    cluster_ids: list[str],
-    locked: dict[str, dict[str, int]],
-) -> list[str]:
-    ranked: list[str] = []
-    if isinstance(order_result, dict) and order_result.get("result") == "OK":
-        for row in order_result.get("order") or []:
-            if isinstance(row, dict):
-                cid = row.get("cluster_id")
-                if isinstance(cid, str) and cid in cluster_ids and cid not in ranked:
-                    ranked.append(cid)
-    for item in enum.get("clusters") or []:
-        if isinstance(item, dict):
-            cid = item.get("cluster_id")
-            if isinstance(cid, str) and cid in cluster_ids and cid not in ranked:
-                ranked.append(cid)
-    for cid in sorted(cluster_ids):
-        if cid not in ranked:
-            ranked.append(cid)
-    return [cid for cid in ranked if cid not in locked]
-
-
-def _build_seed_state(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    existing_transforms_json: dict[str, Any] | None,
-    cfg: SearchConfig,
-) -> tuple[SearchState, list[str]]:
-    notes: list[str] = []
-    seed_transforms: dict[str, dict[str, int]] = {}
-
-    raw = []
-    if isinstance(existing_transforms_json, dict):
-        raw = existing_transforms_json.get("cluster_transforms") or []
-    parsed = _canonicalize_cluster_transforms(raw)
-    if not parsed:
-        return SearchState(), notes
-
-    for item in parsed:
-        cid = item["cluster_id"]
-        candidate_transforms = dict(seed_transforms)
-        candidate_transforms[cid] = {
-            "x": item["x"],
-            "y": item["y"],
-            "rot": item["rot"],
-        }
-        candidate_variants = {
-            **{k: _base_variant_id(k) for k in candidate_transforms.keys()}
-        }
-        verify = _verify_layout(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            transforms=_transforms_dict_to_list(candidate_transforms),
-            selected_variants=candidate_variants,
-            cfg=cfg,
-            mode="partial",
-            materialization_cache={},
-        )
-        if bool(verify.get("hard_valid")):
-            seed_transforms[cid] = candidate_transforms[cid]
-        else:
-            notes.append(f"Ignored invalid existing transform for cluster '{cid}'.")
-
-    if seed_transforms:
-        seed_variants = {cid: _base_variant_id(cid) for cid in seed_transforms.keys()}
-        verify = _verify_layout(
-            room_model=room_model,
-            clusters_outlines=clusters_outlines,
-            relation_plan=relation_plan,
-            transforms=_transforms_dict_to_list(seed_transforms),
-            selected_variants=seed_variants,
-            cfg=cfg,
-            mode="partial",
-            materialization_cache={},
-        )
-        return _state_from_verify(
-            seed_transforms, seed_variants, verify
-        ), _dedupe_str_list(notes)
-
-    return SearchState(), _dedupe_str_list(notes)
-
-
-def _verify_layout(
-    *,
-    room_model: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    transforms: list[dict[str, Any]],
-    selected_variants: dict[str, str] | None,
-    cfg: SearchConfig,
-    mode: str,
-    materialization_cache: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    materialized_clusters = _materialize_clusters_for_variants(
-        clusters_outlines=clusters_outlines,
-        selected_variants=selected_variants,
-        materialization_cache=materialization_cache,
-    )
-    log_args = {
-        "mode": mode,
-        "grid_mm": cfg.grid_mm,
-        "cluster_transforms_count": len(transforms),
-        "selected_variants_count": len(selected_variants or {}),
-        "cluster_ids": [t.get("cluster_id") for t in transforms if isinstance(t, dict)],
-    }
-    if logger.isEnabledFor(logging.INFO):
-        logger.info("Tool calls requested: %s", ["GlobalClusterVerifier"])
-        logger.info(
-            "Tool GlobalClusterVerifier args: %s",
-            _short_json(log_args),
-        )
-    result = GlobalClusterVerifier(
-        room_model=room_model,
-        clusters_outlines=materialized_clusters,
-        cluster_transforms=transforms,
-        grid_mm=cfg.grid_mm,
-        mode=mode,
-        relation_plan=relation_plan,
-        acceptable_critical_orientation_threshold_mm=cfg.acceptable_critical_orientation_threshold_mm,
-        acceptable_focal_pair_threshold_mm=cfg.acceptable_focal_pair_threshold_mm,
-        acceptable_max_item_penalty_mm=cfg.acceptable_max_item_penalty_mm,
-        return_debug=True,
-    )
-    if logger.isEnabledFor(logging.INFO):
-        logger.info(
-            "Tool GlobalClusterVerifier output: %s",
-            _short_json(result),
-        )
-    return result
-
-
-def _state_from_verify(
-    transforms_by_id: dict[str, dict[str, int]],
-    variants_by_id: dict[str, str],
-    verify: dict[str, Any],
-) -> SearchState:
-    quality = verify.get("quality") or {}
-    gate = verify.get("quality_gate") or {}
-    metrics = gate.get("metrics") or {}
-    layout_score = int(quality.get("layout_score") or -(10**9))
-    pass_flag = bool(gate.get("pass"))
-    hard_valid = bool(verify.get("hard_valid"))
-    complete = bool(verify.get("complete"))
-    reasons = tuple(sorted(str(r) for r in (gate.get("reasons") or [])))
-    score_tuple = (
-        0 if pass_flag else 1,
-        0 if hard_valid else 1,
-        0 if complete else 1,
-        len(reasons),
-        int(metrics.get("critical_orientation_penalty_mm") or 0),
-        int(metrics.get("focal_pair_penalty_mm") or 0),
-        int(metrics.get("max_critical_item_penalty_mm") or 0),
-        -layout_score,
-    )
-    return SearchState(
-        transforms_by_id={cid: dict(v) for cid, v in transforms_by_id.items()},
-        variants_by_id={
-            cid: str(v) for cid, v in variants_by_id.items() if isinstance(v, str) and v
-        },
-        score_tuple=score_tuple,
-        quality=quality,
-        quality_gate=gate,
-        repair_guidance=verify.get("repair_guidance") or {},
-        state_signature=str(
-            verify.get("state_signature")
-            or _state_key(transforms_by_id, variants_by_id)
-        ),
-        notes=[],
-    )
-
-
-def _state_sort_key(state: SearchState) -> tuple:
-    return state.score_tuple
-
-
-def _better_state(candidate: SearchState | None, incumbent: SearchState | None) -> bool:
-    if candidate is None:
-        return False
-    if incumbent is None:
-        return True
-    return _state_sort_key(candidate) < _state_sort_key(incumbent)
-
-
-def _parse_json(raw: str) -> dict[str, Any]:
-    try:
         payload = json.loads(raw)
-    except Exception as exc:
-        raise ValueError("MacroClusterPlacer returned invalid JSON") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("MacroClusterPlacer response must be a JSON object")
-    return payload
-
-
-def _truncate_text(text: str, max_len: int = 1200) -> str:
-    if len(text) <= max_len:
-        return text
-    return text[: max_len - 3] + "..."
-
-
-def _short_json(obj: Any, max_len: int = 1200) -> str:
-    try:
-        dumped = json.dumps(obj, ensure_ascii=True)
-    except Exception:
-        dumped = str(obj)
-    return _truncate_text(dumped, max_len=max_len)
-
-
-def _sanitize_output_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    status = payload.get("status")
-    if status not in {"OK", "UNSAT", "NEED_INFO"}:
-        status = "UNSAT"
-    notes = payload.get("notes") if isinstance(payload.get("notes"), list) else []
-    transforms = _canonicalize_cluster_transforms(
-        payload.get("cluster_transforms") or []
-    )
-    selected_variants = _canonicalize_selected_variants(
-        payload.get("selected_variants") or []
-    )
-    try:
-        grid_mm = int(payload.get("grid_mm") or 50)
-    except Exception:
-        grid_mm = 50
-    return {
-        "status": status,
-        "grid_mm": grid_mm,
-        "cluster_transforms": transforms,
-        "selected_variants": _selected_variants_dict_to_list(selected_variants),
-        "notes": _dedupe_str_list([n for n in notes if isinstance(n, str)]),
-    }
-
-
-def _filter_unsat_input_clusters(
-    *,
-    clusters_outlines: dict[str, Any] | list[Any],
-    relation_plan: dict[str, Any] | None,
-    existing_transforms: dict[str, Any] | None,
-) -> tuple[dict[str, Any] | list[Any], dict[str, Any] | None, dict[str, Any] | None]:
-    filtered_outlines, removed_ids = _filter_unsat_clusters_outlines(
-        clusters_outlines
-    )
-    if not removed_ids:
-        return clusters_outlines, relation_plan, existing_transforms
-    filtered_relation_plan = _filter_relation_plan_clusters(relation_plan, removed_ids)
-    filtered_existing = _filter_existing_transforms(existing_transforms, removed_ids)
-    return filtered_outlines, filtered_relation_plan, filtered_existing
-
-
-def _filter_unsat_clusters_outlines(
-    clusters_outlines: dict[str, Any] | list[Any],
-) -> tuple[dict[str, Any] | list[Any], set[str]]:
-    removed_ids: set[str] = set()
-
-    def is_unsat_status(value: Any) -> bool:
-        return isinstance(value, str) and value.strip().upper() == "UNSAT"
-
-    if isinstance(clusters_outlines, dict):
-        clusters = clusters_outlines.get("clusters")
-        if isinstance(clusters, list):
-            kept = []
-            for item in clusters:
-                if isinstance(item, dict) and is_unsat_status(item.get("status")):
-                    cid = item.get("cluster_id")
-                    if isinstance(cid, str) and cid:
-                        removed_ids.add(cid)
-                    continue
-                kept.append(item)
-            out = dict(clusters_outlines)
-            out["clusters"] = kept
-            return out, removed_ids
-
-        out: dict[str, Any] = {}
-        for cid, payload in clusters_outlines.items():
-            if isinstance(payload, dict) and is_unsat_status(payload.get("status")):
-                if isinstance(cid, str) and cid:
-                    removed_ids.add(cid)
-                continue
-            out[cid] = payload
-        return out, removed_ids
-
-    if isinstance(clusters_outlines, list):
-        kept_list: list[Any] = []
-        for item in clusters_outlines:
-            if isinstance(item, dict) and is_unsat_status(item.get("status")):
-                cid = item.get("cluster_id")
-                if isinstance(cid, str) and cid:
-                    removed_ids.add(cid)
-                continue
-            kept_list.append(item)
-        return kept_list, removed_ids
-
-    return clusters_outlines, removed_ids
-
-
-def _filter_relation_plan_clusters(
-    relation_plan: dict[str, Any] | None, removed_ids: set[str]
-) -> dict[str, Any] | None:
-    if not removed_ids or not isinstance(relation_plan, dict):
-        return relation_plan
-
-    def _keep_cluster_id(value: Any) -> bool:
-        return not (isinstance(value, str) and value in removed_ids)
-
-    out = dict(relation_plan)
-
-    def _filter_list(key: str, predicate) -> None:
-        items = out.get(key)
-        if not isinstance(items, list):
-            return
-        out[key] = [item for item in items if isinstance(item, dict) and predicate(item)]
-
-    _filter_list("cluster_affinities", lambda i: _keep_cluster_id(i.get("cluster_id")))
-    _filter_list(
-        "cluster_orientations",
-        lambda i: _keep_cluster_id(i.get("cluster_id"))
-        and _keep_cluster_id(i.get("target_cluster_id")),
-    )
-    _filter_list(
-        "object_orientations",
-        lambda i: _keep_cluster_id(i.get("cluster_id"))
-        and _keep_cluster_id(i.get("target_cluster_id"))
-        and _keep_cluster_id(i.get("target_object_cluster_id")),
-    )
-    _filter_list(
-        "cluster_relations",
-        lambda i: _keep_cluster_id(i.get("a")) and _keep_cluster_id(i.get("b")),
-    )
-    _filter_list(
-        "cluster_directional_relations",
-        lambda i: _keep_cluster_id(i.get("a")) and _keep_cluster_id(i.get("b")),
-    )
-
-    circ = out.get("circulation_plan")
-    if isinstance(circ, dict):
-        circ_out = dict(circ)
-        main_paths = circ.get("main_paths")
-        if isinstance(main_paths, list):
-            circ_out["main_paths"] = [
-                item
-                for item in main_paths
-                if isinstance(item, dict) and _keep_cluster_id(item.get("to_cluster"))
-            ]
-        keep_open = circ.get("keep_open_regions")
-        if isinstance(keep_open, list):
-            circ_out["keep_open_regions"] = [
-                item
-                for item in keep_open
-                if isinstance(item, dict) and _keep_cluster_id(item.get("near"))
-            ]
-        out["circulation_plan"] = circ_out
-
-    return out
-
-
-def _filter_existing_transforms(
-    existing_transforms: dict[str, Any] | None, removed_ids: set[str]
-) -> dict[str, Any] | None:
-    if not removed_ids or not isinstance(existing_transforms, dict):
-        return existing_transforms
-    transforms = existing_transforms.get("cluster_transforms")
-    if not isinstance(transforms, list):
-        return existing_transforms
-    kept = [
-        item
-        for item in transforms
-        if not (
-            isinstance(item, dict)
-            and isinstance(item.get("cluster_id"), str)
-            and item.get("cluster_id") in removed_ids
-        )
-    ]
-    out = dict(existing_transforms)
-    out["cluster_transforms"] = kept
-    return out
-
-
-def _build_ok_json(
-    *,
-    grid_mm: int,
-    transforms: list[dict[str, Any]],
-    selected_variants: list[dict[str, str]],
-    notes: list[str],
-) -> dict[str, Any]:
-    return {
-        "status": "OK",
-        "grid_mm": int(grid_mm),
-        "cluster_transforms": _canonicalize_cluster_transforms(transforms),
-        "selected_variants": _selected_variants_dict_to_list(
-            _canonicalize_selected_variants(selected_variants)
-        ),
-        "notes": _dedupe_str_list(notes),
-    }
-
-
-def _build_unsat_json(*, grid_mm: int, notes: list[str]) -> dict[str, Any]:
-    return {
-        "status": "UNSAT",
-        "grid_mm": int(grid_mm),
-        "cluster_transforms": [],
-        "selected_variants": [],
-        "notes": _dedupe_str_list(notes),
-    }
-
-
-def _build_need_info_json(*, grid_mm: int, notes: list[str]) -> dict[str, Any]:
-    return {
-        "status": "NEED_INFO",
-        "grid_mm": int(grid_mm),
-        "cluster_transforms": [],
-        "selected_variants": [],
-        "notes": _dedupe_str_list(notes),
-    }
-
-
-def _canonicalize_cluster_transforms(raw: Iterable[Any]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in raw or []:
-        if not isinstance(item, dict):
-            continue
-        cid = item.get("cluster_id")
-        if not isinstance(cid, str) or not cid or cid in seen:
-            continue
-        try:
-            x = int(round(float(item.get("x", 0))))
-            y = int(round(float(item.get("y", 0))))
-            rot = int(item.get("rot", 0)) % 360
-        except Exception:
-            continue
-        if rot not in {0, 90, 180, 270}:
-            continue
-        out.append({"cluster_id": cid, "x": x, "y": y, "rot": rot})
-        seen.add(cid)
-    out.sort(key=lambda item: item["cluster_id"])
-    return out
-
-
-def _state_key(
-    transforms_by_id: dict[str, dict[str, int]],
-    variants_by_id: dict[str, str] | None = None,
-) -> str:
-    payload = []
-    variants_by_id = variants_by_id or {}
-    for cid in sorted(transforms_by_id):
-        t = transforms_by_id[cid]
-        payload.append(
-            (
-                cid,
-                int(t["x"]),
-                int(t["y"]),
-                int(t["rot"]) % 360,
-                str(variants_by_id.get(cid) or _base_variant_id(cid)),
-            )
-        )
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-
-
-def _transforms_dict_to_list(
-    transforms_by_id: dict[str, dict[str, int]],
-) -> list[dict[str, Any]]:
-    out = []
-    for cid in sorted(transforms_by_id):
-        t = transforms_by_id[cid]
-        out.append(
-            {
-                "cluster_id": cid,
-                "x": int(t["x"]),
-                "y": int(t["y"]),
-                "rot": int(t["rot"]) % 360,
-            }
-        )
-    return out
-
-
-def _canonicalize_selected_variants(raw: Iterable[Any]) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if isinstance(raw, dict):
-        for cid, vid in raw.items():
-            if isinstance(cid, str) and cid and isinstance(vid, str) and vid:
-                out[cid] = vid
-        return out
-    for item in raw or []:
-        if not isinstance(item, dict):
-            continue
-        cid = item.get("cluster_id")
-        vid = item.get("variant_id")
-        if isinstance(cid, str) and cid and isinstance(vid, str) and vid:
-            out[cid] = vid
-    return out
-
-
-def _selected_variants_dict_to_list(
-    selected_variants: dict[str, str],
-) -> list[dict[str, str]]:
-    out = []
-    for cid in sorted(selected_variants):
-        vid = selected_variants[cid]
-        if isinstance(vid, str) and vid:
-            out.append({"cluster_id": cid, "variant_id": vid})
-    return out
-
-
-def _base_variant_id(cluster_id: str) -> str:
-    return f"{cluster_id}::base"
-
-
-def _materialize_clusters_for_variants(
-    *,
-    clusters_outlines: dict[str, Any] | list[Any],
-    selected_variants: dict[str, str] | None,
-    materialization_cache: dict[str, Any] | None,
-) -> dict[str, Any] | list[Any]:
-    selected_variants = {
-        cid: vid
-        for cid, vid in (selected_variants or {}).items()
-        if isinstance(cid, str) and cid and isinstance(vid, str) and vid
-    }
-    # keep explicit base variants too so downstream signatures stay deterministic
-    signature = json.dumps(
-        sorted((cid, vid) for cid, vid in selected_variants.items()),
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-    if materialization_cache is not None and signature in materialization_cache:
-        return materialization_cache[signature]
-    if not selected_variants:
-        if materialization_cache is not None:
-            materialization_cache[signature] = clusters_outlines
-        return clusters_outlines
-    try:
-        result = MaterializeVariantizedClusters(
-            clusters_outlines=clusters_outlines,
-            selected_variants=selected_variants,
-        )
-        if (
-            isinstance(result, dict)
-            and result.get("result") == "OK"
-            and result.get("clusters_outlines") is not None
-        ):
-            payload = result.get("clusters_outlines")
-            if materialization_cache is not None:
-                materialization_cache[signature] = payload
-            return payload
-    except Exception:
-        logger.exception(
-            "MaterializeVariantizedClusters failed; falling back to original clusters_outlines"
-        )
-    if materialization_cache is not None:
-        materialization_cache[signature] = clusters_outlines
-    return clusters_outlines
-
-
-def _dedupe_str_list(items: Iterable[Any]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for item in items:
-        if not isinstance(item, str):
-            continue
-        s = item.strip()
-        if not s or s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
-    return out
-
-
-def _cluster_ids(clusters_outlines: dict[str, Any] | list[Any]) -> list[str]:
-    return [cid for cid, _ in _iter_cluster_entries_for_index(clusters_outlines)]
-
-
-def _iter_cluster_entries_for_index(clusters_outlines: dict[str, Any] | list[Any]):
-    if isinstance(clusters_outlines, dict):
-        direct = []
-        for cid, value in clusters_outlines.items():
-            if (
-                isinstance(cid, str)
-                and isinstance(value, dict)
-                and _looks_like_cluster_payload(value, cid)
-            ):
-                direct.append((cid, value))
-        if direct:
-            for item in sorted(direct, key=lambda x: x[0]):
-                yield item
-            return
-        clusters = clusters_outlines.get("clusters")
-        if isinstance(clusters, list):
-            for item in clusters:
-                if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
-                    yield (str(item["cluster_id"]), item)
-            return
-    elif isinstance(clusters_outlines, list):
-        for item in clusters_outlines:
-            if isinstance(item, dict) and isinstance(item.get("cluster_id"), str):
-                yield (str(item["cluster_id"]), item)
-
-
-def _looks_like_cluster_payload(
-    value: dict[str, Any], fallback_cluster_id: str
-) -> bool:
-    cid = value.get("cluster_id")
-    if isinstance(cid, str) and cid:
-        return True
-    if (
-        value.get("cluster_footprint")
-        or value.get("local_placements")
-        or value.get("orientation_meta")
-    ):
-        return True
-    return bool(fallback_cluster_id)
-
-
-def _normalize_clusters_outlines_for_solver(
-    clusters_outlines: dict[str, Any] | list[Any],
-) -> tuple[dict[str, Any] | list[Any], dict[str, tuple[int, int]]]:
-    applied_offsets: dict[str, tuple[int, int]] = {}
-
-    if isinstance(clusters_outlines, dict):
-        direct_out: dict[str, Any] = {}
-        for cid, value in clusters_outlines.items():
-            if not isinstance(cid, str) or not isinstance(value, dict):
-                continue
-            if not _looks_like_cluster_payload(value, cid):
-                continue
-            row = deepcopy(value)
-            if not isinstance(row.get("cluster_id"), str) or not row.get("cluster_id"):
-                row["cluster_id"] = cid
-            row, applied = _canonicalize_cluster_payload_local_origin(row)
-            direct_out[cid] = row
-            applied_offsets[cid] = applied
-        if direct_out:
-            return direct_out, applied_offsets
-
-        clusters = clusters_outlines.get("clusters")
-        if isinstance(clusters, list):
-            out_list: list[dict[str, Any]] = []
-            for item in clusters:
-                if not isinstance(item, dict):
-                    continue
-                cid = item.get("cluster_id")
-                if not isinstance(cid, str) or not cid:
-                    continue
-                row, applied = _canonicalize_cluster_payload_local_origin(
-                    deepcopy(item)
-                )
-                out_list.append(row)
-                applied_offsets[cid] = applied
-            if out_list:
-                return out_list, applied_offsets
-
-    if isinstance(clusters_outlines, list):
-        out_list = []
-        for item in clusters_outlines:
-            if not isinstance(item, dict):
-                continue
-            cid = item.get("cluster_id")
-            if not isinstance(cid, str) or not cid:
-                continue
-            row, applied = _canonicalize_cluster_payload_local_origin(deepcopy(item))
-            out_list.append(row)
-            applied_offsets[cid] = applied
-        return out_list, applied_offsets
-
-    return clusters_outlines, applied_offsets
-
-
-def _canonicalize_cluster_payload_local_origin(
-    cluster_payload: dict[str, Any],
-) -> tuple[dict[str, Any], tuple[int, int]]:
-    row = deepcopy(cluster_payload)
-    min_x, min_y = _infer_cluster_local_origin_offset(row)
-    applied = (int(min_x), int(min_y))
-    if min_x != 0 or min_y != 0:
-        _shift_cluster_payload_local_geometry(row, dx=-min_x, dy=-min_y)
-    prior_offset = _read_cluster_canonical_local_origin_offset(row)
-    total_offset = (prior_offset[0] + min_x, prior_offset[1] + min_y)
-    row["canonical_local_origin_offset"] = {
-        "dx": int(total_offset[0]),
-        "dy": int(total_offset[1]),
-    }
-    row["canonical_local_origin_normalized"] = True
-    local_frame = row.get("local_frame")
-    if isinstance(local_frame, dict):
-        local_frame["origin_note"] = (
-            "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
-        )
-    return row, applied
-
-
-def _infer_cluster_local_origin_offset(
-    cluster_payload: dict[str, Any],
-) -> tuple[int, int]:
-    xs: list[float] = []
-    ys: list[float] = []
-    fp = cluster_payload.get("cluster_footprint")
-    if isinstance(fp, dict):
-        rects = fp.get("rects")
-        if isinstance(rects, list):
-            for r in rects:
-                if not isinstance(r, dict):
-                    continue
-                try:
-                    x = float(r.get("x", 0))
-                    y = float(r.get("y", 0))
-                    w = float(r.get("w", 0))
-                    h = float(r.get("h", 0))
-                except Exception:
-                    continue
-                xs.extend([x, x + max(w, 0.0)])
-                ys.extend([y, y + max(h, 0.0)])
-        outlines = fp.get("outline_polygons_ccw") or cluster_payload.get(
-            "outline_polygons_ccw"
-        )
-        if isinstance(outlines, list):
-            for poly in outlines:
-                if not isinstance(poly, list):
-                    continue
-                for p in poly:
-                    if not isinstance(p, dict):
-                        continue
-                    try:
-                        xs.append(float(p.get("x", 0)))
-                        ys.append(float(p.get("y", 0)))
-                    except Exception:
-                        continue
-        bbox = fp.get("local_bbox")
-        if isinstance(bbox, dict):
-            try:
-                xs.append(float(bbox.get("min_x", 0)))
-                ys.append(float(bbox.get("min_y", 0)))
-            except Exception:
-                pass
-    placements = cluster_payload.get("local_placements")
-    if isinstance(placements, list):
-        for p in placements:
-            if not isinstance(p, dict):
-                continue
-            try:
-                xs.append(float(p.get("x", 0)))
-                ys.append(float(p.get("y", 0)))
-            except Exception:
-                continue
-    if not xs or not ys:
-        return (0, 0)
-    return (int(round(min(xs))), int(round(min(ys))))
-
-
-def _shift_cluster_payload_local_geometry(
-    cluster_payload: dict[str, Any], *, dx: int, dy: int
-) -> None:
-    placements = cluster_payload.get("local_placements")
-    if isinstance(placements, list):
-        for p in placements:
-            if not isinstance(p, dict):
-                continue
-            if isinstance(p.get("x"), (int, float)):
-                p["x"] = int(round(float(p.get("x", 0)) + dx))
-            if isinstance(p.get("y"), (int, float)):
-                p["y"] = int(round(float(p.get("y", 0)) + dy))
-    fp = cluster_payload.get("cluster_footprint")
-    if not isinstance(fp, dict):
-        return
-    rects = fp.get("rects")
-    if isinstance(rects, list):
-        for r in rects:
-            if not isinstance(r, dict):
-                continue
-            if isinstance(r.get("x"), (int, float)):
-                r["x"] = int(round(float(r.get("x", 0)) + dx))
-            if isinstance(r.get("y"), (int, float)):
-                r["y"] = int(round(float(r.get("y", 0)) + dy))
-    bbox = fp.get("local_bbox")
-    if isinstance(bbox, dict):
-        for key, delta in (("min_x", dx), ("max_x", dx), ("min_y", dy), ("max_y", dy)):
-            if isinstance(bbox.get(key), (int, float)):
-                bbox[key] = int(round(float(bbox.get(key, 0)) + delta))
-    outlines = fp.get("outline_polygons_ccw")
-    if isinstance(outlines, list):
-        for poly in outlines:
-            if not isinstance(poly, list):
-                continue
-            for p in poly:
-                if not isinstance(p, dict):
-                    continue
-                if isinstance(p.get("x"), (int, float)):
-                    p["x"] = int(round(float(p.get("x", 0)) + dx))
-                if isinstance(p.get("y"), (int, float)):
-                    p["y"] = int(round(float(p.get("y", 0)) + dy))
-
-
-def _read_cluster_canonical_local_origin_offset(
-    cluster_payload: dict[str, Any],
-) -> tuple[int, int]:
-    raw = cluster_payload.get("canonical_local_origin_offset")
-    if isinstance(raw, dict):
-        try:
-            return (int(raw.get("dx", 0) or 0), int(raw.get("dy", 0) or 0))
-        except Exception:
-            return (0, 0)
-    return (0, 0)
-
-
-def _normalize_existing_transforms_for_canonical_origins(
-    existing_transforms_json: dict[str, Any] | None,
-    applied_offsets: dict[str, tuple[int, int]],
-) -> dict[str, Any] | None:
-    if not isinstance(existing_transforms_json, dict):
-        return existing_transforms_json
-    transforms = existing_transforms_json.get("cluster_transforms")
-    if not isinstance(transforms, list):
-        return existing_transforms_json
-    out = dict(existing_transforms_json)
-    out["cluster_transforms"] = _remap_cluster_transforms_by_local_origin(
-        transforms,
-        offsets=applied_offsets,
-        to_canonical=True,
-    )
-    return out
-
-
-def _denormalize_payload_from_canonical_origins(
-    payload: dict[str, Any],
-    clusters_outlines: dict[str, Any] | list[Any],
-) -> dict[str, Any]:
-    if not isinstance(payload, dict):
+        if not isinstance(payload, dict):
+            raise ValueError("MacroClusterPlacer response must be a JSON object")
         return payload
-    out = dict(payload)
-    transforms = out.get("cluster_transforms")
-    if not isinstance(transforms, list):
-        return out
-    offsets = _collect_cluster_local_origin_offsets(clusters_outlines)
-    out["cluster_transforms"] = _remap_cluster_transforms_by_local_origin(
-        transforms,
-        offsets=offsets,
-        to_canonical=False,
+
+
+# -----------------------------------------------------------------------------
+# Testing adapter
+# -----------------------------------------------------------------------------
+def make_file_response_adapter(path: str | Path) -> LLMCallable:
+    def _call(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:
+        _ = system_prompt
+        _ = user_payload_json
+        return load_json(path)
+
+    return _call
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run Phase-2 Placer v3 with a prebuilt payload and a file-based mock LLM response."
     )
-    return out
+    parser.add_argument("--payload", required=True, help="Path to phase-2 payload JSON")
+    parser.add_argument(
+        "--mock-response", required=True, help="Path to mock LLM repair JSON"
+    )
+    parser.add_argument("--out", required=True, help="Path to write merged output JSON")
+    args = parser.parse_args()
 
-
-def _collect_cluster_local_origin_offsets(
-    clusters_outlines: dict[str, Any] | list[Any],
-) -> dict[str, tuple[int, int]]:
-    offsets: dict[str, tuple[int, int]] = {}
-    for cid, cinfo in _iter_cluster_entries_for_index(clusters_outlines):
-        offsets[cid] = _read_cluster_canonical_local_origin_offset(cinfo)
-    return offsets
-
-
-def _remap_cluster_transforms_by_local_origin(
-    transforms: list[dict[str, Any]],
-    *,
-    offsets: dict[str, tuple[int, int]],
-    to_canonical: bool,
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for t in _canonicalize_cluster_transforms(transforms):
-        cid = t["cluster_id"]
-        off_x, off_y = offsets.get(cid, (0, 0))
-        rdx, rdy = _rotate_local_offset_ccw_90s(off_x, off_y, t["rot"])
-        sign = 1 if to_canonical else -1
-        out.append(
-            {
-                "cluster_id": cid,
-                "x": int(t["x"] + sign * rdx),
-                "y": int(t["y"] + sign * rdy),
-                "rot": int(t["rot"]) % 360,
-            }
-        )
-    out.sort(key=lambda item: item["cluster_id"])
-    return out
-
-
-def _rotate_local_offset_ccw_90s(x: int, y: int, rot: int) -> tuple[int, int]:
-    r = int(rot or 0) % 360
-    if r == 0:
-        return (int(x), int(y))
-    if r == 90:
-        return (-int(y), int(x))
-    if r == 180:
-        return (-int(x), -int(y))
-    if r == 270:
-        return (int(y), -int(x))
-    return (int(x), int(y))
-
-
-# if __name__ == "__main__":
-#     import argparse
-
-#     parser = argparse.ArgumentParser(description="Deterministic MacroClusterPlacer")
-#     parser.add_argument("room_json")
-#     parser.add_argument("clusters_json")
-#     parser.add_argument("relation_json")
-#     parser.add_argument("--existing", default=None)
-#     parser.add_argument("--grid", type=int, default=50)
-#     args = parser.parse_args()
-
-#     room = json.loads(Path(args.room_json).read_text())
-#     clusters = json.loads(Path(args.clusters_json).read_text())
-#     relation = json.loads(Path(args.relation_json).read_text())
-#     existing = json.loads(Path(args.existing).read_text()) if args.existing else None
-
-#     placer = MacroClusterPlacer()
-#     raw = placer.generate_raw(
-#         room_model_json=room,
-#         clusters_outlines_json=clusters,
-#         relation_plan_json=relation,
-#         existing_transforms_json=existing,
-#         grid_mm=args.grid,
-#     )
-#     print(raw)
+    payload = load_json(args.payload)
+    adapter = make_file_response_adapter(args.mock_response)
+    out = run_phase2_placer(full_payload=payload, llm_call=adapter)
+    dump_json(args.out, out)

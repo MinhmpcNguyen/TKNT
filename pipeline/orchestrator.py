@@ -8,18 +8,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from agent.room_interpreter import RoomInterpreter
-from agent.cluster_forge import ClusterForge
-from agent.tier_count_director import TierCountDirector
 from agent.cluster_composer import ClusterComposer
+from agent.cluster_forge import ClusterForge
+from agent.cluster_placer import MacroClusterPlacer
 from agent.cluster_relation_planner import ClusterRelationPlanner
+from agent.room_interpreter import RoomInterpreter
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist
+from agent.tier_count_director import TierCountDirector
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
-from layout.tools import build_absolute_layout
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class CasePaths:
@@ -65,6 +66,10 @@ class CasePaths:
         return self.root / "06_cluster_placer.json"
 
     @property
+    def cluster_solver(self) -> Path:
+        return self.root / "06a_cluster_solver.json"
+
+    @property
     def absolute_layout(self) -> Path:
         return self.root / "07_absolute_layout.json"
 
@@ -96,11 +101,14 @@ def run_case(
     paths = CasePaths(case_id=case_id, root=case_root)
     paths.clusters_dir.mkdir(parents=True, exist_ok=True)
 
-    _write_json(paths.meta, {
-        "case_id": case_id,
-        "user_id": user_id,
-        "created_at_utc": _now_utc_iso(),
-    })
+    _write_json(
+        paths.meta,
+        {
+            "case_id": case_id,
+            "user_id": user_id,
+            "created_at_utc": _now_utc_iso(),
+        },
+    )
     _update_status(paths, "room_interpreter")
 
     # 1) RoomInterpreter
@@ -186,7 +194,7 @@ def run_case(
 
     _update_status(paths, "cluster_placer")
 
-    # 7) Cluster placement (solver)
+    # 7) Cluster placement (solver + phase-2 placer)
     filtered_cluster_outlines = _filter_unsat_cluster_outlines(cluster_outlines)
     solver = MacroClusterSolver()
     solver_output = solver.generate(
@@ -197,47 +205,54 @@ def run_case(
         grid_mm=50,
     )
     solver_output = _strip_raw_text(solver_output)
-    _write_json(paths.cluster_placer, solver_output)
+    _write_json(paths.cluster_solver, solver_output)
 
-    solver_status = solver_output.get("status") if isinstance(solver_output, dict) else None
-    if solver_status != "OK":
-        absolute_layout = build_absolute_layout(
-            room_model=room_output,
-            clusters_outlines=filtered_cluster_outlines,
-            cluster_transforms=solver_output.get("cluster_transforms", []),
-        )
-        absolute_layout = _strip_raw_text(absolute_layout)
-        _write_json(paths.absolute_layout, absolute_layout)
+    placer = MacroClusterPlacer()
+    placer_output = placer.generate(
+        room_interpreter_json=room_output,
+        cluster_merged_json=merged_output,
+        cluster_outlines_json=cluster_outlines,
+        relation_plan_json=relation_plan,
+        placer_output_json=solver_output,
+        cluster_constraints_json=None,
+    )
+    placer_output = _strip_raw_text(placer_output)
+    _write_json(paths.cluster_placer, placer_output)
 
-        _update_status(
-            paths,
-            "error",
-            error=(
-                "cluster_solver returned "
-                f"{solver_status!s}; cannot build a valid absolute layout or run stylist."
-            ),
-        )
-        return {
-            "case_id": case_id,
-            "case_dir": str(case_root),
-            "final_output": None,
-            "error": solver_status,
-        }
+    solver_status = (
+        solver_output.get("status") if isinstance(solver_output, dict) else None
+    )
+    # if solver_status != "OK":
+    #     _update_status(
+    #         paths,
+    #         "error",
+    #         error=(
+    #             "cluster_solver returned "
+    #             f"{solver_status!s}; cannot build a valid absolute layout or run stylist."
+    #         ),
+    #     )
+    #     return {
+    #         "case_id": case_id,
+    #         "case_dir": str(case_root),
+    #         "final_output": None,
+    #         "error": solver_status,
+    #     }
 
     _update_status(paths, "absolute_layout")
 
-    # 8) Absolute layout
-    absolute_layout = build_absolute_layout(
-        room_model=room_output,
-        clusters_outlines=filtered_cluster_outlines,
-        cluster_transforms=solver_output.get("cluster_transforms", []),
-    )
-    absolute_layout = _strip_raw_text(absolute_layout)
+    # 8) Absolute layout (from phase-2 placer)
+    absolute_layout = placer_output
     _write_json(paths.absolute_layout, absolute_layout)
 
-    absolute_status = absolute_layout.get("status") if isinstance(absolute_layout, dict) else None
+    absolute_status = (
+        absolute_layout.get("status") if isinstance(absolute_layout, dict) else None
+    )
     if absolute_status != "OK":
-        missing = absolute_layout.get("missing", []) if isinstance(absolute_layout, dict) else []
+        missing = (
+            absolute_layout.get("missing", [])
+            if isinstance(absolute_layout, dict)
+            else []
+        )
         missing_preview = missing[:8] if isinstance(missing, list) else missing
         _update_status(
             paths,
@@ -266,9 +281,15 @@ def run_case(
     stylist_output = _strip_raw_text(stylist_output)
     _write_json(paths.stylist, stylist_output)
 
-    stylist_status = stylist_output.get("status") if isinstance(stylist_output, dict) else None
+    stylist_status = (
+        stylist_output.get("status") if isinstance(stylist_output, dict) else None
+    )
     if stylist_status != "OK":
-        missing = stylist_output.get("missing", []) if isinstance(stylist_output, dict) else []
+        missing = (
+            stylist_output.get("missing", [])
+            if isinstance(stylist_output, dict)
+            else []
+        )
         missing_preview = missing[:8] if isinstance(missing, list) else missing
         _update_status(
             paths,
@@ -308,8 +329,12 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _extract_room_type(input_payload: dict[str, Any], room_output: dict[str, Any]) -> str:
-    user_input = input_payload.get("user_input") if isinstance(input_payload, dict) else None
+def _extract_room_type(
+    input_payload: dict[str, Any], room_output: dict[str, Any]
+) -> str:
+    user_input = (
+        input_payload.get("user_input") if isinstance(input_payload, dict) else None
+    )
     if isinstance(user_input, dict):
         rt = user_input.get("room_type")
         if isinstance(rt, str) and rt:
@@ -347,10 +372,7 @@ def _filter_unsat_cluster_outlines(
             kept = [
                 item
                 for item in clusters
-                if not (
-                    isinstance(item, dict)
-                    and is_unsat_status(item.get("status"))
-                )
+                if not (isinstance(item, dict) and is_unsat_status(item.get("status")))
             ]
             for item in clusters:
                 if isinstance(item, dict) and is_unsat_status(item.get("status")):

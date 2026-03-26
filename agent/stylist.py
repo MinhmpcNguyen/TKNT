@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,12 +28,13 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> str:
+        normalized_layout = _normalize_layout_json(layout_json)
         merged_user_context = _inject_tenant(user_context_json, tenant_id)
-        surface_requirements = _compute_surface_requirements(layout_json)
+        surface_requirements = _compute_surface_requirements(normalized_layout)
 
         user_prompt = _build_prompt(
             template=self.prompt_template,
-            layout_json=layout_json,
+            layout_json=normalized_layout,
             user_context_json=merged_user_context,
             surface_requirements_json=surface_requirements,
         )
@@ -44,7 +46,7 @@ class Stylist:
 
         return _run_with_tools(
             messages,
-            layout_json=layout_json,
+            layout_json=normalized_layout,
             user_context_json=merged_user_context,
         )
 
@@ -55,13 +57,14 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any]:
+        normalized_layout = _normalize_layout_json(layout_json)
         raw = self.generate_raw(
-            layout_json=layout_json,
+            layout_json=normalized_layout,
             user_context_json=user_context_json,
             tenant_id=tenant_id,
         )
         payload = _parse_json(raw)
-        payload = _fix_place_on_targets(payload, layout_json=layout_json)
+        payload = _fix_place_on_targets(payload, layout_json=normalized_layout)
         return StylistOutput.model_validate(payload).model_dump()
 
 
@@ -98,6 +101,44 @@ def _json_block(obj: Any) -> str:
     if obj is None:
         return "null"
     return json.dumps(obj, ensure_ascii=True, indent=2)
+
+
+def _normalize_layout_json(layout_json: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(layout_json, dict):
+        return {}
+
+    out = dict(layout_json)
+    room = out.get("room")
+    if not isinstance(room, dict):
+        room = {}
+    out["room"] = room
+
+    if not isinstance(out.get("openings"), dict):
+        openings = room.get("openings")
+        if isinstance(openings, dict):
+            out["openings"] = deepcopy(openings)
+
+    objects = out.get("objects")
+    if not isinstance(objects, list):
+        return out
+
+    normalized_objects: list[dict[str, Any]] = []
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        row = dict(obj)
+        obj_type = row.get("object_type")
+        if not isinstance(obj_type, str) or not obj_type:
+            obj_id = row.get("object_id")
+            if isinstance(obj_id, str) and obj_id:
+                row["object_type"] = obj_id
+        if not isinstance(row.get("instance_id"), str) or not row.get("instance_id"):
+            obj_id = row.get("object_id")
+            if isinstance(obj_id, str) and obj_id:
+                row["instance_id"] = obj_id
+        normalized_objects.append(row)
+    out["objects"] = normalized_objects
+    return out
 
 
 def _run_with_tools(
@@ -266,15 +307,26 @@ def _run_with_tools(
             continue
 
         status = draft.get("status")
+        draft_eval = draft
+        if status == "OK" and inventory_items:
+            draft_eval = _snap_inventory_sizes(dict(draft), inventory_items)
+
         if status in {"OK", "NEED_INFO", "UNSAT"}:
-            candidate = dict(draft)
+            candidate = dict(draft_eval)
             if status == "OK":
-                missing_required = _validate_required_types(draft, required_types)
+                missing_required = _validate_required_types(draft_eval, required_types)
                 size_issues = (
-                    _validate_inventory_sizes(draft, inventory_items)
+                    _validate_inventory_sizes(draft_eval, inventory_items)
                     if inventory_items
                     else []
                 )
+                if size_issues and inventory_items:
+                    forced = _force_snap_inventory_sizes(dict(draft_eval), inventory_items)
+                    forced_issues = _validate_inventory_sizes(forced, inventory_items)
+                    if not forced_issues:
+                        draft_eval = forced
+                        candidate = dict(draft_eval)
+                        size_issues = []
                 if missing_required or size_issues:
                     candidate["status"] = "NEED_INFO"
                     notes = candidate.get("notes")
@@ -326,7 +378,7 @@ def _run_with_tools(
             continue
 
         if status == "OK":
-            missing_required = _validate_required_types(draft, required_types)
+            missing_required = _validate_required_types(draft_eval, required_types)
             if missing_required:
                 logger.warning(
                     "Stylist final rejected: missing required types = %s",
@@ -345,8 +397,13 @@ def _run_with_tools(
                 continue
 
             if inventory_items:
-                size_issues = _validate_inventory_sizes(draft, inventory_items)
+                size_issues = _validate_inventory_sizes(draft_eval, inventory_items)
                 if size_issues:
+                    forced = _force_snap_inventory_sizes(dict(draft_eval), inventory_items)
+                    forced_issues = _validate_inventory_sizes(forced, inventory_items)
+                    if not forced_issues:
+                        draft_eval = forced
+                        return json.dumps(draft_eval, ensure_ascii=True)
                     logger.warning(
                         "Stylist final rejected: inventory size issues = %s",
                         size_issues,
@@ -363,9 +420,23 @@ def _run_with_tools(
                     )
                     continue
 
+        if status == "OK":
+            return json.dumps(draft_eval, ensure_ascii=True)
         return content
 
     if best_payload is not None:
+        if inventory_items and isinstance(best_payload, dict):
+            forced = _force_snap_inventory_sizes(dict(best_payload), inventory_items)
+            forced_issues = _validate_inventory_sizes(forced, inventory_items)
+            if not forced_issues:
+                best_payload = forced
+                if isinstance(best_payload.get("missing"), list):
+                    best_payload["missing"] = [
+                        x
+                        for x in best_payload["missing"]
+                        if x != "inventory_size_mismatch"
+                    ]
+                best_payload["status"] = "OK"
         logger.warning(
             "Stylist hit max_steps; returning best partial payload with status=%s",
             best_payload.get("status"),
@@ -702,6 +773,298 @@ def _validate_required_types(
             present.add(obj_type)
 
     return [t for t in required_types if t not in present]
+
+
+def _snap_inventory_sizes(
+    draft: dict[str, Any],
+    inventory_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not isinstance(draft, dict):
+        return draft
+
+    objects = draft.get("objects")
+    if not isinstance(objects, list):
+        return draft
+
+    def _to_int_mm(value: Any) -> int | None:
+        if isinstance(value, (int, float)):
+            return int(round(float(value)))
+        return None
+
+    dims_by_type: dict[str, list[tuple[int, int, int]]] = {}
+    for item in inventory_items:
+        obj_type = item.get("type")
+        if not isinstance(obj_type, str) or not obj_type:
+            continue
+        dims = item.get("dimensions") or {}
+        w = None
+        h = None
+        hh = None
+        if isinstance(dims, dict):
+            w = _to_int_mm(dims.get("length_mm"))
+            h = _to_int_mm(dims.get("width_mm"))
+            hh = _to_int_mm(dims.get("height_mm"))
+        if w is None or h is None:
+            w = _to_int_mm(item.get("length_mm"))
+            h = _to_int_mm(item.get("width_mm"))
+        if hh is None:
+            hh = _to_int_mm(item.get("height_mm"))
+        if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+            dims_by_type.setdefault(obj_type.lower(), []).append((w, h, hh or 0))
+
+    if not dims_by_type:
+        return draft
+
+    def _bbox_from_poly(poly: list[dict[str, Any]]) -> tuple[int, int, int, int] | None:
+        if not poly:
+            return None
+        xs, ys = [], []
+        for pt in poly:
+            try:
+                xs.append(int(pt.get("x")))
+                ys.append(int(pt.get("y")))
+            except Exception:
+                return None
+        if not xs or not ys:
+            return None
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _rect_poly(min_x: int, min_y: int, max_x: int, max_y: int) -> list[dict[str, int]]:
+        return [
+            {"x": min_x, "y": min_y},
+            {"x": max_x, "y": min_y},
+            {"x": max_x, "y": max_y},
+            {"x": min_x, "y": max_y},
+        ]
+
+    out_objects: list[dict[str, Any]] = []
+    adjusted = 0
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        row = dict(obj)
+        if row.get("source") != "inventory":
+            out_objects.append(row)
+            continue
+
+        obj_type = row.get("object_type")
+        if not isinstance(obj_type, str):
+            out_objects.append(row)
+            continue
+        dims_list = dims_by_type.get(obj_type.lower()) or []
+        if not dims_list:
+            out_objects.append(row)
+            continue
+
+        bbox = row.get("bbox")
+        if not isinstance(bbox, dict):
+            poly = row.get("polygon_ccw") or []
+            bbox_vals = _bbox_from_poly(poly)
+            if bbox_vals is None:
+                out_objects.append(row)
+                continue
+            min_x, min_y, max_x, max_y = bbox_vals
+        else:
+            try:
+                min_x = int(bbox.get("min_x"))
+                min_y = int(bbox.get("min_y"))
+                max_x = int(bbox.get("max_x"))
+                max_y = int(bbox.get("max_y"))
+            except Exception:
+                out_objects.append(row)
+                continue
+
+        cur_w = max_x - min_x
+        cur_h = max_y - min_y
+        if cur_w <= 0 or cur_h <= 0:
+            out_objects.append(row)
+            continue
+
+        place_on = row.get("place_on") if isinstance(row.get("place_on"), dict) else {}
+        method = str(place_on.get("method") or "floor")
+
+        def _pairs_for_dims(L: int, W: int, H: int, *, method: str) -> list[tuple[int, int]]:
+            if method in {"floor", "on_top"}:
+                return [(L, W)]
+            pairs: list[tuple[int, int]] = []
+            if W > 0 and H > 0:
+                pairs.append((W, H))
+            if L > 0 and W > 0:
+                pairs.append((L, W))
+            if L > 0 and H > 0:
+                pairs.append((L, H))
+            return pairs
+
+        best = None
+        best_score = None
+        for w, h, hh in dims_list:
+            for cand_w, cand_h in _pairs_for_dims(w, h, hh, method=method):
+                score = abs(cur_w - cand_w) + abs(cur_h - cand_h)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = (cand_w, cand_h)
+
+        if best is None:
+            out_objects.append(row)
+            continue
+
+        new_w, new_h = best
+        cx = (min_x + max_x) / 2.0
+        cy = (min_y + max_y) / 2.0
+        nmin_x = int(round(cx - new_w / 2.0))
+        nmax_x = int(round(cx + new_w / 2.0))
+        nmin_y = int(round(cy - new_h / 2.0))
+        nmax_y = int(round(cy + new_h / 2.0))
+
+        row["bbox"] = {
+            "min_x": nmin_x,
+            "min_y": nmin_y,
+            "max_x": nmax_x,
+            "max_y": nmax_y,
+        }
+        row["polygon_ccw"] = _rect_poly(nmin_x, nmin_y, nmax_x, nmax_y)
+        if cur_w != new_w or cur_h != new_h:
+            adjusted += 1
+        out_objects.append(row)
+
+    draft["objects"] = out_objects
+    if adjusted:
+        logger.info("Stylist snapped inventory sizes for %s object(s).", adjusted)
+    return draft
+
+
+def _force_snap_inventory_sizes(
+    draft: dict[str, Any],
+    inventory_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    draft = _snap_inventory_sizes(draft, inventory_items)
+
+    if not isinstance(draft, dict):
+        return draft
+
+    objects = draft.get("objects")
+    if not isinstance(objects, list):
+        return draft
+
+    dims_by_type: dict[str, list[tuple[int, int, int]]] = {}
+    for item in inventory_items:
+        obj_type = item.get("type")
+        dims = item.get("dimensions") or {}
+        if not isinstance(obj_type, str) or not isinstance(dims, dict):
+            continue
+        L = int(dims.get("length_mm") or 0)
+        W = int(dims.get("width_mm") or 0)
+        H = int(dims.get("height_mm") or 0)
+        if L <= 0 or W <= 0:
+            continue
+        dims_by_type.setdefault(obj_type, []).append((L, W, H))
+
+    if not dims_by_type:
+        return draft
+
+    def pairs_for_dims(L: int, W: int, H: int, *, method: str) -> list[tuple[int, int]]:
+        if method in {"floor", "on_top"}:
+            return [(L, W)]
+        pairs: list[tuple[int, int]] = []
+        if W > 0 and H > 0:
+            pairs.append((W, H))
+        if L > 0 and W > 0:
+            pairs.append((L, W))
+        if L > 0 and H > 0:
+            pairs.append((L, H))
+        return pairs
+
+    def _bbox_from_poly(poly: list[dict[str, Any]]) -> tuple[int, int, int, int] | None:
+        if not poly:
+            return None
+        xs, ys = [], []
+        for pt in poly:
+            try:
+                xs.append(int(pt.get("x")))
+                ys.append(int(pt.get("y")))
+            except Exception:
+                return None
+        if not xs or not ys:
+            return None
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _rect_poly(min_x: int, min_y: int, max_x: int, max_y: int) -> list[dict[str, int]]:
+        return [
+            {"x": min_x, "y": min_y},
+            {"x": max_x, "y": min_y},
+            {"x": max_x, "y": max_y},
+            {"x": min_x, "y": max_y},
+        ]
+
+    out_objects: list[dict[str, Any]] = []
+    forced = 0
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        row = dict(obj)
+        if row.get("source") != "inventory":
+            out_objects.append(row)
+            continue
+
+        obj_type = row.get("object_type")
+        if not isinstance(obj_type, str) or obj_type not in dims_by_type:
+            out_objects.append(row)
+            continue
+
+        place_on = row.get("place_on") if isinstance(row.get("place_on"), dict) else {}
+        method = str(place_on.get("method") or "floor")
+
+        dims_list = dims_by_type[obj_type]
+        pair = None
+        for L, W, H in dims_list:
+            pairs = pairs_for_dims(L, W, H, method=method)
+            if pairs:
+                pair = pairs[0]
+                break
+        if pair is None:
+            out_objects.append(row)
+            continue
+
+        bbox = row.get("bbox")
+        if not isinstance(bbox, dict):
+            poly = row.get("polygon_ccw") or []
+            bbox_vals = _bbox_from_poly(poly)
+            if bbox_vals is None:
+                out_objects.append(row)
+                continue
+            min_x, min_y, max_x, max_y = bbox_vals
+        else:
+            try:
+                min_x = int(bbox.get("min_x"))
+                min_y = int(bbox.get("min_y"))
+                max_x = int(bbox.get("max_x"))
+                max_y = int(bbox.get("max_y"))
+            except Exception:
+                out_objects.append(row)
+                continue
+
+        cx = (min_x + max_x) / 2.0
+        cy = (min_y + max_y) / 2.0
+        new_w, new_h = pair
+        nmin_x = int(round(cx - new_w / 2.0))
+        nmax_x = int(round(cx + new_w / 2.0))
+        nmin_y = int(round(cy - new_h / 2.0))
+        nmax_y = int(round(cy + new_h / 2.0))
+
+        row["bbox"] = {
+            "min_x": nmin_x,
+            "min_y": nmin_y,
+            "max_x": nmax_x,
+            "max_y": nmax_y,
+        }
+        row["polygon_ccw"] = _rect_poly(nmin_x, nmin_y, nmax_x, nmax_y)
+        forced += 1
+        out_objects.append(row)
+
+    if forced:
+        logger.info("Stylist forced inventory sizes for %s object(s).", forced)
+    draft["objects"] = out_objects
+    return draft
 
 
 def _validate_inventory_sizes(

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 AllowedRotation = Literal[0, 90, 180, 270]
-PlacerStatus = Literal["OK", "UNSAT", "NEED_INFO"]
+PlacerStatus = Literal["REPAIRED", "NO_IMPROVEMENT", "NEED_INFO"]
+ObjectRepairOp = Literal[
+    "rotate_object",
+    "mirror_object",
+    "nudge_object",
+    "swap_objects",
+    "set_anchor",
+    "set_front_override",
+]
 
 
 def _strip_required_str(value: str, field_name: str) -> str:
@@ -46,23 +54,33 @@ class ClusterVariantSelection(BaseModel):
         return _strip_required_str(value, "variant_id")
 
 
+class ObjectRepair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cluster_id: str
+    object_id: str
+    op: ObjectRepairOp
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("cluster_id")
+    @classmethod
+    def _cluster_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "cluster_id")
+
+    @field_validator("object_id")
+    @classmethod
+    def _object_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "object_id")
+
+
 class MacroClusterPlacerOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: PlacerStatus
-    grid_mm: int | None = None
     cluster_transforms: list[ClusterTransform] = Field(default_factory=list)
     selected_variants: list[ClusterVariantSelection] = Field(default_factory=list)
+    object_repairs: list[ObjectRepair] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
-
-    @field_validator("grid_mm")
-    @classmethod
-    def _grid_mm_positive_if_present(cls, value: int | None) -> int | None:
-        if value is None:
-            return value
-        if value <= 0:
-            raise ValueError("grid_mm must be > 0")
-        return value
 
     @field_validator("notes")
     @classmethod
@@ -93,23 +111,19 @@ class MacroClusterPlacerOutput(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _require_fields_for_ok(self) -> "MacroClusterPlacerOutput":
-        if self.status == "OK":
-            if self.grid_mm is None:
-                raise ValueError("grid_mm is required when status=OK")
-            if self.grid_mm <= 0:
-                raise ValueError("grid_mm must be > 0 when status=OK")
+    def _require_full_layout(self) -> "MacroClusterPlacerOutput":
+        if self.status in {"REPAIRED", "NO_IMPROVEMENT", "NEED_INFO"}:
             if not self.cluster_transforms:
-                raise ValueError("cluster_transforms required when status=OK")
+                raise ValueError("cluster_transforms required for all statuses")
             if not self.selected_variants:
-                raise ValueError("selected_variants required when status=OK")
+                raise ValueError("selected_variants required for all statuses")
 
             transform_ids = {item.cluster_id for item in self.cluster_transforms}
             variant_ids = {item.cluster_id for item in self.selected_variants}
 
             if transform_ids != variant_ids:
                 raise ValueError(
-                    "selected_variants cluster_id set must match cluster_transforms cluster_id set when status=OK"
+                    "selected_variants cluster_id set must match cluster_transforms cluster_id set"
                 )
 
         return self
