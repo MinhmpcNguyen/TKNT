@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_schema.stylist_schema import StylistOutput
-from clients.openai_client import OpenAIClient
+from clients.llm_client import get_llm_client
 from prompt.stylist import STYLIST_PROMPT
 from prompt.system import SYSTEM_PROMPT
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
@@ -148,7 +148,7 @@ def _run_with_tools(
     user_context_json: dict[str, Any] | None,
     max_steps: int = 10,
 ) -> str:
-    client = OpenAIClient()
+    client = get_llm_client()
 
     surface_requirements = _compute_surface_requirements(layout_json)
     required_types = surface_requirements.get("required_types") or []
@@ -176,7 +176,7 @@ def _run_with_tools(
         try:
             response = client.chat_completion(
                 messages,
-                model_key="gpt_4o",
+                model_key="primary",
                 temperature=0.0,
                 tools=TOOL_SCHEMAS,
             )

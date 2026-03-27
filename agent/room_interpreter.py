@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 import math
+from typing import Literal
 
 from agent_schema.roomI_schema import RoomInterpreterOutput
-from clients.openai_client import ChatMessage, OpenAIClient
+from clients.base_client import ChatMessage
+from clients.llm_client import get_llm_client
 from prompt.room_interpreter import ROOM_INTERPRETER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -32,9 +34,9 @@ class RoomInterpreter:
         max_tokens: int | None = None,
     ) -> str:
         messages = self.build_messages(input_payload)
-        response = OpenAIClient().chat_completion(
+        response = get_llm_client().chat_completion(
             messages,
-            model_key="gpt_4o",
+            model_key="primary",
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -55,6 +57,7 @@ class RoomInterpreter:
         payload = _parse_json(raw)
         payload = _ensure_room_interpreter_payload(payload, input_payload)
         payload = _apply_default_openings(payload)
+        payload = _normalize_room_interpreter_numbers(payload)
         return RoomInterpreterOutput.model_validate(payload)
 
 
@@ -126,8 +129,16 @@ def _ensure_room_interpreter_payload(
         room_polygon = _resolve_room_polygon(input_payload) or []
     room_polygon = _ensure_ccw(room_polygon)
 
-    room_id = room.get("room_id") if isinstance(room.get("room_id"), str) else _resolve_room_id(input_payload)
-    name = room.get("name") if isinstance(room.get("name"), str) else _resolve_room_name(input_payload)
+    room_id = (
+        room.get("room_id")
+        if isinstance(room.get("room_id"), str)
+        else _resolve_room_id(input_payload)
+    )
+    name = (
+        room.get("name")
+        if isinstance(room.get("name"), str)
+        else _resolve_room_name(input_payload)
+    )
     room = {
         "unit": "mm",
         "room_id": room_id or "room_1",
@@ -150,15 +161,23 @@ def _ensure_room_interpreter_payload(
     }
 
     meta = {
-        "room_type": meta.get("room_type") if isinstance(meta.get("room_type"), str) else _resolve_room_type(input_payload),
-        "style": meta.get("style") if isinstance(meta.get("style"), str) else _resolve_style(input_payload),
-        "height_mm": meta.get("height_mm") if isinstance(meta.get("height_mm"), int) else _resolve_height_mm(input_payload),
+        "room_type": meta.get("room_type")
+        if isinstance(meta.get("room_type"), str)
+        else _resolve_room_type(input_payload),
+        "style": meta.get("style")
+        if isinstance(meta.get("style"), str)
+        else _resolve_style(input_payload),
+        "height_mm": meta.get("height_mm")
+        if isinstance(meta.get("height_mm"), int)
+        else _resolve_height_mm(input_payload),
         "window_direction": (
             meta.get("window_direction")
             if isinstance(meta.get("window_direction"), str)
             else _resolve_window_direction(input_payload)
         ),
-        "max_iterations": meta.get("max_iterations") if isinstance(meta.get("max_iterations"), int) else _resolve_max_iterations(input_payload),
+        "max_iterations": meta.get("max_iterations")
+        if isinstance(meta.get("max_iterations"), int)
+        else _resolve_max_iterations(input_payload),
     }
 
     payload["room"] = room
@@ -178,7 +197,53 @@ def _ensure_room_interpreter_payload(
     return payload
 
 
-def _resolve_floorplan_openings(input_payload: Mapping[str, object]) -> dict[str, list[dict[str, object]]]:
+def _normalize_room_interpreter_numbers(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    normalized = _normalize_nested_room_value(payload)
+    if not isinstance(normalized, dict):
+        return payload
+
+    room = normalized.get("room")
+    if isinstance(room, dict):
+        polygon = room.get("polygon_ccw")
+        if isinstance(polygon, list):
+            room["polygon_ccw"] = _ensure_ccw(_normalize_polygon_points(polygon))
+    return normalized
+
+
+def _normalize_nested_room_value(value: object) -> object:
+    if isinstance(value, dict):
+        normalized_dict: dict[str, object] = {}
+        for key, nested_value in value.items():
+            normalized_value = _normalize_nested_room_value(nested_value)
+            if key in {
+                "x",
+                "y",
+                "height_mm",
+                "max_iterations",
+                "swing_radius_mm",
+                "clearance_mm",
+            }:
+                normalized_value = _coerce_int_value(normalized_value)
+            normalized_dict[key] = normalized_value
+        return normalized_dict
+    if isinstance(value, list):
+        return [_normalize_nested_room_value(item) for item in value]
+    return value
+
+
+def _coerce_int_value(value: object) -> object:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return int(round(float(value)))
+    return value
+
+
+def _resolve_floorplan_openings(
+    input_payload: Mapping[str, object],
+) -> dict[str, list[dict[str, object]]]:
     floorplan = input_payload.get("floorplan_geometry")
     if isinstance(floorplan, dict):
         openings = floorplan.get("openings")
@@ -202,7 +267,9 @@ def _resolve_floorplan_openings(input_payload: Mapping[str, object]) -> dict[str
     return {"doors": [], "windows": []}
 
 
-def _resolve_room_polygon(input_payload: Mapping[str, object]) -> list[dict[str, int]] | None:
+def _resolve_room_polygon(
+    input_payload: Mapping[str, object],
+) -> list[dict[str, int]] | None:
     floorplan = input_payload.get("floorplan_geometry")
     if isinstance(floorplan, dict):
         room = floorplan.get("room")
@@ -462,7 +529,10 @@ def _make_opening_on_edge(
     if kind == "door":
         opening = {
             "id": opening_id,
-            "segment_mm": [{"x": int(round(p1[0])), "y": int(round(p1[1]))}, {"x": int(round(p2[0])), "y": int(round(p2[1]))}],
+            "segment_mm": [
+                {"x": int(round(p1[0])), "y": int(round(p1[1]))},
+                {"x": int(round(p2[0])), "y": int(round(p2[1]))},
+            ],
             "swing_radius_mm": int(round(clearance_mm)),
             "hinge_hint": "UNKNOWN",
         }
@@ -480,7 +550,10 @@ def _make_opening_on_edge(
     else:
         opening = {
             "id": opening_id,
-            "segment_mm": [{"x": int(round(p1[0])), "y": int(round(p1[1]))}, {"x": int(round(p2[0])), "y": int(round(p2[1]))}],
+            "segment_mm": [
+                {"x": int(round(p1[0])), "y": int(round(p1[1]))},
+                {"x": int(round(p2[0])), "y": int(round(p2[1]))},
+            ],
             "clearance_mm": int(round(clearance_mm)),
         }
         obstacle = {

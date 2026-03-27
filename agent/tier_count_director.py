@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from clients.openai_client import OpenAIClient
+from clients.llm_client import get_llm_client
 from prompt.tier_count import TIER_COUNT_DIRECTOR, TIER_COUNT_DIRECTOR_SYSTEM
 from tier_count.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
@@ -154,7 +154,7 @@ def _run_with_tools(
     max_steps: int,
     size_profiles_by_category: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    client = OpenAIClient()
+    client = get_llm_client()
 
     clusters_json = context.get("clusters_json")
     required_types = _extract_member_types(clusters_json)
@@ -171,7 +171,7 @@ def _run_with_tools(
 
         response = client.chat_completion(
             messages,
-            model_key="gpt_4o",
+            model_key="primary",
             temperature=0.0,
             max_tokens=None,
             tools=TOOL_SCHEMAS,

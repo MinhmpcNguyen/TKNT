@@ -4,6 +4,7 @@ from typing import Any, Tuple
 
 from cluster_composer.constraint_score import (
     FIXED_ACCESS_CLEARANCE_RATIO,
+    _anchor_zone_bounds,
     _build_allow_clearance_overlap,
     _build_rects,
     _collect_access_required_ids,
@@ -12,9 +13,11 @@ from cluster_composer.constraint_score import (
     _is_floor_occupying,
     _normalize_objects,
     _normalize_placements,
+    _perpendicular_center_offset,
     _perpendicular_overlap_len,
     _rect_area,
     _rect_dict,
+    _rect_edge_gap,
     _resolve_anchor_side,
     _resolve_edge_token_to_base_side,
     _rotate_side,
@@ -31,6 +34,7 @@ Rect = Tuple[int, int, int, int]
 def local_cluster_verifier(
     *,
     hard_constraints: list[dict[str, Any]] | None,
+    soft_constraints: list[dict[str, Any]] | None = None,
     objects: list[dict[str, Any]] | dict[str, dict[str, Any]] | None,
     local_placements: list[dict[str, Any]] | None,
     grid_mm: int,
@@ -60,6 +64,11 @@ def local_cluster_verifier(
     - dock_to_edge(a,b,b_edge,span,gap_min,gap_max)
     - requires_access(id, mode=front_clearance)
 
+    Supported soft constraints:
+    - prefer_near(a,b,weight)
+    - prefer_align_edge(a,b,edge,weight)
+    - prefer_facing(...)
+
     Important behavior:
     - Even if no explicit no_overlap(a,b) is provided, floor-occupying objects
       are still checked for implicit body overlap globally.
@@ -85,6 +94,8 @@ def local_cluster_verifier(
     # -------------------------
     if not isinstance(hard_constraints, list):
         hard_constraints = []
+    if not isinstance(soft_constraints, list):
+        soft_constraints = []
     if objects is None or not isinstance(objects, (list, dict)):
         objects = []
     if not isinstance(local_placements, list):
@@ -281,7 +292,7 @@ def local_cluster_verifier(
 
     scoring = score_cluster_constraints(
         hard_constraints=scoring_hard_constraints,
-        soft_constraints=[],
+        soft_constraints=soft_constraints,
         objects=specs,
         local_placements=canonical_local_placements,
         grid_mm=grid_mm,
@@ -294,6 +305,7 @@ def local_cluster_verifier(
         "soft_summary": scoring.get("soft", {}),
         "lexicographic_key": scoring.get("lexicographic_key", []),
         "hard_evaluations": scoring.get("hard_evaluations", []),
+        "soft_evaluations": scoring.get("soft_evaluations", []),
     }
     hard_summary = scoring.get("hard", {}) if isinstance(scoring, dict) else {}
     debug["hard_violated_count"] = int(hard_summary.get("violated_count", 0) or 0)
@@ -656,6 +668,27 @@ def local_cluster_verifier(
 
     if not errors:
         suggested_moves.extend(
+            _suggest_moves_for_relation_refinement(
+                placements=placements,
+                rects=rects,
+                relation_ctx=relation_ctx,
+                grid_mm=grid_mm,
+            )
+        )
+
+        suggested_moves.extend(
+            _suggest_moves_for_soft_constraints(
+                soft_constraints=soft_constraints,
+                placements=placements,
+                rects=rects,
+                relation_ctx=relation_ctx,
+                specs=specs,
+                facing_map=facing_map,
+                grid_mm=grid_mm,
+            )
+        )
+
+        suggested_moves.extend(
             _suggest_moves_for_compaction(
                 placements=placements,
                 rects=rects,
@@ -677,6 +710,7 @@ def local_cluster_verifier(
 
     preferred_patches = _build_preferred_patches(
         hard_constraints=scoring_hard_constraints,
+        soft_constraints=soft_constraints,
         objects=specs,
         placements=canonical_local_placements,
         grid_mm=grid_mm,
@@ -1361,6 +1395,362 @@ def _constraint_aware_snap_for_object(
         )
 
     return new_x, new_y
+
+
+def _soft_step_toward(delta: float, grid_mm: int) -> int:
+    if abs(delta) <= 1e-6:
+        return 0
+    step = abs(delta)
+    if grid_mm > 0:
+        step = min(step, float(grid_mm))
+    snapped = int(round(step))
+    if snapped <= 0 and grid_mm > 0:
+        snapped = int(grid_mm)
+    return snapped if delta > 0 else -snapped
+
+
+def _suggest_moves_for_soft_constraints(
+    *,
+    soft_constraints: list[dict[str, Any]],
+    placements: dict[str, dict[str, Any]],
+    rects: dict[str, Rect],
+    relation_ctx: dict[str, Any],
+    specs: dict[str, dict[str, Any]],
+    facing_map: dict[str, Any],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    moves: list[dict[str, Any]] = []
+    base_to_dependents = relation_ctx.get("base_to_dependents", {})
+
+    for constraint in soft_constraints:
+        if not isinstance(constraint, dict):
+            continue
+        ctype = str(constraint.get("type") or "").strip().lower()
+
+        if ctype == "prefer_near":
+            a = constraint.get("a")
+            b = constraint.get("b")
+            if not (isinstance(a, str) and isinstance(b, str)):
+                continue
+            if a not in placements or a not in rects or b not in rects:
+                continue
+            if len(base_to_dependents.get(a, set())) > 0:
+                continue
+
+            ra = rects[a]
+            rb = rects[b]
+            edge_gap = _rect_edge_gap(ra, rb)
+            if edge_gap <= 0:
+                continue
+
+            ax1, ay1, ax2, ay2 = ra
+            bx1, by1, bx2, by2 = rb
+            center_dx = ((bx1 + bx2) / 2.0) - ((ax1 + ax2) / 2.0)
+            center_dy = ((by1 + by2) / 2.0) - ((ay1 + ay2) / 2.0)
+            x_gap = max(0, max(bx1 - ax2, ax1 - bx2))
+            y_gap = max(0, max(by1 - ay2, ay1 - by2))
+
+            candidate_offsets: list[tuple[int, int]] = []
+            if x_gap > 0:
+                candidate_offsets.append((_soft_step_toward(center_dx, grid_mm), 0))
+            if y_gap > 0:
+                candidate_offsets.append((0, _soft_step_toward(center_dy, grid_mm)))
+            if x_gap > 0 and y_gap > 0:
+                candidate_offsets.append(
+                    (
+                        _soft_step_toward(center_dx, grid_mm),
+                        _soft_step_toward(center_dy, grid_mm),
+                    )
+                )
+
+            seen_offsets: set[tuple[int, int]] = set()
+            for dx, dy in candidate_offsets:
+                if (dx, dy) == (0, 0) or (dx, dy) in seen_offsets:
+                    continue
+                seen_offsets.add((dx, dy))
+                base_x = int(placements[a]["x"])
+                base_y = int(placements[a]["y"])
+                moves.append(
+                    {
+                        "reason": "SOFT_PREFER_NEAR",
+                        "a": a,
+                        "b": b,
+                        "move_object": a,
+                        "dx": int(dx),
+                        "dy": int(dy),
+                        "new_x": int(base_x + dx),
+                        "new_y": int(base_y + dy),
+                        "note": f"Reduce the prefer_near gap between {a} and {b}.",
+                    }
+                )
+            continue
+
+        if ctype == "prefer_align_edge":
+            a = constraint.get("a")
+            b = constraint.get("b")
+            edge = constraint.get("edge")
+            if not (
+                isinstance(a, str) and isinstance(b, str) and isinstance(edge, str)
+            ):
+                continue
+            if a not in placements or a not in rects or b not in rects:
+                continue
+            if len(base_to_dependents.get(a, set())) > 0:
+                continue
+
+            ra = rects[a]
+            rb = rects[b]
+            rot_b = placements[b]["rot"] % 360
+            b_front_base = _get_front_base(b, facing_map, specs)
+            base_side = _resolve_edge_token_to_base_side(edge, b_front_base)
+            mapped_side = _rotate_side(base_side, rot_b)
+            axis, lo, hi = _side_axis_interval(
+                ra=ra,
+                rb=rb,
+                mapped_side=mapped_side,
+                gap_min=0,
+                gap_max=0,
+            )
+
+            base_x = int(placements[a]["x"])
+            base_y = int(placements[a]["y"])
+            new_x = base_x
+            new_y = base_y
+
+            if axis == "x":
+                new_x = _choose_grid_value_in_interval(
+                    current=base_x,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+            else:
+                new_y = _choose_grid_value_in_interval(
+                    current=base_y,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+
+            perp_offset = _perpendicular_center_offset(ra, rb, mapped_side)
+            if mapped_side in {"top", "bottom"}:
+                desired_x = int(round(base_x - perp_offset))
+                new_x = _choose_grid_value_in_interval(
+                    current=desired_x,
+                    interval=None,
+                    grid_mm=grid_mm,
+                )
+            else:
+                desired_y = int(round(base_y - perp_offset))
+                new_y = _choose_grid_value_in_interval(
+                    current=desired_y,
+                    interval=None,
+                    grid_mm=grid_mm,
+                )
+
+            dx = int(new_x - base_x)
+            dy = int(new_y - base_y)
+            if dx == 0 and dy == 0:
+                continue
+
+            moves.append(
+                {
+                    "reason": "SOFT_ALIGN_EDGE",
+                    "a": a,
+                    "b": b,
+                    "move_object": a,
+                    "dx": dx,
+                    "dy": dy,
+                    "new_x": int(new_x),
+                    "new_y": int(new_y),
+                    "note": f"Improve soft edge alignment between {a} and {b}.",
+                }
+            )
+
+    return moves
+
+
+def _suggest_moves_for_relation_refinement(
+    *,
+    placements: dict[str, dict[str, Any]],
+    rects: dict[str, Rect],
+    relation_ctx: dict[str, Any],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    moves: list[dict[str, Any]] = []
+
+    for oid, relations in (relation_ctx.get("anchor_by_a") or {}).items():
+        if oid not in placements or oid not in rects:
+            continue
+        for rel in relations or []:
+            if not isinstance(rel, dict):
+                continue
+            b = rel.get("b")
+            side = rel.get("side")
+            mapped_side = rel.get("mapped_side")
+            if not (
+                isinstance(b, str)
+                and isinstance(side, str)
+                and isinstance(mapped_side, str)
+                and b in placements
+                and b in rects
+            ):
+                continue
+
+            ra = rects[oid]
+            rb = rects[b]
+            base_x = int(placements[oid]["x"])
+            base_y = int(placements[oid]["y"])
+            rot_b = int(placements[b]["rot"]) % 360
+            base_side, qualifier_local = _resolve_anchor_side(side)
+            qualifier_world = None
+            if qualifier_local in {"left", "right"}:
+                qualifier_world = _rotate_side(qualifier_local, rot_b)
+
+            new_x = base_x
+            new_y = base_y
+            axis, lo, hi = _side_axis_interval(
+                ra=ra,
+                rb=rb,
+                mapped_side=mapped_side,
+                gap_min=int(rel.get("gap_min", 0)),
+                gap_max=int(rel.get("gap_max", 0)),
+            )
+            if axis == "x":
+                new_x = _choose_grid_value_in_interval(
+                    current=base_x,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+            else:
+                new_y = _choose_grid_value_in_interval(
+                    current=base_y,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+
+            ax1, ay1, ax2, ay2 = ra
+            bx1, by1, bx2, by2 = rb
+            aw = ax2 - ax1
+            ah = ay2 - ay1
+            bw = bx2 - bx1
+            bh = by2 - by1
+
+            if mapped_side in {"top", "bottom"}:
+                free_span = max(0, bw - aw)
+                z_lo, z_hi = _anchor_zone_bounds(free_span, qualifier_world)
+                desired = bx1 + (z_lo + z_hi) // 2
+                new_x = _choose_grid_value_in_interval(
+                    current=desired,
+                    interval=(bx1 + z_lo, bx1 + z_hi),
+                    grid_mm=grid_mm,
+                )
+            else:
+                free_span = max(0, bh - ah)
+                z_lo, z_hi = _anchor_zone_bounds(free_span, qualifier_world)
+                desired = by1 + (z_lo + z_hi) // 2
+                new_y = _choose_grid_value_in_interval(
+                    current=desired,
+                    interval=(by1 + z_lo, by1 + z_hi),
+                    grid_mm=grid_mm,
+                )
+
+            dx = int(new_x - base_x)
+            dy = int(new_y - base_y)
+            if dx == 0 and dy == 0:
+                continue
+
+            moves.append(
+                {
+                    "reason": "ANCHOR_REFINEMENT",
+                    "a": oid,
+                    "b": b,
+                    "move_object": oid,
+                    "dx": dx,
+                    "dy": dy,
+                    "new_x": int(new_x),
+                    "new_y": int(new_y),
+                    "note": f"Refine {oid} inside its anchor-side band relative to {b}.",
+                }
+            )
+
+    for oid, relations in (relation_ctx.get("dock_by_a") or {}).items():
+        if oid not in placements or oid not in rects:
+            continue
+        for rel in relations or []:
+            if not isinstance(rel, dict):
+                continue
+            b = rel.get("b")
+            mapped_side = rel.get("mapped_side")
+            if not (
+                isinstance(b, str)
+                and isinstance(mapped_side, str)
+                and b in placements
+                and b in rects
+            ):
+                continue
+
+            ra = rects[oid]
+            rb = rects[b]
+            base_x = int(placements[oid]["x"])
+            base_y = int(placements[oid]["y"])
+            new_x = base_x
+            new_y = base_y
+
+            axis, lo, hi = _side_axis_interval(
+                ra=ra,
+                rb=rb,
+                mapped_side=mapped_side,
+                gap_min=int(rel.get("gap_min", 0)),
+                gap_max=int(rel.get("gap_max", 0)),
+            )
+            if axis == "x":
+                new_x = _choose_grid_value_in_interval(
+                    current=base_x,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+            else:
+                new_y = _choose_grid_value_in_interval(
+                    current=base_y,
+                    interval=(lo, hi),
+                    grid_mm=grid_mm,
+                )
+
+            perp_offset = _perpendicular_center_offset(ra, rb, mapped_side)
+            if mapped_side in {"top", "bottom"}:
+                desired_x = int(round(base_x - perp_offset))
+                new_x = _choose_grid_value_in_interval(
+                    current=desired_x,
+                    interval=None,
+                    grid_mm=grid_mm,
+                )
+            else:
+                desired_y = int(round(base_y - perp_offset))
+                new_y = _choose_grid_value_in_interval(
+                    current=desired_y,
+                    interval=None,
+                    grid_mm=grid_mm,
+                )
+
+            dx = int(new_x - base_x)
+            dy = int(new_y - base_y)
+            if dx == 0 and dy == 0:
+                continue
+
+            moves.append(
+                {
+                    "reason": "DOCK_REFINEMENT",
+                    "a": oid,
+                    "b": b,
+                    "move_object": oid,
+                    "dx": dx,
+                    "dy": dy,
+                    "new_x": int(new_x),
+                    "new_y": int(new_y),
+                    "note": f"Refine {oid} along its docked edge relative to {b}.",
+                }
+            )
+
+    return moves
 
 
 # ============================================================
@@ -2148,6 +2538,7 @@ def _apply_move_to_placements(
 def _build_preferred_patches(
     *,
     hard_constraints: list[dict[str, Any]],
+    soft_constraints: list[dict[str, Any]],
     objects: dict[str, dict[str, Any]],
     placements: list[dict[str, Any]],
     grid_mm: int,
@@ -2180,7 +2571,7 @@ def _build_preferred_patches(
 
         scoring = score_cluster_constraints(
             hard_constraints=hard_constraints,
-            soft_constraints=[],
+            soft_constraints=soft_constraints,
             objects=objects,
             local_placements=patched,
             grid_mm=grid_mm,
@@ -2466,6 +2857,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "hard_constraints": {"type": "array", "items": {"type": "object"}},
+                    "soft_constraints": {"type": "array", "items": {"type": "object"}},
                     "objects": {
                         "oneOf": [
                             {"type": "array", "items": {"type": "object"}},

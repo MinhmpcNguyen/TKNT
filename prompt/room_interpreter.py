@@ -4,6 +4,7 @@ ROOM_INTERPRETER_PROMPT = """You are RoomInterpreter. You convert the UI input J
 
 GLOBAL CONTRACT
 - Units: mm, integers only.
+- If any geometry calculation produces floating-point drift (for example 5999.999999), round to the nearest integer mm before returning JSON.
 - Output JSON only (no markdown, no commentary).
 - Do not change geometry values unless you are explicitly converting formats (e.g., ensuring CCW).
 - If data is missing or inconsistent, return status="NEED_INFO" with missing[].

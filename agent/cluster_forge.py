@@ -4,8 +4,9 @@ import json
 from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
-from clients.openai_client import ChatMessage, OpenAIClient
 from agent_schema.clusterF_schema import ClusterForgeOutput
+from clients.base_client import ChatMessage
+from clients.llm_client import get_llm_client
 from prompt.cluster_forge import CLUSTER_FORGE_PROMPT
 from prompt.system import SYSTEM_PROMPT
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
@@ -21,7 +22,9 @@ class ClusterForge:
         room_type: str,
         room_surface_groups: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
     ) -> list[dict[str, object]]:
-        groups = ROOM_SURFACE_GROUPS if room_surface_groups is None else room_surface_groups
+        groups = (
+            ROOM_SURFACE_GROUPS if room_surface_groups is None else room_surface_groups
+        )
         room_group = groups.get(room_type, {})
         no_stack = list(room_group.get("no_stack", []))
         objects = [{"object_id": name, "name": name} for name in no_stack]
@@ -44,13 +47,16 @@ class ClusterForge:
         payload = json.dumps(input_json, ensure_ascii=True)
         description_block = ""
         if description:
-            description_block = f"USER DESCRIPTION (free text):\n{description.strip()}\n\n"
+            description_block = (
+                f"USER DESCRIPTION (free text):\n{description.strip()}\n\n"
+            )
         special_notes_block = ""
         if special_notes:
-            special_notes_block = f"USER SPECIAL NOTES (free text):\n{special_notes.strip()}\n\n"
+            special_notes_block = (
+                f"USER SPECIAL NOTES (free text):\n{special_notes.strip()}\n\n"
+            )
         user_prompt = (
-            self.prompt_template
-            .replace("{INPUT_JSON}", payload)
+            self.prompt_template.replace("{INPUT_JSON}", payload)
             .replace("{DESCRIPTION_BLOCK}", description_block)
             .replace("{SPECIAL_NOTES_BLOCK}", special_notes_block)
         )
@@ -75,9 +81,9 @@ class ClusterForge:
             description=description,
             special_notes=special_notes,
         )
-        response = OpenAIClient().chat_completion(
+        response = get_llm_client().chat_completion(
             messages,
-            model_key="gpt_4o",
+            model_key="primary",
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -154,24 +160,11 @@ def _extract_json_object(text: str) -> str:
 
 
 def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, object]:
-    """
-    Fix small schema mismatches from LLM output (e.g., prefer_facing mode labels).
-    """
     if not isinstance(payload, dict):
         return payload
     clusters = payload.get("clusters")
     if not isinstance(clusters, list):
         return payload
-
-    def _normalize_mode(value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        v = value.strip().lower()
-        if v in {"face_each_other", "face_eachother", "each_other", "towards", "face_each"}:
-            return "face_each_other"
-        if v in {"face_same_direction", "same_direction", "same_dir", "aligned", "same"}:
-            return "face_same_direction"
-        return value
 
     for cluster in clusters:
         if not isinstance(cluster, dict):
@@ -179,14 +172,74 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
         soft = cluster.get("soft_constraints")
         if not isinstance(soft, list):
             continue
-        for c in soft:
-            if not isinstance(c, dict):
+        normalized_soft: list[dict[str, object]] = []
+        for constraint in soft:
+            normalized_constraint = _normalize_soft_constraint(constraint)
+            if normalized_constraint is None:
+                _append_payload_note(
+                    payload,
+                    f"Dropped unsupported soft constraint: {constraint!r}",
+                )
                 continue
-            ctype = c.get("type")
-            if ctype == "prefer_facing":
-                mode = _normalize_mode(c.get("mode"))
-                if mode is None:
-                    # Default to same direction if mode omitted.
-                    mode = "face_same_direction"
-                c["mode"] = mode
+            normalized_soft.append(normalized_constraint)
+        cluster["soft_constraints"] = normalized_soft
     return payload
+
+
+def _normalize_soft_constraint(constraint: object) -> dict[str, object] | None:
+    if not isinstance(constraint, dict):
+        return None
+
+    normalized_constraint = dict(constraint)
+    ctype = normalized_constraint.get("type")
+    if not isinstance(ctype, str):
+        return None
+
+    normalized_type = ctype.strip().lower()
+    normalized_constraint["type"] = normalized_type
+    if normalized_type == "prefer_facing":
+        mode = _normalize_prefer_facing_mode(normalized_constraint.get("mode"))
+        if mode is None:
+            return None
+        normalized_constraint["mode"] = mode
+        return normalized_constraint
+
+    if normalized_type in {"prefer_near", "prefer_align_edge"}:
+        return normalized_constraint
+
+    return None
+
+
+def _normalize_prefer_facing_mode(value: object) -> str | None:
+    if value is None:
+        return "face_same_direction"
+    if not isinstance(value, str):
+        return None
+
+    normalized_value = value.strip().lower()
+    if normalized_value in {
+        "face_each_other",
+        "face_eachother",
+        "each_other",
+        "towards",
+        "face_each",
+    }:
+        return "face_each_other"
+    if normalized_value in {
+        "face_same_direction",
+        "same_direction",
+        "same_dir",
+        "aligned",
+        "same",
+    }:
+        return "face_same_direction"
+    return None
+
+
+def _append_payload_note(payload: dict[str, object], note: str) -> None:
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        notes = []
+        payload["notes"] = notes
+    if note not in notes:
+        notes.append(note)

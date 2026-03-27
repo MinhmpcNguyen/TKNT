@@ -1,8 +1,20 @@
 import React, { useState } from 'react';
-import { useEditorStore } from '../store';
 import { checkDesign, getClusterComposer, getClusterList, getPipelineArtifact, getPipelineResult, getPipelineStatus, runPipeline } from '../api';
-import { Point, FloorplanGeometry, Wall } from '../types';
+import { useEditorStore } from '../store';
+import { FloorplanGeometry, Point, Wall } from '../types';
 import { normalizePoints } from '../utils/geometry';
+import { getBboxCenter, getLocalFootprintFromWorldBbox, getNumericBbox } from '../utils/styledLayout';
+
+const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 1800;
+const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
+  60,
+  Math.floor(
+    Number(
+      (import.meta as any).env?.VITE_PIPELINE_POLL_TIMEOUT_SECONDS ??
+      DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS
+    )
+  )
+);
 
 export const Toolbar: React.FC = () => {
   const {
@@ -158,67 +170,62 @@ export const Toolbar: React.FC = () => {
           };
           const shiftedRoom = stylist?.room
             ? {
-                ...stylist.room,
-                polygon_ccw: Array.isArray(stylist.room.polygon_ccw)
-                  ? stylist.room.polygon_ccw.map(shiftPoint)
-                  : stylist.room.polygon_ccw,
-                obstacles: Array.isArray(stylist.room.obstacles)
-                  ? stylist.room.obstacles.map((ob: any) => ({
-                      ...ob,
-                      polygon_ccw: Array.isArray(ob?.polygon_ccw) ? ob.polygon_ccw.map(shiftPoint) : ob?.polygon_ccw,
+              ...stylist.room,
+              polygon_ccw: Array.isArray(stylist.room.polygon_ccw)
+                ? stylist.room.polygon_ccw.map(shiftPoint)
+                : stylist.room.polygon_ccw,
+              obstacles: Array.isArray(stylist.room.obstacles)
+                ? stylist.room.obstacles.map((ob: any) => ({
+                  ...ob,
+                  polygon_ccw: Array.isArray(ob?.polygon_ccw) ? ob.polygon_ccw.map(shiftPoint) : ob?.polygon_ccw,
+                }))
+                : stylist.room.obstacles,
+              openings: stylist.room.openings
+                ? {
+                  ...stylist.room.openings,
+                  doors: Array.isArray(stylist.room.openings?.doors)
+                    ? stylist.room.openings.doors.map((d: any) => ({
+                      ...d,
+                      segment_mm: Array.isArray(d?.segment_mm)
+                        ? d.segment_mm.map(shiftPoint)
+                        : d?.segment_mm,
                     }))
-                  : stylist.room.obstacles,
-                openings: stylist.room.openings
-                  ? {
-                      ...stylist.room.openings,
-                      doors: Array.isArray(stylist.room.openings?.doors)
-                        ? stylist.room.openings.doors.map((d: any) => ({
-                            ...d,
-                            segment_mm: Array.isArray(d?.segment_mm)
-                              ? d.segment_mm.map(shiftPoint)
-                              : d?.segment_mm,
-                          }))
-                        : stylist.room.openings?.doors,
-                      windows: Array.isArray(stylist.room.openings?.windows)
-                        ? stylist.room.openings.windows.map((w: any) => ({
-                            ...w,
-                            segment_mm: Array.isArray(w?.segment_mm)
-                              ? w.segment_mm.map(shiftPoint)
-                              : w?.segment_mm,
-                          }))
-                        : stylist.room.openings?.windows,
-                    }
-                  : stylist.room.openings,
-              }
+                    : stylist.room.openings?.doors,
+                  windows: Array.isArray(stylist.room.openings?.windows)
+                    ? stylist.room.openings.windows.map((w: any) => ({
+                      ...w,
+                      segment_mm: Array.isArray(w?.segment_mm)
+                        ? w.segment_mm.map(shiftPoint)
+                        : w?.segment_mm,
+                    }))
+                    : stylist.room.openings?.windows,
+                }
+                : stylist.room.openings,
+            }
             : null;
           const shiftedObjects = Array.isArray(objects)
             ? objects.map((obj: any) => ({
-                ...obj,
-                polygon_ccw: Array.isArray(obj?.polygon_ccw) ? obj.polygon_ccw.map(shiftPoint) : obj?.polygon_ccw,
-                bbox: shiftBBox(obj?.bbox),
-              }))
+              ...obj,
+              polygon_ccw: Array.isArray(obj?.polygon_ccw) ? obj.polygon_ccw.map(shiftPoint) : obj?.polygon_ccw,
+              bbox: shiftBBox(obj?.bbox),
+            }))
             : objects;
           setStyledResult({ ...stylist, room: shiftedRoom, objects: shiftedObjects });
         } catch {
           setStyledResult(stylist);
         }
         const placements = objects.map((obj: any, idx: number) => {
-          const bbox = obj?.bbox ?? {};
-          const minX = Number(bbox.min_x ?? 0);
-          const minY = Number(bbox.min_y ?? 0);
-          const maxX = Number(bbox.max_x ?? 0);
-          const maxY = Number(bbox.max_y ?? 0);
-          const w = Math.max(0, maxX - minX);
-          const d = Math.max(0, maxY - minY);
-          const cx = minX + w / 2 - shiftDx;
-          const cy = minY + d / 2 - shiftDy;
+          const rotationDeg = Number(obj.rotation_ccw ?? 0);
+          const bbox = getNumericBbox(obj);
+          const footprint = getLocalFootprintFromWorldBbox(bbox, rotationDeg);
+          const center = getBboxCenter(bbox);
           return {
             placement_id: obj.instance_id ?? `obj_${idx}`,
             asset_id: obj.instance_id ?? obj.object_type ?? `obj_${idx}`,
             category: obj.object_type ?? 'item',
-            position_mm: { x: cx, y: cy },
-            rotation_deg: Number(obj.rotation_ccw ?? 0),
-            footprint_mm: { w, d },
+            position_mm: { x: center.x - shiftDx, y: center.y - shiftDy },
+            rotation_deg: rotationDeg,
+            footprint_mm: footprint,
             height_mm: 0,
             color_hex: obj.color_hex ?? '#cfcac2',
             anchor: 'center',
@@ -228,7 +235,7 @@ export const Toolbar: React.FC = () => {
         setViolations([]);
         setLastDesignMeta({ iteration: null, attempt: null });
       };
-      const maxPollSeconds = 360;
+      const maxPollSeconds = PIPELINE_POLL_TIMEOUT_SECONDS;
       for (let i = 0; i < maxPollSeconds && !done; i += 1) {
         const status = await getPipelineStatus(caseId);
         setRunStatus(status.stage ?? null, null);
@@ -261,7 +268,9 @@ export const Toolbar: React.FC = () => {
         await new Promise((r) => setTimeout(r, 1000));
       }
       if (!done) {
-        appendRunLog('Pipeline still running (poll timeout). You can wait and refresh, or re-open this case.');
+        appendRunLog(
+          `Pipeline still running after ${PIPELINE_POLL_TIMEOUT_SECONDS}s of polling. You can wait and refresh, or re-open this case.`
+        );
         const status = await getPipelineStatus(caseId);
         if (status.stage === 'done') {
           setRunStatus(status.stage ?? null, null);

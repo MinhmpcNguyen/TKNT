@@ -1,24 +1,18 @@
 from __future__ import annotations
 
 import logging
-from threading import Lock
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, TypedDict
+from threading import Lock
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from openai import AzureOpenAI, OpenAI
 
+from clients.base_client import ChatMessage, LLMModelKey
 from config.openai_config import OpenAIConfig
 from config.models import OpenAIModelConfig
 
 logger = logging.getLogger(__name__)
-
-OpenAIModelKey = Literal["gpt_4o", "gpt_4o_mini", "text_embedding_3_small"]
-
-
-class ChatMessage(TypedDict):
-    role: Literal["system", "user", "assistant", "developer", "tool"]
-    content: str
 
 
 class OpenAIClient:
@@ -27,7 +21,7 @@ class OpenAIClient:
 
     _initialized: bool = False
     _client: OpenAI | AzureOpenAI
-    _model_map: dict[OpenAIModelKey, OpenAIModelConfig]
+    _model_map: dict[LLMModelKey, OpenAIModelConfig]
     _azure_endpoint: str | None
     _api_key: str
 
@@ -52,26 +46,26 @@ class OpenAIClient:
     def client(self) -> OpenAI | AzureOpenAI:
         return self._client
 
-    def get_model_name(self, key: OpenAIModelKey) -> str:
+    def get_model_name(self, key: LLMModelKey) -> str:
         return self._model_map[key].name
 
-    def get_model_endpoint(self, key: OpenAIModelKey) -> str:
+    def get_model_endpoint(self, key: LLMModelKey) -> str | None:
         return self._model_map[key].azure_endpoint
 
     def chat_completion(
         self,
         messages: Sequence[ChatMessage],
         *,
-        model_key: OpenAIModelKey = "gpt_4o",
+        model_key: LLMModelKey = "primary",
         temperature: float | None = None,
         max_tokens: int | None = None,
-        tools: Sequence[dict[str, Any]] | None = None,
-        tool_choice: dict[str, Any] | str | None = None,
+        tools: Sequence[dict[str, object]] | None = None,
+        tool_choice: dict[str, object] | str | None = None,
     ) -> object:
         model_name = self.get_model_name(model_key)
         message_list = list(messages)
 
-        params: dict[str, Any] = {
+        params: dict[str, object] = {
             "model": model_name,
             "messages": message_list,
         }
@@ -89,7 +83,7 @@ class OpenAIClient:
         self,
         inputs: str | Sequence[str],
         *,
-        model_key: OpenAIModelKey = "text_embedding_3_small",
+        model_key: LLMModelKey = "embedding",
     ) -> object:
         model_name = self.get_model_name(model_key)
         normalized_inputs = self._normalize_embedding_input(inputs)
@@ -109,12 +103,12 @@ class OpenAIClient:
             )
         return OpenAI(api_key=self._api_key)
 
-    def _build_model_map(self) -> dict[OpenAIModelKey, OpenAIModelConfig]:
+    def _build_model_map(self) -> dict[LLMModelKey, OpenAIModelConfig]:
         models = OpenAIConfig.MODELS
         return {
-            "gpt_4o": models.gpt_4o,
-            "gpt_4o_mini": models.gpt_4o_mini,
-            "text_embedding_3_small": models.text_embedding_3_small,
+            "primary": models.gpt_4o,
+            "helper": models.gpt_4o_mini,
+            "embedding": models.text_embedding_3_small,
         }
 
     def _resolve_azure_endpoint(self) -> str | None:
@@ -123,7 +117,10 @@ class OpenAIClient:
 
         endpoints: set[str] = set()
         for model_config in self._model_map.values():
-            normalized = self._normalize_azure_endpoint(model_config.azure_endpoint)
+            endpoint = model_config.azure_endpoint
+            if endpoint is None:
+                continue
+            normalized = self._normalize_azure_endpoint(endpoint)
             endpoints.add(normalized)
 
         if not endpoints:

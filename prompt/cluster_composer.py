@@ -254,6 +254,10 @@ SUPPORTED HARD CONSTRAINTS
 - no_overlap(a,b)
 - contain_in(a,b)
 - anchor_side(a,b,side,gap_min,gap_max)
+- For head_left / head_right / foot_left / foot_right:
+  - head/foot selects the contacted edge in b's LOCAL frame
+  - left/right selects a CORNER ZONE along that edge, not a tiny bias around the center
+  - the dependent object must lie in the corresponding OUTER THIRD of the available sliding span on that edge
 - dock_to_edge(a,b,b_edge,span,gap_min,gap_max)
 - requires_access(id, mode=front_clearance)
 

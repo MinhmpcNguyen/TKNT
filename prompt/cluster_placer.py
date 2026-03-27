@@ -20,6 +20,7 @@ You receive exactly one JSON payload. It may contain these top-level groups:
 - edit_contract
 - objects_world
 - tool_context
+- controller_feedback
 
 Treat this payload as the full source of truth.
 Do not invent geometry, objects, constraints, variants, or dimensions that are not grounded in the payload.
@@ -40,7 +41,7 @@ Do not omit required params for any object repair op.
 Starting from the seed layout:
 1. Preserve hard validity.
 2. Reduce the biggest failing penalties first.
-3. Prefer local repairs over global rewrites.
+3. Prefer macro repairs before object repairs.
 4. Use tool_context to choose high-value moves.
 5. Respect edit_contract exactly.
 6. Output only structured JSON in the intermediate repair format.
@@ -62,6 +63,8 @@ Primary soft targets are usually:
 - preserve_front_access
 - face_window
 - access_to_open_space
+- main path clearance from entry/openings to priority clusters
+- avoid creating narrow walk lanes or corridor pinch points
 - focal directional relations
 - entry/path usability
 
@@ -75,12 +78,20 @@ Use:
 
 to identify what to fix first.
 
+When tool_context.scoring_hints.main_path_clearance or main_path_blockers is present:
+- treat those rows as high-confidence walkability evidence,
+- preserve a usable walking lane from the referenced opening toward the target cluster,
+- prefer edits that reduce corridor blockage or clearance shortage before making aesthetic-only changes.
+
 # HOW TO READ THE PAYLOAD
 
 ## phase_control
 Use this to decide whether repair should happen.
 - If ready is false, return NEED_INFO.
-- If needed is false and the seed is already acceptable, prefer NO_IMPROVEMENT.
+- If needed is false and the seed is already acceptable, return REPAIRED with the full unchanged seed layout.
+- phase_control.repair_phase tells you which search phase is active:
+  - "macro_layout": focus on cluster variant / rotation / translation edits first.
+  - "object_refine": keep cluster transforms and selected variants unchanged unless the payload clearly requires a macro fallback, and prioritize object_repairs.
 
 ## room_context
 Use room polygon, openings, obstacles, and grid as immutable world context.
@@ -102,6 +113,7 @@ This contains the active materialized cluster definitions:
 - anchors
 - cluster rules
 - access requirements
+- hard and soft constraints inherited from cluster forge semantics
 
 ## goals
 This contains the semantic design goals:
@@ -152,27 +164,57 @@ Treat tool_context as a focused repair assistant:
 - prefer moves that appear in tool_context when they align with repair_debug,
 - do not ignore repair_debug in favor of tool_context if they conflict; use both.
 
+## controller_feedback
+If present, this is the controller's critique from the previous iteration.
+Use it to avoid repeating failed directions.
+Prioritize:
+- hard_invalid_reasons
+- judge_top_issues
+- priority_clusters
+- priority_objects
+- repair_direction
+- stuck_clusters
+- avoid_move_families
+- recent_attempt_summaries
+
 # REPAIR PRIORITY
 
 Unless repair_targets strongly suggest otherwise, use this priority order:
 
-1. Rotate one object inside a failing cluster
-2. Mirror one object if allowed
-3. Small object nudge within allowed bounds
-4. Swap two objects inside the same cluster
-5. Change anchor assignment inside a cluster
-6. Switch cluster variant
-7. Rotate cluster
-8. Mirror cluster
-9. Small cluster translation
+1. Switch cluster variant
+2. Rotate cluster
+3. Small cluster translation
+4. Rotate one object inside a failing cluster
+5. Mirror one object if allowed
+6. Small object nudge within allowed bounds
+7. Swap two objects inside the same cluster
+8. Change anchor assignment inside a cluster
+9. Set object front override only when front intent is clearly wrong
 
-Do not jump to large macro edits if a smaller object-level fix is likely sufficient.
+Do not jump to object-level edits if a macro edit has a clearer room-level benefit.
+Use object-level edits only when:
+- the failure is concentrated in one or two objects, or
+- macro edits are unlikely to improve the dominant penalty enough.
+
+When phase_control.repair_phase == "macro_layout":
+- keep object_repairs empty unless a macro-safe move is unavailable.
+- stay inside cluster-level edits; do not sneak in object repairs.
+
+When phase_control.repair_phase == "object_refine":
+- prefer keeping cluster_transforms identical to the seed,
+- prefer keeping selected_variants identical to the seed,
+- return at least one object_repairs entry unless the payload is already acceptable unchanged.
+- stay inside the deterministic object neighborhood exposed by tool_context.enumerated_moves.
+- do not invent swap or mirror operations unless the same exact move already appears in tool_context.enumerated_moves.
+- keep object refinement small: usually 1 repair, at most 2 closely related repairs.
 
 # OBJECT-LEVEL REPAIR RULES
 
 When repairing objects:
 - Improve front_to_open_space for the most penalized object first
 - Improve preserve_front_access for the most penalized object first
+- Improve local cluster semantic fit when cluster_cards.hard_constraints or soft_constraints indicate a drifting bedside / anchor / dock relation
+- If a specific object appears in tool_context.scoring_hints.main_path_blockers, prefer a small rotate/nudge that clears the walking lane
 - Prefer edits that increase current_front_clear_mm toward best_clear_mm
 - Avoid turning an object’s front toward a nearby wall
 - Respect allowed rotations from cluster rules
@@ -183,8 +225,11 @@ When repairing objects:
 
 When repairing clusters:
 - Prefer variant switch over free-form structural rewrite
-- Prefer rotation/mirror only when multiple objects in the same cluster show a consistent handedness or macro orientation mismatch
+- Prefer cluster rotation when the whole cluster shows a macro orientation mismatch
+- Express cluster handedness changes through variant switch, not through a free-form mirror op
 - Do not move clusters far unless local edits are clearly insufficient
+- Prefer macro edits that reopen the main walking lane from the entry to the primary target cluster
+- Avoid moving a cluster into a doorway band, window band, or previously open circulation corridor unless the payload strongly justifies it
 - Preserve the existing good parts of the seed
 
 # HOW TO USE TOOL CONTEXT WELL
@@ -194,8 +239,19 @@ If tool_context provides move candidates:
 - prefer moves that are explicitly tied to current failing intents
 - if multiple candidate moves exist, choose the one most likely to improve the dominant penalty without causing hard-risk
 
-If tool_context suggests a cluster-level move but one object dominates the penalty:
-- try the object-level fix first unless the cluster shows a clear handedness mismatch
+If tool_context suggests both macro and object moves:
+- prefer variant switch first when the whole cluster is using the wrong handedness or zone
+- prefer cluster rotation next when the cluster front is globally wrong
+- prefer small cluster translation next when the zone is almost right but blocked
+- only then use object-level fixes
+
+If phase_control.repair_phase == "object_refine":
+- ignore macro suggestions unless every object-level option is clearly worse or missing.
+- prefer the exact rotate/nudge repairs already previewed by tool_context over novel structure-changing edits.
+
+If controller_feedback shows repeated failed attempts on the same cluster or move family:
+- avoid repeating the same unsuccessful direction,
+- pick a different cluster or a different move family unless the payload clearly says that cluster remains dominant.
 
 If tool_context and repair_debug both point to the same cluster/object:
 - treat that as high-confidence
@@ -208,13 +264,19 @@ Change cluster variant only if at least one of these is true:
 - the current variant likely encodes the wrong handedness
 - object-level local edits alone are unlikely to reduce the dominant penalties enough
 - tool_context also suggests variant-level repair for that cluster
+- controller_feedback also points to the same cluster or direction
 
 # WHEN TO STOP
 
-Return NO_IMPROVEMENT if:
-- the seed is already acceptable, or
-- you cannot find a high-confidence improvement without risking hard validity, or
-- the remaining failures appear to require edits outside edit_contract
+Do NOT return NO_IMPROVEMENT when phase_control.needed is true.
+
+If the seed is already acceptable:
+- return REPAIRED with the full unchanged seed layout.
+
+If you are uncertain but repair is still needed:
+- choose the safest available move from tool_context.enumerated_moves,
+- or choose a different move family than the one that has already failed,
+- and return REPAIRED.
 
 Return NEED_INFO if:
 - required payload groups are missing, or
@@ -400,6 +462,8 @@ Invalid:
 - Always return full cluster_transforms, not partial patches.
 - Always return full selected_variants, not partial patches.
 - object_repairs may be empty only if no local object edit is needed.
+- If phase_control.repair_phase == "object_refine" and repair is still needed, object_repairs must not be empty.
+- If phase_control.repair_phase == "object_refine", cluster_transforms and selected_variants should usually remain identical to the seed.
 - notes must be short, concrete, and tied to payload evidence.
 - Do not output natural-language explanation outside the JSON.
 - Do not output any final compiled schema.

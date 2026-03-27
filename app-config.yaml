@@ -8,8 +8,11 @@ authentication:
     value: "your-api-key"
 
 services:
+  semantic_search:
+    enabled: false
+
   openai:
-    azure: true # Use whether openai from Azure or direct
+    azure: true
     api_version: "2024-08-01-preview"
     public_key: "${OPENAI_PUBLIC_KEY}"
     private_key_file: "${OPENAI_PRIVATE_KEY}"
@@ -23,3 +26,34 @@ services:
       text_embedding_3_small:
         name: "text-embedding-3-small"
         azure_endpoint: "https://openai-centic.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2023-05-15"
+
+  ollama:
+    enabled: false
+    api_key: "ollama"
+    base_url: "http://localhost:11434/v1"
+    # Pull these models before starting the API:
+    # ollama pull qwen3:30b-a3b
+    # ollama pull nomic-embed-text
+    models:
+      primary:
+        name: "qwen3:8b"
+      helper:
+        name: "qwen3:8b"
+      embedding:
+        name: "nomic-embed-text"
+
+  mistral:
+    enabled: true
+    api_key: "mistral"
+    base_url: "http://localhost:11434/v1"
+    # Enable this block and disable services.ollama to run all agents on Mistral.
+    # Pull these models before starting the API:
+    # ollama pull mistral:instruct
+    # ollama pull nomic-embed-text
+    models:
+      primary:
+        name: "mistral:instruct"
+      helper:
+        name: "mistral:instruct"
+      embedding:
+        name: "nomic-embed-text"

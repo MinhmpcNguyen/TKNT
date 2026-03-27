@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_schema.cluster_composer_schema import ClusterComposerOutput
-from clients.openai_client import OpenAIClient
+from clients.llm_client import get_llm_client
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from prompt.cluster_composer import CLUSTER_COMPOSER_PROMPT
 from prompt.system import SYSTEM_PROMPT
@@ -138,7 +138,7 @@ def _run_with_tools(
     max_steps: int,
     access_clearance_ratio: float,
 ) -> str:
-    client = OpenAIClient()
+    client = get_llm_client()
     access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
 
     expected_member_ids = _member_ids(cluster)
@@ -193,44 +193,29 @@ def _run_with_tools(
                 best_valid_eval = current_eval
                 best_valid_rank = current_rank
 
-                seed_state_sig = _placements_signature(current_seed)
-                tried_patch_keys_by_state.setdefault(seed_state_sig, set())
-
-                for _ in range(6):
-                    selected_move, patched, patched_eval = _choose_best_single_patch(
+                current_seed, current_eval, improve_rounds = (
+                    _greedy_improve_valid_layout(
                         cluster=cluster,
                         access_clearance_ratio=access_clearance_ratio,
-                        tool_output=current_eval,
                         placements=current_seed,
-                        tried_patch_keys=tried_patch_keys_by_state[seed_state_sig],
+                        verifier_eval=current_eval,
+                        max_rounds=min(max(1, int(max_steps)), 12),
                     )
+                )
+                current_rank = _tool_rank(current_eval)
 
-                    if (
-                        selected_move is None
-                        or patched is None
-                        or not isinstance(patched_eval, dict)
-                        or patched_eval.get("result") != "VALID"
-                    ):
-                        break
+                best_valid_draft = {
+                    "cluster_id": cluster.get("cluster_id"),
+                    "local_placements": current_seed,
+                }
+                best_valid_eval = current_eval
+                best_valid_rank = current_rank
 
-                    patched_rank = _tool_rank(patched_eval)
-                    if not _rank_better(patched_rank, current_rank):
-                        break
-
-                    tried_patch_keys_by_state[seed_state_sig].add(
-                        _move_key(selected_move)
+                if improve_rounds > 0:
+                    logger.info(
+                        "Deterministic seed greedy refinement applied %s improving rounds.",
+                        improve_rounds,
                     )
-
-                    current_seed = _canonicalize_local_placements(patched)
-                    current_eval = patched_eval
-                    current_rank = patched_rank
-
-                    best_valid_draft = {
-                        "cluster_id": cluster.get("cluster_id"),
-                        "local_placements": current_seed,
-                    }
-                    best_valid_eval = current_eval
-                    best_valid_rank = current_rank
 
                 messages.append(
                     {
@@ -265,12 +250,12 @@ def _run_with_tools(
         logger.info("ClusterComposer step %s/%s", step, max_steps)
 
         try:
-            response = client.chat_completion(
-                messages,
-                model_key="gpt_4o",
-                temperature=0.0,
-                tools=TOOL_SCHEMAS,
-            )
+                response = client.chat_completion(
+                    messages,
+                    model_key="primary",
+                    temperature=0.0,
+                    tools=TOOL_SCHEMAS,
+                )
         except Exception as exc:
             if _is_context_length_exceeded(exc):
                 logger.warning(
@@ -486,76 +471,35 @@ def _run_with_tools(
 
                 if result == "VALID":
                     last_verifier_result = "VALID"
+                    current_valid_placements, current_valid_eval, improve_rounds = (
+                        _greedy_improve_valid_layout(
+                            cluster=cluster,
+                            access_clearance_ratio=access_clearance_ratio,
+                            placements=lp_verified,
+                            verifier_eval=tool_output,
+                            max_rounds=min(max(1, int(max_steps)), 10),
+                        )
+                    )
                     current_valid_draft = {
                         "cluster_id": cluster.get("cluster_id"),
-                        "local_placements": lp_verified,
+                        "local_placements": current_valid_placements,
                     }
-                    current_valid_eval = tool_output
                     last_draft = current_valid_draft
 
-                    current_rank = _tool_rank(tool_output)
+                    current_rank = _tool_rank(current_valid_eval)
 
                     if best_valid_rank is None or current_rank < best_valid_rank:
                         best_valid_rank = current_rank
                         best_valid_draft = current_valid_draft
                         best_valid_eval = current_valid_eval
 
-                    # VALID state: try one more single-object improvement first.
-                    try:
-                        selected_move, patched, patched_eval = (
-                            _choose_best_single_patch(
-                                cluster=cluster,
-                                access_clearance_ratio=access_clearance_ratio,
-                                tool_output=tool_output,
-                                placements=lp_verified,
-                                tried_patch_keys=tried_patch_keys_by_state[state_sig],
-                            )
+                    if improve_rounds > 0:
+                        logger.info(
+                            "ClusterComposer greedy refinement applied %s improving rounds after VALID verification.",
+                            improve_rounds,
                         )
-                    except Exception as exc:
-                        logger.exception(
-                            "Valid-state improvement patch selection failed: %s",
-                            exc,
-                        )
-                        selected_move, patched, patched_eval = None, None, None
 
-                    if (
-                        selected_move is not None
-                        and patched is not None
-                        and isinstance(patched_eval, dict)
-                        and patched_eval.get("result") == "VALID"
-                        and _tool_rank(patched_eval) < current_rank
-                    ):
-                        ok, detail = _validate_local_placements_full(
-                            patched, expected_member_ids
-                        )
-                        if ok:
-                            move_key = _move_key(selected_move)
-                            tried_patch_keys_by_state[state_sig].add(move_key)
-
-                            last_draft = {
-                                "cluster_id": cluster.get("cluster_id"),
-                                "local_placements": patched,
-                            }
-
-                            patched_eval_preview = _verifier_preview(patched_eval)
-
-                            messages.append(
-                                {
-                                    "role": "user",
-                                    "content": (
-                                        "LocalClusterVerifier returned VALID, but a strictly better VALID compact layout is available. "
-                                        "Use the following SINGLE patched candidate as your next attempt. "
-                                        "Do NOT combine it with other suggested moves in the same step. "
-                                        "Re-call LocalClusterVerifier with EXACTLY these local_placements unless you have one strictly better single-object patch.\n\n"
-                                        f"selected_move={json.dumps(selected_move, ensure_ascii=True)}\n"
-                                        f"patched_local_placements={json.dumps(patched, ensure_ascii=True)}\n"
-                                        f"patched_eval_preview={json.dumps(patched_eval_preview, ensure_ascii=True)}"
-                                    ),
-                                }
-                            )
-                            continue
-
-                    # No better valid patch found -> finalize immediately from host
+                    # Host-side refinement exhausted -> finalize immediately from host
                     final_draft = best_valid_draft or current_valid_draft
                     final_eval = best_valid_eval or current_valid_eval
                     placements = _canonicalize_local_placements(
@@ -922,6 +866,8 @@ def _coerce_verifier_args(
 
     if "hard_constraints" not in output:
         output["hard_constraints"] = cluster.get("hard_constraints", [])
+    if "soft_constraints" not in output:
+        output["soft_constraints"] = cluster.get("soft_constraints", [])
 
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
     if "grid_mm" not in output:
@@ -1061,6 +1007,58 @@ def _placement_ids(local_placements: Any) -> set[str]:
         if isinstance(pid, str) and pid:
             out.add(pid)
     return out
+
+
+def _seed_resolve_anchor_side(side: str) -> tuple[str, str | None]:
+    if side in {"left", "right", "top", "bottom"}:
+        return side, None
+    if side.startswith("head_"):
+        return "head", side.split("_", 1)[1]
+    if side.startswith("foot_"):
+        return "foot", side.split("_", 1)[1]
+    if side in {"head", "foot"}:
+        return side, None
+    return side, None
+
+
+def _seed_anchor_zone_bounds(
+    free_span: int,
+    qualifier_world: str | None,
+) -> tuple[int, int]:
+    free_span = max(0, int(free_span))
+
+    # outer-third semantics:
+    # left/bottom = outer 1/3 đầu
+    # right/top   = outer 1/3 cuối
+    if qualifier_world in {"left", "bottom"}:
+        return 0, free_span // 3
+    if qualifier_world in {"right", "top"}:
+        return (2 * free_span + 2) // 3, free_span
+
+    return 0, free_span
+
+
+def _seed_pick_anchor_axis_start(
+    *,
+    base_start: int,
+    base_extent: int,
+    a_extent: int,
+    qualifier_world: str | None,
+    grid_mm: int,
+) -> int:
+    free_span = max(0, int(base_extent - a_extent))
+    lo = int(base_start)
+
+    z_lo, z_hi = _seed_anchor_zone_bounds(free_span, qualifier_world)
+    q_lo = lo + z_lo
+    q_hi = lo + z_hi
+
+    if qualifier_world in {"left", "bottom", "right", "top"}:
+        current = q_lo + max(0, (q_hi - q_lo)) // 2
+    else:
+        current = lo + free_span // 2
+
+    return _seed_pick_grid_in_interval(current, (q_lo, q_hi), grid_mm)
 
 
 def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1449,30 +1447,34 @@ def _seed_place_relative(
     gap_min = int(rel.get("gap_min", 0) or 0)
     gap_max = int(rel.get("gap_max", 0) or 0)
 
+    qualifier_local: str | None = None
+
     if ctype == "dock_to_edge":
         b_edge = rel.get("b_edge")
         if not isinstance(b_edge, str):
             return None
         front_base = _seed_get_front_base(cluster, b, b_spec)
         base_side = _seed_resolve_edge_token_to_base_side(b_edge, front_base)
+
     elif ctype == "anchor_side":
         side = rel.get("side")
         if not isinstance(side, str):
             return None
-        if side.startswith("head_"):
+
+        base_side, qualifier_local = _seed_resolve_anchor_side(side)
+        if base_side == "head":
             base_side = "top"
-        elif side.startswith("foot_"):
+        elif base_side == "foot":
             base_side = "bottom"
-        elif side in {"head"}:
-            base_side = "top"
-        elif side in {"foot"}:
-            base_side = "bottom"
-        else:
-            base_side = side
+
     else:
         return None
 
     mapped_side = _seed_rotate_side(base_side, b_rot)
+
+    qualifier_world: str | None = None
+    if qualifier_local in {"left", "right"}:
+        qualifier_world = _seed_rotate_side(qualifier_local, b_rot)
 
     if mapped_side == "top":
         y = _seed_pick_grid_in_interval(
@@ -1480,8 +1482,13 @@ def _seed_place_relative(
             (by + bh + gap_min, by + bh + gap_max),
             grid_mm,
         )
-        x_center = bx + (bw - aw) // 2
-        x = _seed_snap_nearest_value(x_center, grid_mm)
+        x = _seed_pick_anchor_axis_start(
+            base_start=bx,
+            base_extent=bw,
+            a_extent=aw,
+            qualifier_world=qualifier_world,
+            grid_mm=grid_mm,
+        )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
     if mapped_side == "bottom":
@@ -1490,8 +1497,13 @@ def _seed_place_relative(
             (by - ah - gap_max, by - ah - gap_min),
             grid_mm,
         )
-        x_center = bx + (bw - aw) // 2
-        x = _seed_snap_nearest_value(x_center, grid_mm)
+        x = _seed_pick_anchor_axis_start(
+            base_start=bx,
+            base_extent=bw,
+            a_extent=aw,
+            qualifier_world=qualifier_world,
+            grid_mm=grid_mm,
+        )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
     if mapped_side == "left":
@@ -1500,8 +1512,13 @@ def _seed_place_relative(
             (bx - aw - gap_max, bx - aw - gap_min),
             grid_mm,
         )
-        y_center = by + (bh - ah) // 2
-        y = _seed_snap_nearest_value(y_center, grid_mm)
+        y = _seed_pick_anchor_axis_start(
+            base_start=by,
+            base_extent=bh,
+            a_extent=ah,
+            qualifier_world=qualifier_world,
+            grid_mm=grid_mm,
+        )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
     if mapped_side == "right":
@@ -1510,8 +1527,13 @@ def _seed_place_relative(
             (bx + bw + gap_min, bx + bw + gap_max),
             grid_mm,
         )
-        y_center = by + (bh - ah) // 2
-        y = _seed_snap_nearest_value(y_center, grid_mm)
+        y = _seed_pick_anchor_axis_start(
+            base_start=by,
+            base_extent=bh,
+            a_extent=ah,
+            qualifier_world=qualifier_world,
+            grid_mm=grid_mm,
+        )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
     return None
@@ -1682,6 +1704,60 @@ def _choose_best_single_patch(
         return None, None, None
 
     return best_move, best_patched, best_eval
+
+
+def _greedy_improve_valid_layout(
+    *,
+    cluster: dict[str, Any],
+    access_clearance_ratio: float,
+    placements: list[dict[str, Any]],
+    verifier_eval: dict[str, Any],
+    max_rounds: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    current = _canonicalize_local_placements(placements)
+    current_eval = verifier_eval if isinstance(verifier_eval, dict) else {}
+    if current_eval.get("result") != "VALID":
+        current_eval = _run_verifier_once(
+            cluster=cluster,
+            placements=current,
+            access_clearance_ratio=access_clearance_ratio,
+        )
+    if current_eval.get("result") != "VALID":
+        return current, current_eval, 0
+
+    rounds = 0
+    current_rank = _tool_rank(current_eval)
+    tried_patch_keys_by_state: dict[str, set[str]] = {}
+
+    for _ in range(max(0, int(max_rounds))):
+        state_sig = _placements_signature(current)
+        tried_patch_keys = tried_patch_keys_by_state.setdefault(state_sig, set())
+        selected_move, patched, patched_eval = _choose_best_single_patch(
+            cluster=cluster,
+            access_clearance_ratio=access_clearance_ratio,
+            tool_output=current_eval,
+            placements=current,
+            tried_patch_keys=tried_patch_keys,
+        )
+        if (
+            selected_move is None
+            or patched is None
+            or not isinstance(patched_eval, dict)
+            or patched_eval.get("result") != "VALID"
+        ):
+            break
+
+        patched_rank = _tool_rank(patched_eval)
+        if not _rank_better(patched_rank, current_rank):
+            break
+
+        tried_patch_keys.add(_move_key(selected_move))
+        current = _canonicalize_local_placements(patched)
+        current_eval = patched_eval
+        current_rank = patched_rank
+        rounds += 1
+
+    return current, current_eval, rounds
 
 
 def _collect_patch_candidates(
@@ -1939,6 +2015,7 @@ def _run_verifier_once(
     access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
     args = {
         "hard_constraints": cluster.get("hard_constraints", []),
+        "soft_constraints": cluster.get("soft_constraints", []),
         "objects": _build_object_specs(cluster),
         "local_placements": _canonicalize_local_placements(placements),
         "grid_mm": _extract_grid_mm(cluster),
@@ -2521,14 +2598,14 @@ def _vec_to_dict(vec: tuple[int, int]) -> dict[str, int]:
 
 
 def _canonical_axis(vec: tuple[int, int]) -> tuple[int, int]:
-    dx, dy = int(vec[0]), int(vec[1])
+    dx = int(vec[0])
     if abs(dx) == 1:
         return (1, 0)
     return (0, 1)
 
 
 def _axis_from_front(front: tuple[int, int]) -> tuple[int, int]:
-    dx, dy = int(front[0]), int(front[1])
+    dx = int(front[0])
     if abs(dx) == 1:
         return (0, 1)
     return (1, 0)
@@ -2726,12 +2803,16 @@ def _reason_rank(reason: Any) -> int:
         "ACCESS_BLOCKED": 7,
         "DOCK_VIOLATION": 8,
         "ANCHOR_VIOLATION": 9,
-        "CONTAIN_VIOLATION": 10,
-        "HOST_ROTATION_ESCAPE": 11,
-        "COMPACT_LEFT_EDGE": 12,
-        "COMPACT_RIGHT_EDGE": 12,
-        "COMPACT_BOTTOM_EDGE": 13,
-        "COMPACT_TOP_EDGE": 13,
+        "DOCK_REFINEMENT": 10,
+        "ANCHOR_REFINEMENT": 11,
+        "SOFT_ALIGN_EDGE": 12,
+        "SOFT_PREFER_NEAR": 13,
+        "CONTAIN_VIOLATION": 14,
+        "HOST_ROTATION_ESCAPE": 15,
+        "COMPACT_LEFT_EDGE": 16,
+        "COMPACT_RIGHT_EDGE": 16,
+        "COMPACT_BOTTOM_EDGE": 17,
+        "COMPACT_TOP_EDGE": 17,
     }
     return rank.get(reason, 99)
 

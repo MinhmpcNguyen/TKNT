@@ -10,8 +10,8 @@ from typing import Any
 
 from agent.cluster_composer import ClusterComposer
 from agent.cluster_forge import ClusterForge
-from agent.cluster_placer import MacroClusterPlacer
 from agent.cluster_relation_planner import ClusterRelationPlanner
+from agent.phase2_controller import Phase2Controller
 from agent.room_interpreter import RoomInterpreter
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist
@@ -207,16 +207,16 @@ def run_case(
     solver_output = _strip_raw_text(solver_output)
     _write_json(paths.cluster_solver, solver_output)
 
-    placer = MacroClusterPlacer()
-    placer_output = placer.generate(
+    controller = Phase2Controller()
+    phase2_result = controller.generate(
         room_interpreter_json=room_output,
         cluster_merged_json=merged_output,
         cluster_outlines_json=cluster_outlines,
         relation_plan_json=relation_plan,
-        placer_output_json=solver_output,
+        solver_output_json=solver_output,
         cluster_constraints_json=None,
     )
-    placer_output = _strip_raw_text(placer_output)
+    placer_output = _strip_raw_text(phase2_result.get("proposal") or {})
     _write_json(paths.cluster_placer, placer_output)
 
     solver_status = (
@@ -240,8 +240,8 @@ def run_case(
 
     _update_status(paths, "absolute_layout")
 
-    # 8) Absolute layout (from phase-2 placer)
-    absolute_layout = placer_output
+    # 8) Absolute layout (from controller-selected proposal)
+    absolute_layout = _strip_raw_text(phase2_result.get("absolute_layout") or {})
     _write_json(paths.absolute_layout, absolute_layout)
 
     absolute_status = (

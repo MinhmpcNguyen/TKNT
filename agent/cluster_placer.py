@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from copy import deepcopy
 from dataclasses import dataclass
@@ -13,14 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from cluster_placer.tools_v2 import (  # type: ignore
     DiagnosePhase2Seed,
     EnumeratePhase2RepairMoves,
-    PreviewPhase2Repair,
-    ScorePhase2Repair,
+    CompileAcceptedPhase2Proposal,
 )
 
 try:
-    from clients.openai_client import OpenAIClient  # type: ignore
+    from clients.llm_client import get_llm_client  # type: ignore
 except Exception:  # pragma: no cover
-    OpenAIClient = None  # type: ignore
+    get_llm_client = None  # type: ignore
 
 try:
     from prompt.cluster_placer import (
@@ -28,6 +28,8 @@ try:
     )
 except Exception:  # pragma: no cover
     DEFAULT_PHASE2_PLACER_PROMPT = "You are a phase-2 placer. Return JSON only."
+
+logger = logging.getLogger(__name__)
 
 
 AllowedRotation = Literal[0, 90, 180, 270]
@@ -232,9 +234,17 @@ def build_phase2_payload(
     def _extract_room_context() -> Dict[str, Any]:
         seed = (placer_06 or {}).get("placer_seed") or {}
         room_model_used = seed.get("room_model_used")
+        grid_mm = seed.get("grid_mm")
+        try:
+            normalized_grid = int(grid_mm) if grid_mm is not None else None
+        except Exception:
+            normalized_grid = None
         if isinstance(room_model_used, dict) and room_model_used:
-            return {"room_model_used": deepcopy(room_model_used)}
-        return {"room_model_used": deepcopy(room_01)}
+            return {
+                "room_model_used": deepcopy(room_model_used),
+                "grid_mm": normalized_grid or 50,
+            }
+        return {"room_model_used": deepcopy(room_01), "grid_mm": normalized_grid or 50}
 
     def _extract_phase_control() -> Dict[str, Any]:
         seed = (placer_06 or {}).get("placer_seed") or {}
@@ -253,7 +263,8 @@ def build_phase2_payload(
                 seed_kind = "none"
 
         return {
-            "phase": "micro_repair",
+            "phase": "phase2_repair",
+            "repair_phase": "macro_layout",
             "ready": ready or bool(best_verify),
             "needed": needed,
             "seed_kind": seed_kind,
@@ -739,6 +750,45 @@ def _allowed_object_ops(payload: Dict[str, Any]) -> set[str]:
     return allowed
 
 
+def _repair_phase(payload: Dict[str, Any]) -> str:
+    phase_control = payload.get("phase_control") or {}
+    value = str(phase_control.get("repair_phase") or "").strip().lower()
+    if value == "object_refine":
+        return "object_refine"
+    return "macro_layout"
+
+
+def _enumerated_object_move_signatures(
+    payload: Dict[str, Any],
+) -> set[tuple[str, str, str, str]]:
+    out: set[tuple[str, str, str, str]] = set()
+    tool_context = payload.get("tool_context") or {}
+    for move in tool_context.get("enumerated_moves") or []:
+        if not isinstance(move, dict):
+            continue
+        proposal = move.get("proposal") or {}
+        repairs = proposal.get("object_repairs") or []
+        if len(repairs) != 1:
+            continue
+        repair = repairs[0]
+        if not isinstance(repair, dict):
+            continue
+        cluster_id = repair.get("cluster_id")
+        object_id = repair.get("object_id")
+        op = repair.get("op")
+        if not (
+            isinstance(cluster_id, str)
+            and isinstance(object_id, str)
+            and isinstance(op, str)
+        ):
+            continue
+        params_json = json.dumps(
+            repair.get("params") or {}, sort_keys=True, ensure_ascii=True
+        )
+        out.add((cluster_id, object_id, op, params_json))
+    return out
+
+
 # -----------------------------------------------------------------------------
 # Compact payload + tool context
 # -----------------------------------------------------------------------------
@@ -748,14 +798,32 @@ def prepare_phase2_llm_payload(
     compact = deepcopy(full_payload)
     diagnosis = DiagnosePhase2Seed(payload=compact)
     moves = EnumeratePhase2RepairMoves(payload=compact, limit=move_limit)
+    layout_metrics = diagnosis.get("global_layout_metrics") or {}
     compact["tool_context"] = {
         "diagnosis": diagnosis,
         "enumerated_moves": moves.get("moves") or [],
         "scoring_hints": {
             "baseline_score": diagnosis.get("score"),
+            "search_phase": (compact.get("phase_control") or {}).get("repair_phase"),
             "hard_valid": diagnosis.get("hard_valid"),
             "priority_clusters": diagnosis.get("prioritized_clusters") or [],
             "priority_objects": diagnosis.get("prioritized_objects") or [],
+            "main_path_clearance": deepcopy(
+                ((layout_metrics.get("main_path_clearance") or {}).get("paths") or [])[
+                    :4
+                ]
+            ),
+            "main_path_blockers": deepcopy(
+                (
+                    (layout_metrics.get("main_path_clearance") or {}).get(
+                        "blocking_objects"
+                    )
+                    or []
+                )[:8]
+            ),
+            "opening_band_blocking": deepcopy(
+                (layout_metrics.get("opening_band_blocking") or [])[:6]
+            ),
         },
     }
     return compact
@@ -870,27 +938,30 @@ def normalize_and_validate_repair_output(
     seed_vmap = _seed_variant_map(seed_layout)
     seed_cluster_ids = set(seed_tmap.keys())
 
-    out_tmap = {**seed_tmap}
-    for item in proposal.cluster_transforms:
-        out_tmap[item.cluster_id] = item.model_dump()
-
-    out_vmap = {**seed_vmap}
-    for item in proposal.selected_variants:
-        out_vmap[item.cluster_id] = item.model_dump()
-
-    if set(out_tmap.keys()) != seed_cluster_ids:
-        missing = sorted(seed_cluster_ids - set(out_tmap.keys()))
-        extra = sorted(set(out_tmap.keys()) - seed_cluster_ids)
+    proposal_transform_ids = {item.cluster_id for item in proposal.cluster_transforms}
+    if proposal_transform_ids != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - proposal_transform_ids)
+        extra = sorted(proposal_transform_ids - seed_cluster_ids)
         raise ValueError(
-            f"cluster_transforms cluster-id set mismatch. missing={missing}, extra={extra}"
+            "cluster_transforms must contain the full cluster-id set. "
+            f"missing={missing}, extra={extra}"
         )
 
-    if set(out_vmap.keys()) != seed_cluster_ids:
-        missing = sorted(seed_cluster_ids - set(out_vmap.keys()))
-        extra = sorted(set(out_vmap.keys()) - seed_cluster_ids)
+    proposal_variant_ids = {item.cluster_id for item in proposal.selected_variants}
+    if proposal_variant_ids != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - proposal_variant_ids)
+        extra = sorted(proposal_variant_ids - seed_cluster_ids)
         raise ValueError(
-            f"selected_variants cluster-id set mismatch. missing={missing}, extra={extra}"
+            "selected_variants must contain the full cluster-id set. "
+            f"missing={missing}, extra={extra}"
         )
+
+    out_tmap = {
+        item.cluster_id: item.model_dump() for item in proposal.cluster_transforms
+    }
+    out_vmap = {
+        item.cluster_id: item.model_dump() for item in proposal.selected_variants
+    }
 
     allowed_rots = _allowed_cluster_rotations(payload)
     for cid, item in out_tmap.items():
@@ -906,6 +977,8 @@ def normalize_and_validate_repair_output(
 
     allowed_obj_ids = _allowed_object_ids_by_cluster(payload)
     allowed_ops = _allowed_object_ops(payload)
+    search_phase = _repair_phase(payload)
+    enumerated_object_moves = _enumerated_object_move_signatures(payload)
 
     normalized_object_repairs: List[Dict[str, Any]] = []
     seen_object_repairs: set[tuple] = set()
@@ -950,10 +1023,39 @@ def normalize_and_validate_repair_output(
             op,
             json.dumps(row["params"], sort_keys=True, ensure_ascii=True),
         )
+        if (
+            search_phase == "object_refine"
+            and repair_sig not in enumerated_object_moves
+        ):
+            raise ValueError(
+                "object_refine proposals must stay inside the deterministic object-move "
+                f"neighborhood; unsupported repair={cid}.{oid}.{op}."
+            )
         if repair_sig in seen_object_repairs:
             continue
         seen_object_repairs.add(repair_sig)
         normalized_object_repairs.append(row)
+
+    if search_phase == "macro_layout" and normalized_object_repairs:
+        raise ValueError("macro_layout proposals must keep object_repairs empty")
+
+    if search_phase == "object_refine":
+        if out_tmap != seed_tmap:
+            raise ValueError(
+                "object_refine proposals must preserve cluster_transforms from the seed"
+            )
+        if out_vmap != seed_vmap:
+            raise ValueError(
+                "object_refine proposals must preserve selected_variants from the seed"
+            )
+        if not normalized_object_repairs:
+            raise ValueError(
+                "object_refine proposals must include at least one object repair"
+            )
+        if len(normalized_object_repairs) > 2:
+            raise ValueError(
+                "object_refine proposals may include at most two object repairs"
+            )
 
     notes: List[str] = []
     seen_notes = set()
@@ -978,21 +1080,8 @@ def compile_phase2_to_final_output(full_payload: Dict[str, Any]) -> Dict[str, An
     phase2 = full_payload.get("phase2_placer") or {}
     repair = phase2.get("phase2_repair")
     if not isinstance(repair, dict):
-        repair = {
-            "status": "NO_IMPROVEMENT",
-            "cluster_transforms": deepcopy(
-                (full_payload.get("seed_layout") or {}).get("cluster_transforms") or []
-            ),
-            "selected_variants": deepcopy(
-                (full_payload.get("seed_layout") or {}).get("selected_variants") or []
-            ),
-            "object_repairs": [],
-            "notes": [],
-        }
-    preview = PreviewPhase2Repair(payload=full_payload, repair=repair)
-    compiled = preview.get("compiled") or {}
-    if not isinstance(compiled, dict):
-        raise ValueError("PreviewPhase2Repair compiled output missing")
+        repair = make_no_improvement_repair(full_payload)
+    compiled = CompileAcceptedPhase2Proposal(payload=full_payload, repair=repair)
     _ensure_room_type(compiled, full_payload)
     return compiled
 
@@ -1031,14 +1120,14 @@ def _extract_message(response: object) -> object:
 
 
 def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:
-    if OpenAIClient is None:
-        raise RuntimeError("OpenAIClient is unavailable")
-    client = OpenAIClient()
+    if get_llm_client is None:
+        raise RuntimeError("LLM client is unavailable")
+    client = get_llm_client()
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_payload_json},
     ]
-    response = client.chat_completion(messages, model_key="gpt_4o", temperature=0.0)
+    response = client.chat_completion(messages, model_key="primary", temperature=0.0)
     message = _extract_message(response)
     content = getattr(message, "content", None)
     if not isinstance(content, str):
@@ -1050,6 +1139,12 @@ def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[st
 # Main orchestration
 # -----------------------------------------------------------------------------
 def _default_no_improvement(
+    payload: Dict[str, Any], note: str | None = None
+) -> Dict[str, Any]:
+    return make_no_improvement_repair(payload, note=note)
+
+
+def make_no_improvement_repair(
     payload: Dict[str, Any], note: str | None = None
 ) -> Dict[str, Any]:
     seed = payload.get("seed_layout") or {}
@@ -1074,15 +1169,23 @@ def run_phase2_placer(
     max_attempts: int = 3,
 ) -> Dict[str, Any]:
     compact_payload = prepare_phase2_llm_payload(full_payload)
-    diagnosis = (compact_payload.get("tool_context") or {}).get("diagnosis") or {}
-    baseline_score = int(diagnosis.get("score") or 0)
-    best_repair = _default_no_improvement(compact_payload)
-    best_scored = ScorePhase2Repair(payload=compact_payload, repair=best_repair)
-    best_score = int(
-        (best_scored.get("candidate") or {}).get("score") or baseline_score
+    logger.info(
+        "Phase2Placer input: repair_phase=%s seed_kind=%s hard_valid=%s priority_clusters=%s",
+        ((compact_payload.get("phase_control") or {}).get("repair_phase")),
+        ((compact_payload.get("phase_control") or {}).get("seed_kind")),
+        (
+            ((compact_payload.get("tool_context") or {}).get("diagnosis") or {}).get(
+                "hard_valid"
+            )
+        ),
+        (
+            ((compact_payload.get("tool_context") or {}).get("diagnosis") or {}).get(
+                "prioritized_clusters"
+            )
+        ),
     )
-
     attempt_errors: List[str] = []
+    proposal: Dict[str, Any] | None = None
     for attempt in range(max(1, int(max_attempts))):
         try:
             raw = llm_call(
@@ -1091,33 +1194,57 @@ def run_phase2_placer(
                     compact_payload, ensure_ascii=False, indent=2
                 ),
             )
-            normalized = normalize_and_validate_repair_output(compact_payload, raw)
-            scored = ScorePhase2Repair(payload=compact_payload, repair=normalized)
-            cand = scored.get("candidate") or {}
-            cand_score = int(cand.get("score") or -(10**9))
-            cand_valid = bool(cand.get("hard_valid"))
-            if cand_valid and cand_score > best_score:
-                best_repair = normalized
-                best_scored = scored
-                best_score = cand_score
+            proposal = normalize_and_validate_repair_output(compact_payload, raw)
+            logger.info(
+                "Phase2Placer accepted output on attempt %s: status=%s",
+                attempt + 1,
+                proposal.get("status"),
+            )
+            break
         except Exception as e:
-            attempt_errors.append(str(e))
+            logger.warning("Phase2Placer attempt %s failed: %s", attempt + 1, e)
+            attempt_errors.append(f"attempt_{attempt + 1}: {e}")
+
+    if proposal is None:
+        proposal = make_no_improvement_repair(
+            compact_payload,
+            note="Fallback to NO_IMPROVEMENT because the placer output was invalid.",
+        )
+        logger.warning("Phase2Placer fallback to NO_IMPROVEMENT after invalid outputs")
+
+    if not attach_result_to_payload:
+        return proposal
 
     attached = deepcopy(full_payload)
     attached["phase2_placer"] = {
         "phase2_input": compact_payload,
-        "phase2_repair": best_repair,
-        "phase2_score": best_scored,
+        "phase2_repair": proposal,
         "attempt_errors": attempt_errors,
     }
-    attached["phase2_compiled_output"] = compile_phase2_to_final_output(attached)
-    return attached if attach_result_to_payload else attached["phase2_placer"]
+    return attached
 
 
 @dataclass(frozen=True)
 class MacroClusterPlacer:
     system_prompt: str = DEFAULT_PHASE2_PLACER_PROMPT
     llm_call: LLMCallable = _call_openai
+
+    def generate_from_payload(
+        self,
+        *,
+        payload: Dict[str, Any],
+        max_attempts: int = 3,
+    ) -> Dict[str, Any]:
+        result = run_phase2_placer(
+            full_payload=payload,
+            llm_call=self.llm_call,
+            system_prompt=self.system_prompt,
+            attach_result_to_payload=False,
+            max_attempts=max_attempts,
+        )
+        if not isinstance(result, dict):
+            raise ValueError("Phase-2 placer must return a JSON object")
+        return result
 
     def generate_raw(
         self,
@@ -1137,16 +1264,8 @@ class MacroClusterPlacer:
             placer_06=placer_output_json,
             cluster_constraints=cluster_constraints_json,
         )
-        result = run_phase2_placer(
-            full_payload=payload,
-            llm_call=self.llm_call,
-            system_prompt=self.system_prompt,
-            attach_result_to_payload=True,
-        )
-        compiled = result.get("phase2_compiled_output")
-        if not isinstance(compiled, dict):
-            raise ValueError("Phase-2 compiled output missing or invalid")
-        return json.dumps(compiled, ensure_ascii=True)
+        proposal = self.generate_from_payload(payload=payload)
+        return json.dumps(proposal, ensure_ascii=True)
 
     def generate(
         self,
@@ -1199,5 +1318,9 @@ if __name__ == "__main__":
 
     payload = load_json(args.payload)
     adapter = make_file_response_adapter(args.mock_response)
-    out = run_phase2_placer(full_payload=payload, llm_call=adapter)
+    out = run_phase2_placer(
+        full_payload=payload,
+        llm_call=adapter,
+        attach_result_to_payload=False,
+    )
     dump_json(args.out, out)

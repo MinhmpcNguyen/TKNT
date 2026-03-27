@@ -15,7 +15,9 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from clients.openai_client import OpenAIClient
+from clients.base_client import LLMClientProtocol
+from clients.llm_client import get_llm_client
+from config.semantic_search_config import SemanticSearchConfig
 from db.models import DesignKnowledge, DesignKnowledgeEmbedding, DesignKnowledgeFilter, TenantId
 from db.repositories import DesignKnowledgeRepository
 from stylist.rules import get_soft_rule_templates
@@ -217,11 +219,11 @@ class StyleKnowledgeHarvester:
     def __init__(
         self,
         knowledge_repo: DesignKnowledgeRepository,
-        client: OpenAIClient | None = None,
+        client: LLMClientProtocol | None = None,
         search_provider: SearchProvider | None = None,
     ) -> None:
         self._repo = knowledge_repo
-        self._client = client or OpenAIClient()
+        self._client = client or get_llm_client()
         self._search = search_provider or build_search_provider()
         fallback = os.getenv("SEARCH_FALLBACK", "duckduckgo").lower()
         if fallback == "duckduckgo":
@@ -400,7 +402,7 @@ def _build_queries(
 
 def _summarize_results(
     *,
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     template_id: str,
     template: dict[str, Any],
     style: str,
@@ -452,7 +454,7 @@ def _summarize_results(
 
 def _extract_rule_candidates(
     *,
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     template_id: str,
     style: str,
     results: list[SearchResult],
@@ -496,7 +498,7 @@ def _extract_rule_candidates(
 
 def _llm_extract_rules(
     *,
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     template_id: str,
     style: str,
     chunk: str,
@@ -520,7 +522,7 @@ def _llm_extract_rules(
     try:
         response = client.chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            model_key="gpt_4o_mini",
+            model_key="helper",
             temperature=0.1,
         )
     except Exception as exc:  # noqa: BLE001
@@ -557,7 +559,7 @@ def _llm_extract_rules(
 
 def _map_rules_to_fields(
     *,
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     template_id: str,
     template: dict[str, Any],
     style: str,
@@ -584,7 +586,7 @@ def _map_rules_to_fields(
     )
     response = client.chat_completion(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        model_key="gpt_4o_mini",
+        model_key="helper",
         temperature=0.1,
     )
     choices = getattr(response, "choices", None)
@@ -643,7 +645,7 @@ def _dedupe_rules(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _store_summaries(
     *,
     repo: DesignKnowledgeRepository,
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     tenant_id: str | None,
     template_id: str,
     style: str,
@@ -688,7 +690,7 @@ def _store_summaries(
                     knowledge_id=knowledge.id,
                     content=summary,
                     vector=embedding,
-                    model="text-embedding-3-small",
+                    model=client.get_model_name("embedding"),
                     meta={"source": url, "field": field, "style": style, "links": links},
                 )
             )
@@ -699,8 +701,10 @@ def _hash_id(style: str, template_id: str, field: str, url: str) -> str:
     return hashlib.sha256(raw).hexdigest()[:24]
 
 
-def _embed_text(client: OpenAIClient, text: str) -> list[float]:
-    response = client.embeddings(inputs=text, model_key="text_embedding_3_small")
+def _embed_text(client: LLMClientProtocol, text: str) -> list[float]:
+    if not SemanticSearchConfig.ENABLED:
+        return []
+    response = client.embeddings(inputs=text, model_key="embedding")
     data = getattr(response, "data", None)
     if not data:
         return []

@@ -8,7 +8,8 @@ from time import perf_counter
 from typing import Any
 
 from agent_schema.cluster_relation_planner_schema import ClusterRelationPlannerOutput
-from clients.openai_client import ChatMessage, OpenAIClient
+from clients.base_client import ChatMessage
+from clients.llm_client import get_llm_client
 from prompt.cluster_relation_planner import CLUSTER_RELATION_PLANNER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -124,14 +125,14 @@ class ClusterRelationPlanner:
             len(_extract_clusters_map(clusters_json)),
         )
 
-        client = OpenAIClient()
+        client = get_llm_client()
         last_raw = ""
 
         for attempt in range(2):
             logger.info("ClusterRelationPlanner attempt %s/2", attempt + 1)
             response = client.chat_completion(
                 messages,
-                model_key="gpt_4o",
+                model_key="primary",
                 temperature=temperature,
                 max_tokens=max_tokens,
             )

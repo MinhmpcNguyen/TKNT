@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Literal, Protocol, TypedDict
+
+LLMModelKey = Literal["primary", "helper", "embedding"]
+
+
+class ChatMessage(TypedDict):
+    role: Literal["system", "user", "assistant", "developer", "tool"]
+    content: str
+
+
+class LLMClientProtocol(Protocol):
+    def get_model_name(self, key: LLMModelKey) -> str: ...
+
+    def chat_completion(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        model_key: LLMModelKey = "primary",
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        tools: Sequence[dict[str, object]] | None = None,
+        tool_choice: dict[str, object] | str | None = None,
+    ) -> object: ...
+
+    def embeddings(
+        self,
+        inputs: str | Sequence[str],
+        *,
+        model_key: LLMModelKey = "embedding",
+    ) -> object: ...

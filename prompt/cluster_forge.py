@@ -69,7 +69,7 @@ OUTPUT JSON (STRICT):
 
         {"type":"prefer_facing",
          "a":"id","b":"id",
-         "mode":"face_each_other|same_direction|perpendicular",
+         "mode":"face_each_other|face_same_direction",
          "weight":int}
       ],
 
@@ -106,6 +106,7 @@ RULES & GUIDELINES
   - Use requires_access for items that require standing space in front (wardrobe, dresser, cabinet).
 - Soft constraints are optional preferences (not requirements):
   - prefer_near, prefer_align_edge, prefer_facing help aesthetics without over-constraining.
+  - Use exact enum values from the schema. For prefer_facing.mode, only use face_each_other or face_same_direction.
 - Do NOT add any room-dependent or wall/window/door-dependent constraints here.
 - If an item does not clearly belong to any cluster, assign it to tag="misc" and explain briefly in notes.
 - If the input lacks essential fields needed (missing object ids, missing type/category, missing rotation allowances),

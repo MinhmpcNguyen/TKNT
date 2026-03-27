@@ -493,7 +493,7 @@ def _eval_anchor_side(
     rb = rects[b]
     rot_b = placements[b]["rot"] % 360
 
-    base_side, qualifier = _resolve_anchor_side(side)
+    base_side, qualifier_local = _resolve_anchor_side(side)
     if base_side == "head":
         base_side = "top"
     elif base_side == "foot":
@@ -501,19 +501,20 @@ def _eval_anchor_side(
 
     mapped_side = _rotate_side(base_side, rot_b)
     gap = _edge_gap(ra, rb, mapped_side)
-
     gap_penalty = max(0, gap_min - gap) + max(0, gap - gap_max)
 
+    qualifier_world = None
+    if qualifier_local in {"left", "right"}:
+        qualifier_world = _rotate_side(qualifier_local, rot_b)
+
     qualifier_penalty = 0.0
-    qualifier_ok = True
-    if qualifier is not None:
-        qualifier_ok = _qualifier_ok(
-            qualifier=qualifier,
-            a_center=_rect_center(ra),
-            b_center=_rect_center(rb),
-            rot_b=rot_b,
-        )
-        qualifier_penalty = 0.0 if qualifier_ok else 1.0
+    qualifier_ok = _qualifier_ok(
+        qualifier_world=qualifier_world,
+        mapped_side=mapped_side,
+        ra=ra,
+        rb=rb,
+    )
+    qualifier_penalty = 0.0 if qualifier_ok else 1.0
 
     violation = float(gap_penalty * 100.0 + qualifier_penalty * 1000.0)
 
@@ -530,7 +531,8 @@ def _eval_anchor_side(
             "b_rect": _rect_dict(rb),
             "side": side,
             "mapped_side": mapped_side,
-            "qualifier": qualifier,
+            "qualifier_local": qualifier_local,
+            "qualifier_world": qualifier_world,
         },
         "subjects": {"a": a, "b": b},
     }
@@ -1133,24 +1135,50 @@ def _perpendicular_center_offset(ra: Rect, rb: Rect, side: str) -> float:
     return 0.0
 
 
+def _anchor_zone_bounds(
+    free_span: int,
+    qualifier_world: str | None,
+) -> tuple[int, int]:
+    free_span = max(0, int(free_span))
+
+    if qualifier_world in {"left", "bottom"}:
+        return 0, free_span // 3
+    if qualifier_world in {"right", "top"}:
+        return (2 * free_span + 2) // 3, free_span
+
+    return 0, free_span
+
+
 def _qualifier_ok(
-    qualifier: str,
-    a_center: tuple[float, float],
-    b_center: tuple[float, float],
-    rot_b: int,
+    qualifier_world: str | None,
+    mapped_side: str,
+    ra: Rect,
+    rb: Rect,
 ) -> bool:
-    ax, ay = a_center
-    bx, by = b_center
-    dx, dy = ax - bx, ay - by
+    ax1, ay1, ax2, ay2 = ra
+    bx1, by1, bx2, by2 = rb
 
-    theta = -math.radians(rot_b % 360)
-    c, s = math.cos(theta), math.sin(theta)
-    lx = c * dx - s * dy
+    aw = ax2 - ax1
+    ah = ay2 - ay1
+    bw = bx2 - bx1
+    bh = by2 - by1
 
-    if qualifier == "left":
-        return lx <= 0
-    if qualifier == "right":
-        return lx >= 0
+    if mapped_side in {"top", "bottom"}:
+        if qualifier_world not in {"left", "right"}:
+            return True
+        free_span = max(0, bw - aw)
+        rel = ax1 - bx1
+        z_lo, z_hi = _anchor_zone_bounds(free_span, qualifier_world)
+        return z_lo <= rel <= z_hi
+
+    if mapped_side in {"left", "right"}:
+        if qualifier_world not in {"bottom", "top"}:
+            return True
+        free_span = max(0, bh - ah)
+        rel = ay1 - by1
+        z_lo, z_hi = _anchor_zone_bounds(free_span, qualifier_world)
+        return z_lo <= rel <= z_hi
+
     return True
 
 

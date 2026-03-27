@@ -24,7 +24,9 @@ from db.models import (
 )
 from db.schema import get_schema_statements
 from db.postgres import PostgresConfig, create_connection
-from clients.openai_client import OpenAIClient, OpenAIModelKey
+from config.semantic_search_config import SemanticSearchConfig
+from clients.base_client import LLMClientProtocol, LLMModelKey
+from clients.llm_client import get_llm_client
 from stylist.room_essentials_loader import load_room_essentials as load_room_essentials_kb
 
 
@@ -163,9 +165,9 @@ def _knowledge_text(item: DesignKnowledge) -> str:
 
 
 def _embed_batch(
-    client: OpenAIClient,
+    client: LLMClientProtocol,
     texts: list[str],
-    model_key: OpenAIModelKey,
+    model_key: LLMModelKey,
 ) -> list[list[float]]:
     response = client.embeddings(inputs=texts, model_key=model_key)
     data = getattr(response, "data", None)
@@ -180,10 +182,13 @@ def _embed_batch(
 
 
 def _backfill_embeddings(batch_size: int = 32) -> tuple[int, int]:
-    client = OpenAIClient()
+    if not SemanticSearchConfig.ENABLED:
+        return 0, 0
+
+    client = get_llm_client()
     asset_repo = PostgresAssetRepository()
     knowledge_repo = PostgresDesignKnowledgeRepository()
-    model_key: OpenAIModelKey = "text_embedding_3_small"
+    model_key: LLMModelKey = "embedding"
 
     tenant_id = TenantId("demo_tenant")
     assets = list(asset_repo.list_assets(AssetFilter(tenant_id=tenant_id)))

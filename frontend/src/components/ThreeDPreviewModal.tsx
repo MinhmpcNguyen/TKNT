@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorStore } from '../store';
 import { polygonBounds } from '../utils/geometry';
+import { getNumericBbox, getWorldBboxFromPlacement, placementMatchesStyledObject } from '../utils/styledLayout';
 import { buildObjectProxy } from '../three/proxies';
 
 type RenderObject = {
@@ -32,6 +33,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function planRotationToYawRad(rotationDeg: number): number {
+  return (rotationDeg * Math.PI) / 180 + Math.PI;
+}
+
 export const ThreeDPreviewModal: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
@@ -48,21 +53,36 @@ export const ThreeDPreviewModal: React.FC = () => {
 
   const objects: RenderObject[] = useMemo(() => {
     const out: RenderObject[] = [];
+    const placements = design?.placements ?? [];
+    const placementsById = new Map<string, any>();
+    for (const placement of placements) {
+      const placementId = String(placement.placement_id ?? placement.id ?? placement.object_id ?? '');
+      if (!placementId) continue;
+      placementsById.set(placementId, placement);
+    }
     const rawObjects = styledResult?.objects;
     if (Array.isArray(rawObjects)) {
+      const used = new Set<string>();
       for (const obj of rawObjects) {
-        const bbox = obj?.bbox ?? {};
-        const minX = Number(bbox.min_x ?? bbox.minX ?? 0);
-        const minY = Number(bbox.min_y ?? bbox.minY ?? 0);
-        const maxX = Number(bbox.max_x ?? bbox.maxX ?? 0);
-        const maxY = Number(bbox.max_y ?? bbox.maxY ?? 0);
+        const id = String(obj.instance_id ?? obj.id ?? obj.object_type ?? `obj_${out.length + 1}`);
+        const styledBbox = getNumericBbox(obj);
+        let bbox = styledBbox;
+        let rotationCcw = Number(obj.rotation_ccw ?? 0);
+        const placement = placementsById.get(id);
+        if (placement) {
+          used.add(id);
+          if (!placementMatchesStyledObject(placement, styledBbox, rotationCcw)) {
+            bbox = getWorldBboxFromPlacement(placement);
+            rotationCcw = Number(placement.rotation_deg ?? rotationCcw ?? 0);
+          }
+        }
         out.push({
-          id: String(obj.instance_id ?? obj.id ?? obj.object_type ?? `obj_${out.length + 1}`),
+          id,
           type: String(obj.object_type ?? obj.category ?? 'item'),
           colorHex: String(obj.color_hex ?? '#cfcac2'),
           material: obj.material ?? null,
-          rotationCcw: Number(obj.rotation_ccw ?? 0),
-          bbox: { minX, minY, maxX, maxY },
+          rotationCcw,
+          bbox,
           placeOn: obj.place_on
             ? {
                 method: String(obj.place_on.method ?? 'floor'),
@@ -71,22 +91,31 @@ export const ThreeDPreviewModal: React.FC = () => {
             : null,
         });
       }
+      for (const placement of placements) {
+        const placementId = String(placement.placement_id ?? placement.id ?? placement.object_id ?? '');
+        if (!placementId || used.has(placementId)) continue;
+        out.push({
+          id: placementId,
+          type: placement.category,
+          colorHex: placement.color_hex ?? '#cfcac2',
+          material: null,
+          rotationCcw: Number(placement.rotation_deg ?? 0),
+          bbox: getWorldBboxFromPlacement(placement),
+          placeOn: { method: 'floor', targetId: 'floor' },
+        });
+      }
       return out;
     }
 
     if (!design) return out;
-    for (const placement of design.placements ?? []) {
-      const w = Number(placement.footprint_mm?.w ?? 0);
-      const d = Number(placement.footprint_mm?.d ?? 0);
-      const cx = Number(placement.position_mm?.x ?? 0);
-      const cy = Number(placement.position_mm?.y ?? 0);
+    for (const placement of placements) {
       out.push({
         id: placement.placement_id,
         type: placement.category,
         colorHex: placement.color_hex ?? '#cfcac2',
         material: null,
         rotationCcw: Number(placement.rotation_deg ?? 0),
-        bbox: { minX: cx - w / 2, minY: cy - d / 2, maxX: cx + w / 2, maxY: cy + d / 2 },
+        bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
       });
     }
@@ -606,7 +635,6 @@ export const ThreeDPreviewModal: React.FC = () => {
               typeKey.includes('pendant_light') ||
               typeKey.includes('track_light'));
           const rotCcwDeg = ((Number(obj.rotationCcw ?? 0) % 360) + 360) % 360;
-          const rotCcwRad = (rotCcwDeg * Math.PI) / 180;
 
           // Our 2D outputs store a world-axis-aligned bbox for the already-rotated footprint.
           // If we rotate the proxy mesh by rotCcw again, we must use the *unrotated* footprint dims
@@ -648,7 +676,7 @@ export const ThreeDPreviewModal: React.FC = () => {
           let pyMm = cyMm;
           // Plan Y is mapped to -Z so 3D matches 2D canvas orientation.
           // Therefore 2D CCW rotation maps to 3D yaw with +angle, plus PI because our proxies face +Z by default.
-          let rotY = rotCcwRad + Math.PI;
+          let rotY = planRotationToYawRad(rotCcwDeg);
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
             if (mount) {
