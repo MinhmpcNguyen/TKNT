@@ -16,6 +16,7 @@ from cluster_composer.constraint_score import (
     build_object_specs_from_cluster,
     score_cluster_constraints,
 )
+from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_layout_grid_mm
 
 
 # -----------------------------------------------------------------------------
@@ -1212,7 +1213,9 @@ def _opening_bands(
     openings: Dict[str, List[Dict[str, Any]]],
     room_poly: Any,
 ) -> List[Dict[str, Any]]:
-    grid_mm = int(((payload.get("room_context") or {}).get("grid_mm") or 50))
+    grid_mm = normalize_layout_grid_mm(
+        (payload.get("room_context") or {}).get("grid_mm")
+    )
     out: List[Dict[str, Any]] = []
 
     for kind, depth in (
@@ -1249,7 +1252,9 @@ def _main_path_corridors(
     room_poly: Any,
     state: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    grid_mm = int(((payload.get("room_context") or {}).get("grid_mm") or 50))
+    grid_mm = normalize_layout_grid_mm(
+        (payload.get("room_context") or {}).get("grid_mm")
+    )
     corridors: List[Dict[str, Any]] = []
     relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
     cluster_by_id = {
@@ -1488,7 +1493,7 @@ def _score_cluster_internal_fidelity(
             "decisions": deepcopy(cluster.get("decisions") or []),
         }
         cluster_rules = cluster_payload.get("cluster_rules") or {}
-        grid_mm = int(cluster_rules.get("grid_mm") or 50)
+        grid_mm = normalize_layout_grid_mm(cluster_rules.get("grid_mm"))
         scoring = score_cluster_constraints(
             hard_constraints=cluster_payload["hard_constraints"],
             soft_constraints=cluster_payload["soft_constraints"],
@@ -2974,7 +2979,9 @@ def EnumeratePhase2RepairMoves(
         if variant_ids:
             allowed_variants[cid] = sorted(set(variant_ids))
 
-    grid_mm = int(((payload.get("room_context") or {}).get("grid_mm") or 50))
+    grid_mm = normalize_layout_grid_mm(
+        (payload.get("room_context") or {}).get("grid_mm")
+    )
     cluster_preferences = _cluster_preference_profile(payload)
     cluster_state_by_id = {
         str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
@@ -3262,7 +3269,12 @@ def EnumeratePhase2RepairMoves(
                         "reason": f"Try rotating {cid}.{oid}",
                     }
                 )
-        for dx, dy in ((50, 0), (-50, 0), (0, 50), (0, -50)):
+        for dx, dy in (
+            (GLOBAL_LAYOUT_GRID_MM, 0),
+            (-GLOBAL_LAYOUT_GRID_MM, 0),
+            (0, GLOBAL_LAYOUT_GRID_MM),
+            (0, -GLOBAL_LAYOUT_GRID_MM),
+        ):
             object_moves.append(
                 {
                     "kind": "object_pose",
@@ -3369,7 +3381,9 @@ def ResolvePhase2HardViolations(
             "attempts": [],
         }
 
-    grid_mm = int(((payload.get("room_context") or {}).get("grid_mm") or 50))
+    grid_mm = normalize_layout_grid_mm(
+        (payload.get("room_context") or {}).get("grid_mm")
+    )
     attempted_signatures = {
         json.dumps(
             {

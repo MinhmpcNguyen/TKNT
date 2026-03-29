@@ -18,6 +18,7 @@ from cluster_placer.tools_v2 import (
     PromotePhase2RepairToSeedPayload,
     ResolvePhase2HardViolations,
 )
+from layout.grid_policy import normalize_layout_grid_mm
 
 logger = logging.getLogger(__name__)
 
@@ -748,7 +749,9 @@ def _forced_macro_moves(
         cluster_ids, key=lambda cluster_id: (cluster_id in stuck_clusters, cluster_id)
     )
 
-    grid_mm = int(((payload.get("room_context") or {}).get("grid_mm") or 50))
+    grid_mm = normalize_layout_grid_mm(
+        (payload.get("room_context") or {}).get("grid_mm")
+    )
     tmap = _seed_transform_map(payload.get("seed_layout") or {})
     forced: list[dict[str, Any]] = []
     for cluster_id in cluster_ids[:4]:
@@ -794,6 +797,7 @@ def _forced_object_moves(
 ) -> list[dict[str, Any]]:
     history_context = _build_history_context(history)
     stuck_clusters = set(history_context.get("stuck_clusters") or [])
+    grid_mm = normalize_layout_grid_mm(None)
 
     prioritized_objects = []
     diagnosis = payload.get("repair_debug") or {}
@@ -850,7 +854,7 @@ def _forced_object_moves(
                     ],
                 }
             )
-        for dx, dy in ((50, 0), (-50, 0), (0, 50), (0, -50)):
+        for dx, dy in ((grid_mm, 0), (-grid_mm, 0), (0, grid_mm), (0, -grid_mm)):
             forced.append(
                 {
                     "cluster_transforms": [],

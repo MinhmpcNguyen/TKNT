@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Finite-pose bedroom/room layout solver using OR-Tools CP-SAT.
 
@@ -28,6 +26,8 @@ a path can be passed explicitly. That file provides robust geometry,
 verification, canonicalization, mirroring, and candidate enumeration helpers.
 """
 
+from __future__ import annotations
+
 import argparse
 import importlib.util
 import json
@@ -37,6 +37,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
 
 try:
     from ortools.sat.python import cp_model
@@ -91,7 +93,7 @@ class MacroClusterSolver:
         clusters_outlines_json: dict[str, Any] | list[Any],
         relation_plan_json: dict[str, Any] | None,
         cluster_constraints_json: dict[str, Any] | None = None,
-        grid_mm: int = 50,
+        grid_mm: int = GLOBAL_LAYOUT_GRID_MM,
     ) -> dict[str, Any]:
         tools_path = self.tools_path or _default_tools_path()
         return solve_layout(
@@ -1035,6 +1037,110 @@ def _filter_cluster_constraints(
     return out
 
 
+def _filter_cluster_ids_from_outlines(
+    clusters_outlines: dict[str, Any] | list[Any],
+    removed_ids: set[str],
+) -> dict[str, Any] | list[Any]:
+    if not removed_ids:
+        return clusters_outlines
+
+    if isinstance(clusters_outlines, dict):
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            out = dict(clusters_outlines)
+            out["clusters"] = [
+                item
+                for item in clusters
+                if not (
+                    isinstance(item, dict)
+                    and isinstance(item.get("cluster_id"), str)
+                    and item.get("cluster_id") in removed_ids
+                )
+            ]
+            return out
+        return {
+            cid: payload
+            for cid, payload in clusters_outlines.items()
+            if not (isinstance(cid, str) and cid in removed_ids)
+        }
+
+    if isinstance(clusters_outlines, list):
+        return [
+            item
+            for item in clusters_outlines
+            if not (
+                isinstance(item, dict)
+                and isinstance(item.get("cluster_id"), str)
+                and item.get("cluster_id") in removed_ids
+            )
+        ]
+
+    return clusters_outlines
+
+
+def _skip_clusters_without_candidates(
+    *,
+    clusters_outlines: dict[str, Any] | list[Any],
+    relation_plan: dict[str, Any] | None,
+    cluster_constraints: dict[str, Any] | None,
+    candidates_by_cluster: dict[str, list[Candidate]],
+    variant_payload_lookup: dict[str, dict[str, dict[str, Any]]],
+    cluster_allowed_rotations: dict[str, set[int]],
+) -> tuple[
+    dict[str, Any] | list[Any],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, list[Candidate]],
+    dict[str, dict[str, dict[str, Any]]],
+    dict[str, set[int]],
+    list[str],
+]:
+    skipped_ids = sorted(
+        cid for cid, candidates in candidates_by_cluster.items() if not candidates
+    )
+    if not skipped_ids:
+        return (
+            clusters_outlines,
+            relation_plan,
+            cluster_constraints,
+            candidates_by_cluster,
+            variant_payload_lookup,
+            cluster_allowed_rotations,
+            [],
+        )
+
+    removed_ids = set(skipped_ids)
+    filtered_outlines = _filter_cluster_ids_from_outlines(
+        clusters_outlines, removed_ids
+    )
+    filtered_relation_plan = _filter_relation_plan_clusters(relation_plan, removed_ids)
+    filtered_constraints = _filter_cluster_constraints(cluster_constraints, removed_ids)
+    filtered_candidates = {
+        cid: candidates
+        for cid, candidates in candidates_by_cluster.items()
+        if cid not in removed_ids
+    }
+    filtered_variants = {
+        cid: variants
+        for cid, variants in variant_payload_lookup.items()
+        if cid not in removed_ids
+    }
+    filtered_rotations = {
+        cid: rotations
+        for cid, rotations in cluster_allowed_rotations.items()
+        if cid not in removed_ids
+    }
+    return (
+        filtered_outlines,
+        filtered_relation_plan,
+        filtered_constraints,
+        filtered_candidates,
+        filtered_variants,
+        filtered_rotations,
+        skipped_ids,
+    )
+
+
 def _selected_variants_map(
     selected_variants: Sequence[dict[str, str]],
 ) -> dict[str, str]:
@@ -1215,35 +1321,48 @@ def solve_layout(
         candidates_by_cluster,
         cluster_allowed_rots,
     )
+    (
+        clusters_c,
+        relation_plan_aug,
+        cluster_constraints_n,
+        candidates_by_cluster,
+        variant_payload_lookup,
+        cluster_allowed_rots,
+        skipped_candidate_clusters,
+    ) = _skip_clusters_without_candidates(
+        clusters_outlines=clusters_c,
+        relation_plan=relation_plan_aug,
+        cluster_constraints=cluster_constraints_n,
+        candidates_by_cluster=candidates_by_cluster,
+        variant_payload_lookup=variant_payload_lookup,
+        cluster_allowed_rotations=cluster_allowed_rots,
+    )
+    if skipped_candidate_clusters:
+        logger.info(
+            "Solver skipped clusters without hard-valid candidates: %s",
+            skipped_candidate_clusters,
+        )
     cluster_ids = sorted(candidates_by_cluster.keys())
     if not cluster_ids:
+        notes = ["No candidates were generated."]
+        if skipped_candidate_clusters:
+            notes.insert(
+                0,
+                f"Skipped clusters without hard-valid candidates: {skipped_candidate_clusters}",
+            )
         return {
             "status": "UNSAT",
             "grid_mm": grid_mm,
             "cluster_transforms": [],
             "selected_variants": [],
-            "notes": ["No candidates were generated."],
+            "notes": notes,
+            "skipped_clusters": skipped_candidate_clusters,
             "placer_seed": {
                 "phase": "micro_repair",
                 "ready": False,
                 "needed": False,
                 "reason": "no_candidates_generated",
-            },
-        }
-    if any(len(v) == 0 for v in candidates_by_cluster.values()):
-        missing = [cid for cid, vals in candidates_by_cluster.items() if not vals]
-        return {
-            "status": "UNSAT",
-            "grid_mm": grid_mm,
-            "cluster_transforms": [],
-            "selected_variants": [],
-            "notes": [f"No hard-valid candidates for clusters: {missing}"],
-            "placer_seed": {
-                "phase": "micro_repair",
-                "ready": False,
-                "needed": False,
-                "reason": "no_hard_valid_candidates_for_some_clusters",
-                "missing_clusters": missing,
+                "skipped_clusters": skipped_candidate_clusters,
             },
         }
 
@@ -1299,11 +1418,20 @@ def solve_layout(
                 "cluster_transforms": transforms,
                 "selected_variants": selected_variants,
                 "notes": [
+                    *(
+                        [
+                            "Skipped clusters without hard-valid candidates: "
+                            f"{skipped_candidate_clusters}"
+                        ]
+                        if skipped_candidate_clusters
+                        else []
+                    ),
                     "Solved with finite-pose CP-SAT over enumerated candidates.",
                     f"layout_score={score}",
                     f"state_signature={verify.get('state_signature')}",
                     f"round={round_idx + 1}/{max_rounds}",
                 ],
+                "skipped_clusters": skipped_candidate_clusters,
                 "placer_seed": _build_placer_seed(
                     tools,
                     clusters_outlines=clusters_c,
@@ -1373,7 +1501,18 @@ def solve_layout(
         "grid_mm": grid_mm,
         "cluster_transforms": [],
         "selected_variants": [],
-        "notes": notes,
+        "notes": [
+            *(
+                [
+                    "Skipped clusters without hard-valid candidates: "
+                    f"{skipped_candidate_clusters}"
+                ]
+                if skipped_candidate_clusters
+                else []
+            ),
+            *notes,
+        ],
+        "skipped_clusters": skipped_candidate_clusters,
         "placer_seed": _build_placer_seed(
             tools,
             clusters_outlines=clusters_c,
@@ -1417,7 +1556,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to cluster-level constraints JSON",
     )
-    parser.add_argument("--grid-mm", type=int, default=50, help="Placement grid in mm")
+    parser.add_argument(
+        "--grid-mm",
+        type=int,
+        default=GLOBAL_LAYOUT_GRID_MM,
+        help="Placement grid in mm",
+    )
     parser.add_argument(
         "--tools", default=_default_tools_path(), help="Path to tools.py"
     )

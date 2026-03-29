@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from agent_schema.stylist_schema import StylistOutput
 from clients.llm_client import get_llm_client
 from prompt.stylist import STYLIST_PROMPT
 from prompt.system import SYSTEM_PROMPT
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
+from stylist.deterministic_layout import (
+    DEFAULT_OBJECT_COLOR,
+    DEFAULT_SURFACES,
+    build_deterministic_stylist_payload,
+)
 from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
 logger = logging.getLogger(__name__)
@@ -28,27 +35,12 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> str:
-        normalized_layout = _normalize_layout_json(layout_json)
-        merged_user_context = _inject_tenant(user_context_json, tenant_id)
-        surface_requirements = _compute_surface_requirements(normalized_layout)
-
-        user_prompt = _build_prompt(
-            template=self.prompt_template,
-            layout_json=normalized_layout,
-            user_context_json=merged_user_context,
-            surface_requirements_json=surface_requirements,
+        payload = self._build_output_payload(
+            layout_json=layout_json,
+            user_context_json=user_context_json,
+            tenant_id=tenant_id,
         )
-
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-        return _run_with_tools(
-            messages,
-            layout_json=normalized_layout,
-            user_context_json=merged_user_context,
-        )
+        return json.dumps(payload, ensure_ascii=True, indent=2)
 
     def generate(
         self,
@@ -57,15 +49,54 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any]:
-        normalized_layout = _normalize_layout_json(layout_json)
-        raw = self.generate_raw(
-            layout_json=normalized_layout,
+        payload = self._build_output_payload(
+            layout_json=layout_json,
             user_context_json=user_context_json,
             tenant_id=tenant_id,
         )
-        payload = _parse_json(raw)
-        payload = _fix_place_on_targets(payload, layout_json=normalized_layout)
+        payload = _fix_place_on_targets(
+            payload,
+            layout_json=_normalize_layout_json(layout_json),
+        )
         return StylistOutput.model_validate(payload).model_dump()
+
+    def _build_output_payload(
+        self,
+        *,
+        layout_json: dict[str, Any],
+        user_context_json: dict[str, Any] | None,
+        tenant_id: str | None,
+    ) -> dict[str, Any]:
+        normalized_layout = _normalize_layout_json(layout_json)
+        merged_user_context = _inject_tenant(user_context_json, tenant_id)
+        resolved_tenant_id = _extract_tenant_id(merged_user_context, normalized_layout)
+
+        payload = build_deterministic_stylist_payload(
+            normalized_layout,
+            tenant_id=resolved_tenant_id,
+        )
+        style_context = _build_style_context(
+            layout_json=normalized_layout,
+            user_context_json=merged_user_context,
+            payload=payload,
+        )
+        style_prompt = _build_color_prompt(
+            template=self.prompt_template,
+            style_context_json=style_context,
+            locked_style_payload_json=_build_locked_style_payload(payload),
+        )
+
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": style_prompt},
+        ]
+        style_plan = _generate_style_plan(messages)
+        styled_payload = _apply_style_plan(
+            payload=payload,
+            style_plan=style_plan,
+            style_context=style_context,
+        )
+        return styled_payload
 
 
 def _build_prompt(
@@ -79,6 +110,22 @@ def _build_prompt(
         "LAYOUT_JSON": _json_block(layout_json),
         "USER_CONTEXT_JSON": _json_block(user_context_json),
         "SURFACE_REQUIREMENTS_JSON": _json_block(surface_requirements_json),
+    }
+    output = template
+    for key, value in mapping.items():
+        output = output.replace("{" + key + "}", value)
+    return output
+
+
+def _build_color_prompt(
+    *,
+    template: str,
+    style_context_json: dict[str, Any],
+    locked_style_payload_json: dict[str, Any],
+) -> str:
+    mapping = {
+        "STYLE_CONTEXT_JSON": _json_block(style_context_json),
+        "LOCKED_STYLE_PAYLOAD_JSON": _json_block(locked_style_payload_json),
     }
     output = template
     for key, value in mapping.items():
@@ -139,6 +186,530 @@ def _normalize_layout_json(layout_json: dict[str, Any]) -> dict[str, Any]:
         normalized_objects.append(row)
     out["objects"] = normalized_objects
     return out
+
+
+def _build_style_context(
+    *,
+    layout_json: dict[str, Any],
+    user_context_json: dict[str, Any] | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    room = layout_json.get("room") if isinstance(layout_json.get("room"), dict) else {}
+    notes = _extract_guidance_notes(user_context_json)
+    payload_notes = payload.get("notes")
+    if isinstance(payload_notes, list):
+        for note in payload_notes:
+            if isinstance(note, str) and note.strip() and note.strip() not in notes:
+                notes.append(note.strip())
+
+    objects_summary: list[dict[str, Any]] = []
+    for row in payload.get("objects") or []:
+        if not isinstance(row, dict):
+            continue
+        place_on = (
+            row.get("place_on") if isinstance(row.get("place_on"), dict) else None
+        )
+        objects_summary.append(
+            {
+                "instance_id": row.get("instance_id"),
+                "object_type": row.get("object_type"),
+                "source": row.get("source"),
+                "cluster_id": row.get("cluster_id"),
+                "place_on": place_on,
+            }
+        )
+
+    room_info = payload.get("room") if isinstance(payload.get("room"), dict) else {}
+    openings = (
+        room_info.get("openings") if isinstance(room_info.get("openings"), dict) else {}
+    )
+    return {
+        "room_type": _extract_room_type(layout_json),
+        "requested_style": _extract_requested_style(user_context_json, layout_json),
+        "style_tags": _extract_style_tags(user_context_json, layout_json),
+        "notes": notes[:8],
+        "room_id": room_info.get("room_id") or room.get("room_id") or "room_1",
+        "door_ids": [
+            row.get("id")
+            for row in openings.get("doors", [])
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        ],
+        "window_ids": [
+            row.get("id")
+            for row in openings.get("windows", [])
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        ],
+        "objects": objects_summary,
+    }
+
+
+def _extract_guidance_notes(
+    user_context_json: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(user_context_json, dict):
+        return []
+
+    notes: list[str] = []
+
+    def _add(value: Any) -> None:
+        if not isinstance(value, str):
+            return
+        text = value.strip()
+        if text and text not in notes:
+            notes.append(text)
+
+    for key in ("guidance_text", "notes_text"):
+        _add(user_context_json.get(key))
+
+    for key in ("notes", "room_notes"):
+        value = user_context_json.get(key)
+        if isinstance(value, list):
+            for item in value:
+                _add(item)
+
+    user_input = user_context_json.get("user_input")
+    if isinstance(user_input, dict):
+        for key in (
+            "description",
+            "special_description",
+            "special_notes",
+            "notes",
+            "feng_shui",
+        ):
+            _add(user_input.get(key))
+
+    return notes
+
+
+def _extract_requested_style(
+    user_context_json: dict[str, Any] | None,
+    layout_json: dict[str, Any],
+) -> str:
+    if isinstance(user_context_json, dict):
+        style = user_context_json.get("style")
+        if isinstance(style, str) and style.strip():
+            return style.strip()
+        user_input = user_context_json.get("user_input")
+        if isinstance(user_input, dict):
+            style = user_input.get("style")
+            if isinstance(style, str) and style.strip():
+                return style.strip()
+
+    room = layout_json.get("room") if isinstance(layout_json.get("room"), dict) else {}
+    style = room.get("style")
+    if isinstance(style, str) and style.strip():
+        return style.strip()
+
+    meta = layout_json.get("meta")
+    if isinstance(meta, dict):
+        style = meta.get("style")
+        if isinstance(style, str) and style.strip():
+            return style.strip()
+
+    return ""
+
+
+def _build_locked_style_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    room = payload.get("room") if isinstance(payload.get("room"), dict) else {}
+    objects_out: list[dict[str, Any]] = []
+    for row in payload.get("objects") or []:
+        if not isinstance(row, dict):
+            continue
+        objects_out.append(
+            {
+                "instance_id": row.get("instance_id"),
+                "object_type": row.get("object_type"),
+                "source": row.get("source"),
+                "cluster_id": row.get("cluster_id"),
+                "place_on": row.get("place_on"),
+            }
+        )
+
+    return {
+        "room": {
+            "room_id": room.get("room_id"),
+            "room_type": room.get("room_type"),
+            "opening_ids": {
+                "doors": [
+                    item.get("id")
+                    for item in (room.get("openings") or {}).get("doors", [])
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                ],
+                "windows": [
+                    item.get("id")
+                    for item in (room.get("openings") or {}).get("windows", [])
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                ],
+            },
+        },
+        "objects": objects_out,
+    }
+
+
+def _generate_style_plan(messages: list[dict[str, str]]) -> dict[str, Any]:
+    try:
+        response = get_llm_client().chat_completion(
+            messages,
+            model_key="primary",
+            temperature=1.2,
+            max_tokens=1800,
+        )
+        content = _extract_content_from_response(response)
+        return _parse_json(content)
+    except Exception as exc:
+        logger.warning("Stylist color planner fallback triggered: %s", exc)
+        return {}
+
+
+def _apply_style_plan(
+    *,
+    payload: dict[str, Any],
+    style_plan: dict[str, Any],
+    style_context: dict[str, Any],
+) -> dict[str, Any]:
+    out = deepcopy(payload)
+    palette = _fallback_palette(style_context)
+
+    room = out.get("room")
+    if isinstance(room, dict):
+        room["surfaces"] = {
+            "wall_color_hex": palette["wall"],
+            "floor_color_hex": palette["floor"],
+            "ceiling_color_hex": palette["ceiling"],
+        }
+        opening_colors = room.get("opening_colors")
+        if not isinstance(opening_colors, dict):
+            opening_colors = {"doors": [], "windows": []}
+            room["opening_colors"] = opening_colors
+        for item in opening_colors.get("doors", []):
+            if isinstance(item, dict):
+                item["color_hex"] = palette["trim"]
+        for item in opening_colors.get("windows", []):
+            if isinstance(item, dict):
+                item["color_hex"] = palette["glass"]
+
+    for row in out.get("objects") or []:
+        if not isinstance(row, dict):
+            continue
+        object_type = str(row.get("object_type") or "")
+        instance_id = str(row.get("instance_id") or object_type)
+        row["color_hex"] = _fallback_object_color(
+            object_type=object_type,
+            instance_id=instance_id,
+            palette=palette,
+        )
+        material = row.get("material")
+        if not isinstance(material, str) or not material.strip():
+            row["material"] = _fallback_material_name(object_type)
+
+    if isinstance(style_plan, dict):
+        room_surfaces = style_plan.get("room_surfaces")
+        if isinstance(room_surfaces, dict) and isinstance(room, dict):
+            surfaces = room.get("surfaces")
+            if not isinstance(surfaces, dict):
+                surfaces = dict(DEFAULT_SURFACES)
+                room["surfaces"] = surfaces
+            for key in ("wall_color_hex", "floor_color_hex", "ceiling_color_hex"):
+                value = room_surfaces.get(key)
+                if _is_hex_color(value):
+                    surfaces[key] = value
+
+        opening_colors_plan = style_plan.get("opening_colors")
+        if isinstance(opening_colors_plan, dict) and isinstance(room, dict):
+            opening_colors = room.get("opening_colors")
+            if not isinstance(opening_colors, dict):
+                opening_colors = {"doors": [], "windows": []}
+                room["opening_colors"] = opening_colors
+            for key in ("doors", "windows"):
+                plan_rows = opening_colors_plan.get(key)
+                output_rows = opening_colors.get(key)
+                if not isinstance(plan_rows, list) or not isinstance(output_rows, list):
+                    continue
+                by_id = {
+                    item.get("id"): item
+                    for item in output_rows
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                for plan_row in plan_rows:
+                    if not isinstance(plan_row, dict):
+                        continue
+                    opening_id = plan_row.get("id")
+                    color_hex = plan_row.get("color_hex")
+                    if (
+                        isinstance(opening_id, str)
+                        and opening_id in by_id
+                        and _is_hex_color(color_hex)
+                    ):
+                        by_id[opening_id]["color_hex"] = color_hex
+
+        object_styles = style_plan.get("object_styles")
+        if isinstance(object_styles, list):
+            style_by_id = {
+                row.get("instance_id"): row
+                for row in object_styles
+                if isinstance(row, dict) and isinstance(row.get("instance_id"), str)
+            }
+            for row in out.get("objects") or []:
+                if not isinstance(row, dict):
+                    continue
+                instance_id = row.get("instance_id")
+                if not isinstance(instance_id, str):
+                    continue
+                planned = style_by_id.get(instance_id)
+                if not isinstance(planned, dict):
+                    continue
+                color_hex = planned.get("color_hex")
+                if _is_hex_color(color_hex):
+                    row["color_hex"] = color_hex
+                material = planned.get("material")
+                if material is None:
+                    row["material"] = None
+                elif isinstance(material, str) and material.strip():
+                    row["material"] = material.strip()
+
+        combined_notes = list(out.get("notes") or [])
+        style_notes = style_plan.get("notes")
+        if not isinstance(style_notes, list):
+            style_notes = []
+        for note in style_notes:
+            if (
+                isinstance(note, str)
+                and note.strip()
+                and note.strip() not in combined_notes
+            ):
+                combined_notes.append(note.strip())
+        out["notes"] = combined_notes[:6]
+
+    return out
+
+
+def _fallback_palette(style_context: dict[str, Any]) -> dict[str, str]:
+    style_text = " ".join(
+        [
+            str(style_context.get("requested_style") or ""),
+            " ".join(
+                item
+                for item in style_context.get("style_tags", [])
+                if isinstance(item, str)
+            ),
+            " ".join(
+                item for item in style_context.get("notes", []) if isinstance(item, str)
+            ),
+        ]
+    ).lower()
+
+    if "japandi" in style_text:
+        return {
+            "wall": "#F1E8DC",
+            "floor": "#B98A61",
+            "ceiling": "#FBF5EC",
+            "trim": "#8F7259",
+            "glass": "#DDE7F0",
+            "large": "#B79A7C",
+            "soft": "#DCC9B6",
+            "accent": "#A46D3F",
+            "accent_alt": "#7E8A70",
+            "metal": "#5B5651",
+            "dark": "#4B4038",
+        }
+    if "industrial" in style_text:
+        return {
+            "wall": "#E1DDD7",
+            "floor": "#8B6B4F",
+            "ceiling": "#F4F1EC",
+            "trim": "#4D4D4D",
+            "glass": "#C6D4DE",
+            "large": "#6D726E",
+            "soft": "#B8ADA0",
+            "accent": "#B35C3B",
+            "accent_alt": "#6C7A7A",
+            "metal": "#4D4D4D",
+            "dark": "#2E2E2E",
+        }
+    if "boho" in style_text:
+        return {
+            "wall": "#F5E6D4",
+            "floor": "#B57E50",
+            "ceiling": "#FBF5EE",
+            "trim": "#99613D",
+            "glass": "#D7E4EA",
+            "large": "#B48A68",
+            "soft": "#D6B79D",
+            "accent": "#C46849",
+            "accent_alt": "#7B8F65",
+            "metal": "#7D665A",
+            "dark": "#5B4336",
+        }
+    if "minimal" in style_text or "scandinav" in style_text:
+        return {
+            "wall": "#F6F2EC",
+            "floor": "#C6A47A",
+            "ceiling": "#FCFAF6",
+            "trim": "#8D8C84",
+            "glass": "#E1EAF0",
+            "large": "#C2B8AA",
+            "soft": "#DDD6CB",
+            "accent": "#8F9C9A",
+            "accent_alt": "#BCA08A",
+            "metal": "#76736E",
+            "dark": "#55514C",
+        }
+    return {
+        "wall": "#F2ECE4",
+        "floor": "#BC926A",
+        "ceiling": "#FBF7F2",
+        "trim": "#8A715B",
+        "glass": "#D9E3EC",
+        "large": "#B9A690",
+        "soft": "#D7C8B8",
+        "accent": "#8F7A6A",
+        "accent_alt": "#7F8E86",
+        "metal": "#6F6962",
+        "dark": "#4F463F",
+    }
+
+
+def _fallback_object_color(
+    *,
+    object_type: str,
+    instance_id: str,
+    palette: dict[str, str],
+) -> str:
+    lowered = object_type.lower()
+    accent = _pick_palette_color(
+        [palette["accent"], palette["accent_alt"], palette["soft"]],
+        seed=instance_id,
+    )
+    if any(token in lowered for token in ("rug", "curtain", "blanket", "cushion")):
+        return accent
+    if "plant" in lowered:
+        return palette["accent_alt"]
+    if any(
+        token in lowered
+        for token in (
+            "lamp",
+            "speaker",
+            "clock",
+            "desktop",
+            "printer",
+            "monitor",
+            "tv",
+            "air_conditioner",
+            "appliance",
+            "cooktop",
+            "oven",
+            "microwave",
+            "toaster",
+            "blender",
+            "coffee_machine",
+        )
+    ):
+        return palette["metal"]
+    if any(token in lowered for token in ("mirror", "window", "screen")):
+        return palette["glass"]
+    if any(token in lowered for token in ("decor", "vase")):
+        return accent
+    if any(
+        token in lowered
+        for token in (
+            "chair",
+            "armchair",
+            "sofa",
+            "bed",
+            "bench",
+            "bean_bag",
+            "ottoman",
+        )
+    ):
+        return _pick_palette_color(
+            [palette["large"], palette["soft"], accent],
+            seed=instance_id,
+        )
+    if any(
+        token in lowered
+        for token in (
+            "desk",
+            "table",
+            "dresser",
+            "wardrobe",
+            "cabinet",
+            "bookshelf",
+            "console",
+            "nightstand",
+            "storage",
+        )
+    ):
+        return _pick_palette_color(
+            [palette["large"], palette["dark"]],
+            seed=instance_id,
+        )
+    return DEFAULT_OBJECT_COLOR
+
+
+def _pick_palette_color(options: list[str], *, seed: str) -> str:
+    if not options:
+        return DEFAULT_OBJECT_COLOR
+    index = sum(ord(ch) for ch in seed) % len(options)
+    return options[index]
+
+
+def _is_hex_color(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.match(r"^#[0-9A-Fa-f]{6}$", value))
+
+
+def _extract_content_from_response(response: object) -> str:
+    choices = getattr(response, "choices", None)
+    if isinstance(choices, list) and choices:
+        message = getattr(choices[0], "message", None)
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content
+    raise ValueError("Stylist color planner response missing message content")
+
+
+def _fallback_material_name(object_type: str) -> str:
+    lowered = object_type.lower()
+    if any(
+        token in lowered
+        for token in (
+            "rug",
+            "curtain",
+            "blanket",
+            "cushion",
+            "bed",
+            "sofa",
+            "chair",
+            "armchair",
+            "bean_bag",
+        )
+    ):
+        return "fabric"
+    if any(
+        token in lowered
+        for token in (
+            "lamp",
+            "clock",
+            "speaker",
+            "air_conditioner",
+            "monitor",
+            "laptop",
+            "desktop",
+            "printer",
+            "appliance",
+            "microwave",
+            "oven",
+            "toaster",
+            "blender",
+            "hood",
+            "cooktop",
+        )
+    ):
+        return "metal"
+    if any(token in lowered for token in ("mirror", "window", "glass")):
+        return "glass"
+    if any(token in lowered for token in ("vase", "plant", "decor")):
+        return "ceramic"
+    return "wood"
 
 
 def _run_with_tools(
@@ -321,7 +892,9 @@ def _run_with_tools(
                     else []
                 )
                 if size_issues and inventory_items:
-                    forced = _force_snap_inventory_sizes(dict(draft_eval), inventory_items)
+                    forced = _force_snap_inventory_sizes(
+                        dict(draft_eval), inventory_items
+                    )
                     forced_issues = _validate_inventory_sizes(forced, inventory_items)
                     if not forced_issues:
                         draft_eval = forced
@@ -399,7 +972,9 @@ def _run_with_tools(
             if inventory_items:
                 size_issues = _validate_inventory_sizes(draft_eval, inventory_items)
                 if size_issues:
-                    forced = _force_snap_inventory_sizes(dict(draft_eval), inventory_items)
+                    forced = _force_snap_inventory_sizes(
+                        dict(draft_eval), inventory_items
+                    )
                     forced_issues = _validate_inventory_sizes(forced, inventory_items)
                     if not forced_issues:
                         draft_eval = forced
@@ -468,7 +1043,6 @@ def _coerce_tool_args(
 
     room_type = _extract_room_type(layout_json)
     tenant_id = _extract_tenant_id(user_context_json, layout_json)
-    style_tags = _extract_style_tags(user_context_json, layout_json)
 
     if name == "GetRoomSurfaceGroups":
         out["room_type"] = room_type
@@ -578,28 +1152,7 @@ def _extract_message(response: object) -> object:
 
 
 def _extract_tool_calls(message: object) -> list[dict[str, Any]]:
-    tool_calls = getattr(message, "tool_calls", None)
-    if not tool_calls:
-        return []
-    output: list[dict[str, Any]] = []
-    for call in tool_calls:
-        if isinstance(call, dict):
-            output.append(call)
-            continue
-        fn = getattr(call, "function", None)
-        output.append(
-            {
-                "id": getattr(call, "id", None),
-                "type": getattr(call, "type", "function"),
-                "function": {
-                    "name": getattr(fn, "name", None) if fn is not None else None,
-                    "arguments": getattr(fn, "arguments", None)
-                    if fn is not None
-                    else None,
-                },
-            }
-        )
-    return output
+    return parse_tool_calls(message)
 
 
 def _safe_json_loads(value: str) -> dict[str, Any]:
@@ -829,7 +1382,9 @@ def _snap_inventory_sizes(
             return None
         return min(xs), min(ys), max(xs), max(ys)
 
-    def _rect_poly(min_x: int, min_y: int, max_x: int, max_y: int) -> list[dict[str, int]]:
+    def _rect_poly(
+        min_x: int, min_y: int, max_x: int, max_y: int
+    ) -> list[dict[str, int]]:
         return [
             {"x": min_x, "y": min_y},
             {"x": max_x, "y": min_y},
@@ -883,7 +1438,9 @@ def _snap_inventory_sizes(
         place_on = row.get("place_on") if isinstance(row.get("place_on"), dict) else {}
         method = str(place_on.get("method") or "floor")
 
-        def _pairs_for_dims(L: int, W: int, H: int, *, method: str) -> list[tuple[int, int]]:
+        def _pairs_for_dims(
+            L: int, W: int, H: int, *, method: str
+        ) -> list[tuple[int, int]]:
             if method in {"floor", "on_top"}:
                 return [(L, W)]
             pairs: list[tuple[int, int]] = []
@@ -988,7 +1545,9 @@ def _force_snap_inventory_sizes(
             return None
         return min(xs), min(ys), max(xs), max(ys)
 
-    def _rect_poly(min_x: int, min_y: int, max_x: int, max_y: int) -> list[dict[str, int]]:
+    def _rect_poly(
+        min_x: int, min_y: int, max_x: int, max_y: int
+    ) -> list[dict[str, int]]:
         return [
             {"x": min_x, "y": min_y},
             {"x": max_x, "y": min_y},
@@ -1198,7 +1757,9 @@ def _try_parse_json_object(text: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _fix_place_on_targets(payload: dict[str, Any], *, layout_json: dict[str, Any]) -> dict[str, Any]:
+def _fix_place_on_targets(
+    payload: dict[str, Any], *, layout_json: dict[str, Any]
+) -> dict[str, Any]:
     """
     Stylist sometimes returns place_on.target_instance_id=null even though the schema requires a string.
     We repair this deterministically to keep the pipeline stable.
@@ -1210,8 +1771,10 @@ def _fix_place_on_targets(payload: dict[str, Any], *, layout_json: dict[str, Any
     if not isinstance(objects, list) or not objects:
         return payload
 
-    supports: list[tuple[str, int, int, int, int, int]] = []  # (id, minx, miny, maxx, maxy, area)
-    for o in (layout_json.get("objects") or []):
+    supports: list[
+        tuple[str, int, int, int, int, int]
+    ] = []  # (id, minx, miny, maxx, maxy, area)
+    for o in layout_json.get("objects") or []:
         if not isinstance(o, dict):
             continue
         inst = o.get("instance_id")
@@ -1231,7 +1794,9 @@ def _fix_place_on_targets(payload: dict[str, Any], *, layout_json: dict[str, Any
     # Prefer smallest container when inferring "on_top" supports.
     supports.sort(key=lambda x: x[5])
 
-    def contains(a: tuple[str, int, int, int, int, int], b: dict[str, Any], *, tol: int = 5) -> bool:
+    def contains(
+        a: tuple[str, int, int, int, int, int], b: dict[str, Any], *, tol: int = 5
+    ) -> bool:
         w, h = _bbox_dims(b)
         bbox = b.get("bbox")
         if w is None or h is None or not isinstance(bbox, dict):
@@ -1252,7 +1817,12 @@ def _fix_place_on_targets(payload: dict[str, Any], *, layout_json: dict[str, Any
         )
 
     def is_ceiling_type(obj_type: str) -> bool:
-        return obj_type in {"ceiling_light", "pendant_light", "track_light", "projector"}
+        return obj_type in {
+            "ceiling_light",
+            "pendant_light",
+            "track_light",
+            "projector",
+        }
 
     for obj in objects:
         if not isinstance(obj, dict):
@@ -1268,7 +1838,9 @@ def _fix_place_on_targets(payload: dict[str, Any], *, layout_json: dict[str, Any
         obj_type = str(obj.get("object_type") or "")
 
         if method in {"hang_on", "lean_on"}:
-            place_on["target_instance_id"] = "ceiling" if is_ceiling_type(obj_type) else "wall"
+            place_on["target_instance_id"] = (
+                "ceiling" if is_ceiling_type(obj_type) else "wall"
+            )
             continue
 
         if method == "floor":

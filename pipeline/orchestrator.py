@@ -18,6 +18,7 @@ from agent.stylist import Stylist
 from agent.tier_count_director import TierCountDirector
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
+from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,46 @@ class CasePaths:
         return self.root / "case_meta.json"
 
 
+def _build_primary_guidance_text(
+    *,
+    room_output: dict[str, Any],
+    input_payload: dict[str, Any],
+    description: str | None,
+    special_notes: str | None,
+) -> str:
+    notes = room_output.get("notes")
+    if isinstance(notes, list):
+        cleaned_notes = [
+            note.strip() for note in notes if isinstance(note, str) and note.strip()
+        ]
+        if cleaned_notes:
+            return "\n".join(f"- {note}" for note in cleaned_notes)
+
+    legacy_parts: list[str] = []
+    for value in (description, special_notes):
+        if isinstance(value, str) and value.strip():
+            legacy_parts.append(value.strip())
+
+    user_input = input_payload.get("user_input")
+    if isinstance(user_input, dict):
+        for key in (
+            "description",
+            "special_description",
+            "special_notes",
+            "notes",
+            "feng_shui",
+            "style",
+        ):
+            value = user_input.get(key)
+            if not isinstance(value, str):
+                continue
+            text = value.strip()
+            if text and text not in legacy_parts:
+                legacy_parts.append(text)
+
+    return "\n".join(legacy_parts)
+
+
 def run_case(
     *,
     input_payload: dict[str, Any],
@@ -113,9 +154,19 @@ def run_case(
 
     # 1) RoomInterpreter
     room_interpreter = RoomInterpreter()
-    room_output = room_interpreter.generate(input_payload).model_dump()
+    room_output = room_interpreter.generate(
+        input_payload,
+        description=description,
+        special_notes=special_notes,
+    ).model_dump()
     room_output = _strip_raw_text(room_output)
     _write_json(paths.room_interpreter, room_output)
+    guidance_text = _build_primary_guidance_text(
+        room_output=room_output,
+        input_payload=input_payload,
+        description=description,
+        special_notes=special_notes,
+    )
 
     _update_status(paths, "cluster_forge")
 
@@ -124,8 +175,8 @@ def run_case(
     cluster_forge = ClusterForge()
     cluster_output = cluster_forge.generate(
         room_type,
-        description=description,
-        special_notes=special_notes,
+        description=guidance_text or None,
+        special_notes=None,
     ).model_dump()
     cluster_output = _strip_raw_text(cluster_output)
     _write_json(paths.cluster_forge, cluster_output)
@@ -135,8 +186,8 @@ def run_case(
     # 3) TierCountDirector
     tier_count = TierCountDirector()
     tier_output = tier_count.generate(
-        description=description or "",
-        special_notes=special_notes or "",
+        description=guidance_text,
+        special_notes="",
         room_model_json=room_output,
         user_intent_json=input_payload,
         clusters_json=cluster_output,
@@ -165,8 +216,8 @@ def run_case(
         cluster_result = composer.generate(
             merged_clusters=merged_output,
             cluster_id=cluster_id,
-            description=description or "",
-            special_notes=special_notes or "",
+            description=guidance_text,
+            special_notes="",
         )
         cluster_result = _strip_raw_text(cluster_result)
         _write_json(paths.cluster_composer(cluster_id), cluster_result)
@@ -186,8 +237,8 @@ def run_case(
     relation_plan = relation_planner.generate(
         room_model_json=room_output,
         clusters_json=cluster_outlines,
-        description=description or "",
-        special_notes=special_notes or "",
+        description=guidance_text,
+        special_notes="",
     )
     relation_plan = _strip_raw_text(relation_plan)
     _write_json(paths.cluster_relation_plan, relation_plan)
@@ -202,7 +253,7 @@ def run_case(
         clusters_outlines_json=filtered_cluster_outlines,
         relation_plan_json=relation_plan,
         cluster_constraints_json=cluster_output,
-        grid_mm=50,
+        grid_mm=GLOBAL_LAYOUT_GRID_MM,
     )
     solver_output = _strip_raw_text(solver_output)
     _write_json(paths.cluster_solver, solver_output)
@@ -219,9 +270,6 @@ def run_case(
     placer_output = _strip_raw_text(phase2_result.get("proposal") or {})
     _write_json(paths.cluster_placer, placer_output)
 
-    solver_status = (
-        solver_output.get("status") if isinstance(solver_output, dict) else None
-    )
     # if solver_status != "OK":
     #     _update_status(
     #         paths,
@@ -273,10 +321,23 @@ def run_case(
 
     # 9) Stylist
     stylist = Stylist()
+    room_meta = room_output.get("meta") if isinstance(room_output, dict) else None
+    stylist_tenant_id = _extract_tenant_id_from_payload(input_payload)
     stylist_output = stylist.generate(
         layout_json=absolute_layout,
-        user_context_json={"user_id": user_id},
-        tenant_id=None,
+        user_context_json={
+            "user_id": user_id,
+            "tenant_id": stylist_tenant_id,
+            "style": room_meta.get("style") if isinstance(room_meta, dict) else "",
+            "room_notes": room_output.get("notes", [])
+            if isinstance(room_output, dict)
+            else [],
+            "guidance_text": guidance_text,
+            "user_input": input_payload.get("user_input", {})
+            if isinstance(input_payload, dict)
+            else {},
+        },
+        tenant_id=stylist_tenant_id,
     )
     stylist_output = _strip_raw_text(stylist_output)
     _write_json(paths.stylist, stylist_output)
@@ -345,6 +406,18 @@ def _extract_room_type(
         if isinstance(rt, str) and rt:
             return rt
     return "unknown"
+
+
+def _extract_tenant_id_from_payload(input_payload: dict[str, Any]) -> str | None:
+    tenant_id = input_payload.get("tenant_id")
+    if isinstance(tenant_id, str) and tenant_id.strip():
+        return tenant_id.strip()
+    user_input = input_payload.get("user_input")
+    if isinstance(user_input, dict):
+        tenant_id = user_input.get("tenant_id")
+        if isinstance(tenant_id, str) and tenant_id.strip():
+            return tenant_id.strip()
+    return None
 
 
 def _strip_raw_text(payload: Any) -> Any:

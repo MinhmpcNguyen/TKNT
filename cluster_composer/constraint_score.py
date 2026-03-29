@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from typing import Any, Iterable, Tuple
 
+from layout.grid_policy import normalize_layout_grid_mm
+
 Rect = Tuple[int, int, int, int]
 Point = Tuple[int, int]
 
@@ -52,7 +54,7 @@ def score_cluster_from_cluster_json(
         soft_constraints=soft_constraints,
         objects=objects,
         local_placements=local_placements,
-        grid_mm=int((cluster_rules or {}).get("grid_mm", 1) or 1),
+        grid_mm=normalize_layout_grid_mm((cluster_rules or {}).get("grid_mm")),
         cluster_rules=cluster_rules,
         use_clearance=use_clearance,
     )

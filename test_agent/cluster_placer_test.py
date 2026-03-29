@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import sys
@@ -11,7 +12,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from agent.cluster_placer import MacroClusterPlacer
+MacroClusterPlacer = importlib.import_module("agent.cluster_placer").MacroClusterPlacer
+GLOBAL_LAYOUT_GRID_MM = importlib.import_module(
+    "layout.grid_policy"
+).GLOBAL_LAYOUT_GRID_MM
 
 
 def _load_json(path: Path) -> Any:
@@ -28,12 +32,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Test MacroClusterPlacer agent")
     parser.add_argument(
         "--room",
-        default=str(REPO_ROOT / "test_agent" / "result" / "room_interpreter_output.json"),
+        default=str(
+            REPO_ROOT / "test_agent" / "result" / "room_interpreter_output.json"
+        ),
         help="Path to room_model_json",
     )
     parser.add_argument(
         "--clusters",
-        default=str(REPO_ROOT / "test_agent" / "result" / "cluster_outline_output.json"),
+        default=str(
+            REPO_ROOT / "test_agent" / "result" / "cluster_outline_output.json"
+        ),
         help="Path to clusters_outlines_json",
     )
     parser.add_argument(
@@ -44,7 +52,7 @@ def main() -> int:
     parser.add_argument(
         "--grid",
         type=int,
-        default=50,
+        default=GLOBAL_LAYOUT_GRID_MM,
         help="grid_mm for placement",
     )
     args = parser.parse_args()

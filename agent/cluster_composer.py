@@ -6,9 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from agent_schema.cluster_composer_schema import ClusterComposerOutput
-from clients.llm_client import get_llm_client
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
+from layout.grid_policy import normalize_layout_grid_mm
 from prompt.cluster_composer import CLUSTER_COMPOSER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -34,22 +35,13 @@ class ClusterComposer:
     ) -> str:
         access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
         cluster = _find_cluster(merged_clusters, cluster_id)
-        user_prompt = _build_prompt(
-            template=self.prompt_template,
-            description=description,
-            special_notes=special_notes,
-            input_json=cluster,
-            verifier_feedback_json=verifier_feedback_json,
-        )
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        return _run_with_tools(
-            messages=messages,
+        return _run_deterministic_controller(
             cluster=cluster,
             max_steps=max_steps,
             access_clearance_ratio=access_clearance_ratio,
+            description=description,
+            special_notes=special_notes,
+            verifier_feedback_json=verifier_feedback_json,
         )
 
     def generate(
@@ -131,6 +123,170 @@ def _json_block(obj: Any) -> str:
 # ---------------------------
 
 
+def _run_deterministic_controller(
+    *,
+    cluster: dict[str, Any],
+    max_steps: int,
+    access_clearance_ratio: float,
+    description: str,
+    special_notes: str,
+    verifier_feedback_json: dict[str, Any] | None,
+) -> str:
+    del description
+    del special_notes
+    del verifier_feedback_json
+
+    access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
+    expected_member_ids = _member_ids(cluster)
+    if not expected_member_ids:
+        return json.dumps(
+            {
+                "status": "NEED_INFO",
+                "cluster_id": str(cluster.get("cluster_id") or ""),
+                "local_placements": [],
+                "notes": ["Cluster has no members to compose."],
+                "missing": ["members"],
+            },
+            ensure_ascii=True,
+        )
+
+    best_valid_draft: dict[str, Any] | None = None
+    best_valid_eval: dict[str, Any] | None = None
+    best_valid_rank: tuple[Any, ...] | None = None
+
+    seed_states = _build_search_seed_states(cluster)
+    visited: set[str] = set()
+    frontier: list[
+        tuple[tuple[Any, ...], int, list[dict[str, Any]], dict[str, Any]]
+    ] = []
+    step_budget = max(1, int(max_steps))
+
+    for placements in seed_states:
+        ok, detail = _validate_local_placements_full(placements, expected_member_ids)
+        if not ok:
+            logger.warning("ClusterComposer deterministic seed rejected: %s", detail)
+            continue
+
+        canonical = _canonicalize_local_placements(placements)
+        state_sig = _placements_signature(canonical)
+        if state_sig in visited:
+            continue
+        visited.add(state_sig)
+
+        eval_out = _run_verifier_once(
+            cluster=cluster,
+            placements=canonical,
+            access_clearance_ratio=access_clearance_ratio,
+        )
+        frontier.append((_tool_rank(eval_out), 0, canonical, eval_out))
+
+    if not frontier:
+        return json.dumps(
+            {
+                "status": "UNSAT",
+                "cluster_id": str(cluster.get("cluster_id") or ""),
+                "local_frame": {
+                    "unit": "mm",
+                    "grid_mm": _extract_grid_mm(cluster),
+                    "origin_note": "(0,0) is an arbitrary local origin for this cluster",
+                },
+                "local_placements": [],
+                "cluster_footprint": {
+                    "type": "union_of_rects",
+                    "rects": [],
+                    "local_bbox": {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0},
+                },
+                "notes": ["No valid deterministic seed state could be generated."],
+                "missing": [],
+            },
+            ensure_ascii=True,
+        )
+
+    steps_used = 0
+    while frontier and steps_used < step_budget:
+        frontier.sort(key=lambda item: (item[0], item[1]))
+        current_rank, depth, placements, eval_out = frontier.pop(0)
+        steps_used += 1
+
+        if eval_out.get("result") == "VALID":
+            placements, eval_out, improve_rounds = _greedy_improve_valid_layout(
+                cluster=cluster,
+                access_clearance_ratio=access_clearance_ratio,
+                placements=placements,
+                verifier_eval=eval_out,
+                max_rounds=max(1, step_budget - steps_used),
+            )
+            current_rank = _tool_rank(eval_out)
+
+            if best_valid_rank is None or current_rank < best_valid_rank:
+                best_valid_rank = current_rank
+                best_valid_draft = {
+                    "cluster_id": cluster.get("cluster_id"),
+                    "local_placements": placements,
+                }
+                best_valid_eval = eval_out
+
+            if improve_rounds > 0:
+                logger.info(
+                    "ClusterComposer deterministic refinement applied %s improving rounds.",
+                    improve_rounds,
+                )
+            continue
+
+        successors = _collect_ranked_patch_successors(
+            cluster=cluster,
+            access_clearance_ratio=access_clearance_ratio,
+            tool_output=eval_out,
+            placements=placements,
+            limit=3,
+        )
+
+        for successor_rank, successor_placements, successor_eval in successors:
+            state_sig = _placements_signature(successor_placements)
+            if state_sig in visited:
+                continue
+            visited.add(state_sig)
+            frontier.append(
+                (successor_rank, depth + 1, successor_placements, successor_eval)
+            )
+
+    if best_valid_draft is not None and isinstance(
+        best_valid_draft.get("local_placements"), list
+    ):
+        payload = _build_cluster_output_from_placements(
+            cluster=cluster,
+            placements=_canonicalize_local_placements(
+                best_valid_draft["local_placements"]
+            ),
+            verifier_eval=best_valid_eval,
+            notes=["ClusterComposer used deterministic search instead of an LLM."],
+        )
+        return json.dumps(payload, ensure_ascii=True)
+
+    return json.dumps(
+        {
+            "status": "UNSAT",
+            "cluster_id": str(cluster.get("cluster_id") or ""),
+            "local_frame": {
+                "unit": "mm",
+                "grid_mm": _extract_grid_mm(cluster),
+                "origin_note": "(0,0) is an arbitrary local origin for this cluster",
+            },
+            "local_placements": [],
+            "cluster_footprint": {
+                "type": "union_of_rects",
+                "rects": [],
+                "local_bbox": {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0},
+            },
+            "notes": [
+                "ClusterComposer deterministic search exhausted without a verified valid layout."
+            ],
+            "missing": [],
+        },
+        ensure_ascii=True,
+    )
+
+
 def _run_with_tools(
     *,
     messages: list[dict[str, Any]],
@@ -138,6 +294,8 @@ def _run_with_tools(
     max_steps: int,
     access_clearance_ratio: float,
 ) -> str:
+    from clients.llm_client import get_llm_client
+
     client = get_llm_client()
     access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
 
@@ -250,12 +408,12 @@ def _run_with_tools(
         logger.info("ClusterComposer step %s/%s", step, max_steps)
 
         try:
-                response = client.chat_completion(
-                    messages,
-                    model_key="primary",
-                    temperature=0.0,
-                    tools=TOOL_SCHEMAS,
-                )
+            response = client.chat_completion(
+                messages,
+                model_key="primary",
+                temperature=0.0,
+                tools=TOOL_SCHEMAS,
+            )
         except Exception as exc:
             if _is_context_length_exceeded(exc):
                 logger.warning(
@@ -871,7 +1029,7 @@ def _coerce_verifier_args(
 
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
     if "grid_mm" not in output:
-        output["grid_mm"] = int((rules or {}).get("grid_mm", 1) or 1)
+        output["grid_mm"] = _extract_grid_mm(cluster)
 
     if "objects" not in output:
         output["objects"] = _build_object_specs(cluster)
@@ -1601,6 +1759,92 @@ def _validate_local_placements_full(
 # ---------------------------
 
 
+def _build_search_seed_states(cluster: dict[str, Any]) -> list[list[dict[str, Any]]]:
+    base = _seed_local_layout(cluster)
+    if not base:
+        return []
+
+    seeds: list[list[dict[str, Any]]] = []
+    seen: set[str] = set()
+
+    for candidate in (
+        _canonicalize_local_placements(base),
+        _mirror_seed_layout(base, cluster, axis="x"),
+        _mirror_seed_layout(base, cluster, axis="y"),
+    ):
+        if not candidate:
+            continue
+        signature = _placements_signature(candidate)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        seeds.append(candidate)
+
+    return seeds
+
+
+def _mirror_seed_layout(
+    placements: list[dict[str, Any]],
+    cluster: dict[str, Any],
+    *,
+    axis: str,
+) -> list[dict[str, Any]]:
+    canonical = _canonicalize_local_placements(placements)
+    if not canonical:
+        return []
+
+    spec_by_id = {
+        s["id"]: s
+        for s in _build_object_specs(cluster)
+        if isinstance(s, dict) and isinstance(s.get("id"), str)
+    }
+    rects: list[dict[str, Any]] = []
+    for placement in canonical:
+        spec = spec_by_id.get(placement["id"])
+        if spec is None:
+            return []
+        w = int(spec.get("w", 0) or 0)
+        h = int(spec.get("h", 0) or 0)
+        rot = int(placement["rot"]) % 360
+        if rot in (90, 270):
+            w, h = h, w
+        rects.append(
+            {
+                "id": placement["id"],
+                "x": int(placement["x"]),
+                "y": int(placement["y"]),
+                "w": w,
+                "h": h,
+                "rot": rot,
+            }
+        )
+
+    bbox = _local_bbox_from_rects(rects)
+    max_x = int(bbox["max_x"])
+    max_y = int(bbox["max_y"])
+
+    mirrored: list[dict[str, Any]] = []
+    for rect in rects:
+        x = int(rect["x"])
+        y = int(rect["y"])
+        w = int(rect["w"])
+        h = int(rect["h"])
+        if axis == "x":
+            x = max_x - (x + w)
+        elif axis == "y":
+            y = max_y - (y + h)
+        mirrored.append(
+            {
+                "id": rect["id"],
+                "x": x,
+                "y": y,
+                "rot": int(rect["rot"]),
+            }
+        )
+
+    return _seed_normalize_to_origin(mirrored)
+
+
 def _canonicalize_local_placements(
     placements: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -1704,6 +1948,62 @@ def _choose_best_single_patch(
         return None, None, None
 
     return best_move, best_patched, best_eval
+
+
+def _collect_ranked_patch_successors(
+    *,
+    cluster: dict[str, Any],
+    access_clearance_ratio: float,
+    tool_output: dict[str, Any],
+    placements: list[dict[str, Any]],
+    limit: int,
+) -> list[tuple[tuple[Any, ...], list[dict[str, Any]], dict[str, Any]]]:
+    baseline_rank = _tool_rank(tool_output)
+    grid_mm = _extract_grid_mm(cluster)
+    candidates = _collect_patch_candidates(
+        cluster=cluster,
+        access_clearance_ratio=access_clearance_ratio,
+        tool_output=tool_output,
+        placements=placements,
+        grid_mm=grid_mm,
+    )
+
+    best_by_signature: dict[
+        str,
+        tuple[tuple[Any, ...], tuple[Any, ...], list[dict[str, Any]], dict[str, Any]],
+    ] = {}
+
+    for move in candidates:
+        patched = _apply_single_move(placements, move)
+        eval_out = _run_verifier_once(
+            cluster=cluster,
+            placements=patched,
+            access_clearance_ratio=access_clearance_ratio,
+        )
+        candidate_rank = _tool_rank(eval_out)
+        if not _rank_better(candidate_rank, baseline_rank):
+            continue
+
+        score_key = (
+            *candidate_rank,
+            _movement_cost(move),
+            _reason_rank(move.get("reason")),
+            move.get("move_object") or "",
+            _move_key(move),
+        )
+        canonical = _canonicalize_local_placements(patched)
+        signature = _placements_signature(canonical)
+        current_best = best_by_signature.get(signature)
+        if current_best is None or score_key < current_best[0]:
+            best_by_signature[signature] = (
+                score_key,
+                candidate_rank,
+                canonical,
+                eval_out,
+            )
+
+    ranked = sorted(best_by_signature.values(), key=lambda item: item[0])
+    return [(item[1], item[2], item[3]) for item in ranked[: max(0, int(limit))]]
 
 
 def _greedy_improve_valid_layout(
@@ -2032,7 +2332,7 @@ def _run_verifier_once(
 
 def _extract_grid_mm(cluster: dict[str, Any]) -> int:
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
-    return int((rules or {}).get("grid_mm", 1) or 1)
+    return normalize_layout_grid_mm((rules or {}).get("grid_mm"))
 
 
 def _build_cluster_output_from_placements(
@@ -2909,28 +3209,7 @@ def _extract_message(response: object) -> object:
 
 
 def _extract_tool_calls(message: object) -> list[dict[str, Any]]:
-    tool_calls = getattr(message, "tool_calls", None)
-    if not tool_calls:
-        return []
-    output: list[dict[str, Any]] = []
-    for call in tool_calls:
-        if isinstance(call, dict):
-            output.append(call)
-            continue
-        fn = getattr(call, "function", None)
-        output.append(
-            {
-                "id": getattr(call, "id", None),
-                "type": getattr(call, "type", "function"),
-                "function": {
-                    "name": getattr(fn, "name", None) if fn is not None else None,
-                    "arguments": getattr(fn, "arguments", None)
-                    if fn is not None
-                    else None,
-                },
-            }
-        )
-    return output
+    return parse_tool_calls(message)
 
 
 def _try_parse_json_object(text: str) -> dict[str, Any] | None:

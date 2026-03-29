@@ -23,6 +23,7 @@ fake_client_module.OpenAIClient = _DummyOpenAIClient
 sys.modules["clients.openai_client"] = fake_client_module
 
 _cluster_composer = importlib.import_module("agent.cluster_composer")
+ClusterComposer = _cluster_composer.ClusterComposer
 _cluster_composer_tools = importlib.import_module("cluster_composer.tools")
 _constraint_score = importlib.import_module("cluster_composer.constraint_score")
 _find_cluster = _cluster_composer._find_cluster
@@ -32,9 +33,13 @@ _run_verifier_once = _cluster_composer._run_verifier_once
 _seed_local_layout = _cluster_composer._seed_local_layout
 _tool_rank = _cluster_composer._tool_rank
 _build_preferred_patches = _cluster_composer_tools._build_preferred_patches
+_extract_grid_mm = _cluster_composer._extract_grid_mm
 local_cluster_verifier = _cluster_composer_tools.local_cluster_verifier
 _tool_rank_key_from_scoring = _cluster_composer_tools._tool_rank_key_from_scoring
 score_cluster_constraints = _constraint_score.score_cluster_constraints
+GLOBAL_LAYOUT_GRID_MM = importlib.import_module(
+    "layout.grid_policy"
+).GLOBAL_LAYOUT_GRID_MM
 
 CASE_ROOT = REPO_ROOT / "cases" / "demo_tenant_20260326T074655Z"
 
@@ -44,6 +49,50 @@ def _load_json(path: Path) -> Any:
 
 
 class ClusterComposerArchitectureTest(unittest.TestCase):
+    def test_extract_grid_mm_uses_shared_layout_policy(self) -> None:
+        self.assertEqual(
+            _extract_grid_mm({"cluster_rules": {"grid_mm": 400}}),
+            GLOBAL_LAYOUT_GRID_MM,
+        )
+        self.assertEqual(_extract_grid_mm({"cluster_rules": {}}), GLOBAL_LAYOUT_GRID_MM)
+
+    def test_generate_uses_deterministic_controller(self) -> None:
+        merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
+        original_run_with_tools = _cluster_composer._run_with_tools
+        self.addCleanup(
+            setattr, _cluster_composer, "_run_with_tools", original_run_with_tools
+        )
+
+        def _unexpected_llm_loop(**_: Any) -> str:
+            raise AssertionError(
+                "LLM loop should not be used by ClusterComposer.generate"
+            )
+
+        _cluster_composer._run_with_tools = _unexpected_llm_loop
+
+        result = ClusterComposer().generate(
+            merged_clusters=merged,
+            cluster_id="sleep_area",
+            description="",
+            special_notes="",
+        )
+
+        self.assertEqual(result["status"], "OK")
+        self.assertIn("deterministic", " ".join(result.get("notes") or []).lower())
+
+        cluster = _find_cluster(merged, "sleep_area")
+        member_ids = {
+            member
+            for member in cluster.get("members") or []
+            if isinstance(member, str) and member
+        }
+        placement_ids = {
+            row["id"]
+            for row in result.get("local_placements") or []
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        }
+        self.assertEqual(member_ids, placement_ids)
+
     def test_coerce_verifier_args_populates_soft_constraints(self) -> None:
         merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
         cluster = _find_cluster(merged, "sleep_area")

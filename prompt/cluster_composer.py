@@ -231,6 +231,13 @@ TOOL RULES
   1) controller explicitly asks for final JSON, or
   2) controller says no strictly better single-object patch exists, or
   3) you conclude no better VALID single-object improvement exists.
+- If native tool calling is unavailable, request tools by outputting EXACTLY this JSON object and nothing else:
+  {
+    "tool_calls":[
+      {"name":"LocalClusterVerifier","arguments":{...}}
+    ]
+  }
+- A tool-request response must contain only the tool_calls object.
 
 PRIMARY OBJECTIVES
 1. Satisfy all hard constraints.

@@ -20,7 +20,7 @@ OUTPUT JSON (STRICT):
       "anchors":["object_id", "..."],
 
       "cluster_rules":{
-        "grid_mm": int,
+        "grid_mm": 100,
         "allowed_rotations": {"object_id":[0,90,180,270]},
 
         "facing": {
@@ -93,6 +93,7 @@ DEFINITIONS (IMPORTANT)
   - Treat this requirement as a HARD constraint.
 
 RULES & GUIDELINES
+- Always set cluster_rules.grid_mm = 100 for every cluster. This grid is fixed across the full layout pipeline.
 - Create clusters that are small, coherent, and functional: items that naturally form a “set” in typical interior layouts.
 - Choose 1–3 anchors per cluster: the most space-defining items that other items tend to relate to.
 - Be explicit about relative placement when there is a strong functional norm:

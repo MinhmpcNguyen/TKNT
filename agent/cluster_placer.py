@@ -16,6 +16,7 @@ from cluster_placer.tools_v2 import (  # type: ignore
     EnumeratePhase2RepairMoves,
     CompileAcceptedPhase2Proposal,
 )
+from layout.grid_policy import normalize_layout_grid_mm, normalize_room_context_grid
 
 try:
     from clients.llm_client import get_llm_client  # type: ignore
@@ -235,16 +236,17 @@ def build_phase2_payload(
         seed = (placer_06 or {}).get("placer_seed") or {}
         room_model_used = seed.get("room_model_used")
         grid_mm = seed.get("grid_mm")
-        try:
-            normalized_grid = int(grid_mm) if grid_mm is not None else None
-        except Exception:
-            normalized_grid = None
+        normalized_grid = normalize_layout_grid_mm(grid_mm)
         if isinstance(room_model_used, dict) and room_model_used:
-            return {
-                "room_model_used": deepcopy(room_model_used),
-                "grid_mm": normalized_grid or 50,
-            }
-        return {"room_model_used": deepcopy(room_01), "grid_mm": normalized_grid or 50}
+            return normalize_room_context_grid(
+                {
+                    "room_model_used": deepcopy(room_model_used),
+                    "grid_mm": normalized_grid,
+                }
+            )
+        return normalize_room_context_grid(
+            {"room_model_used": deepcopy(room_01), "grid_mm": normalized_grid}
+        )
 
     def _extract_phase_control() -> Dict[str, Any]:
         seed = (placer_06 or {}).get("placer_seed") or {}

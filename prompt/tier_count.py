@@ -43,6 +43,14 @@ TOOL RULES
 - Use recommended_decisions, recommended_quantity, and recommended_size_tier from estimate_budget as the primary repair hints.
 - Do not repeat the same incomplete tool call.
 - Do not call estimate_budget with missing or incomplete decisions.
+- If native tool calling is unavailable, request tools by outputting EXACTLY this JSON object and nothing else:
+  {
+    "tool_calls":[
+      {"name":"get_size_profiles","arguments":{...}}
+    ]
+  }
+- A tool-request response must contain only the tool_calls object.
+- Do not include final decisions JSON in the same response as a tool request.
 
 BUDGET INTERPRETATION
 - input_decisions_fit=true means your CURRENT decisions fit.
