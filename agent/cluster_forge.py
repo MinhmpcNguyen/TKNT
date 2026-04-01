@@ -7,7 +7,17 @@ from dataclasses import dataclass
 from agent_schema.clusterF_schema import ClusterForgeOutput
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
+from config.gemini_config import GeminiConfig
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_cluster_rules_grid
+from layout.semantic_roles import (
+    is_bed_like,
+    is_bedside_support_like,
+    is_bench_like,
+    is_lounge_anchor_like,
+    is_seat_like,
+    is_surface_side_accessory_like,
+    is_work_surface_like,
+)
 from prompt.cluster_forge import CLUSTER_FORGE_PROMPT
 from prompt.system import SYSTEM_PROMPT
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
@@ -82,9 +92,10 @@ class ClusterForge:
             description=description,
             special_notes=special_notes,
         )
-        response = get_llm_client().chat_completion(
+        response = get_llm_client(provider="gemini").chat_completion(
             messages,
             model_key="primary",
+            model_name=GeminiConfig.AGENT_MODELS.get("forge"),
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -199,18 +210,18 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
         soft = cluster.get("soft_constraints")
         if not isinstance(soft, list):
             cluster["soft_constraints"] = []
-            continue
-        normalized_soft: list[dict[str, object]] = []
-        for constraint in soft:
-            normalized_constraint = _normalize_soft_constraint(constraint)
-            if normalized_constraint is None:
-                _append_payload_note(
-                    payload,
-                    f"Dropped unsupported soft constraint: {constraint!r}",
-                )
-                continue
-            normalized_soft.append(normalized_constraint)
-        cluster["soft_constraints"] = normalized_soft
+        else:
+            normalized_soft: list[dict[str, object]] = []
+            for constraint in soft:
+                normalized_constraint = _normalize_soft_constraint(constraint)
+                if normalized_constraint is None:
+                    _append_payload_note(
+                        payload,
+                        f"Dropped unsupported soft constraint: {constraint!r}",
+                    )
+                    continue
+                normalized_soft.append(normalized_constraint)
+            cluster["soft_constraints"] = normalized_soft
         _sanitize_cluster_constraints(
             payload=payload,
             cluster_id=cluster_id if isinstance(cluster_id, str) else "",
@@ -470,6 +481,102 @@ def _normalize_prefer_facing_mode(value: object) -> str | None:
     return None
 
 
+def _normalize_facing_front_token(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    token = value.strip().lower()
+    mapping = {
+        "front": "top",
+        "back": "bottom",
+        "head": "top",
+        "foot": "bottom",
+        "up": "top",
+        "down": "bottom",
+        "north": "top",
+        "south": "bottom",
+        "west": "left",
+        "east": "right",
+    }
+    token = mapping.get(token, token)
+    if token in {"top", "bottom", "left", "right"}:
+        return token
+    return None
+
+
+def _object_prefers_explicit_facing(object_id: str) -> bool:
+    key = object_id.lower()
+    if (
+        is_seat_like(object_id)
+        or is_work_surface_like(object_id)
+        or is_lounge_anchor_like(object_id)
+    ):
+        return True
+    return any(
+        pattern in key
+        for pattern in (
+            "wardrobe",
+            "closet",
+            "dresser",
+            "cabinet",
+            "console",
+            "tv",
+            "vanity",
+            "storage",
+        )
+    )
+
+
+def _default_facing_front(object_id: str) -> str:
+    _ = object_id
+    return "top"
+
+
+def _normalize_facing_rules(
+    *,
+    payload: dict[str, object],
+    cluster_id: str,
+    members: set[str],
+    facing: object,
+) -> dict[str, dict[str, str]]:
+    if not isinstance(facing, Mapping):
+        return {}
+
+    normalized: dict[str, dict[str, str]] = {}
+    for obj_id, raw_rule in facing.items():
+        if not isinstance(obj_id, str) or obj_id not in members:
+            _append_payload_note(
+                payload,
+                f"Cluster {cluster_id}: dropped facing rule for unknown object {obj_id!r}.",
+            )
+            continue
+
+        rule = raw_rule if isinstance(raw_rule, Mapping) else {}
+        front = _normalize_facing_front_token(rule.get("front"))
+        if front is None:
+            if _object_prefers_explicit_facing(obj_id):
+                front = _default_facing_front(obj_id)
+                _append_payload_note(
+                    payload,
+                    f"Cluster {cluster_id}: defaulted ambiguous facing.front for {obj_id} to {front}.",
+                )
+            else:
+                _append_payload_note(
+                    payload,
+                    f"Cluster {cluster_id}: dropped facing rule for {obj_id} because it has no stable front side.",
+                )
+                continue
+
+        normalized_rule: dict[str, str] = {"front": front}
+        notes = rule.get("notes")
+        if isinstance(notes, str):
+            note_text = notes.strip()
+            if note_text:
+                normalized_rule["notes"] = note_text
+        normalized[obj_id] = normalized_rule
+    return normalized
+
+
 def _append_payload_note(payload: dict[str, object], note: str) -> None:
     notes = payload.get("notes")
     if not isinstance(notes, list):
@@ -485,11 +592,20 @@ def _sanitize_cluster_constraints(
     cluster_id: str,
     cluster: dict[str, object],
 ) -> None:
-    members = {
+    member_list = [
         item
         for item in _coerce_str_list(cluster.get("members"))
         if isinstance(item, str) and item
-    }
+    ]
+    cluster["members"] = member_list
+    members = set(member_list)
+    cluster["anchors"] = _sanitize_cluster_anchors(
+        payload=payload,
+        cluster_id=cluster_id,
+        cluster_tag=str(cluster.get("tag") or "").lower(),
+        members=member_list,
+        anchors=cluster.get("anchors"),
+    )
     cluster_rules = cluster.get("cluster_rules")
     grid_mm = GLOBAL_LAYOUT_GRID_MM
     if isinstance(cluster_rules, Mapping):
@@ -497,6 +613,37 @@ def _sanitize_cluster_constraints(
             cluster_rules.get("grid_mm"),
             default=GLOBAL_LAYOUT_GRID_MM,
         )
+    if isinstance(cluster_rules, dict):
+        allowed_rotations = cluster_rules.get("allowed_rotations")
+        if isinstance(allowed_rotations, Mapping):
+            cluster_rules["allowed_rotations"] = {
+                obj_id: rotations
+                for obj_id, rotations in allowed_rotations.items()
+                if isinstance(obj_id, str) and obj_id in members
+            }
+        cluster_rules["facing"] = _normalize_facing_rules(
+            payload=payload,
+            cluster_id=cluster_id,
+            members=members,
+            facing=cluster_rules.get("facing"),
+        )
+        access_requirements = cluster_rules.get("access_requirements")
+        if isinstance(access_requirements, list):
+            sanitized_access_requirements: list[dict[str, object]] = []
+            for requirement in access_requirements:
+                if not isinstance(requirement, Mapping):
+                    continue
+                obj_id = requirement.get("id")
+                if not isinstance(obj_id, str) or obj_id not in members:
+                    _append_payload_note(
+                        payload,
+                        f"Cluster {cluster_id}: dropped access requirement for unknown object {obj_id!r}.",
+                    )
+                    continue
+                sanitized_access_requirements.append(dict(requirement))
+            cluster_rules["access_requirements"] = sanitized_access_requirements
+        else:
+            cluster_rules["access_requirements"] = []
 
     hard_constraints = cluster.get("hard_constraints")
     if isinstance(hard_constraints, list):
@@ -554,6 +701,12 @@ def _sanitize_cluster_constraints(
                 continue
             sanitized_soft.append(dict(constraint))
         cluster["soft_constraints"] = sanitized_soft
+    _apply_semantic_layout_intents(
+        payload=payload,
+        cluster_id=cluster_id,
+        cluster=cluster,
+        members=members,
+    )
 
 
 def _constraint_subjects_are_known(
@@ -572,6 +725,124 @@ def _constraint_subjects_are_known(
     if ctype == "contain_in" and b == "room":
         return True
     return isinstance(b, str) and b in members
+
+
+def _sanitize_cluster_anchors(
+    *,
+    payload: dict[str, object],
+    cluster_id: str,
+    cluster_tag: str,
+    members: Sequence[str],
+    anchors: object,
+) -> list[str]:
+    member_set = {member for member in members if isinstance(member, str) and member}
+    raw_anchors = _coerce_str_list(anchors)
+    kept = [anchor for anchor in raw_anchors if anchor in member_set]
+    dropped = [anchor for anchor in raw_anchors if anchor not in member_set]
+
+    if dropped:
+        _append_payload_note(
+            payload,
+            f"Cluster {cluster_id}: dropped anchors not present in members: {sorted(set(dropped))}.",
+        )
+
+    if kept:
+        return kept
+
+    fallback = _choose_fallback_anchor(cluster_tag=cluster_tag, members=members)
+    if fallback is not None:
+        if raw_anchors:
+            note = (
+                f"Cluster {cluster_id}: defaulted anchors to {fallback!r} because the original anchors "
+                "were invalid for this cluster."
+            )
+        else:
+            note = f"Cluster {cluster_id}: defaulted anchors to {fallback!r} because none were provided."
+        _append_payload_note(payload, note)
+        return [fallback]
+
+    return []
+
+
+def _choose_fallback_anchor(
+    *,
+    cluster_tag: str,
+    members: Sequence[str],
+) -> str | None:
+    if not members:
+        return None
+
+    best_member: str | None = None
+    best_score = -1
+    for member in members:
+        if not isinstance(member, str) or not member:
+            continue
+        score = _anchor_priority_score(cluster_tag=cluster_tag, member=member)
+        if score > best_score:
+            best_member = member
+            best_score = score
+
+    return best_member
+
+
+def _anchor_priority_score(*, cluster_tag: str, member: str) -> int:
+    key = member.lower()
+    score = 0
+
+    if cluster_tag == "sleep":
+        if is_bed_like(member):
+            score += 1_000
+        elif is_bedside_support_like(member):
+            score += 700
+        elif is_bench_like(member):
+            score += 500
+    elif cluster_tag == "work":
+        if is_work_surface_like(member):
+            score += 1_000
+        elif is_seat_like(member):
+            score += 700
+    elif cluster_tag == "living":
+        if "sectional" in key:
+            score += 1_050
+        elif "sofa" in key or "loveseat" in key:
+            score += 1_000
+        elif is_lounge_anchor_like(member):
+            score += 850
+        elif is_seat_like(member):
+            score += 700
+    elif cluster_tag == "dining":
+        if "dining_table" in key or "table" in key:
+            score += 1_000
+        elif is_seat_like(member):
+            score += 700
+    elif cluster_tag == "storage":
+        if "wardrobe" in key or "closet" in key:
+            score += 1_120
+        elif "storage_cabinet" in key:
+            score += 1_100
+        elif "dresser" in key or "sideboard" in key or "buffet" in key:
+            score += 1_080
+        elif "media_shelf" in key or "bookshelf" in key:
+            score += 1_060
+        elif "tv_console" in key:
+            score += 1_040
+        elif "console_table" in key:
+            score += 1_000
+        elif "coffee_table" in key or "ottoman" in key:
+            score += 300
+    else:
+        if is_bed_like(member):
+            score += 950
+        if is_work_surface_like(member):
+            score += 900
+        if "sofa" in key or "sectional" in key:
+            score += 900
+        if is_lounge_anchor_like(member):
+            score += 850
+        if any(token in key for token in ("wardrobe", "storage_cabinet", "dresser")):
+            score += 800
+
+    return score
 
 
 def _should_drop_object_containment(constraint: Mapping[str, object]) -> bool:
@@ -594,3 +865,300 @@ def _normalize_gap_range_for_grid(
     if max_value <= snapped_grid:
         return 0, snapped_grid
     return min_value, max_value
+
+
+def _apply_semantic_layout_intents(
+    *,
+    payload: dict[str, object],
+    cluster_id: str,
+    cluster: dict[str, object],
+    members: set[str],
+) -> None:
+    rules = cluster.get("cluster_rules")
+    if not isinstance(rules, dict):
+        rules = {}
+        cluster["cluster_rules"] = rules
+
+    semantic_placements = _normalize_semantic_placements(
+        rules.get("semantic_placements"),
+        members=members,
+    )
+
+    hard_constraints = cluster.get("hard_constraints")
+    if not isinstance(hard_constraints, list):
+        hard_constraints = []
+        cluster["hard_constraints"] = hard_constraints
+
+    # Strengthen common serving-surface relationships so the composer can place
+    # dependents in a semantically meaningful region, not merely any valid edge.
+    for constraint in hard_constraints:
+        if not isinstance(constraint, dict):
+            continue
+        if str(constraint.get("type") or "").lower() != "dock_to_edge":
+            continue
+
+        a = constraint.get("a")
+        b = constraint.get("b")
+        if not isinstance(a, str) or not isinstance(b, str):
+            continue
+
+        if is_seat_like(a) and is_work_surface_like(b):
+            if constraint.get("span") in {"any", "short_edge", "long_edge"}:
+                constraint["span"] = "center"
+                _append_payload_note(
+                    payload,
+                    f"Cluster {cluster_id}: refined {a}->{b} dock span to center for a serving-surface seating relationship.",
+                )
+            _upsert_semantic_placement(
+                semantic_placements,
+                {
+                    "id": a,
+                    "relative_to": b,
+                    "kind": "dock_to_edge",
+                    "b_edge": str(constraint.get("b_edge") or "front"),
+                    "span": str(constraint.get("span") or "center"),
+                    "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
+                    "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "selection": "best_fit",
+                    "orientation": "face_base",
+                },
+            )
+            _ensure_soft_constraint(
+                cluster,
+                {
+                    "type": "prefer_facing",
+                    "a": a,
+                    "b": b,
+                    "mode": "face_each_other",
+                    "weight": 8,
+                },
+            )
+            continue
+
+        if is_bench_like(a) and is_bed_like(b):
+            if constraint.get("span") in {"any", "short_edge", "long_edge"}:
+                constraint["span"] = "center"
+                _append_payload_note(
+                    payload,
+                    f"Cluster {cluster_id}: refined {a}->{b} dock span to center for a foot-of-bed seating relationship.",
+                )
+            _upsert_semantic_placement(
+                semantic_placements,
+                {
+                    "id": a,
+                    "relative_to": b,
+                    "kind": "dock_to_edge",
+                    "b_edge": str(constraint.get("b_edge") or "back"),
+                    "span": str(constraint.get("span") or "center"),
+                    "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
+                    "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "selection": "best_fit",
+                    "orientation": "face_base",
+                },
+            )
+
+    bedside_relations: list[dict[str, object]] = []
+    for constraint in hard_constraints:
+        if not isinstance(constraint, dict):
+            continue
+        if str(constraint.get("type") or "").lower() != "anchor_side":
+            continue
+        a = constraint.get("a")
+        b = constraint.get("b")
+        side = constraint.get("side")
+        if (
+            isinstance(a, str)
+            and isinstance(b, str)
+            and isinstance(side, str)
+            and is_bedside_support_like(a)
+            and is_bed_like(b)
+            and side in {"head", "foot"}
+        ):
+            bedside_relations.append(constraint)
+
+    if len(bedside_relations) >= 2:
+        ordered = sorted(
+            bedside_relations,
+            key=lambda item: str(item.get("a") or ""),
+        )
+        side_tokens = ["head_left", "head_right"]
+        if str(ordered[0].get("side") or "") == "foot":
+            side_tokens = ["foot_left", "foot_right"]
+        for constraint, side_token in zip(ordered[:2], side_tokens, strict=False):
+            if constraint.get("side") != side_token:
+                constraint["side"] = side_token
+                _append_payload_note(
+                    payload,
+                    f"Cluster {cluster_id}: assigned {constraint.get('a')} to {side_token} for clearer bedside semantics.",
+                )
+
+    for constraint in bedside_relations:
+        a = str(constraint.get("a") or "")
+        b = str(constraint.get("b") or "")
+        side = str(constraint.get("side") or "")
+        if side in {"head", "foot"}:
+            option_prefix = "head" if side == "head" else "foot"
+            _upsert_semantic_placement(
+                semantic_placements,
+                {
+                    "id": a,
+                    "relative_to": b,
+                    "kind": "anchor_side",
+                    "side_options": [
+                        f"{option_prefix}_left",
+                        f"{option_prefix}_right",
+                    ],
+                    "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
+                    "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "selection": "best_fit",
+                    "orientation": "same_direction",
+                },
+            )
+
+    soft_constraints = cluster.get("soft_constraints")
+    if isinstance(soft_constraints, list):
+        for constraint in soft_constraints:
+            if not isinstance(constraint, dict):
+                continue
+            if str(constraint.get("type") or "").lower() != "prefer_near":
+                continue
+            a = constraint.get("a")
+            b = constraint.get("b")
+            if not isinstance(a, str) or not isinstance(b, str):
+                continue
+
+            if is_surface_side_accessory_like(a) and (
+                is_lounge_anchor_like(b) or is_seat_like(b)
+            ):
+                _upsert_semantic_placement(
+                    semantic_placements,
+                    {
+                        "id": a,
+                        "relative_to": b,
+                        "kind": "anchor_side",
+                        "side_options": ["left", "right"],
+                        "gap_min": 50,
+                        "gap_max": 200,
+                        "selection": "best_fit",
+                        "orientation": "same_direction",
+                    },
+                )
+
+    rules["semantic_placements"] = semantic_placements
+
+
+def _normalize_semantic_placements(
+    value: object,
+    *,
+    members: set[str],
+) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+
+    out: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        obj_id = item.get("id")
+        relative_to = item.get("relative_to")
+        kind = item.get("kind")
+        if not (
+            isinstance(obj_id, str)
+            and obj_id in members
+            and isinstance(relative_to, str)
+            and relative_to in members
+            and isinstance(kind, str)
+        ):
+            continue
+        record: dict[str, object] = {
+            "id": obj_id,
+            "relative_to": relative_to,
+            "kind": kind.strip().lower(),
+            "selection": _normalize_semantic_selection(item.get("selection")),
+        }
+        orientation = _normalize_semantic_orientation(item.get("orientation"))
+        if orientation is not None:
+            record["orientation"] = orientation
+        if "gap_min" in item or "gap_max" in item:
+            gap_min, gap_max = _normalize_gap_range(
+                item.get("gap_min"),
+                item.get("gap_max"),
+            )
+            record["gap_min"] = gap_min
+            record["gap_max"] = gap_max
+
+        if record["kind"] == "dock_to_edge":
+            b_edge = _normalize_dock_edge_token(item.get("b_edge"))
+            if b_edge is not None:
+                record["b_edge"] = b_edge
+            record["span"] = _normalize_dock_span_token(item.get("span"))
+        elif record["kind"] == "anchor_side":
+            side_options = item.get("side_options")
+            if isinstance(side_options, list):
+                normalized_options = [
+                    side
+                    for raw_side in side_options
+                    if (side := _normalize_anchor_side_token(raw_side)) is not None
+                ]
+                if normalized_options:
+                    record["side_options"] = normalized_options
+        out.append(record)
+    return out
+
+
+def _normalize_semantic_selection(value: object) -> str:
+    if not isinstance(value, str):
+        return "best_fit"
+    token = value.strip().lower()
+    if token in {"best_fit", "first_fit"}:
+        return token
+    return "best_fit"
+
+
+def _normalize_semantic_orientation(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    token = value.strip().lower()
+    if token in {"face_base", "same_direction"}:
+        return token
+    return None
+
+
+def _upsert_semantic_placement(
+    semantic_placements: list[dict[str, object]],
+    record: dict[str, object],
+) -> None:
+    obj_id = record.get("id")
+    relative_to = record.get("relative_to")
+    kind = record.get("kind")
+    for existing in semantic_placements:
+        if not isinstance(existing, dict):
+            continue
+        if (
+            existing.get("id") == obj_id
+            and existing.get("relative_to") == relative_to
+            and existing.get("kind") == kind
+        ):
+            existing.update(record)
+            return
+    semantic_placements.append(record)
+
+
+def _ensure_soft_constraint(
+    cluster: dict[str, object], record: dict[str, object]
+) -> None:
+    soft_constraints = cluster.get("soft_constraints")
+    if not isinstance(soft_constraints, list):
+        soft_constraints = []
+        cluster["soft_constraints"] = soft_constraints
+
+    for existing in soft_constraints:
+        if not isinstance(existing, dict):
+            continue
+        if (
+            existing.get("type") == record.get("type")
+            and existing.get("a") == record.get("a")
+            and existing.get("b") == record.get("b")
+        ):
+            return
+    soft_constraints.append(record)

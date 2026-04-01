@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 JudgeVerdict = Literal["ACCEPT", "REVISE", "REJECT"]
+JudgeNextStepMode = Literal["macro_layout", "object_refine", "stop"]
 
 
 def _strip_required_str(value: str, field_name: str) -> str:
@@ -19,6 +20,7 @@ class Phase2JudgeOutput(BaseModel):
 
     reasonableness_score: int
     verdict: JudgeVerdict
+    next_step_mode: JudgeNextStepMode = "macro_layout"
     top_issues: list[str] = Field(default_factory=list)
     repair_advice: list[str] = Field(default_factory=list)
     priority_clusters: list[str] = Field(default_factory=list)

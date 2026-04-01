@@ -440,6 +440,90 @@ def _enumerate_initial_candidates(
     return out
 
 
+def _relax_relation_plan_for_candidate_search(
+    relation_plan: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(relation_plan, dict):
+        return relation_plan
+
+    out = dict(relation_plan)
+    out["cluster_relations"] = []
+    out["cluster_directional_relations"] = []
+
+    cluster_orientations: list[dict[str, Any]] = []
+    for entry in relation_plan.get("cluster_orientations") or []:
+        if not isinstance(entry, dict):
+            continue
+        new_entry = dict(entry)
+        intents = [
+            item
+            for item in (entry.get("intents") or [])
+            if isinstance(item, str) and item != "face_cluster"
+        ]
+        if not intents:
+            continue
+        new_entry["intents"] = intents
+        if "face_cluster" not in intents:
+            new_entry["target_cluster_id"] = None
+        cluster_orientations.append(new_entry)
+    out["cluster_orientations"] = cluster_orientations
+
+    object_orientations: list[dict[str, Any]] = []
+    for entry in relation_plan.get("object_orientations") or []:
+        if not isinstance(entry, dict):
+            continue
+        new_entry = dict(entry)
+        intents = [
+            item
+            for item in (entry.get("intents") or [])
+            if isinstance(item, str)
+            and item not in {"face_object", "face_away_from_object"}
+        ]
+        if not intents:
+            continue
+        new_entry["intents"] = intents
+        if "face_object" not in intents and "face_away_from_object" not in intents:
+            new_entry["target_object_id"] = None
+        object_orientations.append(new_entry)
+    out["object_orientations"] = object_orientations
+    return out
+
+
+def _augment_with_relaxed_candidates(
+    tools: Any,
+    *,
+    room_model: Any,
+    clusters_outlines: Any,
+    relation_plan: dict[str, Any] | None,
+    grid_mm: int,
+    current_candidates: dict[str, list[Candidate]],
+    cluster_allowed_rotations: dict[str, set[int]],
+    max_variants_per_cluster: int,
+    base_candidate_limit: int,
+) -> dict[str, list[Candidate]]:
+    relaxed_plan = _relax_relation_plan_for_candidate_search(relation_plan)
+    extra_candidates = _enumerate_initial_candidates(
+        tools,
+        room_model=room_model,
+        clusters_outlines=clusters_outlines,
+        relation_plan=relaxed_plan,
+        grid_mm=grid_mm,
+        max_candidates_per_cluster=max(base_candidate_limit + 16, 56),
+        max_variants_per_cluster=max_variants_per_cluster,
+    )
+    extra_candidates = _filter_candidates_by_allowed_rotations(
+        extra_candidates,
+        cluster_allowed_rotations,
+    )
+
+    merged: dict[str, list[Candidate]] = {}
+    for cid in sorted(set(current_candidates.keys()) | set(extra_candidates.keys())):
+        merged[cid] = _dedupe_candidates(
+            list(current_candidates.get(cid, [])) + list(extra_candidates.get(cid, []))
+        )[: max(base_candidate_limit + 32, 64)]
+    return merged
+
+
 def _dedupe_candidates(cands: Iterable[Candidate]) -> list[Candidate]:
     best: dict[tuple[str, str, int, int, int], Candidate] = {}
     for c in cands:
@@ -1370,6 +1454,8 @@ def solve_layout(
     best_transforms: list[dict[str, Any]] = []
     best_variants: list[dict[str, str]] = []
     best_score = -(10**18)
+    used_relaxed_candidate_expansion = False
+    infeasible_candidate_set = False
 
     current_candidates = {
         cid: list(vals) for cid, vals in candidates_by_cluster.items()
@@ -1382,17 +1468,42 @@ def solve_layout(
             max_rounds,
             {cid: len(vals) for cid, vals in current_candidates.items()},
         )
-        transforms, selected_variants, chosen, verify = _solve_one_round(
-            tools=tools,
-            room_model=room_model_c,
-            clusters_outlines=clusters_c,
-            relation_plan=relation_plan_aug,
-            grid_mm=grid_mm,
-            candidates_by_cluster=current_candidates,
-            variant_payload_lookup=variant_payload_lookup,
-            time_limit_s=time_limit_s,
-            num_workers=num_workers,
-        )
+        try:
+            transforms, selected_variants, chosen, verify = _solve_one_round(
+                tools=tools,
+                room_model=room_model_c,
+                clusters_outlines=clusters_c,
+                relation_plan=relation_plan_aug,
+                grid_mm=grid_mm,
+                candidates_by_cluster=current_candidates,
+                variant_payload_lookup=variant_payload_lookup,
+                time_limit_s=time_limit_s,
+                num_workers=num_workers,
+            )
+        except RuntimeError as exc:
+            if not used_relaxed_candidate_expansion:
+                logger.info(
+                    "Solver exact solve was infeasible at round %s/%s; "
+                    "expanding candidates with relaxed macro pairwise hints.",
+                    round_idx + 1,
+                    max_rounds,
+                )
+                current_candidates = _augment_with_relaxed_candidates(
+                    tools,
+                    room_model=room_model_c,
+                    clusters_outlines=clusters_c,
+                    relation_plan=relation_plan_aug,
+                    grid_mm=grid_mm,
+                    current_candidates=current_candidates,
+                    cluster_allowed_rotations=cluster_allowed_rots,
+                    max_variants_per_cluster=max_variants_per_cluster,
+                    base_candidate_limit=initial_candidates_per_cluster,
+                )
+                used_relaxed_candidate_expansion = True
+                continue
+            logger.warning("Solver exact solve remained infeasible: %s", exc)
+            infeasible_candidate_set = True
+            break
 
         q = verify.get("quality") or {}
         score = int(q.get("layout_score") or 0)
@@ -1490,6 +1601,15 @@ def solve_layout(
     notes = [
         "No acceptable-valid solution found within the finite candidate space.",
     ]
+    if infeasible_candidate_set:
+        notes.insert(
+            0,
+            "No feasible exact assignment existed over the available macro candidate set.",
+        )
+    if used_relaxed_candidate_expansion:
+        notes.append(
+            "Expanded the candidate pool once with relaxed macro pairwise hints."
+        )
     if best_verify is not None:
         reasons = (best_verify.get("quality_gate") or {}).get("reasons") or []
         notes.append(f"quality_gate_reasons={json.dumps(reasons, ensure_ascii=False)}")

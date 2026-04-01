@@ -459,11 +459,16 @@ Invalid:
 
 # OUTPUT RULES
 
-- Always return full cluster_transforms, not partial patches.
-- Always return full selected_variants, not partial patches.
+- cluster_transforms may be a partial patch:
+  - if you include a cluster_id, provide the full transform row for that cluster
+  - if you omit a cluster_id, backend will inherit that cluster transform from the seed
+- selected_variants may be a partial patch:
+  - if you include a cluster_id, provide the full variant row for that cluster
+  - if you omit a cluster_id, backend will inherit that cluster variant from the seed
+- In object_refine, it is normal to leave cluster_transforms and selected_variants empty when no macro edit is needed.
 - object_repairs may be empty only if no local object edit is needed.
 - If phase_control.repair_phase == "object_refine" and repair is still needed, object_repairs must not be empty.
-- If phase_control.repair_phase == "object_refine", cluster_transforms and selected_variants should usually remain identical to the seed.
+- If phase_control.repair_phase == "object_refine", any macro rows you do include must preserve the seed layout unless there is an explicit payload-backed reason to change them.
 - notes must be short, concrete, and tied to payload evidence.
 - Do not output natural-language explanation outside the JSON.
 - Do not output any final compiled schema.

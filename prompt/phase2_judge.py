@@ -118,6 +118,7 @@ Return JSON only in this shape:
 {
   "reasonableness_score": 0,
   "verdict": "ACCEPT" | "REVISE" | "REJECT",
+  "next_step_mode": "macro_layout" | "object_refine" | "stop",
   "top_issues": [
     "short factual issue"
   ],
@@ -135,5 +136,8 @@ Return JSON only in this shape:
 - Keep repair_advice directional and high-level.
 - Do not include coordinates or object-level patch syntax.
 - priority_clusters must name the clusters that should be addressed next.
+- Use "macro_layout" when the next attempt should change cluster pose, rotation, or variant at the cluster level.
+- Use "object_refine" only when the macro direction is already good enough and the next attempt should focus on local object pose tweaks.
+- Use "stop" only when the candidate is acceptable.
 - If the candidate is good enough, you may return an empty repair_advice list.
 """

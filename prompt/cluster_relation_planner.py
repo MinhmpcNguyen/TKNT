@@ -39,6 +39,10 @@ In particular:
    - object_orientations for relevant seating anchors and focal/media anchors whenever those object ids exist.
 3) If an object has meaningful front usability (storage/appliance/front-access), you SHOULD emit object_orientations with preserve_front_access and/or front_to_open_space when useful.
 
+Directional relations are expensive signals.
+Reserve cluster_directional_relations for true focal/viewing/access relationships.
+Do NOT emit face_each_other or turn_toward between arbitrary support clusters.
+
 Do NOT rely on downstream systems to infer viewing or front usability from vague prose.
 
 IMPORTANT
@@ -185,6 +189,7 @@ Rules:
 - Prefer sparse, high-value relations over dense noisy relations.
 - Use room function, user notes, and member semantics together.
 - Use separation when it helps preserve openness or prevent clutter, not merely for visual variety.
+- Do not over-concentrate support clusters by making many pairs all near the same primary cluster unless the room function truly demands it.
 
 Viewing rule:
 - If one cluster is primarily seating and the other is primarily focal/media, they should usually be near unless the inputs clearly contradict that.

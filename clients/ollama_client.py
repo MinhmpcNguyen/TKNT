@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from openai import OpenAI
 
-from clients.base_client import ChatMessage, LLMModelKey
+from clients.base_client import ChatMessage, LLMModelKey, ThinkingLevel
 from config.models import OllamaModelConfig
 from config.ollama_config import OllamaConfig
 
@@ -51,13 +51,17 @@ class OllamaClient:
         messages: Sequence[ChatMessage],
         *,
         model_key: LLMModelKey = "primary",
+        model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        thinking_level: ThinkingLevel | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
+        _ = thinking_level
+        resolved_model_name = model_name or self.get_model_name(model_key)
         params: dict[str, object] = {
-            "model": self.get_model_name(model_key),
+            "model": resolved_model_name,
             "messages": list(messages),
         }
         if temperature is not None:
@@ -92,7 +96,9 @@ class OllamaClient:
             "embedding": models.embedding,
         }
 
-    def _normalize_embedding_input(self, inputs: str | Sequence[str]) -> str | list[str]:
+    def _normalize_embedding_input(
+        self, inputs: str | Sequence[str]
+    ) -> str | list[str]:
         if isinstance(inputs, str):
             return inputs
         return list(inputs)

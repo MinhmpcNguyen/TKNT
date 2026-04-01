@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { checkDesign, getClusterComposer, getClusterList, getPipelineArtifact, getPipelineResult, getPipelineStatus, runPipeline } from '../api';
 import { useEditorStore } from '../store';
-import { FloorplanGeometry, Point, Wall } from '../types';
-import { normalizePoints } from '../utils/geometry';
-import { getBboxCenter, getLocalFootprintFromWorldBbox, getNumericBbox } from '../utils/styledLayout';
+import { Placement, Point } from '../types';
+import { preparePipelineResultLayouts } from '../utils/pipelineLayouts';
 
 const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 1800;
 const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
@@ -45,21 +44,49 @@ export const Toolbar: React.FC = () => {
     setPipelineStage,
     setClusterPreviews,
     updateClusterPreview,
+    layoutVariants,
+    selectedVariantId,
+    variantPickerOpen,
+    setLayoutVariants,
+    selectLayoutVariant,
+    setVariantPickerOpen,
+    clearLayoutVariants,
     styledResult,
     viewMode,
     setViewMode,
   } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const galleryOpen = variantPickerOpen && layoutVariants.length > 0;
+
+  const applyVariantToEditor = (variantId: string | null) => {
+    const variant =
+      layoutVariants.find((item) => item.variant_id === variantId) ?? layoutVariants[0];
+    if (!variant) {
+      return;
+    }
+    if (variant.design) {
+      setFloorplan(variant.design.floorplan_geometry);
+      setDesign(variant.design);
+    }
+    setStyledResult(variant.styled_result);
+    selectLayoutVariant(variant.variant_id);
+    setViewMode('2d');
+    setVariantPickerOpen(false);
+    appendRunLog(`Selected layout: ${variant.label}`);
+  };
 
   const handleGenerate = async () => {
     if (!floorplan) return;
+    const manualPlacements = collectManualPlacements(design?.placements ?? []);
     setLoading(true);
     setError(null);
     clearRunLogs();
     setAdditionRequests([]);
     setRunStatus('running', null);
+    clearLayoutVariants();
     setStyledResult(null);
+    setVariantPickerOpen(false);
     setViewMode('2d');
     try {
       const caseResp = await runPipeline({
@@ -79,12 +106,16 @@ export const Toolbar: React.FC = () => {
             windows: userInput.windows,
             window_direction: userInput.window_direction,
           },
+          manual_placements: manualPlacements,
           max_iterations: 12,
         },
         description: userInput.description,
         special_notes: userInput.special_description,
       });
       appendRunLog(`Case started: ${caseResp.case_id}`);
+      if (manualPlacements.length > 0) {
+        appendRunLog(`Protected ${manualPlacements.length} manual furniture placement(s) during generation.`);
+      }
       setCaseId(caseResp.case_id);
       setPipelineStage('queued');
       setClusterPreviews({});
@@ -92,146 +123,35 @@ export const Toolbar: React.FC = () => {
       let done = false;
       let lastStage = '';
       const loadFinal = async (caseId: string) => {
-        let roomFloorplan: FloorplanGeometry | null = null;
-        let shiftDx = 0;
-        let shiftDy = 0;
+        let roomPayload: any = null;
         try {
           const roomArtifact = await getPipelineArtifact(caseId, 'room_interpreter');
-          const roomPayload = roomArtifact?.payload ?? roomArtifact;
-          const room = roomPayload?.room ?? {};
-          const polyRaw = Array.isArray(room?.polygon_ccw) ? room.polygon_ccw : [];
-          const normalized = normalizePoints(polyRaw);
-          shiftDx = normalized.dx;
-          shiftDy = normalized.dy;
-          const shiftPoint = (p: Point) => ({ x: p.x - normalized.dx, y: p.y - normalized.dy });
-          const roomPoints = normalized.points;
-          const wallThickness = 100;
-          const walls: Wall[] = roomPoints.map((p, idx) => {
-            const next = roomPoints[(idx + 1) % roomPoints.length];
-            return {
-              wall_id: `wall_${idx + 1}`,
-              p1_mm: p,
-              p2_mm: next,
-              thickness_mm: wallThickness,
-              room_id: room?.room_id ?? 'room_1',
-            };
-          });
-          const doors = (roomPayload?.openings?.doors ?? []).map((door: any, idx: number) => {
-            const seg = door?.segment_mm ?? [];
-            const p1 = seg?.[0] ?? { x: 0, y: 0 };
-            const p2 = seg?.[1] ?? { x: 0, y: 0 };
-            return {
-              door_id: door?.id ?? `door_${idx + 1}`,
-              start_mm: shiftPoint(p1),
-              end_mm: shiftPoint(p2),
-            };
-          });
-          const windows = (roomPayload?.openings?.windows ?? []).map((win: any, idx: number) => {
-            const seg = win?.segment_mm ?? [];
-            const p1 = seg?.[0] ?? { x: 0, y: 0 };
-            const p2 = seg?.[1] ?? { x: 0, y: 0 };
-            return {
-              window_id: win?.id ?? `window_${idx + 1}`,
-              start_mm: shiftPoint(p1),
-              end_mm: shiftPoint(p2),
-            };
-          });
-          roomFloorplan = {
-            room: {
-              room_id: room?.room_id ?? 'room_1',
-              name: room?.name ?? 'Room',
-              polygon_mm: roomPoints,
-            },
-            walls,
-            openings: { doors, windows },
-          };
-          setFloorplan(roomFloorplan);
+          roomPayload = roomArtifact?.payload ?? roomArtifact;
         } catch {
-          roomFloorplan = floorplan;
+          roomPayload = null;
         }
         const result = await getPipelineResult(caseId);
         const stylist = result.result ?? result;
-        const objects = stylist?.objects ?? [];
-        // Store a shifted version of stylist output for 3D preview (match UI-normalized floorplan coordinates).
-        try {
-          const shiftPoint = (p: any): Point => ({
-            x: Number(p?.x ?? 0) - shiftDx,
-            y: Number(p?.y ?? 0) - shiftDy,
-          });
-          const shiftBBox = (bbox: any) => {
-            if (!bbox) return bbox;
-            return {
-              ...bbox,
-              min_x: Number(bbox.min_x ?? 0) - shiftDx,
-              min_y: Number(bbox.min_y ?? 0) - shiftDy,
-              max_x: Number(bbox.max_x ?? 0) - shiftDx,
-              max_y: Number(bbox.max_y ?? 0) - shiftDy,
-            };
-          };
-          const shiftedRoom = stylist?.room
-            ? {
-              ...stylist.room,
-              polygon_ccw: Array.isArray(stylist.room.polygon_ccw)
-                ? stylist.room.polygon_ccw.map(shiftPoint)
-                : stylist.room.polygon_ccw,
-              obstacles: Array.isArray(stylist.room.obstacles)
-                ? stylist.room.obstacles.map((ob: any) => ({
-                  ...ob,
-                  polygon_ccw: Array.isArray(ob?.polygon_ccw) ? ob.polygon_ccw.map(shiftPoint) : ob?.polygon_ccw,
-                }))
-                : stylist.room.obstacles,
-              openings: stylist.room.openings
-                ? {
-                  ...stylist.room.openings,
-                  doors: Array.isArray(stylist.room.openings?.doors)
-                    ? stylist.room.openings.doors.map((d: any) => ({
-                      ...d,
-                      segment_mm: Array.isArray(d?.segment_mm)
-                        ? d.segment_mm.map(shiftPoint)
-                        : d?.segment_mm,
-                    }))
-                    : stylist.room.openings?.doors,
-                  windows: Array.isArray(stylist.room.openings?.windows)
-                    ? stylist.room.openings.windows.map((w: any) => ({
-                      ...w,
-                      segment_mm: Array.isArray(w?.segment_mm)
-                        ? w.segment_mm.map(shiftPoint)
-                        : w?.segment_mm,
-                    }))
-                    : stylist.room.openings?.windows,
-                }
-                : stylist.room.openings,
-            }
-            : null;
-          const shiftedObjects = Array.isArray(objects)
-            ? objects.map((obj: any) => ({
-              ...obj,
-              polygon_ccw: Array.isArray(obj?.polygon_ccw) ? obj.polygon_ccw.map(shiftPoint) : obj?.polygon_ccw,
-              bbox: shiftBBox(obj?.bbox),
-            }))
-            : objects;
-          setStyledResult({ ...stylist, room: shiftedRoom, objects: shiftedObjects });
-        } catch {
-          setStyledResult(stylist);
-        }
-        const placements = objects.map((obj: any, idx: number) => {
-          const rotationDeg = Number(obj.rotation_ccw ?? 0);
-          const bbox = getNumericBbox(obj);
-          const footprint = getLocalFootprintFromWorldBbox(bbox, rotationDeg);
-          const center = getBboxCenter(bbox);
-          return {
-            placement_id: obj.instance_id ?? `obj_${idx}`,
-            asset_id: obj.instance_id ?? obj.object_type ?? `obj_${idx}`,
-            category: obj.object_type ?? 'item',
-            position_mm: { x: center.x - shiftDx, y: center.y - shiftDy },
-            rotation_deg: rotationDeg,
-            footprint_mm: footprint,
-            height_mm: 0,
-            color_hex: obj.color_hex ?? '#cfcac2',
-            anchor: 'center',
-          };
+        const prepared = preparePipelineResultLayouts({
+          roomPayload,
+          resultPayload: stylist,
+          fallbackFloorplan: floorplan ?? null,
         });
-        setDesign({ floorplan_geometry: roomFloorplan ?? floorplan, placements });
+        if (prepared.floorplan) {
+          setFloorplan(prepared.floorplan);
+        }
+        setStyledResult(prepared.styledResult);
+        if (prepared.design) {
+          setDesign(prepared.design);
+        }
+        if (prepared.variants.length > 0) {
+          setLayoutVariants(prepared.variants, prepared.selectedVariantId);
+          setVariantPickerOpen(true);
+          appendRunLog(`Loaded ${prepared.variants.length} layout variants`);
+        } else {
+          clearLayoutVariants();
+          setVariantPickerOpen(false);
+        }
         setViolations([]);
         setLastDesignMeta({ iteration: null, attempt: null });
       };
@@ -331,20 +251,39 @@ export const Toolbar: React.FC = () => {
       <button onClick={handleGenerate} disabled={loading}>
         {loading ? 'Working…' : 'Generate'}
       </button>
-      <button onClick={handleCheck} disabled={loading || !design}>
+      <button onClick={handleCheck} disabled={loading || galleryOpen || !design}>
         Check
       </button>
+      {layoutVariants.length > 0 && galleryOpen ? (
+        <button
+          onClick={() => applyVariantToEditor(selectedVariantId)}
+          disabled={loading || !selectedVariantId}
+        >
+          Choose Layout
+        </button>
+      ) : null}
+      {layoutVariants.length > 0 && !galleryOpen ? (
+        <button
+          onClick={() => {
+            setVariantPickerOpen(true);
+            setViewMode('2d');
+          }}
+          disabled={loading}
+        >
+          Back to {layoutVariants.length} Layouts
+        </button>
+      ) : null}
       <button
         onClick={() => setViewMode('2d')}
         className={viewMode === '2d' ? 'active' : ''}
-        disabled={loading}
+        disabled={loading || galleryOpen}
       >
         2D
       </button>
       <button
         onClick={() => setViewMode('3d')}
         className={viewMode === '3d' ? 'active' : ''}
-        disabled={loading || !floorplan || (!styledResult && !design)}
+        disabled={loading || galleryOpen || !floorplan || (!styledResult && !design)}
       >
         3D
       </button>
@@ -361,12 +300,13 @@ export const Toolbar: React.FC = () => {
           }
         }}
         className={roomEditMode ? 'active' : ''}
+        disabled={galleryOpen}
       >
         {roomEditMode ? 'Finish Room Edit' : 'Edit Room'}
       </button>
       <button
         onClick={() => setDrawWallMode(!drawWallMode)}
-        disabled={!roomEditMode}
+        disabled={galleryOpen || !roomEditMode}
         className={drawWallMode ? 'active' : ''}
       >
         Draw Line
@@ -389,7 +329,7 @@ export const Toolbar: React.FC = () => {
           selectCorner(null);
           selectWall(null);
         }}
-        disabled={!roomEditMode || selectedCornerIndex === null}
+        disabled={galleryOpen || !roomEditMode || selectedCornerIndex === null}
       >
         Delete Point
       </button>
@@ -401,6 +341,7 @@ export const Toolbar: React.FC = () => {
             selectWall(null);
           }
         }}
+        disabled={galleryOpen}
       >
         Reset Room
       </button>
@@ -408,6 +349,17 @@ export const Toolbar: React.FC = () => {
     </div>
   );
 };
+
+function collectManualPlacements(placements: Placement[]): Placement[] {
+  return placements
+    .filter((placement) => placement.source === 'manual')
+    .map((placement) => ({
+      ...placement,
+      source: 'manual',
+      constraint_mode:
+        placement.constraint_mode === 'locked' ? 'locked' : 'pinned',
+    }));
+}
 
 function pointsEqual(a: Point, b: Point, tolerance = 1): boolean {
   return Math.abs(a.x - b.x) <= tolerance && Math.abs(a.y - b.y) <= tolerance;

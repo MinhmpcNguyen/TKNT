@@ -629,6 +629,18 @@ def _place_support_attached_items(
     on_top_types: list[str] = []
 
     for item_type in item_types:
+        if item_type == "throw_blanket":
+            row = _place_throw_blanket_item(
+                support=support,
+                room_center=room_center,
+                item_type=item_type,
+                inventory_profiles=inventory_profiles,
+                existing_ids=existing_ids,
+                counters=counters,
+            )
+            if row is not None:
+                generated.append(row)
+                continue
         method = _infer_method(item_type)
         if method == "floor" and item_type in UNDERLAY_TYPES:
             row = _place_underlay_item(
@@ -799,6 +811,99 @@ def _pack_on_support(
         )
 
     return rows
+
+
+def _place_throw_blanket_item(
+    *,
+    support: _Support,
+    room_center: tuple[float, float],
+    item_type: str,
+    inventory_profiles: dict[str, _Profile],
+    existing_ids: set[str],
+    counters: dict[str, int],
+) -> dict[str, Any] | None:
+    if support.object_type not in {"bed", "sofa", "sectional_sofa"}:
+        return None
+
+    support_rect = support.rect
+    inner_min_x = support_rect.min_x + SUPPORT_INSET_MM
+    inner_max_x = support_rect.max_x - SUPPORT_INSET_MM
+    inner_min_y = support_rect.min_y + SUPPORT_INSET_MM
+    inner_max_y = support_rect.max_y - SUPPORT_INSET_MM
+    if inner_max_x <= inner_min_x or inner_max_y <= inner_min_y:
+        return None
+
+    profile = _profile_for_type(item_type, inventory_profiles)
+    available_width = inner_max_x - inner_min_x
+    available_height = inner_max_y - inner_min_y
+    horizontal = support_rect.width >= support_rect.height
+
+    if horizontal:
+        blanket_width = _clamp(
+            int(round(support_rect.width * 0.68)),
+            min(available_width, max(profile.width_mm, 450)),
+            available_width,
+        )
+        blanket_height = _clamp(
+            int(round(support_rect.height * 0.34)),
+            min(available_height, max(profile.height_mm * 6, 260)),
+            available_height,
+        )
+        long_shift_limit = max(0, (available_width - blanket_width) // 2)
+        shift_direction = _outward_direction(
+            support_center=support_rect.center_x,
+            room_center=room_center[0],
+        )
+        center_x = support_rect.center_x + shift_direction * min(
+            long_shift_limit,
+            int(round(support_rect.width * 0.12)),
+        )
+        center_y = support_rect.center_y
+    else:
+        blanket_width = _clamp(
+            int(round(support_rect.width * 0.34)),
+            min(available_width, max(profile.height_mm * 6, 260)),
+            available_width,
+        )
+        blanket_height = _clamp(
+            int(round(support_rect.height * 0.68)),
+            min(available_height, max(profile.width_mm, 450)),
+            available_height,
+        )
+        long_shift_limit = max(0, (available_height - blanket_height) // 2)
+        shift_direction = _outward_direction(
+            support_center=support_rect.center_y,
+            room_center=room_center[1],
+        )
+        center_x = support_rect.center_x
+        center_y = support_rect.center_y + shift_direction * min(
+            long_shift_limit,
+            int(round(support_rect.height * 0.12)),
+        )
+
+    rect = _centered_rect(
+        center_x=center_x,
+        center_y=center_y,
+        width=blanket_width,
+        height=blanket_height,
+    )
+    rect = _fit_rect_within_bounds(
+        rect=rect,
+        min_x=inner_min_x,
+        max_x=inner_max_x,
+        min_y=inner_min_y,
+        max_y=inner_max_y,
+    )
+    return _make_generated_object(
+        item_type=item_type,
+        rect=rect,
+        method="on_top",
+        target_instance_id=support.instance_id,
+        cluster_id=support.cluster_id,
+        inventory_profiles=inventory_profiles,
+        existing_ids=existing_ids,
+        counters=counters,
+    )
 
 
 def _place_underlay_item(
@@ -1386,6 +1491,32 @@ def _centered_rect(
         min_y=min_y,
         max_x=min_x + width,
         max_y=min_y + height,
+    )
+
+
+def _fit_rect_within_bounds(
+    *,
+    rect: _Rect,
+    min_x: int,
+    max_x: int,
+    min_y: int,
+    max_y: int,
+) -> _Rect:
+    dx = 0
+    dy = 0
+    if rect.min_x < min_x:
+        dx = min_x - rect.min_x
+    elif rect.max_x > max_x:
+        dx = max_x - rect.max_x
+    if rect.min_y < min_y:
+        dy = min_y - rect.min_y
+    elif rect.max_y > max_y:
+        dy = max_y - rect.max_y
+    return _Rect(
+        min_x=rect.min_x + dx,
+        min_y=rect.min_y + dy,
+        max_x=rect.max_x + dx,
+        max_y=rect.max_y + dy,
     )
 
 

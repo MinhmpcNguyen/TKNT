@@ -23,6 +23,8 @@ export async function fetchInventory(tenantId: string): Promise<InventoryItem[]>
       material_tags: item.attributes?.material_tags ?? [],
       price: null,
       color_hex: item.attributes?.color_hex ?? null,
+      room_type: item.attributes?.room_type ?? null,
+      attributes: item.attributes ?? {},
     } satisfies InventoryItem;
   });
 }

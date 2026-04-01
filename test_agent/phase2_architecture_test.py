@@ -17,6 +17,7 @@ MacroClusterPlacer = _cluster_placer.MacroClusterPlacer
 build_phase2_payload = _cluster_placer.build_phase2_payload
 make_no_improvement_repair = _cluster_placer.make_no_improvement_repair
 prepare_phase2_llm_payload = _cluster_placer.prepare_phase2_llm_payload
+RetryablePlacerModelError = _cluster_placer.RetryablePlacerModelError
 normalize_and_validate_repair_output = (
     _cluster_placer.normalize_and_validate_repair_output
 )
@@ -25,6 +26,7 @@ _phase2_controller = importlib.import_module("agent.phase2_controller")
 Phase2Controller = _phase2_controller.Phase2Controller
 _choose_fallback_proposal = _phase2_controller._choose_fallback_proposal
 _select_shortlist_candidate = _phase2_controller._select_shortlist_candidate
+_should_stop_macro_search = _phase2_controller._should_stop_macro_search
 _should_stop_object_refine_search = _phase2_controller._should_stop_object_refine_search
 _should_promote_candidate = _phase2_controller._should_promote_candidate
 _should_replace_with_deterministic_candidate = (
@@ -229,14 +231,87 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertNotIn("objects", proposal)
         self.assertNotIn("missing", proposal)
 
-    def test_repair_output_must_include_full_layout(self) -> None:
+    def test_partial_repair_output_is_merged_with_seed_layout(self) -> None:
+        payload = _sample_payload()
+        partial = {
+            "status": "REPAIRED",
+            "cluster_transforms": [
+                {
+                    **deepcopy(payload["seed_layout"]["cluster_transforms"][0]),
+                    "x": int(payload["seed_layout"]["cluster_transforms"][0]["x"]) + 50,
+                }
+            ],
+            "selected_variants": [],
+            "object_repairs": [],
+            "notes": ["Partial macro patch should inherit the rest from seed."],
+        }
+
+        normalized = normalize_and_validate_repair_output(payload, partial)
+        transform_map = {
+            row["cluster_id"]: row for row in normalized.get("cluster_transforms") or []
+        }
+        variant_map = {
+            row["cluster_id"]: row for row in normalized.get("selected_variants") or []
+        }
+
+        self.assertEqual(
+            set(transform_map.keys()),
+            {
+                row["cluster_id"]
+                for row in payload["seed_layout"]["cluster_transforms"]
+                if isinstance(row, dict) and isinstance(row.get("cluster_id"), str)
+            },
+        )
+        self.assertEqual(
+            set(variant_map.keys()),
+            {
+                row["cluster_id"]
+                for row in payload["seed_layout"]["selected_variants"]
+                if isinstance(row, dict) and isinstance(row.get("cluster_id"), str)
+            },
+        )
+        changed_cluster_id = payload["seed_layout"]["cluster_transforms"][0][
+            "cluster_id"
+        ]
+        self.assertEqual(
+            transform_map[changed_cluster_id]["x"],
+            int(payload["seed_layout"]["cluster_transforms"][0]["x"]) + 50,
+        )
+
+    def test_placer_rotates_models_on_quota_without_consuming_attempt(self) -> None:
+        payload = _sample_payload()
+        noop = make_no_improvement_repair(payload)
+        llm_calls: list[str] = []
+
+        def _llm_call(*, system_prompt: str, user_payload_json: str) -> dict[str, Any]:
+            _ = system_prompt
+            _ = user_payload_json
+            llm_calls.append("call")
+            if len(llm_calls) == 1:
+                raise RetryablePlacerModelError(
+                    failed_model="gemma-3-27b-it",
+                    next_model="gemini-2.5-flash",
+                    retry_delay_s=13.4,
+                    detail="quota exceeded",
+                )
+            return noop
+
+        placer = MacroClusterPlacer(llm_call=_llm_call)
+        proposal = placer.generate_from_payload(payload=payload, max_attempts=1)
+
+        self.assertEqual(proposal["status"], "NO_IMPROVEMENT")
+        self.assertEqual(len(llm_calls), 2)
+
+    def test_partial_repair_output_still_rejects_unknown_cluster_ids(self) -> None:
         payload = _sample_payload()
         invalid = {
             "status": "REPAIRED",
-            "cluster_transforms": [payload["seed_layout"]["cluster_transforms"][0]],
-            "selected_variants": [payload["seed_layout"]["selected_variants"][0]],
+            "cluster_transforms": [
+                {"cluster_id": "ghost_cluster", "x": 0, "y": 0, "rot": 0}
+            ],
+            "selected_variants": [],
             "object_repairs": [],
-            "notes": ["Partial output should fail."],
+            "notes": ["Unknown cluster id should fail."],
         }
 
         with self.assertRaises(ValueError):
@@ -375,9 +450,11 @@ class Phase2ArchitectureTest(unittest.TestCase):
                 worse_evaluation,
                 {
                     "verdict": "REVISE",
+                    "next_step_mode": "macro_layout",
                     "reasonableness_score": 95,
                     "top_issues": [],
                 },
+                search_phase="macro_layout",
             )
         )
         self.assertFalse(
@@ -385,9 +462,29 @@ class Phase2ArchitectureTest(unittest.TestCase):
                 worse_evaluation,
                 {
                     "verdict": "ACCEPT",
+                    "next_step_mode": "stop",
                     "reasonableness_score": 95,
                     "top_issues": [],
                 },
+                search_phase="macro_layout",
+            )
+        )
+
+    def test_small_revise_delta_is_not_promoted(self) -> None:
+        evaluation = {
+            "hard_valid": True,
+            "baseline_comparison": {"delta_score": 60},
+        }
+        self.assertFalse(
+            _should_promote_candidate(
+                evaluation,
+                {
+                    "verdict": "REVISE",
+                    "next_step_mode": "macro_layout",
+                    "reasonableness_score": 78,
+                    "top_issues": ["Orientation still needs a larger cluster move."],
+                },
+                search_phase="object_refine",
             )
         )
 
@@ -518,6 +615,92 @@ class Phase2ArchitectureTest(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             normalize_and_validate_repair_output(payload, invalid_swap)
+
+    def test_object_refine_accepts_object_only_patch(self) -> None:
+        payload = _sample_payload()
+        payload["phase_control"]["repair_phase"] = "object_refine"
+        payload = prepare_phase2_llm_payload(payload)
+        enumerated = (payload.get("tool_context") or {}).get("enumerated_moves") or []
+        proposal = next(
+            (
+                deepcopy(move.get("proposal"))
+                for move in enumerated
+                if isinstance(move, dict)
+                and isinstance(move.get("proposal"), dict)
+                and ((move.get("proposal") or {}).get("object_repairs") or [])
+            ),
+            None,
+        )
+
+        self.assertIsNotNone(proposal)
+        if proposal is None:
+            return
+
+        proposal["status"] = "REPAIRED"
+        proposal["cluster_transforms"] = []
+        proposal["selected_variants"] = []
+        proposal["notes"] = [
+            "Object-only repair patch should inherit seed macro layout."
+        ]
+
+        normalized = normalize_and_validate_repair_output(payload, proposal)
+
+        self.assertTrue(normalized["object_repairs"])
+        self.assertEqual(
+            normalized["cluster_transforms"],
+            make_no_improvement_repair(payload)["cluster_transforms"],
+        )
+        self.assertEqual(
+            normalized["selected_variants"],
+            make_no_improvement_repair(payload)["selected_variants"],
+        )
+
+    def test_controller_merges_partial_patch_before_judge_and_follow_up(self) -> None:
+        seed_payload = _sample_payload()
+        changed_cluster = deepcopy(seed_payload["seed_layout"]["cluster_transforms"][0])
+        changed_cluster["x"] = int(changed_cluster["x"])
+        changed_cluster_id = str(changed_cluster["cluster_id"])
+        expected_cluster_ids = {
+            str(row["cluster_id"])
+            for row in seed_payload["seed_layout"]["cluster_transforms"]
+            if isinstance(row, dict) and isinstance(row.get("cluster_id"), str)
+        }
+
+        partial = {
+            "status": "REPAIRED",
+            "cluster_transforms": [changed_cluster],
+            "selected_variants": [],
+            "object_repairs": [],
+            "notes": ["Partial macro patch should be merged before evaluation."],
+        }
+
+        def _llm_call(*, system_prompt: str, user_payload_json: str) -> dict[str, Any]:
+            _ = system_prompt
+            _ = user_payload_json
+            return deepcopy(partial)
+
+        judge = _RevisingJudge()
+        controller = Phase2Controller(
+            placer=MacroClusterPlacer(llm_call=_llm_call),
+            judge=judge,  # type: ignore[arg-type]
+            max_iterations=1,
+        )
+        result = controller.generate(
+            room_interpreter_json=_load_json(CASE_ROOT / "01_room_interpreter.json"),
+            cluster_merged_json=_load_json(CASE_ROOT / "04_cluster_merged.json"),
+            cluster_outlines_json=_load_json(CASE_ROOT / "05_cluster_outlines.json"),
+            relation_plan_json=_load_json(CASE_ROOT / "05b_cluster_relation_plan.json"),
+            solver_output_json=_load_json(CASE_ROOT / "06a_cluster_solver.json"),
+            cluster_constraints_json=None,
+        )
+
+        proposal_map = {
+            row["cluster_id"]: row for row in result["proposal"]["cluster_transforms"]
+        }
+
+        self.assertEqual(set(proposal_map.keys()), expected_cluster_ids)
+        self.assertEqual(proposal_map[changed_cluster_id]["x"], changed_cluster["x"])
+        self.assertTrue(judge.payloads)
 
     def test_window_case_scores_front_to_window_and_affinity_preferences(self) -> None:
         payload = _window_payload()
@@ -667,6 +850,97 @@ class Phase2ArchitectureTest(unittest.TestCase):
             )
         )
 
+    def test_macro_search_stops_after_repeated_small_revise(self) -> None:
+        history = [
+            {
+                "search_phase": "macro_layout",
+                "tool_evaluation": {
+                    "hard_valid": True,
+                    "baseline_comparison": {"delta_score": 40},
+                },
+                "judge_evaluation": {
+                    "verdict": "REVISE",
+                    "priority_clusters": ["seating_area", "tv_zone"],
+                    "top_issues": ["TV and sofa orientation still feels wrong."],
+                    "repair_advice": ["Try a different macro direction."],
+                    "next_step_mode": "macro_layout",
+                },
+                "direction_summary": {
+                    "primary_clusters": ["seating_area"],
+                    "move_families": ["cluster_translation"],
+                },
+            },
+            {
+                "search_phase": "macro_layout",
+                "tool_evaluation": {
+                    "hard_valid": True,
+                    "baseline_comparison": {"delta_score": 55},
+                },
+                "judge_evaluation": {
+                    "verdict": "REVISE",
+                    "priority_clusters": ["seating_area", "tv_zone"],
+                    "top_issues": ["TV and sofa orientation still feels wrong."],
+                    "repair_advice": ["Try a different macro direction."],
+                    "next_step_mode": "macro_layout",
+                },
+                "direction_summary": {
+                    "primary_clusters": ["seating_area"],
+                    "move_families": ["cluster_translation"],
+                },
+            },
+            {
+                "search_phase": "macro_layout",
+                "tool_evaluation": {
+                    "hard_valid": True,
+                    "baseline_comparison": {"delta_score": 70},
+                },
+                "judge_evaluation": {
+                    "verdict": "REVISE",
+                    "priority_clusters": ["seating_area", "tv_zone"],
+                    "top_issues": ["TV and sofa orientation still feels wrong."],
+                    "repair_advice": ["Try a different macro direction."],
+                    "next_step_mode": "macro_layout",
+                },
+                "direction_summary": {
+                    "primary_clusters": ["tv_zone"],
+                    "move_families": ["cluster_rotation"],
+                },
+            },
+            {
+                "search_phase": "macro_layout",
+                "tool_evaluation": {
+                    "hard_valid": True,
+                    "baseline_comparison": {"delta_score": 65},
+                },
+                "judge_evaluation": {
+                    "verdict": "REVISE",
+                    "priority_clusters": ["seating_area", "tv_zone"],
+                    "top_issues": ["TV and sofa orientation still feels wrong."],
+                    "repair_advice": ["Try a different macro direction."],
+                    "next_step_mode": "macro_layout",
+                },
+                "direction_summary": {
+                    "primary_clusters": ["seating_area"],
+                    "move_families": ["cluster_translation"],
+                },
+            },
+        ]
+        shortlist = [
+            {
+                "evaluation": {
+                    "hard_valid": True,
+                    "baseline_comparison": {"delta_score": 90},
+                }
+            }
+        ]
+        self.assertTrue(
+            _should_stop_macro_search(
+                history=history,
+                deterministic_shortlist=shortlist,
+                search_phase="macro_layout",
+            )
+        )
+
     def test_judge_calibration_breaks_flat_revise_scores(self) -> None:
         payload = {
             "hard_check_summary": {"hard_valid": True},
@@ -696,6 +970,77 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertEqual(result["verdict"], "ACCEPT")
         self.assertGreaterEqual(result["reasonableness_score"], 85)
         self.assertEqual(result["repair_advice"], [])
+        self.assertEqual(result["next_step_mode"], "stop")
+
+    def test_judge_calibration_prefers_macro_layout_for_orientation_issues(
+        self,
+    ) -> None:
+        payload = {
+            "hard_check_summary": {"hard_valid": True},
+            "comparison_summary": {"delta_score": 90},
+            "metrics": {
+                "cluster_affinity_to_preferred_zone": [],
+                "opening_band_blocking": [],
+                "main_path_clearance": {"paths": []},
+                "central_congestion": [],
+                "cluster_edge_vs_center_fit": [],
+                "cluster_internal_constraint_fidelity": [],
+            },
+            "diagnosis": {
+                "prioritized_clusters": [
+                    {"cluster_id": "seating_area"},
+                    {"cluster_id": "tv_zone"},
+                ]
+            },
+        }
+
+        result = run_phase2_judge(
+            payload=payload,
+            llm_call=lambda system_prompt, user_payload_json: {
+                "reasonableness_score": 68,
+                "verdict": "REVISE",
+                "top_issues": ["TV and sofa orientation still feels wrong."],
+                "repair_advice": ["Try a different macro direction."],
+                "priority_clusters": ["seating_area", "tv_zone"],
+            },
+        )
+
+        self.assertEqual(result["next_step_mode"], "macro_layout")
+
+    def test_judge_calibration_prefers_object_refine_for_local_clearance_issue(
+        self,
+    ) -> None:
+        payload = {
+            "hard_check_summary": {"hard_valid": True},
+            "comparison_summary": {"delta_score": 220},
+            "metrics": {
+                "cluster_affinity_to_preferred_zone": [],
+                "opening_band_blocking": [],
+                "main_path_clearance": {"paths": []},
+                "central_congestion": [],
+                "cluster_edge_vs_center_fit": [],
+                "cluster_internal_constraint_fidelity": [],
+            },
+            "diagnosis": {
+                "prioritized_clusters": [{"cluster_id": "work_area"}],
+                "prioritized_objects": [
+                    {"cluster_id": "work_area", "object_id": "desk_chair"}
+                ],
+            },
+        }
+
+        result = run_phase2_judge(
+            payload=payload,
+            llm_call=lambda system_prompt, user_payload_json: {
+                "reasonableness_score": 76,
+                "verdict": "REVISE",
+                "top_issues": ["Chair still needs front clearance tuning."],
+                "repair_advice": ["Use a smaller local object adjustment."],
+                "priority_clusters": ["work_area"],
+            },
+        )
+
+        self.assertEqual(result["next_step_mode"], "object_refine")
 
     def test_judge_calibration_demotes_accept_when_main_path_is_severely_blocked(
         self,

@@ -22,11 +22,39 @@ from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
 logger = logging.getLogger(__name__)
 
+try:
+    from config.gemini_config import GeminiConfig
+except Exception:  # pragma: no cover
+    GeminiConfig = None  # type: ignore[assignment]
+
 
 @dataclass(frozen=True)
 class Stylist:
     system_prompt: str = SYSTEM_PROMPT
     prompt_template: str = STYLIST_PROMPT
+
+    def generate_style_plan(
+        self,
+        *,
+        layout_json: dict[str, Any],
+        user_context_json: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
+        _, payload, _, style_context = self._prepare_style_inputs(
+            layout_json=layout_json,
+            user_context_json=user_context_json,
+            tenant_id=tenant_id,
+        )
+        style_prompt = _build_color_prompt(
+            template=self.prompt_template,
+            style_context_json=style_context,
+            locked_style_payload_json=_build_locked_style_payload(payload),
+        )
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": style_prompt},
+        ]
+        return _generate_style_plan(messages)
 
     def generate_raw(
         self,
@@ -49,16 +77,44 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any]:
-        payload = self._build_output_payload(
+        return self.apply_style_plan(
             layout_json=layout_json,
             user_context_json=user_context_json,
             tenant_id=tenant_id,
         )
-        payload = _fix_place_on_targets(
-            payload,
-            layout_json=_normalize_layout_json(layout_json),
+
+    def apply_style_plan(
+        self,
+        *,
+        layout_json: dict[str, Any],
+        user_context_json: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
+        style_plan: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        normalized_layout, payload, _, style_context = self._prepare_style_inputs(
+            layout_json=layout_json,
+            user_context_json=user_context_json,
+            tenant_id=tenant_id,
         )
-        return StylistOutput.model_validate(payload).model_dump()
+        resolved_style_plan = (
+            deepcopy(style_plan)
+            if isinstance(style_plan, dict)
+            else self.generate_style_plan(
+                layout_json=normalized_layout,
+                user_context_json=user_context_json,
+                tenant_id=tenant_id,
+            )
+        )
+        styled_payload = _apply_style_plan(
+            payload=payload,
+            style_plan=resolved_style_plan,
+            style_context=style_context,
+        )
+        styled_payload = _fix_place_on_targets(
+            styled_payload,
+            layout_json=normalized_layout,
+        )
+        return StylistOutput.model_validate(styled_payload).model_dump()
 
     def _build_output_payload(
         self,
@@ -67,18 +123,10 @@ class Stylist:
         user_context_json: dict[str, Any] | None,
         tenant_id: str | None,
     ) -> dict[str, Any]:
-        normalized_layout = _normalize_layout_json(layout_json)
-        merged_user_context = _inject_tenant(user_context_json, tenant_id)
-        resolved_tenant_id = _extract_tenant_id(merged_user_context, normalized_layout)
-
-        payload = build_deterministic_stylist_payload(
-            normalized_layout,
-            tenant_id=resolved_tenant_id,
-        )
-        style_context = _build_style_context(
-            layout_json=normalized_layout,
-            user_context_json=merged_user_context,
-            payload=payload,
+        normalized_layout, payload, _, style_context = self._prepare_style_inputs(
+            layout_json=layout_json,
+            user_context_json=user_context_json,
+            tenant_id=tenant_id,
         )
         style_prompt = _build_color_prompt(
             template=self.prompt_template,
@@ -97,6 +145,27 @@ class Stylist:
             style_context=style_context,
         )
         return styled_payload
+
+    def _prepare_style_inputs(
+        self,
+        *,
+        layout_json: dict[str, Any],
+        user_context_json: dict[str, Any] | None,
+        tenant_id: str | None,
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, dict[str, Any]]:
+        normalized_layout = _normalize_layout_json(layout_json)
+        merged_user_context = _inject_tenant(user_context_json, tenant_id)
+        resolved_tenant_id = _extract_tenant_id(merged_user_context, normalized_layout)
+        payload = build_deterministic_stylist_payload(
+            normalized_layout,
+            tenant_id=resolved_tenant_id,
+        )
+        style_context = _build_style_context(
+            layout_json=normalized_layout,
+            user_context_json=merged_user_context,
+            payload=payload,
+        )
+        return normalized_layout, payload, merged_user_context, style_context
 
 
 def _build_prompt(
@@ -348,14 +417,26 @@ def _build_locked_style_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _generate_style_plan(messages: list[dict[str, str]]) -> dict[str, Any]:
     try:
-        response = get_llm_client().chat_completion(
+        response = get_llm_client(provider="gemini").chat_completion(
             messages,
             model_key="primary",
+            model_name=(
+                GeminiConfig.AGENT_MODELS.get("stylist")
+                if GeminiConfig is not None
+                else None
+            ),
             temperature=1.2,
             max_tokens=1800,
+            thinking_level="medium",
         )
         content = _extract_content_from_response(response)
-        return _parse_json(content)
+        parsed = _try_parse_json_object(content)
+        if parsed is not None:
+            return parsed
+        raise ValueError(
+            "Stylist returned invalid JSON: "
+            f"{_truncate_text(content, max_len=300)}"
+        )
     except Exception as exc:
         logger.warning("Stylist color planner fallback triggered: %s", exc)
         return {}
@@ -719,7 +800,7 @@ def _run_with_tools(
     user_context_json: dict[str, Any] | None,
     max_steps: int = 10,
 ) -> str:
-    client = get_llm_client()
+    client = get_llm_client(provider="gemini")
 
     surface_requirements = _compute_surface_requirements(layout_json)
     required_types = surface_requirements.get("required_types") or []
@@ -748,7 +829,13 @@ def _run_with_tools(
             response = client.chat_completion(
                 messages,
                 model_key="primary",
+                model_name=(
+                    GeminiConfig.AGENT_MODELS.get("stylist")
+                    if GeminiConfig is not None
+                    else None
+                ),
                 temperature=0.0,
+                thinking_level="medium",
                 tools=TOOL_SCHEMAS,
             )
         except Exception as exc:

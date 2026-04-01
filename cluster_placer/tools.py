@@ -3935,201 +3935,6 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
 
 
 # =========================================================
-# Additional search-friendly public tools
-# =========================================================
-def EnumerateClusterCandidates(
-    *,
-    room_model: Dict[str, Any],
-    clusters_outlines: Any,
-    grid_mm: int,
-    relation_plan: Dict[str, Any] | None = None,
-    cluster_ids: List[str] | None = None,
-    max_candidates_per_cluster: int = 48,
-    keep_rejected_examples: int = 8,
-    max_variants_per_cluster: int = 6,
-    acceptable_critical_orientation_threshold_mm: int = 260,
-    acceptable_focal_pair_threshold_mm: int = 260,
-    acceptable_max_item_penalty_mm: int = 220,
-) -> Dict[str, Any]:
-    """
-    Deterministically enumerates search-friendly macro candidates for each cluster.
-
-    This version is convergence-oriented:
-    - it enumerates over generic local-layout variants
-    - it uses soft penalties only for ranking in partial mode
-    - it avoids killing promising candidates too early
-    """
-    try:
-        from shapely.geometry import Polygon
-    except Exception:
-        return {
-            "result": "INVALID",
-            "errors": [{"code": "NO_SHAPELY", "detail": "Shapely is required."}],
-            "clusters": [],
-            "cluster_order": [],
-        }
-
-    room_model_u = _unwrap_any(room_model)
-    clusters_u = _unwrap_any(clusters_outlines)
-    clusters_u, _ = _canonicalize_clusters_local_origin(clusters_u)
-    cluster_entries = _iter_cluster_entries(clusters_u)
-    cinfo_by_id: Dict[str, Dict[str, Any]] = {
-        cid: cinfo for cid, cinfo in cluster_entries
-    }
-    if not cinfo_by_id:
-        return {
-            "result": "INVALID",
-            "errors": [
-                {"code": "CLUSTERS_INVALID", "detail": "No valid cluster entries found"}
-            ],
-            "clusters": [],
-            "cluster_order": [],
-        }
-
-    room_pts = (room_model_u.get("room") or {}).get("polygon_ccw") or []
-    if not isinstance(room_pts, list) or len(room_pts) < 3:
-        return {
-            "result": "INVALID",
-            "errors": [
-                {"code": "ROOM_INVALID", "detail": "room.polygon_ccw missing/invalid"}
-            ],
-            "clusters": [],
-            "cluster_order": [],
-        }
-
-    room_poly = _fix_poly(Polygon([(float(p["x"]), float(p["y"])) for p in room_pts]))
-    room_bbox = room_poly.bounds
-    opening_ctx = _build_opening_context(room_model_u)
-
-    if cluster_ids:
-        target_ids = [str(cid) for cid in cluster_ids if str(cid) in cinfo_by_id]
-    else:
-        target_ids = sorted(cinfo_by_id.keys())
-
-    per_cluster = []
-    for cid in target_ids:
-        base_cinfo = cinfo_by_id[cid]
-        hints = _cluster_search_hints(cluster_id=cid, relation_plan=relation_plan)
-        variants = _generate_generic_variants_for_cluster(
-            cluster_id=cid,
-            cinfo=base_cinfo,
-            max_variants_per_cluster=max(1, int(max_variants_per_cluster or 1)),
-        )
-        variants = _rank_variants_for_search(variants, hints=hints)
-
-        cluster_candidates: List[Dict[str, Any]] = []
-        cluster_rejected: List[Dict[str, Any]] = []
-        for variant in variants:
-            variant_payload = (
-                variant.get("payload") if isinstance(variant, dict) else None
-            )
-            if not isinstance(variant_payload, dict):
-                continue
-            variantized_clusters = _materialize_variantized_clusters_payload(
-                clusters_u, {cid: variant_payload}
-            )
-            candidates, rejected = _enumerate_candidates_for_one_cluster(
-                room_model=room_model_u,
-                room_bbox=room_bbox,
-                room_poly=room_poly,
-                clusters_outlines=variantized_clusters,
-                relation_plan=relation_plan,
-                opening_ctx=opening_ctx,
-                cinfo=variant_payload,
-                cluster_id=cid,
-                grid_mm=grid_mm,
-                max_candidates_per_cluster=max_candidates_per_cluster,
-                keep_rejected_examples=keep_rejected_examples,
-                acceptable_critical_orientation_threshold_mm=acceptable_critical_orientation_threshold_mm,
-                acceptable_focal_pair_threshold_mm=acceptable_focal_pair_threshold_mm,
-                acceptable_max_item_penalty_mm=acceptable_max_item_penalty_mm,
-                variant_id=str(variant.get("variant_id") or ""),
-                variant_family=str(variant.get("family") or ""),
-                variant_priority=float(variant.get("priority") or 0.0),
-                variant_ops=list(variant.get("ops") or []),
-            )
-            cluster_candidates.extend(candidates)
-            cluster_rejected.extend(rejected)
-
-        cluster_candidates = _dedupe_candidate_records(cluster_candidates)
-        cluster_rejected = _dedupe_candidate_records(cluster_rejected)
-        cluster_candidates.sort(key=_candidate_sort_key_for_search)
-        cluster_rejected.sort(key=_rejected_candidate_sort_key)
-
-        per_cluster.append(
-            {
-                "cluster_id": cid,
-                "variant_count_considered": len(variants),
-                "candidate_count": len(cluster_candidates[:max_candidates_per_cluster]),
-                "acceptable_candidate_count": sum(
-                    1 for c in cluster_candidates if c.get("acceptable_valid")
-                ),
-                "hard_valid_candidate_count": sum(
-                    1 for c in cluster_candidates if c.get("hard_valid")
-                ),
-                "rejected_example_count": len(
-                    cluster_rejected[:keep_rejected_examples]
-                ),
-                "candidates": cluster_candidates[:max_candidates_per_cluster],
-                "rejected_examples": cluster_rejected[:keep_rejected_examples],
-                "priority_score": _cluster_priority_score(
-                    cinfo=base_cinfo, candidates=cluster_candidates
-                ),
-            }
-        )
-
-    per_cluster.sort(
-        key=lambda item: (
-            -float(item.get("priority_score", 0.0)),
-            item.get("cluster_id", ""),
-        )
-    )
-
-    return {
-        "result": "OK",
-        "errors": [],
-        "clusters": per_cluster,
-        "cluster_order": [item["cluster_id"] for item in per_cluster],
-    }
-
-
-def RankClusterPlacementOrder(
-    *,
-    room_model: Dict[str, Any],
-    clusters_outlines: Any,
-    grid_mm: int,
-    relation_plan: Dict[str, Any] | None = None,
-    cluster_ids: List[str] | None = None,
-    max_variants_per_cluster: int = 6,
-) -> Dict[str, Any]:
-    """Returns a constrained-first placement order using deterministic candidate stats."""
-    enum = EnumerateClusterCandidates(
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        grid_mm=grid_mm,
-        relation_plan=relation_plan,
-        cluster_ids=cluster_ids,
-        max_candidates_per_cluster=40,
-        keep_rejected_examples=4,
-        max_variants_per_cluster=max_variants_per_cluster,
-    )
-    if enum.get("result") != "OK":
-        return enum
-    order = []
-    for item in enum.get("clusters") or []:
-        order.append(
-            {
-                "cluster_id": item.get("cluster_id"),
-                "priority_score": item.get("priority_score"),
-                "acceptable_candidate_count": item.get("acceptable_candidate_count"),
-                "hard_valid_candidate_count": item.get("hard_valid_candidate_count"),
-                "candidate_count": item.get("candidate_count"),
-            }
-        )
-    return {"result": "OK", "order": order}
-
-
-# =========================================================
 # Search-friendly helpers
 # =========================================================
 def _evaluate_quality_gate(
@@ -4360,6 +4165,9 @@ def _cluster_search_hints(
         "prefer_entry": bool(prefer & AFFINITY_ENTRY_SIDE)
         or ("face_entry" in intents)
         or ("front_to_entry" in object_intents),
+        "prefer_long_wall": "long_wall" in prefer,
+        "prefer_short_wall": "short_wall" in prefer,
+        "prefer_recess_or_edge": "recess_or_edge" in prefer,
         "avoid_entry": bool(avoid & AFFINITY_AVOID_ENTRY)
         or (prefer & AFFINITY_FAR_FROM_ENTRY),
         "avoid_window": bool(avoid & AFFINITY_AVOID_WINDOW),
@@ -4393,6 +4201,9 @@ def _semantic_anchor_specs_for_cluster(
     x1, y1, x2, y2 = [float(v) for v in room_bbox]
     max_x = max(x1, x2 - width)
     max_y = max(y1, y2 - height)
+    room_width = max(1.0, x2 - x1)
+    room_height = max(1.0, y2 - y1)
+    long_wall_is_horizontal = room_width >= room_height
 
     door_mids = _opening_midpoints(opening_ctx, "doors")
     window_mids = _opening_midpoints(opening_ctx, "windows")
@@ -4416,12 +4227,119 @@ def _semantic_anchor_specs_for_cluster(
 
     specs: List[Tuple[int, int, str, float]] = []
 
+    def is_long_wall_kind(kind: str) -> bool:
+        if long_wall_is_horizontal:
+            return kind.startswith(
+                (
+                    "wall_top",
+                    "wall_bottom",
+                    "window_top",
+                    "window_bottom",
+                    "door_top",
+                    "door_bottom",
+                    "open_front_top",
+                    "open_front_bottom",
+                    "prefer_center_top",
+                    "prefer_center_bottom",
+                    "avoid_center_top",
+                    "avoid_center_bottom",
+                )
+            )
+        return kind.startswith(
+            (
+                "wall_left",
+                "wall_right",
+                "window_left",
+                "window_right",
+                "door_left",
+                "door_right",
+                "open_front_left",
+                "open_front_right",
+                "avoid_center_left",
+                "avoid_center_right",
+            )
+        )
+
+    def is_short_wall_kind(kind: str) -> bool:
+        if long_wall_is_horizontal:
+            return kind.startswith(
+                (
+                    "wall_left",
+                    "wall_right",
+                    "window_left",
+                    "window_right",
+                    "door_left",
+                    "door_right",
+                    "open_front_left",
+                    "open_front_right",
+                    "avoid_center_left",
+                    "avoid_center_right",
+                )
+            )
+        return kind.startswith(
+            (
+                "wall_top",
+                "wall_bottom",
+                "window_top",
+                "window_bottom",
+                "door_top",
+                "door_bottom",
+                "open_front_top",
+                "open_front_bottom",
+                "prefer_center_top",
+                "prefer_center_bottom",
+                "avoid_center_top",
+                "avoid_center_bottom",
+            )
+        )
+
+    def anchor_bias(kind: str) -> float:
+        bias = 0.0
+        if hints.get("prefer_wall") and kind.startswith(("wall_", "corner_")):
+            bias += 0.05
+        if hints.get("prefer_long_wall"):
+            if is_long_wall_kind(kind):
+                bias += 0.18
+            elif is_short_wall_kind(kind):
+                bias -= 0.06
+        if hints.get("prefer_short_wall"):
+            if is_short_wall_kind(kind):
+                bias += 0.18
+            elif is_long_wall_kind(kind):
+                bias -= 0.06
+        if hints.get("prefer_recess_or_edge"):
+            if kind.startswith(("corner_", "wall_left_inset", "wall_right_inset")):
+                bias += 0.18
+            if kind.startswith(("wall_top_inset", "wall_bottom_inset")):
+                bias += 0.18
+            if kind == "center" or kind.startswith("quad_"):
+                bias -= 0.08
+        if hints.get("prefer_center"):
+            if kind == "center" or kind.startswith(("quad_", "prefer_center_")):
+                bias += 0.10
+        if hints.get("avoid_center"):
+            if kind == "center" or kind.startswith("quad_"):
+                bias -= 0.14
+            if kind.startswith(("corner_", "wall_", "avoid_center_")):
+                bias += 0.05
+        if hints.get("prefer_window") and kind.startswith("window_"):
+            bias += 0.08
+        if hints.get("prefer_entry") and kind.startswith("door_"):
+            bias += 0.08
+        if hints.get("avoid_entry") and kind.startswith("door_"):
+            bias -= 0.14
+        if hints.get("avoid_window") and kind.startswith("window_"):
+            bias -= 0.14
+        if hints.get("need_open_front") and kind.startswith("open_front_"):
+            bias += 0.10
+        return bias
+
     def add(px: float, py: float, kind: str, priority: float) -> None:
         sx = int(_snap_to_grid(px, grid_mm))
         sy = int(_snap_to_grid(py, grid_mm))
         sx = max(int(round(x1)), min(int(round(max_x)), sx))
         sy = max(int(round(y1)), min(int(round(max_y)), sy))
-        specs.append((sx, sy, kind, float(priority)))
+        specs.append((sx, sy, kind, float(priority) + anchor_bias(kind)))
 
     inset = max(grid_mm, int(round(0.04 * min(max(x2 - x1, 1.0), max(y2 - y1, 1.0)))))
     top_y = y1
@@ -4584,6 +4502,90 @@ def _semantic_anchor_specs_for_cluster(
     out = [(sx, sy, kind, pr) for (sx, sy, kind), pr in dedup.items()]
     out.sort(key=lambda item: (-float(item[3]), item[2], item[0], item[1]))
     return out
+
+
+def _candidate_region_bucket(
+    item: Dict[str, Any],
+    *,
+    room_bbox: Tuple[float, float, float, float],
+) -> tuple[str, str]:
+    x1, y1, x2, y2 = [float(v) for v in room_bbox]
+    span_x = max(1.0, x2 - x1)
+    span_y = max(1.0, y2 - y1)
+    px = (float(item.get("x") or 0) - x1) / span_x
+    py = (float(item.get("y") or 0) - y1) / span_y
+
+    bucket_x = "left" if px < 0.33 else "right" if px > 0.66 else "center"
+    bucket_y = "top" if py < 0.33 else "bottom" if py > 0.66 else "middle"
+    return bucket_x, bucket_y
+
+
+def _candidate_signature(item: Dict[str, Any]) -> tuple[str, str, int, int, int]:
+    return (
+        str(item.get("cluster_id") or ""),
+        str(item.get("variant_id") or ""),
+        int(item.get("x") or 0),
+        int(item.get("y") or 0),
+        int(item.get("rot") or 0) % 360,
+    )
+
+
+def _select_diverse_candidates_for_search(
+    candidates: List[Dict[str, Any]],
+    *,
+    room_bbox: Tuple[float, float, float, float],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    ordered = sorted(candidates, key=_candidate_sort_key_for_search)
+    if len(ordered) <= limit:
+        return ordered
+
+    bucket_limit = max(2, limit // 4)
+    selected: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, int, int, int]] = set()
+    bucket_counts: Dict[tuple[str, str], int] = {}
+    bucket_best: Dict[tuple[str, str], Dict[str, Any]] = {}
+
+    for item in ordered:
+        bucket = _candidate_region_bucket(item, room_bbox=room_bbox)
+        bucket_best.setdefault(bucket, item)
+
+    for bucket in sorted(bucket_best.keys()):
+        item = bucket_best[bucket]
+        sig = _candidate_signature(item)
+        if sig in seen:
+            continue
+        selected.append(item)
+        seen.add(sig)
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+        if len(selected) >= limit:
+            return selected
+
+    overflow: List[Dict[str, Any]] = []
+    for item in ordered:
+        sig = _candidate_signature(item)
+        if sig in seen:
+            continue
+        bucket = _candidate_region_bucket(item, room_bbox=room_bbox)
+        if bucket_counts.get(bucket, 0) >= bucket_limit:
+            overflow.append(item)
+            continue
+        selected.append(item)
+        seen.add(sig)
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+        if len(selected) >= limit:
+            return selected
+
+    for item in overflow:
+        sig = _candidate_signature(item)
+        if sig in seen:
+            continue
+        selected.append(item)
+        seen.add(sig)
+        if len(selected) >= limit:
+            break
+
+    return selected
 
 
 def _local_refinement_offsets(grid_mm: int) -> List[Tuple[int, int]]:
@@ -4824,9 +4826,13 @@ def _enumerate_candidates_for_one_cluster(
 
     candidates = _dedupe_candidate_records(candidates)
     rejected = _dedupe_candidate_records(rejected)
-    candidates.sort(key=_candidate_sort_key_for_search)
+    candidates = _select_diverse_candidates_for_search(
+        candidates,
+        room_bbox=room_bbox,
+        limit=max_candidates_per_cluster,
+    )
     rejected.sort(key=_rejected_candidate_sort_key)
-    return candidates[:max_candidates_per_cluster], rejected[:keep_rejected_examples]
+    return candidates, rejected[:keep_rejected_examples]
 
 
 def _candidate_sort_key_for_search(item: Dict[str, Any]) -> tuple:
@@ -6059,18 +6065,10 @@ def _enumerate_candidates_for_one_cluster(
                     variantized_clusters,
                 )
 
-    candidates.sort(
-        key=lambda item: (
-            0 if item.get("acceptable_valid") else 1,
-            -float(item.get("variant_priority") or 0.0),
-            -float(item.get("anchor_priority") or 0.0),
-            -int(item.get("rough_score") or -(10**9)),
-            int(item.get("critical_orientation_penalty_mm") or 0),
-            int(item.get("orientation_penalty_mm") or 0),
-            int(item.get("x") or 0),
-            int(item.get("y") or 0),
-            int(item.get("rot") or 0),
-        )
+    candidates = _select_diverse_candidates_for_search(
+        candidates,
+        room_bbox=room_bbox,
+        limit=max_candidates_per_cluster,
     )
     rejected.sort(
         key=lambda item: (
@@ -6080,7 +6078,7 @@ def _enumerate_candidates_for_one_cluster(
             item.get("anchor_kind", ""),
         )
     )
-    return candidates[:max_candidates_per_cluster], rejected[:keep_rejected_examples]
+    return candidates, rejected[:keep_rejected_examples]
 
 
 def _cluster_priority_score(
@@ -6115,76 +6113,76 @@ _TOOL_REGISTRY.update(
 
 _TOOL_SCHEMAS.extend(
     [
-    {
-        "type": "function",
-        "function": {
-            "name": "BuildGenericClusterVariants",
-            "description": "Generate finite, generalized local-layout variants for each cluster by applying geometry mirrors and semantic front-flip transformations. Use this to increase degrees of freedom before macro placement search.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "clusters_outlines": {
-                        "oneOf": [
-                            {"type": "object", "additionalProperties": True},
-                            {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "additionalProperties": True,
+        {
+            "type": "function",
+            "function": {
+                "name": "BuildGenericClusterVariants",
+                "description": "Generate finite, generalized local-layout variants for each cluster by applying geometry mirrors and semantic front-flip transformations. Use this to increase degrees of freedom before macro placement search.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clusters_outlines": {
+                            "oneOf": [
+                                {"type": "object", "additionalProperties": True},
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
                                 },
-                            },
-                        ]
+                            ]
+                        },
+                        "cluster_ids": {"type": "array", "items": {"type": "string"}},
+                        "max_variants_per_cluster": {"type": "integer"},
+                        "include_variant_payloads": {"type": "boolean"},
                     },
-                    "cluster_ids": {"type": "array", "items": {"type": "string"}},
-                    "max_variants_per_cluster": {"type": "integer"},
-                    "include_variant_payloads": {"type": "boolean"},
+                    "required": ["clusters_outlines"],
+                    "additionalProperties": False,
                 },
-                "required": ["clusters_outlines"],
-                "additionalProperties": False,
             },
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "MaterializeVariantizedClusters",
-            "description": "Apply selected variant ids to clusters_outlines and return a full variantized payload suitable for verification and search.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "clusters_outlines": {
-                        "oneOf": [
-                            {"type": "object", "additionalProperties": True},
-                            {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "additionalProperties": True,
+        {
+            "type": "function",
+            "function": {
+                "name": "MaterializeVariantizedClusters",
+                "description": "Apply selected variant ids to clusters_outlines and return a full variantized payload suitable for verification and search.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clusters_outlines": {
+                            "oneOf": [
+                                {"type": "object", "additionalProperties": True},
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
                                 },
-                            },
-                        ]
-                    },
-                    "selected_variants": {
-                        "oneOf": [
-                            {
-                                "type": "object",
-                                "additionalProperties": {"type": "string"},
-                            },
-                            {
-                                "type": "array",
-                                "items": {
+                            ]
+                        },
+                        "selected_variants": {
+                            "oneOf": [
+                                {
                                     "type": "object",
-                                    "additionalProperties": True,
+                                    "additionalProperties": {"type": "string"},
                                 },
-                            },
-                        ]
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
+                                },
+                            ]
+                        },
                     },
+                    "required": ["clusters_outlines", "selected_variants"],
+                    "additionalProperties": False,
                 },
-                "required": ["clusters_outlines", "selected_variants"],
-                "additionalProperties": False,
             },
         },
-    },
     ]
 )
 

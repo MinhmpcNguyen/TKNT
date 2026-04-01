@@ -7,13 +7,23 @@ import { UserInputPanel } from './components/UserInputPanel';
 import { ValidationPanel } from './components/ValidationPanel';
 import { Toolbar } from './components/Toolbar';
 import { ClusterPreviewPanel } from './components/ClusterPreviewPanel';
+import { LayoutVariantsGallery } from './components/LayoutVariantsGallery';
 import { ThreeDPreviewPanel } from './components/ThreeDPreviewPanel';
 import { useEditorStore } from './store';
 import { fetchInventory } from './api';
 import sampleFloorplan from './sample_floorplan.json';
 
 export const App: React.FC = () => {
-  const { setFloorplan, setInventory, tenantId, setBaseFloorplan, appendRunLog, viewMode } = useEditorStore();
+  const {
+    setFloorplan,
+    setInventory,
+    tenantId,
+    setBaseFloorplan,
+    appendRunLog,
+    viewMode,
+    layoutVariants,
+    variantPickerOpen,
+  } = useEditorStore();
 
   useEffect(() => {
     setFloorplan(sampleFloorplan as any);
@@ -40,7 +50,13 @@ export const App: React.FC = () => {
       <div className="workspace">
         <LibraryPanel />
         <div className="canvas-wrapper">
-          {viewMode === '3d' ? <ThreeDPreviewPanel /> : <Canvas2D />}
+          {variantPickerOpen && layoutVariants.length > 0 ? (
+            <LayoutVariantsGallery />
+          ) : viewMode === '3d' ? (
+            <ThreeDPreviewPanel />
+          ) : (
+            <Canvas2D />
+          )}
         </div>
         <div className="side-stack">
           <UserInputPanel />

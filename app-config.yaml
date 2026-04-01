@@ -28,22 +28,22 @@ services:
         azure_endpoint: "https://openai-centic.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2023-05-15"
 
   ollama:
-    enabled: false
+    enabled: true
     api_key: "ollama"
     base_url: "http://localhost:11434/v1"
     # Pull these models before starting the API:
-    # ollama pull qwen3:30b-a3b
+    # ollama pull gemma3:27b
     # ollama pull nomic-embed-text
     models:
       primary:
-        name: "qwen3:8b"
+        name: "gemma3:27b"
       helper:
-        name: "qwen3:8b"
+        name: "gemma3:27b"
       embedding:
         name: "nomic-embed-text"
 
   mistral:
-    enabled: true
+    enabled: false
     api_key: "mistral"
     base_url: "http://localhost:11434/v1"
     # Enable this block and disable services.ollama to run all agents on Mistral.
@@ -57,3 +57,31 @@ services:
         name: "mistral:instruct"
       embedding:
         name: "nomic-embed-text"
+
+  gemini:
+    enabled: true
+    api_key: "AIzaSyBDyF0vlgztCNrYebc34hSjxT74WbRkGtE"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    # Gemini-compatible routing for both Gemini and Gemma models.
+    models:
+      primary:
+        name: "gemini-3-flash-preview"
+      helper:
+        name: "gemini-3.1-flash-lite-preview"
+      embedding:
+        name: "gemini-embedding-001"
+    agent_models:
+      forge:
+        name: "gemma-3-27b-it"
+      planner:
+        name: "gemma-3-27b-it"
+      placer:
+        name: "gemma-3-27b-it"
+      placer_fallback_primary:
+        name: "gemini-2.5-flash"
+      placer_fallback_helper:
+        name: "gemini-2.5-flash-lite"
+      stylist:
+        name: "gemini-3-flash-preview"
+      judge:
+        name: "gemini-3.1-flash-lite-preview"

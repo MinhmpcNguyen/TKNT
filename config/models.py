@@ -42,6 +42,16 @@ class MistralModelGroupConfig(BaseModel):
     embedding: MistralModelConfig
 
 
+class GeminiModelConfig(BaseModel):
+    name: str
+
+
+class GeminiModelGroupConfig(BaseModel):
+    primary: GeminiModelConfig
+    helper: GeminiModelConfig
+    embedding: GeminiModelConfig
+
+
 class OpenAIConfig(BaseModel):
     azure: bool
     api_version: str
@@ -125,6 +135,32 @@ class MistralConfig(BaseModel):
         return self
 
 
+class GeminiConfig(BaseModel):
+    enabled: bool = False
+    api_key: str | None = None
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    models: GeminiModelGroupConfig | None = None
+    agent_models: dict[str, GeminiModelConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_enabled_config(self) -> Self:
+        if not self.enabled:
+            return self
+        if not self.api_key:
+            raise ValueError(
+                "services.gemini.api_key is required when Gemini is enabled."
+            )
+        if not self.base_url:
+            raise ValueError(
+                "services.gemini.base_url is required when Gemini is enabled."
+            )
+        if self.models is None:
+            raise ValueError(
+                "services.gemini.models is required when Gemini is enabled."
+            )
+        return self
+
+
 class SemanticSearchConfig(BaseModel):
     enabled: bool = True
 
@@ -133,13 +169,15 @@ class Service(BaseModel):
     openai: OpenAIConfig
     ollama: OllamaConfig = Field(default_factory=OllamaConfig)
     mistral: MistralConfig = Field(default_factory=MistralConfig)
+    gemini: GeminiConfig = Field(default_factory=GeminiConfig)
     semantic_search: SemanticSearchConfig = Field(default_factory=SemanticSearchConfig)
 
     @model_validator(mode="after")
     def validate_provider_selection(self) -> Self:
         if self.ollama.enabled and self.mistral.enabled:
             raise ValueError(
-                "Enable only one local provider at a time: services.ollama or services.mistral."
+                "Enable only one local Ollama-compatible provider at a time: "
+                "services.ollama or services.mistral."
             )
         return self
 

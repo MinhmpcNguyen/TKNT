@@ -1,0 +1,27 @@
+This is an exact image preservation test.
+
+Your job is to recreate the reference image as faithfully as possible.
+Treat the reference image as ground truth for composition and scene content.
+
+Hard constraints:
+- Keep the same room or scene category.
+- Keep the same camera position, camera height, perspective, framing, and viewing direction.
+- Keep the same architecture and fixed background elements.
+- Keep the same major objects, object categories, and object count.
+- Keep the same layout, spacing, relative positions, and approximate object sizes.
+- Keep the same focal object and overall composition.
+- Keep the same visible lights.
+- Do not replace one room type with another.
+- Do not redesign the scene.
+- Do not add major new furniture.
+- Do not remove major objects.
+- Do not merge multiple objects into one.
+- Do not crop to a different framing.
+
+Allowed changes:
+- Slightly improve realism and rendering quality.
+- Slightly improve material detail while staying close to the reference.
+- Slightly improve lighting consistency while preserving the original lighting setup.
+
+Output goal:
+The result should look like the same exact scene re-rendered, not a new design inspired by it.

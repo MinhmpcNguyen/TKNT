@@ -1182,8 +1182,16 @@ def _seed_resolve_anchor_side(side: str) -> tuple[str, str | None]:
 def _seed_anchor_zone_bounds(
     free_span: int,
     qualifier_world: str | None,
+    span_mode: str = "any",
 ) -> tuple[int, int]:
     free_span = max(0, int(free_span))
+
+    if span_mode == "center":
+        return free_span // 3, (2 * free_span + 2) // 3
+    if span_mode == "left":
+        return 0, free_span // 3
+    if span_mode == "right":
+        return (2 * free_span + 2) // 3, free_span
 
     # outer-third semantics:
     # left/bottom = outer 1/3 đầu
@@ -1202,12 +1210,17 @@ def _seed_pick_anchor_axis_start(
     base_extent: int,
     a_extent: int,
     qualifier_world: str | None,
+    span_mode: str,
     grid_mm: int,
 ) -> int:
     free_span = max(0, int(base_extent - a_extent))
     lo = int(base_start)
 
-    z_lo, z_hi = _seed_anchor_zone_bounds(free_span, qualifier_world)
+    z_lo, z_hi = _seed_anchor_zone_bounds(
+        free_span,
+        qualifier_world,
+        span_mode=span_mode,
+    )
     q_lo = lo + z_lo
     q_hi = lo + z_hi
 
@@ -1217,6 +1230,34 @@ def _seed_pick_anchor_axis_start(
         current = lo + free_span // 2
 
     return _seed_pick_grid_in_interval(current, (q_lo, q_hi), grid_mm)
+
+
+def _extract_semantic_placements(cluster: dict[str, Any]) -> list[dict[str, Any]]:
+    rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
+    if not isinstance(rules, dict):
+        return []
+    raw = rules.get("semantic_placements")
+    if not isinstance(raw, list):
+        return []
+
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        obj_id = item.get("id")
+        relative_to = item.get("relative_to")
+        kind = item.get("kind")
+        if not (
+            isinstance(obj_id, str)
+            and obj_id
+            and isinstance(relative_to, str)
+            and relative_to
+            and isinstance(kind, str)
+            and kind in {"dock_to_edge", "anchor_side"}
+        ):
+            continue
+        out.append(dict(item))
+    return out
 
 
 def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1250,9 +1291,11 @@ def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
     ]
     priority_map = _seed_build_priority_map(cluster)
     access_required = _seed_collect_access_required(cluster)
+    semantic_placements = _extract_semantic_placements(cluster)
 
     dependent_ids: set[str] = set()
     relations: list[dict[str, Any]] = []
+    seen_relation_keys: set[tuple[str, str, str]] = set()
 
     for c in hard_constraints:
         if not isinstance(c, dict):
@@ -1263,8 +1306,37 @@ def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
         if ctype in {"dock_to_edge", "anchor_side", "contain_in"}:
             if isinstance(a, str) and isinstance(b, str):
                 if a in spec_by_id and b in spec_by_id:
-                    relations.append(dict(c))
+                    rel = dict(c)
+                    for semantic in semantic_placements:
+                        if (
+                            semantic.get("id") == a
+                            and semantic.get("relative_to") == b
+                            and semantic.get("kind") == ctype
+                        ):
+                            rel.update(semantic)
+                    relations.append(rel)
+                    seen_relation_keys.add((a, b, str(ctype)))
                     dependent_ids.add(a)
+
+    for semantic in semantic_placements:
+        a = semantic.get("id")
+        b = semantic.get("relative_to")
+        ctype = semantic.get("kind")
+        if not (
+            isinstance(a, str)
+            and isinstance(b, str)
+            and isinstance(ctype, str)
+            and a in spec_by_id
+            and b in spec_by_id
+        ):
+            continue
+        key = (a, b, ctype)
+        if key in seen_relation_keys:
+            continue
+        synthetic = dict(semantic)
+        synthetic["type"] = ctype
+        relations.append(synthetic)
+        dependent_ids.add(a)
 
     freestanding = [m for m in members if m in spec_by_id and m not in dependent_ids]
     if not freestanding:
@@ -1584,8 +1656,9 @@ def _seed_place_relative(
 
     a_rot = _seed_first_allowed_rotation(a_spec, prefer=0)
     aw, ah = _seed_rotated_wh(a_spec, a_rot)
+    span_mode = str(rel.get("span") or "any")
 
-    ctype = rel.get("type")
+    ctype = rel.get("type") or rel.get("kind")
 
     if ctype == "contain_in":
         x_lo = bx
@@ -1602,9 +1675,6 @@ def _seed_place_relative(
         y = _seed_pick_grid_in_interval(y_mid, (y_lo, y_hi), grid_mm)
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
-    gap_min = int(rel.get("gap_min", 0) or 0)
-    gap_max = int(rel.get("gap_max", 0) or 0)
-
     qualifier_local: str | None = None
 
     if ctype == "dock_to_edge":
@@ -1615,20 +1685,190 @@ def _seed_place_relative(
         base_side = _seed_resolve_edge_token_to_base_side(b_edge, front_base)
 
     elif ctype == "anchor_side":
+        side_options = _seed_semantic_side_options(rel)
         side = rel.get("side")
-        if not isinstance(side, str):
+        if not isinstance(side, str) and not side_options:
             return None
-
-        base_side, qualifier_local = _seed_resolve_anchor_side(side)
-        if base_side == "head":
-            base_side = "top"
-        elif base_side == "foot":
-            base_side = "bottom"
+        candidate_sides = side_options or ([side] if isinstance(side, str) else [])
+        best_candidate: dict[str, Any] | None = None
+        best_score: tuple[int, int] | None = None
+        for candidate_side in candidate_sides:
+            base_side, qualifier_local = _seed_resolve_anchor_side(candidate_side)
+            if base_side == "head":
+                base_side = "top"
+            elif base_side == "foot":
+                base_side = "bottom"
+            candidate = _seed_place_relative_with_side(
+                cluster=cluster,
+                rel=rel,
+                spec_by_id=spec_by_id,
+                placements=placements,
+                grid_mm=grid_mm,
+                a=a,
+                b=b,
+                a_spec=a_spec,
+                b_spec=b_spec,
+                a_rot=a_rot,
+                aw=aw,
+                ah=ah,
+                b_rot=b_rot,
+                bx=bx,
+                by=by,
+                bw=bw,
+                bh=bh,
+                mapped_side=_seed_rotate_side(base_side, b_rot),
+                qualifier_local=qualifier_local,
+                span_mode=span_mode,
+            )
+            if candidate is None:
+                continue
+            score = _seed_relative_candidate_score(
+                candidate=candidate,
+                spec_by_id=spec_by_id,
+                a_spec=a_spec,
+                placements=placements,
+            )
+            if str(rel.get("selection") or "best_fit") == "first_fit" and score[0] == 0:
+                return candidate
+            if best_score is None or score < best_score:
+                best_candidate = candidate
+                best_score = score
+        return best_candidate
 
     else:
         return None
 
     mapped_side = _seed_rotate_side(base_side, b_rot)
+    return _seed_place_relative_with_side(
+        cluster=cluster,
+        rel=rel,
+        spec_by_id=spec_by_id,
+        placements=placements,
+        grid_mm=grid_mm,
+        a=a,
+        b=b,
+        a_spec=a_spec,
+        b_spec=b_spec,
+        a_rot=a_rot,
+        aw=aw,
+        ah=ah,
+        b_rot=b_rot,
+        bx=bx,
+        by=by,
+        bw=bw,
+        bh=bh,
+        mapped_side=mapped_side,
+        qualifier_local=qualifier_local,
+        span_mode=span_mode,
+    )
+
+
+def _seed_semantic_side_options(rel: dict[str, Any]) -> list[str]:
+    raw = rel.get("side_options")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        token = item.strip().lower()
+        if token in {
+            "head_left",
+            "head_right",
+            "foot_left",
+            "foot_right",
+            "head",
+            "foot",
+            "left",
+            "right",
+            "top",
+            "bottom",
+        }:
+            out.append(token)
+    return out
+
+
+def _seed_choose_relative_rotation(
+    *,
+    cluster: dict[str, Any],
+    obj_id: str,
+    spec: dict[str, Any],
+    orientation: str | None,
+    base_id: str,
+    base_spec: dict[str, Any],
+    base_rot: int,
+    mapped_side: str,
+) -> int:
+    allowed = spec.get("allowed_rotations")
+    allowed_rotations = (
+        [int(value) % 360 for value in allowed if isinstance(value, int)]
+        if isinstance(allowed, list)
+        else [0, 90, 180, 270]
+    )
+    if not allowed_rotations:
+        return 0
+
+    if orientation == "face_base":
+        desired_front = _seed_opposite_side(mapped_side)
+        for rot in allowed_rotations:
+            if (
+                _seed_rotate_side(_seed_get_front_base(cluster, obj_id, spec), rot)
+                == desired_front
+            ):
+                return rot
+
+    if orientation == "same_direction":
+        base_front = _seed_get_front_base(cluster, base_id, base_spec)
+        desired_front = _seed_rotate_side(base_front, base_rot)
+        for rot in allowed_rotations:
+            if (
+                _seed_rotate_side(_seed_get_front_base(cluster, obj_id, spec), rot)
+                == desired_front
+            ):
+                return rot
+
+    return _seed_first_allowed_rotation(spec, prefer=0)
+
+
+def _seed_place_relative_with_side(
+    *,
+    cluster: dict[str, Any],
+    rel: dict[str, Any],
+    spec_by_id: dict[str, dict[str, Any]],
+    placements: dict[str, dict[str, Any]],
+    grid_mm: int,
+    a: str,
+    b: str,
+    a_spec: dict[str, Any],
+    b_spec: dict[str, Any],
+    a_rot: int,
+    aw: int,
+    ah: int,
+    b_rot: int,
+    bx: int,
+    by: int,
+    bw: int,
+    bh: int,
+    mapped_side: str,
+    qualifier_local: str | None,
+    span_mode: str,
+) -> dict[str, Any] | None:
+    orientation = rel.get("orientation")
+    if isinstance(orientation, str):
+        a_rot = _seed_choose_relative_rotation(
+            cluster=cluster,
+            obj_id=a,
+            spec=a_spec,
+            orientation=orientation,
+            base_id=b,
+            base_spec=b_spec,
+            base_rot=b_rot,
+            mapped_side=mapped_side,
+        )
+        aw, ah = _seed_rotated_wh(a_spec, a_rot)
+
+    gap_min = int(rel.get("gap_min", 0) or 0)
+    gap_max = int(rel.get("gap_max", 0) or 0)
 
     qualifier_world: str | None = None
     if qualifier_local in {"left", "right"}:
@@ -1645,6 +1885,7 @@ def _seed_place_relative(
             base_extent=bw,
             a_extent=aw,
             qualifier_world=qualifier_world,
+            span_mode=span_mode,
             grid_mm=grid_mm,
         )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
@@ -1660,6 +1901,7 @@ def _seed_place_relative(
             base_extent=bw,
             a_extent=aw,
             qualifier_world=qualifier_world,
+            span_mode=span_mode,
             grid_mm=grid_mm,
         )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
@@ -1675,6 +1917,7 @@ def _seed_place_relative(
             base_extent=bh,
             a_extent=ah,
             qualifier_world=qualifier_world,
+            span_mode=span_mode,
             grid_mm=grid_mm,
         )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
@@ -1690,11 +1933,61 @@ def _seed_place_relative(
             base_extent=bh,
             a_extent=ah,
             qualifier_world=qualifier_world,
+            span_mode=span_mode,
             grid_mm=grid_mm,
         )
         return {"id": a, "x": int(x), "y": int(y), "rot": int(a_rot)}
 
     return None
+
+
+def _seed_relative_candidate_score(
+    *,
+    candidate: dict[str, Any],
+    spec_by_id: dict[str, dict[str, Any]],
+    a_spec: dict[str, Any],
+    placements: dict[str, dict[str, Any]],
+) -> tuple[int, int, int, int]:
+    aw, ah = _seed_rotated_wh(a_spec, int(candidate.get("rot", 0) or 0))
+    ax1 = int(candidate.get("x", 0) or 0)
+    ay1 = int(candidate.get("y", 0) or 0)
+    ax2 = ax1 + aw
+    ay2 = ay1 + ah
+
+    overlap_count = 0
+    overlap_area = 0
+    min_x = ax1
+    min_y = ay1
+    max_x = ax2
+    max_y = ay2
+
+    for placed in placements.values():
+        if not isinstance(placed, dict):
+            continue
+        placed_id = placed.get("id")
+        if not isinstance(placed_id, str):
+            continue
+        placed_spec = spec_by_id.get(placed_id)
+        if not isinstance(placed_spec, dict):
+            continue
+        px1 = int(placed.get("x", 0) or 0)
+        py1 = int(placed.get("y", 0) or 0)
+        pw, ph = _seed_rotated_wh(placed_spec, int(placed.get("rot", 0) or 0))
+        px2 = px1 + pw
+        py2 = py1 + ph
+        min_x = min(min_x, px1)
+        min_y = min(min_y, py1)
+        max_x = max(max_x, px2)
+        max_y = max(max_y, py2)
+
+        overlap_w = max(0, min(ax2, px2) - max(ax1, px1))
+        overlap_h = max(0, min(ay2, py2) - max(ay1, py1))
+        if overlap_w > 0 and overlap_h > 0:
+            overlap_count += 1
+            overlap_area += overlap_w * overlap_h
+
+    bbox_area = max(0, max_x - min_x) * max(0, max_y - min_y)
+    return (overlap_count, overlap_area, bbox_area, ax1 + ay1)
 
 
 def _seed_normalize_to_origin(

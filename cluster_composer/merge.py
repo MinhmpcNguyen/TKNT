@@ -165,4 +165,21 @@ def _filter_cluster_rules(rules: dict[str, Any], kept_ids: set[str]) -> dict[str
                 kept_reqs.append(item)
         out["access_requirements"] = kept_reqs
 
+    semantic_placements = out.get("semantic_placements")
+    if isinstance(semantic_placements, list):
+        kept_semantic: list[dict[str, Any]] = []
+        for item in semantic_placements:
+            if not isinstance(item, dict):
+                continue
+            oid = item.get("id")
+            relative_to = item.get("relative_to")
+            if (
+                isinstance(oid, str)
+                and oid in kept_ids
+                and isinstance(relative_to, str)
+                and relative_to in kept_ids
+            ):
+                kept_semantic.append(item)
+        out["semantic_placements"] = kept_semantic
+
     return out

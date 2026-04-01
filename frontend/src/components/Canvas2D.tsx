@@ -2,16 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage, Group, Circle, Text } from 'react-konva';
 import { useEditorStore } from '../store';
 import { clamp, polygonBounds, toCanvas, fromCanvas } from '../utils/geometry';
-import { Placement, Point } from '../types';
+import { InventoryItem, Placement, Point } from '../types';
 import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
 
 export const Canvas2D: React.FC = () => {
   const stageRef = useRef<any>(null);
+  const dropZoneRef = useRef<HTMLDivElement | null>(null);
   const {
     floorplan,
     design,
+    inventory,
     selectedPlacementId,
     selectedCornerIndex,
     selectPlacement,
@@ -75,15 +77,16 @@ export const Canvas2D: React.FC = () => {
     setScale((prev) => clamp(prev * delta, 0.05, 0.4));
   };
 
-  const handleDrop = (evt: React.DragEvent) => {
+  const handleDrop = (evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
-    const data = evt.dataTransfer.getData('application/x-asset');
-    if (!data) return;
-    const asset = JSON.parse(data);
-    const stage = stageRef.current;
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
-    const pos = fromCanvasPoint({ x: pointer.x, y: pointer.y });
+    const asset = resolveDroppedAsset(evt.dataTransfer, inventory);
+    if (!asset) return;
+    const boundsRect = dropZoneRef.current?.getBoundingClientRect();
+    if (!boundsRect) return;
+    const pos = fromCanvasPoint({
+      x: evt.clientX - boundsRect.left,
+      y: evt.clientY - boundsRect.top,
+    });
 
     if (asset.category === 'door' || asset.category === 'window') {
       if (!floorplan) return;
@@ -123,8 +126,6 @@ export const Canvas2D: React.FC = () => {
       return;
     }
 
-    if (!design) return;
-
     const placement: Placement = {
       placement_id: crypto.randomUUID(),
       asset_id: asset.asset_id,
@@ -135,12 +136,24 @@ export const Canvas2D: React.FC = () => {
       height_mm: asset.height_mm ?? 0,
       color_hex: asset.color_hex ?? '#cfcac2',
       anchor: 'center',
+      source: 'manual',
+      constraint_mode: 'pinned',
     };
 
-    setDesign({
-      ...design,
-      placements: [...design.placements, placement],
-    });
+    const nextDesign = design
+      ? {
+          ...design,
+          placements: [...design.placements, placement],
+        }
+      : floorplan
+        ? {
+            floorplan_geometry: floorplan,
+            placements: [placement],
+          }
+        : null;
+    if (!nextDesign) return;
+    setDesign(nextDesign);
+    selectPlacement(placement.placement_id);
   };
 
   const handleStageMouseMove = () => {
@@ -499,6 +512,7 @@ export const Canvas2D: React.FC = () => {
       return a.index - b.index;
     });
     return placements.map(({ placement }) => {
+      const isLocked = placement.constraint_mode === 'locked';
       const pos = toCanvasPoint(placement.position_mm);
       const w = placement.footprint_mm.w * scale;
       const d = placement.footprint_mm.d * scale;
@@ -526,8 +540,9 @@ export const Canvas2D: React.FC = () => {
           x={pos.x}
           y={pos.y}
           rotation={placement.rotation_deg}
-          draggable
+          draggable={!isLocked}
           onDragMove={(evt) => {
+            if (isLocked) return;
             const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
             updatePlacement({ ...placement, position_mm: newPos });
           }}
@@ -636,7 +651,7 @@ export const Canvas2D: React.FC = () => {
               />
             </Group>
           )}
-          {isSelected && (
+          {isSelected && !isLocked && (
             <Circle
               x={w / 2 + 10}
               y={0}
@@ -659,44 +674,101 @@ export const Canvas2D: React.FC = () => {
   };
 
   return (
-    <Stage
-      width={width}
-      height={height}
-      ref={stageRef}
-      onWheel={handleWheel}
+    <div
+      ref={dropZoneRef}
+      className="canvas-drop-zone"
       onDrop={handleDrop}
-      onDblClick={handleStageDoubleClick}
-      onMouseMove={handleStageMouseMove}
-      onMouseUp={handleStageMouseUp}
       onDragOver={(evt) => evt.preventDefault()}
-      style={{ background: '#f8f6f1', borderRadius: 12, border: '1px solid #e0dbd2' }}
     >
-      <Layer>
-        {drawGrid()}
-        {renderRoomOutline()}
-        {renderWalls()}
-        {drawingLine && floorplan && floorplan.room.polygon_mm[drawingLine.startIndex] && (() => {
-          const start = toCanvasPoint(floorplan.room.polygon_mm[drawingLine.startIndex]);
-          const end = toCanvasPoint(drawingLine.end);
-          return (
-            <Line
-              points={[start.x, start.y, end.x, end.y]}
-              stroke="#d4a15d"
-              strokeWidth={2}
-              dash={[6, 6]}
-            />
-          );
-        })()}
-        {renderOpenings()}
-        {renderPlacements()}
-        {renderRoomHandles()}
-      </Layer>
-    </Stage>
+      <Stage
+        width={width}
+        height={height}
+        ref={stageRef}
+        onWheel={handleWheel}
+        onDblClick={handleStageDoubleClick}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
+        style={{ background: '#f8f6f1', borderRadius: 12, border: '1px solid #e0dbd2' }}
+      >
+        <Layer>
+          {drawGrid()}
+          {renderRoomOutline()}
+          {renderWalls()}
+          {drawingLine && floorplan && floorplan.room.polygon_mm[drawingLine.startIndex] && (() => {
+            const start = toCanvasPoint(floorplan.room.polygon_mm[drawingLine.startIndex]);
+            const end = toCanvasPoint(drawingLine.end);
+            return (
+              <Line
+                points={[start.x, start.y, end.x, end.y]}
+                stroke="#d4a15d"
+                strokeWidth={2}
+                dash={[6, 6]}
+              />
+            );
+          })()}
+          {renderOpenings()}
+          {renderPlacements()}
+          {renderRoomHandles()}
+        </Layer>
+      </Stage>
+    </div>
   );
 };
 
 function pointsEqual(a: Point, b: Point, tolerance = 1): boolean {
   return Math.abs(a.x - b.x) <= tolerance && Math.abs(a.y - b.y) <= tolerance;
+}
+
+function resolveDroppedAsset(
+  dataTransfer: DataTransfer,
+  inventory: InventoryItem[],
+): PlacementAsset | null {
+  const rawCustom = dataTransfer.getData('application/x-asset');
+  const rawPlain = dataTransfer.getData('text/plain');
+  const rawAssetId = dataTransfer.getData('text/x-asset-id');
+
+  for (const candidate of [rawCustom, rawPlain]) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isPlacementAsset(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // fall through to inventory lookup
+    }
+  }
+
+  const lookupId = rawAssetId || rawPlain;
+  if (!lookupId) {
+    return null;
+  }
+  const matched = inventory.find((item) => item.asset_id === lookupId);
+  return matched ?? null;
+}
+
+type PlacementAsset = {
+  asset_id: string;
+  category: string;
+  footprint_mm: { w: number; d: number };
+  height_mm?: number;
+  color_hex?: string | null;
+};
+
+function isPlacementAsset(value: unknown): value is PlacementAsset {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const row = value as Record<string, unknown>;
+  const footprint = row.footprint_mm;
+  return (
+    typeof row.asset_id === 'string' &&
+    typeof row.category === 'string' &&
+    !!footprint &&
+    typeof footprint === 'object' &&
+    typeof (footprint as Record<string, unknown>).w === 'number' &&
+    typeof (footprint as Record<string, unknown>).d === 'number'
+  );
 }
 
 function isRugLike(category: string): boolean {

@@ -24,6 +24,11 @@ except Exception:  # pragma: no cover
     get_llm_client = None  # type: ignore
 
 try:
+    from config.gemini_config import GeminiConfig  # type: ignore
+except Exception:  # pragma: no cover
+    GeminiConfig = None  # type: ignore
+
+try:
     from prompt.cluster_placer import (
         MACRO_CLUSTER_PLACER_PROMPT as DEFAULT_PHASE2_PLACER_PROMPT,  # type: ignore
     )
@@ -31,6 +36,18 @@ except Exception:  # pragma: no cover
     DEFAULT_PHASE2_PLACER_PROMPT = "You are a phase-2 placer. Return JSON only."
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_PLACER_FALLBACK_MODELS = (
+    "gemma-3-27b-it",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+)
+_PLACER_MODEL_ROTATION_KEYS = (
+    "placer",
+    "placer_fallback_primary",
+    "placer_fallback_helper",
+)
+_placer_model_cursor = 0
 
 
 AllowedRotation = Literal[0, 90, 180, 270]
@@ -49,6 +66,21 @@ class LLMCallable(Protocol):
     def __call__(
         self, *, system_prompt: str, user_payload_json: str
     ) -> str | Dict[str, Any]: ...
+
+
+class RetryablePlacerModelError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        failed_model: str,
+        next_model: str,
+        retry_delay_s: float | None = None,
+        detail: str,
+    ) -> None:
+        self.failed_model = failed_model
+        self.next_model = next_model
+        self.retry_delay_s = retry_delay_s
+        super().__init__(detail)
 
 
 # -----------------------------------------------------------------------------
@@ -941,29 +973,44 @@ def normalize_and_validate_repair_output(
     seed_cluster_ids = set(seed_tmap.keys())
 
     proposal_transform_ids = {item.cluster_id for item in proposal.cluster_transforms}
-    if proposal_transform_ids != seed_cluster_ids:
-        missing = sorted(seed_cluster_ids - proposal_transform_ids)
-        extra = sorted(proposal_transform_ids - seed_cluster_ids)
+    extra_transform_ids = sorted(proposal_transform_ids - seed_cluster_ids)
+    if extra_transform_ids:
         raise ValueError(
-            "cluster_transforms must contain the full cluster-id set. "
-            f"missing={missing}, extra={extra}"
+            "cluster_transforms references unknown cluster ids. "
+            f"extra={extra_transform_ids}"
         )
 
     proposal_variant_ids = {item.cluster_id for item in proposal.selected_variants}
-    if proposal_variant_ids != seed_cluster_ids:
-        missing = sorted(seed_cluster_ids - proposal_variant_ids)
-        extra = sorted(proposal_variant_ids - seed_cluster_ids)
+    extra_variant_ids = sorted(proposal_variant_ids - seed_cluster_ids)
+    if extra_variant_ids:
         raise ValueError(
-            "selected_variants must contain the full cluster-id set. "
+            "selected_variants references unknown cluster ids. "
+            f"extra={extra_variant_ids}"
+        )
+
+    out_tmap = {cid: deepcopy(item) for cid, item in seed_tmap.items()}
+    for item in proposal.cluster_transforms:
+        out_tmap[item.cluster_id] = item.model_dump()
+
+    out_vmap = {cid: deepcopy(item) for cid, item in seed_vmap.items()}
+    for item in proposal.selected_variants:
+        out_vmap[item.cluster_id] = item.model_dump()
+
+    if set(out_tmap.keys()) != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - set(out_tmap.keys()))
+        extra = sorted(set(out_tmap.keys()) - seed_cluster_ids)
+        raise ValueError(
+            "merged cluster_transforms must contain the full cluster-id set. "
             f"missing={missing}, extra={extra}"
         )
 
-    out_tmap = {
-        item.cluster_id: item.model_dump() for item in proposal.cluster_transforms
-    }
-    out_vmap = {
-        item.cluster_id: item.model_dump() for item in proposal.selected_variants
-    }
+    if set(out_vmap.keys()) != seed_cluster_ids:
+        missing = sorted(seed_cluster_ids - set(out_vmap.keys()))
+        extra = sorted(set(out_vmap.keys()) - seed_cluster_ids)
+        raise ValueError(
+            "merged selected_variants must contain the full cluster-id set. "
+            f"missing={missing}, extra={extra}"
+        )
 
     allowed_rots = _allowed_cluster_rotations(payload)
     for cid, item in out_tmap.items():
@@ -1121,15 +1168,87 @@ def _extract_message(response: object) -> object:
     raise ValueError("OpenAI response missing message")
 
 
+def _configured_placer_models() -> list[str]:
+    configured: list[str] = []
+    if GeminiConfig is not None:
+        for key in _PLACER_MODEL_ROTATION_KEYS:
+            model_name = GeminiConfig.AGENT_MODELS.get(key)
+            if isinstance(model_name, str) and model_name.strip():
+                configured.append(model_name.strip())
+    if not configured:
+        configured = list(_DEFAULT_PLACER_FALLBACK_MODELS)
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for model_name in configured:
+        if model_name in seen:
+            continue
+        seen.add(model_name)
+        unique.append(model_name)
+    return unique or list(_DEFAULT_PLACER_FALLBACK_MODELS)
+
+
+def _current_placer_model_name() -> str:
+    global _placer_model_cursor
+    candidates = _configured_placer_models()
+    _placer_model_cursor %= len(candidates)
+    return candidates[_placer_model_cursor]
+
+
+def _advance_placer_model_name() -> str:
+    global _placer_model_cursor
+    candidates = _configured_placer_models()
+    _placer_model_cursor = (_placer_model_cursor + 1) % len(candidates)
+    return candidates[_placer_model_cursor]
+
+
+def _extract_retry_delay_seconds(exc: Exception) -> float | None:
+    text = str(exc)
+    match = re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", text, flags=re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def _is_quota_exhausted_error(exc: Exception) -> bool:
+    text = str(exc)
+    lowered = text.lower()
+    return (
+        "429" in lowered
+        or "resource_exhausted" in lowered
+        or "quota exceeded" in lowered
+    ) and ("generativelanguage" in lowered or "gemini" in lowered or "quota" in lowered)
+
+
 def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:
     if get_llm_client is None:
         raise RuntimeError("LLM client is unavailable")
-    client = get_llm_client()
+    client = get_llm_client(provider="gemini")
+    model_name = _current_placer_model_name()
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_payload_json},
     ]
-    response = client.chat_completion(messages, model_key="primary", temperature=0.0)
+    try:
+        response = client.chat_completion(
+            messages,
+            model_key="primary",
+            model_name=model_name,
+            temperature=0.0,
+        )
+    except Exception as exc:
+        if _is_quota_exhausted_error(exc):
+            next_model = _advance_placer_model_name()
+            raise RetryablePlacerModelError(
+                failed_model=model_name,
+                next_model=next_model,
+                retry_delay_s=_extract_retry_delay_seconds(exc),
+                detail=str(exc),
+            ) from exc
+        raise
     message = _extract_message(response)
     content = getattr(message, "content", None)
     if not isinstance(content, str):
@@ -1188,7 +1307,10 @@ def run_phase2_placer(
     )
     attempt_errors: List[str] = []
     proposal: Dict[str, Any] | None = None
-    for attempt in range(max(1, int(max_attempts))):
+    attempt = 0
+    rotation_retries = 0
+    max_rotation_retries = max(3, len(_configured_placer_models()) * 2)
+    while attempt < max(1, int(max_attempts)):
         try:
             raw = llm_call(
                 system_prompt=system_prompt,
@@ -1203,9 +1325,28 @@ def run_phase2_placer(
                 proposal.get("status"),
             )
             break
+        except RetryablePlacerModelError as exc:
+            rotation_retries += 1
+            retry_note = (
+                f"Phase2Placer rate-limited on model={exc.failed_model}; "
+                f"rotating to model={exc.next_model} without consuming an attempt."
+            )
+            if exc.retry_delay_s is not None:
+                retry_note += f" retry_delay_s={exc.retry_delay_s:.3f}"
+            logger.warning(retry_note)
+            if rotation_retries >= max_rotation_retries:
+                attempt_errors.append(
+                    f"model_rotation_exhausted: {exc.failed_model} -> {exc.next_model}"
+                )
+                logger.warning(
+                    "Phase2Placer exhausted model rotation retries after quota errors"
+                )
+                break
+            continue
         except Exception as e:
-            logger.warning("Phase2Placer attempt %s failed: %s", attempt + 1, e)
-            attempt_errors.append(f"attempt_{attempt + 1}: {e}")
+            attempt += 1
+            logger.warning("Phase2Placer attempt %s failed: %s", attempt, e)
+            attempt_errors.append(f"attempt_{attempt}: {e}")
 
     if proposal is None:
         proposal = make_no_improvement_repair(

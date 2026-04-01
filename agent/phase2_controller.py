@@ -22,6 +22,23 @@ from layout.grid_policy import normalize_layout_grid_mm
 
 logger = logging.getLogger(__name__)
 
+_MEANINGFUL_DELTA_BY_PHASE = {
+    "macro_layout": 180,
+    "object_refine": 120,
+}
+_MACRO_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "orientation": ("orientation", "facing", "face", "align"),
+    "focal": ("focal", "tv", "view", "viewing"),
+    "circulation": ("circulation", "walk", "path", "entry", "door", "lane"),
+    "zoning": ("zone", "zoning", "center", "central", "congestion"),
+    "openings": ("window", "opening", "wall", "edge", "perimeter"),
+}
+_OBJECT_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "front_access": ("front access", "front clearance", "clearance"),
+    "object_pose": ("object", "chair", "nightstand", "lamp", "desk", "sofa"),
+    "local_fidelity": ("internal", "local", "variant", "fidelity"),
+}
+
 
 def _judge_rank(verdict: str) -> int:
     if verdict == "ACCEPT":
@@ -49,6 +66,7 @@ def _baseline_judge_stub(evaluation: dict[str, Any]) -> dict[str, Any]:
         return {
             "reasonableness_score": 50,
             "verdict": "REVISE",
+            "next_step_mode": "macro_layout",
             "top_issues": [],
             "repair_advice": [],
             "priority_clusters": [],
@@ -56,6 +74,7 @@ def _baseline_judge_stub(evaluation: dict[str, Any]) -> dict[str, Any]:
     return {
         "reasonableness_score": 0,
         "verdict": "REJECT",
+        "next_step_mode": "macro_layout",
         "top_issues": ["Baseline seed is hard-invalid."],
         "repair_advice": ["Repair hard validity before soft reasoning."],
         "priority_clusters": [],
@@ -159,6 +178,7 @@ def _invalid_judge_stub(evaluation: dict[str, Any]) -> dict[str, Any]:
     return {
         "reasonableness_score": 10,
         "verdict": "REJECT",
+        "next_step_mode": "macro_layout",
         "top_issues": top_issues,
         "repair_advice": ["Repair hard validity before spending more search."],
         "priority_clusters": [],
@@ -228,6 +248,30 @@ def _proposal_signature(proposal: dict[str, Any]) -> str:
         ensure_ascii=True,
         sort_keys=True,
     )
+
+
+def _issue_families_from_texts(texts: list[object]) -> list[str]:
+    lowered_text = " ".join(
+        str(item).strip().lower() for item in texts if str(item).strip()
+    )
+    if not lowered_text:
+        return []
+
+    families: list[str] = []
+    for family, keywords in _MACRO_ISSUE_KEYWORDS.items():
+        if any(keyword in lowered_text for keyword in keywords):
+            families.append(family)
+    for family, keywords in _OBJECT_ISSUE_KEYWORDS.items():
+        if any(keyword in lowered_text for keyword in keywords):
+            families.append(family)
+    return families
+
+
+def _judge_issue_families(judge_eval: dict[str, Any]) -> list[str]:
+    texts: list[object] = []
+    texts.extend(judge_eval.get("top_issues") or [])
+    texts.extend(judge_eval.get("repair_advice") or [])
+    return _issue_families_from_texts(texts)
 
 
 def _summarize_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -357,18 +401,29 @@ def _summarize_proposal_direction(
 def _build_history_context(history: list[dict[str, Any]]) -> dict[str, Any]:
     recent_attempts: list[dict[str, Any]] = []
     cluster_counts: dict[str, int] = {}
+    priority_cluster_counts: dict[str, int] = {}
     family_counts: dict[str, int] = {}
+    issue_family_counts: dict[str, int] = {}
 
     for entry in history[-8:]:
         direction = entry.get("direction_summary") or {}
         tool_eval = entry.get("tool_evaluation") or {}
         judge_eval = entry.get("judge_evaluation") or {}
+        priority_clusters = [
+            str(cluster_id)
+            for cluster_id in (judge_eval.get("priority_clusters") or [])
+            if isinstance(cluster_id, str) and cluster_id
+        ]
+        issue_families = _judge_issue_families(judge_eval)
         attempt = {
             "iteration": entry.get("iteration"),
             "search_phase": _normalize_search_phase(entry.get("search_phase")),
             "summary": direction.get("summary"),
             "primary_clusters": deepcopy(direction.get("primary_clusters") or []),
             "move_families": deepcopy(direction.get("move_families") or []),
+            "priority_clusters": priority_clusters,
+            "issue_families": issue_families,
+            "next_step_mode": str(judge_eval.get("next_step_mode") or ""),
             "hard_valid": bool(tool_eval.get("hard_valid")),
             "judge_verdict": judge_eval.get("verdict"),
             "judge_score": judge_eval.get("reasonableness_score"),
@@ -379,13 +434,28 @@ def _build_history_context(history: list[dict[str, Any]]) -> dict[str, Any]:
         recent_attempts.append(attempt)
         for cluster_id in attempt["primary_clusters"]:
             cluster_counts[str(cluster_id)] = cluster_counts.get(str(cluster_id), 0) + 1
+        for cluster_id in priority_clusters:
+            priority_cluster_counts[cluster_id] = (
+                priority_cluster_counts.get(cluster_id, 0) + 1
+            )
         for family in attempt["move_families"]:
             family_counts[str(family)] = family_counts.get(str(family), 0) + 1
+        for family in issue_families:
+            issue_family_counts[str(family)] = (
+                issue_family_counts.get(str(family), 0) + 1
+            )
 
     stuck_clusters = [
         cluster_id
         for cluster_id, count in sorted(
             cluster_counts.items(), key=lambda item: (-item[1], item[0])
+        )
+        if count >= 3
+    ]
+    stuck_priority_clusters = [
+        cluster_id
+        for cluster_id, count in sorted(
+            priority_cluster_counts.items(), key=lambda item: (-item[1], item[0])
         )
         if count >= 3
     ]
@@ -396,6 +466,13 @@ def _build_history_context(history: list[dict[str, Any]]) -> dict[str, Any]:
         )
         if count >= 3
     ]
+    repeated_issue_families = [
+        family
+        for family, count in sorted(
+            issue_family_counts.items(), key=lambda item: (-item[1], item[0])
+        )
+        if count >= 3
+    ]
 
     stuck_patterns: list[str] = []
     if stuck_clusters:
@@ -403,16 +480,28 @@ def _build_history_context(history: list[dict[str, Any]]) -> dict[str, Any]:
             "Repeated focus on the same clusters without acceptance: "
             + ", ".join(stuck_clusters[:4])
         )
+    if stuck_priority_clusters:
+        stuck_patterns.append(
+            "Judge keeps prioritizing the same clusters: "
+            + ", ".join(stuck_priority_clusters[:4])
+        )
     if avoid_move_families:
         stuck_patterns.append(
             "Repeated move families without acceptance: "
             + ", ".join(avoid_move_families[:4])
         )
+    if repeated_issue_families:
+        stuck_patterns.append(
+            "Repeated issue families without convergence: "
+            + ", ".join(repeated_issue_families[:4])
+        )
 
     return {
         "recent_attempts": recent_attempts,
         "stuck_clusters": stuck_clusters,
+        "stuck_priority_clusters": stuck_priority_clusters,
         "avoid_move_families": avoid_move_families,
+        "repeated_issue_families": repeated_issue_families,
         "stuck_patterns": stuck_patterns,
     }
 
@@ -472,6 +561,64 @@ def _select_shortlist_candidate(
     return best
 
 
+def _meaningful_delta(search_phase: str) -> int:
+    return _MEANINGFUL_DELTA_BY_PHASE.get(
+        _normalize_search_phase(search_phase),
+        _MEANINGFUL_DELTA_BY_PHASE["macro_layout"],
+    )
+
+
+def _recent_attempts_for_phase(
+    history: list[dict[str, Any]], search_phase: str, limit: int
+) -> list[dict[str, Any]]:
+    normalized_phase = _normalize_search_phase(search_phase)
+    return [
+        entry
+        for entry in history[-limit:]
+        if _normalize_search_phase(entry.get("search_phase")) == normalized_phase
+    ]
+
+
+def _should_stop_macro_search(
+    *,
+    history: list[dict[str, Any]],
+    deterministic_shortlist: list[dict[str, Any]],
+    search_phase: str,
+) -> bool:
+    if _normalize_search_phase(search_phase) != "macro_layout":
+        return False
+
+    recent_macro_attempts = _recent_attempts_for_phase(history, search_phase, limit=4)
+    if len(recent_macro_attempts) < 4:
+        return False
+
+    if any(
+        bool((item.get("evaluation") or {}).get("hard_valid"))
+        and _delta_score(item.get("evaluation") or {})
+        >= _meaningful_delta(search_phase)
+        for item in deterministic_shortlist
+    ):
+        return False
+
+    history_context = _build_history_context(recent_macro_attempts)
+    repeated_clusters = bool(history_context.get("stuck_priority_clusters"))
+    repeated_issue_families = bool(history_context.get("repeated_issue_families"))
+    if not repeated_clusters and not repeated_issue_families:
+        return False
+
+    for entry in recent_macro_attempts:
+        tool_eval = entry.get("tool_evaluation") or {}
+        judge_eval = entry.get("judge_evaluation") or {}
+        if str(judge_eval.get("verdict") or "").upper() == "ACCEPT":
+            return False
+        if not bool(tool_eval.get("hard_valid")):
+            return False
+        if _delta_score(tool_eval) >= _meaningful_delta(search_phase):
+            return False
+
+    return True
+
+
 def _should_stop_object_refine_search(
     *,
     history: list[dict[str, Any]],
@@ -491,7 +638,8 @@ def _should_stop_object_refine_search(
 
     if any(
         bool((item.get("evaluation") or {}).get("hard_valid"))
-        and _delta_score(item.get("evaluation") or {}) > 0
+        and _delta_score(item.get("evaluation") or {})
+        >= _meaningful_delta(search_phase)
         for item in deterministic_shortlist
     ):
         return False
@@ -499,7 +647,9 @@ def _should_stop_object_refine_search(
     for entry in recent_object_attempts:
         tool_eval = entry.get("tool_evaluation") or {}
         judge_eval = entry.get("judge_evaluation") or {}
-        if bool(tool_eval.get("hard_valid")) and _delta_score(tool_eval) > 0:
+        if bool(tool_eval.get("hard_valid")) and _delta_score(
+            tool_eval
+        ) >= _meaningful_delta(search_phase):
             return False
         if str(judge_eval.get("verdict") or "").upper() == "ACCEPT":
             return False
@@ -588,10 +738,43 @@ def _build_judge_payload(
         "controller_context": {
             "iteration": iteration,
             "max_iterations": max_iterations,
+            "search_phase": _normalize_search_phase(
+                (payload.get("phase_control") or {}).get("repair_phase")
+            ),
             "current_direction": deepcopy(direction_summary),
             **_build_history_context(history),
         },
     }
+
+
+def _recommended_search_phase(
+    *,
+    evaluation: dict[str, Any],
+    judge_output: dict[str, Any] | None,
+    history: list[dict[str, Any]],
+) -> str:
+    if not bool(evaluation.get("hard_valid")):
+        return "macro_layout"
+
+    history_context = _build_history_context(history)
+    requested = _normalize_search_phase(
+        ((judge_output or {}).get("next_step_mode") or "macro_layout")
+    )
+    repeated_macro_issues = bool(
+        set(history_context.get("repeated_issue_families") or []).intersection(
+            {"orientation", "focal", "circulation", "zoning", "openings"}
+        )
+    )
+    repeated_priority_clusters = bool(history_context.get("stuck_priority_clusters"))
+    current_delta = _delta_score(evaluation)
+
+    if repeated_macro_issues and current_delta < _meaningful_delta("macro_layout"):
+        return "macro_layout"
+    if repeated_priority_clusters and current_delta < _meaningful_delta(requested):
+        return "macro_layout"
+    if str((judge_output or {}).get("verdict") or "").upper() == "ACCEPT":
+        return "stop"
+    return requested
 
 
 def _build_controller_feedback(
@@ -634,6 +817,12 @@ def _build_controller_feedback(
                 (judge_output.get("repair_advice") or [""])[0] or repair_direction
             )
 
+    recommended_search_phase = _recommended_search_phase(
+        evaluation=evaluation,
+        judge_output=judge_output,
+        history=history,
+    )
+
     return {
         "iteration": iteration,
         "candidate_status": candidate_status,
@@ -643,9 +832,16 @@ def _build_controller_feedback(
         "priority_objects": deepcopy((diagnosis.get("prioritized_objects") or [])[:6]),
         "repair_direction": repair_direction,
         "stuck_clusters": deepcopy(history_context.get("stuck_clusters") or []),
+        "stuck_priority_clusters": deepcopy(
+            history_context.get("stuck_priority_clusters") or []
+        ),
         "avoid_move_families": deepcopy(
             history_context.get("avoid_move_families") or []
         ),
+        "repeated_issue_families": deepcopy(
+            history_context.get("repeated_issue_families") or []
+        ),
+        "recommended_search_phase": recommended_search_phase,
         "recent_attempt_summaries": deepcopy(
             history_context.get("recent_attempts") or []
         ),
@@ -1018,20 +1214,35 @@ def _should_use_deterministic_candidate(
 
 
 def _should_promote_candidate(
-    evaluation: dict[str, Any], judge_output: dict[str, Any]
+    evaluation: dict[str, Any],
+    judge_output: dict[str, Any],
+    *,
+    search_phase: str,
 ) -> bool:
     if not bool(evaluation.get("hard_valid")):
         return False
     verdict = str(judge_output.get("verdict") or "").upper()
     if verdict == "REJECT":
         return False
+    next_step_mode = _normalize_search_phase(judge_output.get("next_step_mode"))
     delta = _delta_score(evaluation)
+    if verdict == "ACCEPT":
+        if delta < 0:
+            return False
+        judge_score = int(judge_output.get("reasonableness_score") or 0)
+        return judge_score >= 85
+    if delta < _meaningful_delta(search_phase):
+        return False
+    if (
+        _normalize_search_phase(search_phase) == "object_refine"
+        and next_step_mode == "macro_layout"
+    ):
+        return False
     if delta > 0:
         return True
     if delta < 0:
         return False
-    judge_score = int(judge_output.get("reasonableness_score") or 0)
-    return verdict == "ACCEPT" and judge_score >= 85
+    return False
 
 
 @dataclass(frozen=True)
@@ -1093,7 +1304,14 @@ class Phase2Controller:
             else:
                 current_payload.pop("controller_feedback", None)
 
-            search_phase = _current_search_phase(current_payload)
+            requested_search_phase = None
+            if isinstance(controller_feedback, dict):
+                requested_search_phase = controller_feedback.get(
+                    "recommended_search_phase"
+                )
+            search_phase = _normalize_search_phase(
+                requested_search_phase or _current_search_phase(current_payload)
+            )
             _set_search_phase(current_payload, search_phase)
 
             deterministic_shortlist = _shortlist_deterministic_candidates(
@@ -1132,6 +1350,17 @@ class Phase2Controller:
             ):
                 logger.info(
                     "Phase2Controller iteration %s: stopping object-refine search because recent attempts stalled and no positive deterministic object move remains",
+                    iteration,
+                )
+                break
+
+            if _should_stop_macro_search(
+                history=history,
+                deterministic_shortlist=deterministic_shortlist,
+                search_phase=search_phase,
+            ):
+                logger.info(
+                    "Phase2Controller iteration %s: stopping macro search because repeated small revisions failed to change the prioritized clusters",
                     iteration,
                 )
                 break
@@ -1316,7 +1545,11 @@ class Phase2Controller:
                 history=history,
             )
 
-            if _should_promote_candidate(tool_eval, judge_eval):
+            if _should_promote_candidate(
+                tool_eval,
+                judge_eval,
+                search_phase=search_phase,
+            ):
                 logger.info(
                     "Phase2Controller iteration %s: promoting candidate to next baseline",
                     iteration,

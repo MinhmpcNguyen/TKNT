@@ -19,6 +19,16 @@ from agent.tier_count_director import TierCountDirector
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from pipeline.layout_variants import build_layout_variants_artifact
+from pipeline.manual_placements import (
+    apply_manual_placements_to_tier_output,
+    append_manual_placements_guidance,
+    augment_cluster_forge_with_manual_placements,
+    merge_manual_placements_into_absolute_layout,
+    merge_manual_placements_into_layout_variants,
+    merge_manual_placements_into_styled_output,
+    prepare_input_payload_for_manual_placements,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +89,10 @@ class CasePaths:
         return self.root / "08_stylist.json"
 
     @property
+    def layout_variants(self) -> Path:
+        return self.root / "09_layout_variants.json"
+
+    @property
     def status(self) -> Path:
         return self.root / "status.json"
 
@@ -136,6 +150,9 @@ def run_case(
     cases_root: str | Path = "cases",
     case_id: str | None = None,
 ) -> dict[str, Any]:
+    prepared_input_payload, manual_placements = (
+        prepare_input_payload_for_manual_placements(input_payload)
+    )
     case_id = case_id or _make_case_id(user_id)
     case_root = Path(cases_root) / case_id
     case_root.mkdir(parents=True, exist_ok=True)
@@ -155,7 +172,7 @@ def run_case(
     # 1) RoomInterpreter
     room_interpreter = RoomInterpreter()
     room_output = room_interpreter.generate(
-        input_payload,
+        prepared_input_payload,
         description=description,
         special_notes=special_notes,
     ).model_dump()
@@ -163,22 +180,30 @@ def run_case(
     _write_json(paths.room_interpreter, room_output)
     guidance_text = _build_primary_guidance_text(
         room_output=room_output,
-        input_payload=input_payload,
+        input_payload=prepared_input_payload,
         description=description,
         special_notes=special_notes,
+    )
+    planning_guidance_text = append_manual_placements_guidance(
+        guidance_text,
+        manual_placements,
     )
 
     _update_status(paths, "cluster_forge")
 
     # 2) ClusterForge
-    room_type = _extract_room_type(input_payload, room_output)
+    room_type = _extract_room_type(prepared_input_payload, room_output)
     cluster_forge = ClusterForge()
     cluster_output = cluster_forge.generate(
         room_type,
-        description=guidance_text or None,
+        description=planning_guidance_text or None,
         special_notes=None,
     ).model_dump()
     cluster_output = _strip_raw_text(cluster_output)
+    cluster_output = augment_cluster_forge_with_manual_placements(
+        cluster_output,
+        manual_placements,
+    )
     _write_json(paths.cluster_forge, cluster_output)
 
     _update_status(paths, "tier_count")
@@ -186,13 +211,18 @@ def run_case(
     # 3) TierCountDirector
     tier_count = TierCountDirector()
     tier_output = tier_count.generate(
-        description=guidance_text,
+        description=planning_guidance_text,
         special_notes="",
         room_model_json=room_output,
-        user_intent_json=input_payload,
+        user_intent_json=prepared_input_payload,
         clusters_json=cluster_output,
     )
     tier_output = _strip_raw_text(tier_output)
+    tier_output = apply_manual_placements_to_tier_output(
+        tier_output,
+        manual_placements,
+        clusters_json=cluster_output,
+    )
     _write_json(paths.tier_count, tier_output)
 
     _update_status(paths, "merge")
@@ -290,6 +320,10 @@ def run_case(
 
     # 8) Absolute layout (from controller-selected proposal)
     absolute_layout = _strip_raw_text(phase2_result.get("absolute_layout") or {})
+    absolute_layout = merge_manual_placements_into_absolute_layout(
+        absolute_layout,
+        manual_placements,
+    )
     _write_json(paths.absolute_layout, absolute_layout)
 
     absolute_status = (
@@ -322,24 +356,35 @@ def run_case(
     # 9) Stylist
     stylist = Stylist()
     room_meta = room_output.get("meta") if isinstance(room_output, dict) else None
-    stylist_tenant_id = _extract_tenant_id_from_payload(input_payload)
-    stylist_output = stylist.generate(
+    stylist_tenant_id = _extract_tenant_id_from_payload(prepared_input_payload)
+    stylist_user_context = {
+        "user_id": user_id,
+        "tenant_id": stylist_tenant_id,
+        "style": room_meta.get("style") if isinstance(room_meta, dict) else "",
+        "room_notes": room_output.get("notes", [])
+        if isinstance(room_output, dict)
+        else [],
+        "guidance_text": guidance_text,
+        "user_input": prepared_input_payload.get("user_input", {})
+        if isinstance(prepared_input_payload, dict)
+        else {},
+    }
+    style_plan = stylist.generate_style_plan(
         layout_json=absolute_layout,
-        user_context_json={
-            "user_id": user_id,
-            "tenant_id": stylist_tenant_id,
-            "style": room_meta.get("style") if isinstance(room_meta, dict) else "",
-            "room_notes": room_output.get("notes", [])
-            if isinstance(room_output, dict)
-            else [],
-            "guidance_text": guidance_text,
-            "user_input": input_payload.get("user_input", {})
-            if isinstance(input_payload, dict)
-            else {},
-        },
+        user_context_json=stylist_user_context,
         tenant_id=stylist_tenant_id,
     )
+    stylist_output = stylist.apply_style_plan(
+        layout_json=absolute_layout,
+        user_context_json=stylist_user_context,
+        tenant_id=stylist_tenant_id,
+        style_plan=style_plan,
+    )
     stylist_output = _strip_raw_text(stylist_output)
+    stylist_output = merge_manual_placements_into_styled_output(
+        stylist_output,
+        manual_placements,
+    )
     _write_json(paths.stylist, stylist_output)
 
     stylist_status = (
@@ -366,6 +411,30 @@ def run_case(
             "final_output": stylist_output,
             "error": stylist_status,
         }
+
+    _update_status(paths, "layout_variants")
+    layout_variants = build_layout_variants_artifact(
+        room_output=room_output,
+        merged_output=merged_output,
+        cluster_outlines=cluster_outlines,
+        relation_plan=relation_plan,
+        solver_output=solver_output,
+        phase2_result=phase2_result,
+        absolute_layout=absolute_layout,
+        stylist_output=stylist_output,
+        stylist=stylist,
+        stylist_user_context_json=stylist_user_context,
+        stylist_tenant_id=stylist_tenant_id,
+        style_plan=style_plan,
+        manual_placements=manual_placements,
+        max_variants=5,
+    )
+    layout_variants = _strip_raw_text(layout_variants)
+    layout_variants = merge_manual_placements_into_layout_variants(
+        layout_variants,
+        manual_placements,
+    )
+    _write_json(paths.layout_variants, layout_variants)
 
     _update_status(paths, "done")
 

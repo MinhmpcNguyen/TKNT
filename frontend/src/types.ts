@@ -15,6 +15,7 @@ export type Wall = {
   room_id?: string | null;
   locked?: boolean | null;
   color_hex?: string | null;
+  opacity?: number | null;
 };
 
 export type Door = {
@@ -48,6 +49,10 @@ export type FloorplanGeometry = {
 
 export type Footprint = { w: number; d: number };
 
+export type PlacementSource = 'generated' | 'manual';
+
+export type PlacementConstraintMode = 'free' | 'pinned' | 'locked';
+
 export type Placement = {
   placement_id: string;
   asset_id: string;
@@ -58,6 +63,8 @@ export type Placement = {
   height_mm: number;
   color_hex: string;
   anchor: 'center';
+  source?: PlacementSource;
+  constraint_mode?: PlacementConstraintMode;
 };
 
 export type TopView = {
@@ -76,6 +83,8 @@ export type InventoryItem = {
   material_tags: string[];
   price?: number | null;
   color_hex?: string | null;
+  room_type?: string | null;
+  attributes?: Record<string, unknown> | null;
 };
 
 export type TemplateItem = {
@@ -89,6 +98,19 @@ export type TemplateItem = {
 export type DesignPlanV1 = {
   floorplan_geometry: FloorplanGeometry;
   placements: Placement[];
+};
+
+export type LayoutVariant = {
+  variant_id: string;
+  label: string;
+  source: string;
+  reason: string;
+  layout_score: number;
+  hard_valid: boolean;
+  notes: string[];
+  absolute_layout: Record<string, unknown>;
+  styled_result: Record<string, unknown>;
+  design: DesignPlanV1 | null;
 };
 
 export type Violation = {

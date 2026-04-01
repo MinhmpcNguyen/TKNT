@@ -1,0 +1,93 @@
+{
+  "status": "OK",
+  "cluster_id": "living_room_cluster",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "sofa_01",
+      "x": 300,
+      "y": 600,
+      "rot": 0
+    },
+    {
+      "id": "coffee_table_01",
+      "x": 950,
+      "y": 700,
+      "rot": 0
+    },
+    {
+      "id": "tv_console_01",
+      "x": 1900,
+      "y": 650,
+      "rot": 0
+    },
+    {
+      "id": "armchair_01",
+      "x": 700,
+      "y": 1700,
+      "rot": 270
+    },
+    {
+      "id": "plant_01",
+      "x": 2500,
+      "y": 1800,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "sofa_01",
+        "x": 300,
+        "y": 600,
+        "w": 1800,
+        "h": 900
+      },
+      {
+        "id": "coffee_table_01",
+        "x": 950,
+        "y": 700,
+        "w": 900,
+        "h": 500
+      },
+      {
+        "id": "tv_console_01",
+        "x": 1900,
+        "y": 650,
+        "w": 1400,
+        "h": 450
+      },
+      {
+        "id": "armchair_01",
+        "x": 700,
+        "y": 1700,
+        "w": 900,
+        "h": 900
+      },
+      {
+        "id": "plant_01",
+        "x": 2500,
+        "y": 1800,
+        "w": 400,
+        "h": 400
+      }
+    ],
+    "local_bbox": {
+      "min_x": 300,
+      "min_y": 600,
+      "max_x": 3300,
+      "max_y": 2600
+    }
+  },
+  "notes": [
+    "Sofa faces the TV console.",
+    "Central walking space is kept open.",
+    "Coffee table stays centered to the sofa."
+  ],
+  "missing": []
+}

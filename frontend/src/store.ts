@@ -1,5 +1,15 @@
 import { create } from 'zustand';
-import { DesignPlanV1, FloorplanGeometry, InventoryItem, TemplateItem, Violation, Placement, Wall, Point } from './types';
+import {
+  DesignPlanV1,
+  FloorplanGeometry,
+  InventoryItem,
+  LayoutVariant,
+  Placement,
+  Point,
+  TemplateItem,
+  Violation,
+  Wall,
+} from './types';
 import { normalizePoints } from './utils/geometry';
 
 export type UserInput = {
@@ -23,6 +33,9 @@ export type EditorState = {
   baseFloorplan: FloorplanGeometry | null;
   design: DesignPlanV1 | null;
   styledResult: any | null;
+  layoutVariants: LayoutVariant[];
+  selectedVariantId: string | null;
+  variantPickerOpen: boolean;
   inventory: InventoryItem[];
   viewMode: '2d' | '3d';
   caseId: string | null;
@@ -49,6 +62,13 @@ export type EditorState = {
   setBaseFloorplan: (floorplan: FloorplanGeometry) => void;
   setDesign: (design: DesignPlanV1) => void;
   setStyledResult: (styled: any | null) => void;
+  setLayoutVariants: (
+    variants: LayoutVariant[],
+    selectedVariantId?: string | null,
+  ) => void;
+  selectLayoutVariant: (variantId: string | null) => void;
+  setVariantPickerOpen: (open: boolean) => void;
+  clearLayoutVariants: () => void;
   setInventory: (inventory: InventoryItem[]) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   setCaseId: (caseId: string | null) => void;
@@ -86,6 +106,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   baseFloorplan: null,
   design: null,
   styledResult: null,
+  layoutVariants: [],
+  selectedVariantId: null,
+  variantPickerOpen: false,
   inventory: [],
   viewMode: '2d',
   caseId: null,
@@ -221,6 +244,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ design: { ...design, placements: clampedPlacements } });
   },
   setStyledResult: (styledResult) => set({ styledResult }),
+  setLayoutVariants: (layoutVariants, selectedVariantId = null) =>
+    set({
+      layoutVariants,
+      selectedVariantId:
+        selectedVariantId && layoutVariants.some((item) => item.variant_id === selectedVariantId)
+          ? selectedVariantId
+          : layoutVariants[0]?.variant_id ?? null,
+    }),
+  selectLayoutVariant: (selectedVariantId) => set({ selectedVariantId }),
+  setVariantPickerOpen: (variantPickerOpen) => set({ variantPickerOpen }),
+  clearLayoutVariants: () =>
+    set({
+      layoutVariants: [],
+      selectedVariantId: null,
+      variantPickerOpen: false,
+    }),
   setInventory: (inventory) => set({ inventory }),
   setViewMode: (viewMode) => set({ viewMode }),
   setCaseId: (caseId) => set({ caseId }),
@@ -231,11 +270,29 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setTemplates: (templates) => set({ templates }),
   setViolations: (violations) => set({ violations }),
   selectPlacement: (placementId) =>
-    set({ selectedPlacementId: placementId, selectedOpeningId: null, selectedOpeningType: null }),
+    set({
+      selectedPlacementId: placementId,
+      selectedOpeningId: null,
+      selectedOpeningType: null,
+      selectedWallId: null,
+      selectedCornerIndex: null,
+    }),
   selectCorner: (index) =>
-    set({ selectedCornerIndex: index, selectedOpeningId: null, selectedOpeningType: null }),
+    set({
+      selectedCornerIndex: index,
+      selectedOpeningId: null,
+      selectedOpeningType: null,
+      selectedWallId: null,
+      selectedPlacementId: null,
+    }),
   selectWall: (wallId) =>
-    set({ selectedWallId: wallId, selectedOpeningId: null, selectedOpeningType: null }),
+    set({
+      selectedWallId: wallId,
+      selectedOpeningId: null,
+      selectedOpeningType: null,
+      selectedPlacementId: null,
+      selectedCornerIndex: null,
+    }),
   selectOpening: (type, id = null) =>
     set({
       selectedOpeningType: type,
@@ -245,21 +302,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedCornerIndex: null,
     }),
   updateWall: (wallId, patch) => {
-    const floorplan = get().floorplan;
+    const state = get();
+    const floorplan = state.floorplan ?? state.design?.floorplan_geometry ?? null;
     if (!floorplan) return;
     const walls = floorplan.walls.map((wall) =>
       wall.wall_id === wallId ? { ...wall, ...patch } : wall
     );
-    set({ floorplan: { ...floorplan, walls } });
+    const nextFloorplan = { ...floorplan, walls };
+    set({
+      floorplan: state.floorplan ? nextFloorplan : state.floorplan,
+      design: state.design
+        ? {
+            ...state.design,
+            floorplan_geometry: nextFloorplan,
+          }
+        : state.design,
+    });
   },
   removeWall: (wallId) => {
-    const floorplan = get().floorplan;
+    const state = get();
+    const floorplan = state.floorplan ?? state.design?.floorplan_geometry ?? null;
     if (!floorplan) return;
+    const nextFloorplan = {
+      ...floorplan,
+      walls: floorplan.walls.filter((wall) => wall.wall_id !== wallId),
+    };
     set({
-      floorplan: {
-        ...floorplan,
-        walls: floorplan.walls.filter((wall) => wall.wall_id !== wallId),
-      },
+      floorplan: state.floorplan ? nextFloorplan : state.floorplan,
+      design: state.design
+        ? {
+            ...state.design,
+            floorplan_geometry: nextFloorplan,
+          }
+        : state.design,
       selectedWallId: null,
     });
   },

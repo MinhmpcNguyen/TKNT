@@ -421,6 +421,7 @@ def _eval_dock_to_edge(
     a = constraint.get("a")
     b = constraint.get("b")
     b_edge = constraint.get("b_edge")
+    span = str(constraint.get("span") or "any")
     gap_min = int(constraint.get("gap_min", 0) or 0)
     gap_max = int(constraint.get("gap_max", 0) or 0)
 
@@ -446,6 +447,10 @@ def _eval_dock_to_edge(
 
     gap = _edge_gap(ra, rb, mapped_side)
     perp_overlap = _perpendicular_overlap_len(ra, rb, mapped_side)
+    span_ok = _dock_span_ok(span=span, mapped_side=mapped_side, ra=ra, rb=rb)
+    span_penalty = 0.0 if span_ok else 1.0
+    edge_family_ok = _dock_edge_family_ok(span=span, mapped_side=mapped_side, rb=rb)
+    edge_family_penalty = 0.0 if edge_family_ok else 1.0
 
     gap_penalty = max(0, gap_min - gap) + max(0, gap - gap_max)
     perp_penalty = 0 if perp_overlap > 0 else 1.0
@@ -453,22 +458,36 @@ def _eval_dock_to_edge(
     # Side penalty is mostly implicit in gap penalty already, but keeping it visible helps debugging.
     side_penalty = float(max(0, -gap)) if gap < 0 else 0.0
 
-    violation = float(gap_penalty * 100.0 + perp_penalty * 1000.0 + side_penalty)
+    violation = float(
+        gap_penalty * 100.0
+        + perp_penalty * 1000.0
+        + span_penalty * 1000.0
+        + edge_family_penalty * 500.0
+        + side_penalty
+    )
 
     return {
-        "satisfied": (gap_min <= gap <= gap_max) and (perp_overlap > 0),
+        "satisfied": (
+            (gap_min <= gap <= gap_max)
+            and (perp_overlap > 0)
+            and span_ok
+            and edge_family_ok
+        ),
         "violation": violation,
         "components": {
             "gap_mm": float(gap),
             "gap_penalty_mm": float(gap_penalty),
             "perpendicular_overlap_mm": float(perp_overlap),
             "perpendicular_penalty": float(perp_penalty),
+            "span_penalty": float(span_penalty),
+            "edge_family_penalty": float(edge_family_penalty),
             "side_penalty_mm": float(side_penalty),
         },
         "debug": {
             "a_rect": _rect_dict(ra),
             "b_rect": _rect_dict(rb),
             "b_edge": b_edge,
+            "span": span,
             "mapped_side": mapped_side,
             "b_front_base": b_front_base,
         },
@@ -1149,6 +1168,58 @@ def _anchor_zone_bounds(
         return (2 * free_span + 2) // 3, free_span
 
     return 0, free_span
+
+
+def _dock_span_zone_bounds(free_span: int, span: str) -> tuple[int, int]:
+    free_span = max(0, int(free_span))
+    if span == "center":
+        return free_span // 3, (2 * free_span + 2) // 3
+    if span == "left":
+        return 0, free_span // 3
+    if span == "right":
+        return (2 * free_span + 2) // 3, free_span
+    return 0, free_span
+
+
+def _dock_span_ok(*, span: str, mapped_side: str, ra: Rect, rb: Rect) -> bool:
+    if span not in {"center", "left", "right"}:
+        return True
+
+    ax1, ay1, ax2, ay2 = ra
+    bx1, by1, bx2, by2 = rb
+    aw = ax2 - ax1
+    ah = ay2 - ay1
+    bw = bx2 - bx1
+    bh = by2 - by1
+
+    if mapped_side in {"top", "bottom"}:
+        free_span = max(0, bw - aw)
+        rel = ax1 - bx1
+        z_lo, z_hi = _dock_span_zone_bounds(free_span, span)
+        return z_lo <= rel <= z_hi
+
+    if mapped_side in {"left", "right"}:
+        free_span = max(0, bh - ah)
+        rel = ay1 - by1
+        z_lo, z_hi = _dock_span_zone_bounds(free_span, span)
+        return z_lo <= rel <= z_hi
+
+    return True
+
+
+def _dock_edge_family_ok(*, span: str, mapped_side: str, rb: Rect) -> bool:
+    if span not in {"short_edge", "long_edge"}:
+        return True
+
+    bx1, by1, bx2, by2 = rb
+    bw = bx2 - bx1
+    bh = by2 - by1
+    edge_len = bh if mapped_side in {"left", "right"} else bw
+    other_len = bw if mapped_side in {"left", "right"} else bh
+
+    if span == "short_edge":
+        return edge_len <= other_len
+    return edge_len >= other_len
 
 
 def _qualifier_ok(

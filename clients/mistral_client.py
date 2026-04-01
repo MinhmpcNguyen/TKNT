@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import httpx
 from openai import OpenAI
 
-from clients.base_client import ChatMessage, LLMModelKey
+from clients.base_client import ChatMessage, LLMModelKey, ThinkingLevel
 from config.mistral_config import MistralConfig
 from config.models import MistralModelConfig
 
@@ -63,15 +63,19 @@ class MistralClient:
         messages: Sequence[ChatMessage],
         *,
         model_key: LLMModelKey = "primary",
+        model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        thinking_level: ThinkingLevel | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
+        _ = thinking_level
+        resolved_model_name = model_name or self.get_model_name(model_key)
         if tools is not None:
             return self._raw_tool_chat_completion(
                 messages,
-                model_key=model_key,
+                model_name=resolved_model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
@@ -84,7 +88,7 @@ class MistralClient:
             options["num_predict"] = max_tokens
 
         payload: dict[str, object] = {
-            "model": self.get_model_name(model_key),
+            "model": resolved_model_name,
             "messages": self._to_ollama_messages(messages),
             "stream": False,
         }
@@ -267,7 +271,7 @@ class MistralClient:
         self,
         messages: Sequence[ChatMessage],
         *,
-        model_key: LLMModelKey,
+        model_name: str,
         temperature: float | None,
         max_tokens: int | None,
         tools: Sequence[dict[str, object]],
@@ -280,7 +284,7 @@ class MistralClient:
 
         prompt = self._build_raw_tool_prompt(messages=messages, tools=tools)
         payload: dict[str, object] = {
-            "model": self.get_model_name(model_key),
+            "model": model_name,
             "prompt": prompt,
             "stream": False,
             "raw": True,

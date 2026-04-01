@@ -100,6 +100,57 @@ class SolverArchitectureTest(unittest.TestCase):
             {"clusters": [{"cluster_id": "sleep"}]},
         )
 
+    def test_relax_relation_plan_for_candidate_search_drops_pairwise_directional_biases(
+        self,
+    ) -> None:
+        relation_plan = {
+            "cluster_relations": [{"a": "sleep", "b": "living", "relation": "near"}],
+            "cluster_directional_relations": [
+                {"a": "sleep", "b": "living", "relation": "face_each_other"}
+            ],
+            "cluster_orientations": [
+                {
+                    "cluster_id": "living",
+                    "intents": ["face_cluster", "back_to_wall"],
+                    "target_cluster_id": "sleep",
+                }
+            ],
+            "object_orientations": [
+                {
+                    "cluster_id": "living",
+                    "object_id": "armchair",
+                    "intents": ["face_object", "front_to_open_space"],
+                    "target_object_id": "bed",
+                }
+            ],
+        }
+
+        relaxed = _solver._relax_relation_plan_for_candidate_search(relation_plan)
+
+        self.assertEqual(relaxed["cluster_relations"], [])
+        self.assertEqual(relaxed["cluster_directional_relations"], [])
+        self.assertEqual(
+            relaxed["cluster_orientations"],
+            [
+                {
+                    "cluster_id": "living",
+                    "intents": ["back_to_wall"],
+                    "target_cluster_id": None,
+                }
+            ],
+        )
+        self.assertEqual(
+            relaxed["object_orientations"],
+            [
+                {
+                    "cluster_id": "living",
+                    "object_id": "armchair",
+                    "intents": ["front_to_open_space"],
+                    "target_object_id": None,
+                }
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

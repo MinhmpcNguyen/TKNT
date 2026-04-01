@@ -213,6 +213,30 @@ def get_result(case_id: str) -> PipelineResultResponse:
         stylist_payload=stylist_payload,
         absolute_layout_payload=absolute_payload,
     )
+    if paths.layout_variants.exists():
+        variants_payload = json.loads(paths.layout_variants.read_text())
+        if isinstance(variants_payload, dict):
+            variants = variants_payload.get("variants")
+            selected_variant_id = variants_payload.get("selected_variant_id")
+            if isinstance(variants, list):
+                enriched_variants: list[dict[str, Any]] = []
+                for variant in variants:
+                    if not isinstance(variant, dict):
+                        continue
+                    styled_variant = variant.get("styled_result")
+                    absolute_variant = variant.get("absolute_layout")
+                    next_variant = dict(variant)
+                    if isinstance(styled_variant, dict):
+                        next_variant["styled_result"] = _enrich_rotation_ccw(
+                            stylist_payload=styled_variant,
+                            absolute_layout_payload=absolute_variant
+                            if isinstance(absolute_variant, dict)
+                            else None,
+                        )
+                    enriched_variants.append(next_variant)
+                enriched["variants"] = enriched_variants
+            if isinstance(selected_variant_id, str) and selected_variant_id:
+                enriched["selected_variant_id"] = selected_variant_id
     return PipelineResultResponse(case_id=case_id, result=enriched)
 
 
@@ -229,6 +253,7 @@ def get_artifact(case_id: str, name: str) -> ArtifactResponse:
         "absolute_layout": paths.absolute_layout,
         "stylist": paths.stylist,
         "cluster_outlines": paths.cluster_outlines_all,
+        "layout_variants": paths.layout_variants,
     }
     path = mapping.get(name)
     if path is None or not path.exists():

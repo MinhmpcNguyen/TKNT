@@ -10,6 +10,7 @@ from typing import Any
 from agent_schema.cluster_relation_planner_schema import ClusterRelationPlannerOutput
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
+from config.gemini_config import GeminiConfig
 from prompt.cluster_relation_planner import CLUSTER_RELATION_PLANNER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -125,7 +126,7 @@ class ClusterRelationPlanner:
             len(_extract_clusters_map(clusters_json)),
         )
 
-        client = get_llm_client()
+        client = get_llm_client(provider="gemini")
         last_raw = ""
 
         for attempt in range(2):
@@ -133,6 +134,7 @@ class ClusterRelationPlanner:
             response = client.chat_completion(
                 messages,
                 model_key="primary",
+                model_name=GeminiConfig.AGENT_MODELS.get("planner"),
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -1338,6 +1340,11 @@ def _normalize_relation_plan_payload(
         out,
         clusters_json=clusters_json or {},
     )
+    _apply_generic_macro_relation_policy(
+        out,
+        room_model_json=room_model_json or {},
+        clusters_json=clusters_json or {},
+    )
 
     return out
 
@@ -1920,3 +1927,207 @@ def _enforce_access_orientation_requirements(
                 plan,
                 f"Preserve front usability for {oid}.",
             )
+
+
+def _apply_generic_macro_relation_policy(
+    plan: dict[str, Any],
+    *,
+    room_model_json: dict[str, Any],
+    clusters_json: dict[str, Any],
+) -> None:
+    if not isinstance(plan, dict):
+        return
+
+    clusters = _extract_clusters_map(clusters_json)
+    if not clusters:
+        return
+
+    room_type = _extract_room_type(room_model_json)
+    roles_by_cluster: dict[str, str] = {}
+    footprint_area_by_cluster: dict[str, int] = {}
+    for cid, cluster in clusters.items():
+        object_ids = _extract_cluster_object_ids(cluster)
+        roles_by_cluster[cid] = _classify_cluster_role(object_ids, cid)
+        footprint = cluster.get("cluster_footprint")
+        rects = (footprint or {}).get("rects") if isinstance(footprint, dict) else None
+        footprint_area_by_cluster[cid] = _sum_rect_area_mm2(rects or [])
+
+    primary_cluster_id = _pick_primary_cluster_id(
+        room_type=room_type,
+        roles_by_cluster=roles_by_cluster,
+        footprint_area_by_cluster=footprint_area_by_cluster,
+    )
+
+    viewing_pairs = {
+        tuple(sorted(pair))
+        for pair in _infer_viewing_cluster_pairs(plan, clusters_json)
+    }
+
+    _prune_directional_relations_without_focal_support(
+        plan,
+        viewing_pairs=viewing_pairs,
+        roles_by_cluster=roles_by_cluster,
+    )
+    _cap_center_preference_to_primary_cluster(
+        plan,
+        primary_cluster_id=primary_cluster_id,
+        roles_by_cluster=roles_by_cluster,
+    )
+
+
+def _extract_room_type(room_model_json: dict[str, Any]) -> str:
+    src = _unwrap_room_model(room_model_json)
+    meta = src.get("meta")
+    if not isinstance(meta, dict):
+        return ""
+    room_type = meta.get("room_type")
+    if not isinstance(room_type, str):
+        return ""
+    return room_type.strip().lower()
+
+
+def _pick_primary_cluster_id(
+    *,
+    room_type: str,
+    roles_by_cluster: dict[str, str],
+    footprint_area_by_cluster: dict[str, int],
+) -> str | None:
+    room_bias: dict[str, dict[str, int]] = {
+        "bedroom": {
+            "sleep": 20,
+            "storage": 8,
+            "work": 6,
+            "lounge": 4,
+            "media": 2,
+        },
+        "living_room": {
+            "lounge": 20,
+            "media": 18,
+            "work": 6,
+            "storage": 4,
+            "sleep": 0,
+        },
+        "office": {
+            "work": 20,
+            "storage": 8,
+            "lounge": 4,
+        },
+    }
+    generic_role_priority = {
+        "sleep": 12,
+        "lounge": 11,
+        "work": 10,
+        "cooking_line": 10,
+        "island": 9,
+        "media": 8,
+        "storage": 6,
+        "mixed": 5,
+    }
+
+    best_cluster_id: str | None = None
+    best_score = -(10**9)
+    room_role_bonus = room_bias.get(room_type, {})
+    for cid, role in roles_by_cluster.items():
+        score = generic_role_priority.get(role, 4) * 1000
+        score += room_role_bonus.get(role, 0) * 1000
+        score += int(footprint_area_by_cluster.get(cid, 0) // 10000)
+        if score > best_score or (
+            score == best_score and (best_cluster_id is None or cid < best_cluster_id)
+        ):
+            best_score = score
+            best_cluster_id = cid
+    return best_cluster_id
+
+
+def _prune_directional_relations_without_focal_support(
+    plan: dict[str, Any],
+    *,
+    viewing_pairs: set[tuple[str, str]],
+    roles_by_cluster: dict[str, str],
+) -> None:
+    values = plan.get("cluster_directional_relations")
+    if not isinstance(values, list):
+        return
+
+    kept: list[dict[str, Any]] = []
+    dropped_pairs: list[str] = []
+
+    for entry in values:
+        if not isinstance(entry, dict):
+            continue
+        a = entry.get("a")
+        b = entry.get("b")
+        relation = entry.get("relation")
+        if (
+            not isinstance(a, str)
+            or not isinstance(b, str)
+            or not isinstance(relation, str)
+        ):
+            continue
+
+        relation_key = relation.strip().lower()
+        pair = tuple(sorted((a, b)))
+        a_role = roles_by_cluster.get(a, "mixed")
+        b_role = roles_by_cluster.get(b, "mixed")
+        pair_has_media = "media" in {a_role, b_role}
+        keep = True
+
+        if relation_key in {"face_each_other", "turn_toward", "access_faces_other"}:
+            keep = pair in viewing_pairs or pair_has_media
+        elif relation_key in {"parallel_alignment", "perpendicular_alignment"}:
+            keep = pair_has_media or pair in viewing_pairs
+
+        if keep:
+            kept.append(entry)
+            continue
+
+        dropped_pairs.append(f"{a}:{b}:{relation_key}")
+
+    plan["cluster_directional_relations"] = kept
+    if dropped_pairs:
+        notes = plan.setdefault("notes", [])
+        if isinstance(notes, list):
+            notes.append(
+                "Dropped over-specific directional relations that were not supported "
+                "by a focal/viewing macro relationship."
+            )
+
+
+def _cap_center_preference_to_primary_cluster(
+    plan: dict[str, Any],
+    *,
+    primary_cluster_id: str | None,
+    roles_by_cluster: dict[str, str],
+) -> None:
+    if primary_cluster_id is None:
+        return
+
+    affinities = plan.get("cluster_affinities")
+    if isinstance(affinities, list):
+        for entry in affinities:
+            if not isinstance(entry, dict):
+                continue
+            cid = entry.get("cluster_id")
+            prefer = entry.get("prefer")
+            if not isinstance(cid, str) or not isinstance(prefer, list):
+                continue
+            if cid == primary_cluster_id:
+                continue
+            if roles_by_cluster.get(cid) in {"island"}:
+                continue
+            entry["prefer"] = [item for item in prefer if item != "center"]
+
+    orientations = plan.get("cluster_orientations")
+    if isinstance(orientations, list):
+        for entry in orientations:
+            if not isinstance(entry, dict):
+                continue
+            cid = entry.get("cluster_id")
+            intents = entry.get("intents")
+            if not isinstance(cid, str) or not isinstance(intents, list):
+                continue
+            if cid == primary_cluster_id:
+                continue
+            if roles_by_cluster.get(cid) in {"island"}:
+                continue
+            entry["intents"] = [item for item in intents if item != "face_center"]

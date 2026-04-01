@@ -48,6 +48,84 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _build_work_cluster_with_semantic_intent() -> dict[str, Any]:
+    return {
+        "cluster_id": "work_area",
+        "members": ["desk", "office_chair"],
+        "anchors": ["desk"],
+        "hard_constraints": [
+            {"type": "no_overlap", "a": "desk", "b": "office_chair"},
+            {
+                "type": "dock_to_edge",
+                "a": "office_chair",
+                "b": "desk",
+                "b_edge": "front",
+                "span": "center",
+                "gap_min": 0,
+                "gap_max": 50,
+            },
+            {"type": "requires_access", "id": "desk", "mode": "front_clearance"},
+        ],
+        "soft_constraints": [
+            {
+                "type": "prefer_facing",
+                "a": "office_chair",
+                "b": "desk",
+                "mode": "face_each_other",
+                "weight": 8,
+            }
+        ],
+        "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+                "desk": [0],
+                "office_chair": [0, 90, 180, 270],
+            },
+            "facing": {
+                "desk": {"front": "top", "notes": "Desk is used from the top edge."},
+                "office_chair": {
+                    "front": "top",
+                    "notes": "Chair front should face the desk.",
+                },
+            },
+            "access_requirements": [
+                {
+                    "id": "desk",
+                    "type": "front_clearance",
+                    "required": True,
+                }
+            ],
+            "semantic_placements": [
+                {
+                    "id": "office_chair",
+                    "relative_to": "desk",
+                    "kind": "dock_to_edge",
+                    "b_edge": "front",
+                    "span": "center",
+                    "gap_min": 0,
+                    "gap_max": 50,
+                    "selection": "best_fit",
+                    "orientation": "face_base",
+                }
+            ],
+        },
+        "decisions": [
+            {
+                "object_type": "desk",
+                "rep_dims_m": {"L": 1.2, "W": 0.6},
+                "priority": "anchor",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "office_chair",
+                "rep_dims_m": {"L": 0.55, "W": 0.55},
+                "priority": "primary",
+                "clearance_mm": 0,
+            },
+        ],
+    }
+
+
 class ClusterComposerArchitectureTest(unittest.TestCase):
     def test_extract_grid_mm_uses_shared_layout_policy(self) -> None:
         self.assertEqual(
@@ -321,6 +399,51 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
                 and move.get("reason") == "SOFT_PREFER_NEAR"
                 and move.get("move_object") == "target"
                 for move in verifier.get("suggested_moves") or []
+            )
+        )
+
+    def test_seed_layout_centers_chair_on_desk_front_and_faces_base(self) -> None:
+        cluster = _build_work_cluster_with_semantic_intent()
+
+        placements = _seed_local_layout(cluster)
+        by_id = {row["id"]: row for row in placements}
+
+        self.assertEqual(by_id["desk"]["rot"], 0)
+        self.assertEqual(by_id["office_chair"]["rot"], 180)
+        self.assertEqual(by_id["office_chair"]["y"], 600)
+        self.assertEqual(by_id["office_chair"]["x"], 300)
+
+    def test_verifier_enforces_center_span_for_docked_dependents(self) -> None:
+        cluster = _build_work_cluster_with_semantic_intent()
+
+        valid = _run_verifier_once(
+            cluster=cluster,
+            placements=[
+                {"id": "desk", "x": 0, "y": 0, "rot": 0},
+                {"id": "office_chair", "x": 300, "y": 600, "rot": 180},
+            ],
+            access_clearance_ratio=0.25,
+        )
+        invalid = _run_verifier_once(
+            cluster=cluster,
+            placements=[
+                {"id": "desk", "x": 0, "y": 0, "rot": 0},
+                {"id": "office_chair", "x": 0, "y": 600, "rot": 180},
+            ],
+            access_clearance_ratio=0.25,
+        )
+
+        self.assertEqual(valid.get("result"), "VALID")
+        self.assertEqual(invalid.get("result"), "INVALID")
+        hard_evaluations = (
+            (invalid.get("debug") or {}).get("constraint_scores") or {}
+        ).get("hard_evaluations") or []
+        self.assertTrue(
+            any(
+                isinstance(score, dict)
+                and score.get("type") == "dock_to_edge"
+                and float((score.get("components") or {}).get("span_penalty") or 0) > 0
+                for score in hard_evaluations
             )
         )
 

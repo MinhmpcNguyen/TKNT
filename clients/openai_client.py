@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from openai import AzureOpenAI, OpenAI
 
-from clients.base_client import ChatMessage, LLMModelKey
+from clients.base_client import ChatMessage, LLMModelKey, ThinkingLevel
 from config.openai_config import OpenAIConfig
 from config.models import OpenAIModelConfig
 
@@ -57,16 +57,19 @@ class OpenAIClient:
         messages: Sequence[ChatMessage],
         *,
         model_key: LLMModelKey = "primary",
+        model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        thinking_level: ThinkingLevel | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
-        model_name = self.get_model_name(model_key)
+        resolved_model_name = model_name or self.get_model_name(model_key)
         message_list = list(messages)
+        _ = thinking_level
 
         params: dict[str, object] = {
-            "model": model_name,
+            "model": resolved_model_name,
             "messages": message_list,
         }
         if temperature is not None:
@@ -140,7 +143,9 @@ class OpenAIClient:
             raise ValueError(f"Invalid Azure endpoint: {endpoint}")
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    def _normalize_embedding_input(self, inputs: str | Sequence[str]) -> str | list[str]:
+    def _normalize_embedding_input(
+        self, inputs: str | Sequence[str]
+    ) -> str | list[str]:
         if isinstance(inputs, str):
             return inputs
         return list(inputs)

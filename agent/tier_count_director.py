@@ -2189,11 +2189,21 @@ def _extract_anchors_by_cluster(clusters_json: Any) -> dict[str, set[str]]:
         cluster_id = cluster.get("cluster_id")
         if not isinstance(cluster_id, str) or not cluster_id:
             continue
+        members = cluster.get("members")
+        member_set = (
+            {member for member in members if isinstance(member, str) and member}
+            if isinstance(members, list)
+            else set()
+        )
         anchors = cluster.get("anchors")
         if not isinstance(anchors, list):
             out.setdefault(cluster_id, set())
             continue
-        out[cluster_id] = {a for a in anchors if isinstance(a, str) and a}
+        out[cluster_id] = {
+            anchor
+            for anchor in anchors
+            if isinstance(anchor, str) and anchor and anchor in member_set
+        }
     return out
 
 

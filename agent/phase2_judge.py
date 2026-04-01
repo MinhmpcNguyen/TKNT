@@ -12,9 +12,11 @@ from agent_schema.phase2_judge_schema import Phase2JudgeOutput
 try:
     from clients.base_client import ChatMessage
     from clients.llm_client import get_llm_client
+    from config.gemini_config import GeminiConfig
 except Exception:  # pragma: no cover
     ChatMessage = dict[str, str]  # type: ignore[misc,assignment]
     get_llm_client = None  # type: ignore[assignment]
+    GeminiConfig = None  # type: ignore[assignment]
 
 from prompt.phase2_judge import (
     PHASE2_JUDGE_PROMPT,
@@ -22,6 +24,19 @@ from prompt.phase2_judge import (
 )
 
 logger = logging.getLogger(__name__)
+
+_MACRO_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "orientation": ("orientation", "facing", "face", "align"),
+    "focal": ("focal", "tv", "viewing", "view"),
+    "circulation": ("circulation", "walk", "path", "entry", "door", "lane"),
+    "zoning": ("zone", "zoning", "center", "central", "congestion"),
+    "openings": ("window", "opening", "wall", "edge", "perimeter"),
+}
+_OBJECT_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "front_access": ("front access", "front clearance", "clearance"),
+    "object_pose": ("object", "chair", "nightstand", "lamp", "desk", "sofa"),
+    "local_fidelity": ("internal", "local", "variant", "fidelity"),
+}
 
 
 class JudgeLLMCallable(Protocol):
@@ -69,11 +84,17 @@ class Phase2Judge:
                 ).get("score")
             ),
         )
-        response = get_llm_client().chat_completion(
+        response = get_llm_client(provider="gemini").chat_completion(
             messages,
-            model_key="primary",
+            model_key="helper",
+            model_name=(
+                GeminiConfig.AGENT_MODELS.get("judge")
+                if GeminiConfig is not None
+                else None
+            ),
             temperature=temperature,
             max_tokens=max_tokens,
+            thinking_level="high",
         )
         return _extract_content(response)
 
@@ -170,6 +191,89 @@ def _extract_json_object(text: str) -> str:
     if start == -1 or end == -1 or end <= start:
         return text
     return text[start : end + 1]
+
+
+def _issue_families_from_texts(texts: Sequence[object]) -> list[str]:
+    families: list[str] = []
+    lowered_text = " ".join(
+        str(item).strip().lower() for item in texts if str(item).strip()
+    )
+    if not lowered_text:
+        return families
+
+    for family, keywords in _MACRO_ISSUE_KEYWORDS.items():
+        if any(keyword in lowered_text for keyword in keywords):
+            families.append(family)
+    for family, keywords in _OBJECT_ISSUE_KEYWORDS.items():
+        if any(keyword in lowered_text for keyword in keywords):
+            families.append(family)
+    return families
+
+
+def _infer_next_step_mode(
+    input_payload: Mapping[str, object],
+    calibrated_payload: Mapping[str, object],
+    *,
+    severe_metric_count: int,
+) -> str:
+    hard_check = input_payload.get("hard_check_summary") or {}
+    comparison = input_payload.get("comparison_summary") or {}
+    metrics = input_payload.get("metrics") or {}
+    diagnosis = input_payload.get("diagnosis") or {}
+
+    if not bool(hard_check.get("hard_valid")):
+        return "macro_layout"
+
+    verdict = str(calibrated_payload.get("verdict") or "REJECT").upper()
+    if verdict == "ACCEPT":
+        return "stop"
+    if verdict == "REJECT":
+        return "macro_layout"
+
+    explicit_mode = str(calibrated_payload.get("next_step_mode") or "").strip().lower()
+    if explicit_mode in {"macro_layout", "object_refine", "stop"}:
+        return explicit_mode
+
+    delta_score = int(comparison.get("delta_score") or 0)
+    priority_clusters = [
+        item
+        for item in calibrated_payload.get("priority_clusters") or []
+        if isinstance(item, str) and item
+    ]
+    prioritized_objects = [
+        row
+        for row in diagnosis.get("prioritized_objects") or []
+        if isinstance(row, dict)
+    ]
+    issue_texts: list[object] = []
+    issue_texts.extend(calibrated_payload.get("top_issues") or [])
+    issue_texts.extend(calibrated_payload.get("repair_advice") or [])
+    issue_texts.extend(diagnosis.get("key_findings") or [])
+    issue_families = set(_issue_families_from_texts(issue_texts))
+
+    macro_metric_pressure = bool(
+        severe_metric_count >= 2
+        or len(priority_clusters) >= 2
+        or int((metrics.get("central_congestion") or [{}])[0].get("penalty_mm") or 0)
+        >= 750
+    )
+    object_metric_pressure = bool(
+        prioritized_objects and len(priority_clusters) <= 1 and severe_metric_count == 0
+    )
+
+    if delta_score <= 0:
+        return "macro_layout"
+    if issue_families.intersection(
+        {"orientation", "focal", "circulation", "zoning", "openings"}
+    ):
+        return "macro_layout"
+    if macro_metric_pressure:
+        return "macro_layout"
+    if issue_families.intersection({"front_access", "object_pose", "local_fidelity"}):
+        return "object_refine"
+    if object_metric_pressure and delta_score >= 180:
+        return "object_refine"
+    return "macro_layout"
 
 
 def _cluster_priority_fallback(input_payload: Mapping[str, object]) -> list[str]:
@@ -284,4 +388,9 @@ def _calibrate_judge_payload(
         if cluster_id not in priority_clusters:
             priority_clusters.append(cluster_id)
     calibrated["priority_clusters"] = priority_clusters[:4]
+    calibrated["next_step_mode"] = _infer_next_step_mode(
+        input_payload,
+        calibrated,
+        severe_metric_count=severe_metric_count,
+    )
     return calibrated

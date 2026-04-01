@@ -35,11 +35,11 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function planRotationToYawRad(rotationDeg: number): number {
-  return (rotationDeg * Math.PI) / 180 + Math.PI;
+  return (rotationDeg * Math.PI) / 180;
 }
 
 function yawRadToPlanRotationDeg(yawRad: number): number {
-  const rotationDeg = (yawRad * 180) / Math.PI - 180;
+  const rotationDeg = (yawRad * 180) / Math.PI;
   return ((rotationDeg % 360) + 360) % 360;
 }
 
@@ -52,6 +52,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
     styledResult,
     inventory,
     userInput,
+    selectedWallId,
+    selectWall,
     updatePlacement,
     removePlacement,
     setDesign,
@@ -136,7 +138,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           rotationCcw,
           bbox: { minX, minY, maxX, maxY },
           placeOn,
-          draggable: placementsById.has(id),
+          draggable:
+            placementsById.has(id) &&
+            placementsById.get(id)?.constraint_mode !== 'locked',
         });
       }
 
@@ -152,7 +156,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           rotationCcw: Number(p.rotation_deg ?? 0),
           bbox,
           placeOn: { method: 'floor', targetId: 'floor' },
-          draggable: true,
+          draggable: p.constraint_mode !== 'locked',
         });
       }
 
@@ -169,7 +173,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         rotationCcw: Number(placement.rotation_deg ?? 0),
         bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
-        draggable: true,
+        draggable: placement.constraint_mode !== 'locked',
       });
     }
     return out;
@@ -366,11 +370,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
             ? wallsRaw
             : wallPts.length >= 2
               ? wallPts.map((p, idx) => ({
+                  wall_id: `wall_${idx + 1}`,
                   p1_mm: p,
                   p2_mm: wallPts[(idx + 1) % wallPts.length],
                   thickness_mm: 100,
                 }))
               : [];
+        const wallOpacityById = new Map<string, number>();
+        for (const wall of walls) {
+          const wallId = String(wall.wall_id ?? '');
+          if (!wallId) continue;
+          wallOpacityById.set(wallId, clamp(Number(wall.opacity ?? 1), 0, 1));
+        }
         const openings =
           activeFloorplan.openings ??
           styledResult?.room?.openings ?? {
@@ -384,6 +395,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
           }
           return null;
         };
+        const wallGroup = new THREE.Group();
+        scene.add(wallGroup);
         for (const wall of walls) {
           const x1 = Number(wall.p1_mm?.x ?? 0);
           const y1 = Number(wall.p1_mm?.y ?? 0);
@@ -397,16 +410,27 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const midY = (y1 + y2) / 2;
           const angle = Math.atan2(dy, dx);
           const thicknessMm = Number(wall.thickness_mm ?? 100);
+          const wallId = String(wall.wall_id ?? '');
+          const wallOpacity = clamp(Number(wall.opacity ?? 1), 0, 1);
+          const isSelectedWall = !!wallId && selectedWallId === wallId;
 
           const geom = new THREE.BoxGeometry(lenMm * MM_TO_M, wallHeight, thicknessMm * MM_TO_M);
-          const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(wallColorHex) });
+          const mat = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(isSelectedWall ? '#d58c54' : wallColorHex),
+            transparent: wallOpacity < 1,
+            opacity: wallOpacity,
+          });
           const mesh = new THREE.Mesh(geom, mat);
           mesh.castShadow = true;
           mesh.receiveShadow = true;
+          mesh.userData = {
+            wallId,
+            wallMesh: true,
+          };
           // 2D plan uses +Y "up". Our 3D preview maps plan Y to -Z so 3D matches the 2D canvas orientation.
           mesh.position.set((midX - centerXmm) * MM_TO_M, wallHeight / 2, -(midY - centerYmm) * MM_TO_M);
           mesh.rotation.y = angle;
-          scene.add(mesh);
+          wallGroup.add(mesh);
         }
 
         type WallSeg = {
@@ -598,6 +622,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const angle = Math.atan2(dy, dx);
           const doorId = String(door?.door_id ?? door?.id ?? 'door');
           const doorColor = doorColorById.get(doorId) ?? '#8c7a63';
+          const attachedWallOpacity = clamp(
+            Number(wallOpacityById.get(String(door?.wall_id ?? '')) ?? 1),
+            0,
+            1,
+          );
 
           const thicknessM = 0.04;
           const extraMm = thicknessM * 0.5 / MM_TO_M + 6; // fully inside wall face + a small gap
@@ -614,6 +643,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
               color: new THREE.Color(doorColor),
               roughness: 0.65,
               metalness: 0.08,
+              transparent: attachedWallOpacity < 1,
+              opacity: attachedWallOpacity,
             })
           );
           leaf.castShadow = true;
@@ -642,6 +673,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const angle = Math.atan2(dy, dx);
           const winId = String(win?.window_id ?? win?.id ?? 'window');
           const frameColor = winColorById.get(winId) ?? '#c0c0c0';
+          const attachedWallOpacity = clamp(
+            Number(wallOpacityById.get(String(win?.wall_id ?? '')) ?? 1),
+            0,
+            1,
+          );
 
           const sillMm = Number(win?.sill_height_mm ?? 900);
           const heightMm = Number(win?.height_mm ?? 1200);
@@ -669,6 +705,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
               color: new THREE.Color(frameColor),
               roughness: 0.35,
               metalness: 0.55,
+              transparent: attachedWallOpacity < 1,
+              opacity: attachedWallOpacity,
             })
           );
           frame.castShadow = true;
@@ -682,7 +720,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
               roughness: 0.12,
               metalness: 0.02,
               transparent: true,
-              opacity: 0.35,
+              opacity: attachedWallOpacity >= 1 ? 0.35 : attachedWallOpacity * 0.35,
             })
           );
           glass.position.z = frameDepthM / 2 - 0.006;
@@ -756,8 +794,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           let pxMm = cxMm;
           let pyMm = cyMm;
-          // Plan Y is mapped to -Z so 3D matches 2D canvas orientation.
-          // Therefore 2D CCW rotation maps to 3D yaw with +angle, plus PI because our proxies face +Z by default.
+          // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
+          // Our proxy meshes already use +Z as their visual front, which corresponds to plan -Y.
+          // So plan rotation can map directly to yaw without an extra 180-degree offset.
           let rotY = planRotationToYawRad(rotCcwDeg);
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
@@ -1022,8 +1061,23 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 const hit = findDraggableRoot(intersects[0].object);
                 if (hit?.userData?.objectId) {
                   setSelectedId(hit.userData.objectId);
+                  selectWall(null);
+                  return;
                 }
               }
+              const wallIntersects = raycaster.intersectObjects(wallGroup.children, true);
+              if (wallIntersects.length) {
+                const wallHit = wallIntersects[0].object;
+                const wallId = String(wallHit?.userData?.wallId ?? '');
+                if (wallId) {
+                  setSelectedId(null);
+                  setEditMode('idle');
+                  selectWall(wallId);
+                  return;
+                }
+              }
+              setSelectedId(null);
+              selectWall(null);
             }
           }
 
@@ -1151,7 +1205,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
         console.debug('[3D] cleanup');
       }
     };
-  }, [viewMode, activeFloorplan, objects, inventory, styledResult, userInput.height, design, updatePlacement]);
+  }, [
+    viewMode,
+    activeFloorplan,
+    objects,
+    inventory,
+    styledResult,
+    userInput.height,
+    design,
+    updatePlacement,
+    selectedWallId,
+    selectWall,
+  ]);
 
   if (viewMode !== '3d') return null;
 
@@ -1193,9 +1258,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
             Edit
           </button>
           {editMode === 'edit' ? <button onClick={() => setEditMode('idle')}>Done</button> : null}
-          {selectedId ? <div className="three-panel-hint">Selected: {selectedId}</div> : null}
+          {selectedId ? <div className="three-panel-hint">Selected object: {selectedId}</div> : null}
+          {!selectedId && selectedWallId ? (
+            <div className="three-panel-hint">Selected wall: {selectedWallId}</div>
+          ) : null}
           <div className="three-panel-hint">
-            Click-drag to orbit. Click an object to select. Press Edit to lock and adjust. Done to unlock.
+            Click-drag to orbit. Click an object to select it, or click a wall to adjust its opacity.
           </div>
         </div>
       </div>

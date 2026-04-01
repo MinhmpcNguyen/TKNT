@@ -1,0 +1,8 @@
+name: hf-image-edit-mac
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/requirements-macos.txt

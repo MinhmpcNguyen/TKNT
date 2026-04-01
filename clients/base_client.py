@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Literal, Protocol, TypedDict
 
 LLMModelKey = Literal["primary", "helper", "embedding"]
+ThinkingLevel = Literal["minimal", "low", "medium", "high"]
 
 
 class ChatMessage(TypedDict):
@@ -19,8 +20,10 @@ class LLMClientProtocol(Protocol):
         messages: Sequence[ChatMessage],
         *,
         model_key: LLMModelKey = "primary",
+        model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        thinking_level: ThinkingLevel | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object: ...

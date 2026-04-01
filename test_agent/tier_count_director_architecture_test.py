@@ -214,6 +214,42 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
         }
         self.assertEqual(decisions_by_type["floor_lamp"]["quantity"], 0)
 
+    def test_extract_anchors_by_cluster_ignores_anchors_outside_members(self) -> None:
+        clusters_json = {
+            "clusters": [
+                {
+                    "cluster_id": "living_storage",
+                    "members": ["tv_console", "storage_cabinet"],
+                    "anchors": ["sofa"],
+                }
+            ]
+        }
+
+        anchors_by_cluster = _tier_count_director._extract_anchors_by_cluster(
+            clusters_json
+        )
+        members_by_cluster = _tier_count_director._extract_members_by_cluster(
+            clusters_json
+        )
+        ok, detail = _tier_count_director._validate_decisions(
+            [
+                {
+                    "object_type": "storage_cabinet",
+                    "category": "storage_cabinet",
+                    "cluster_id": "living_storage",
+                    "quantity": 1,
+                    "size_tier": "M",
+                    "priority": "anchor",
+                }
+            ],
+            required_types=[],
+            members_by_cluster=members_by_cluster,
+            anchors_by_cluster=anchors_by_cluster,
+        )
+
+        self.assertEqual(anchors_by_cluster["living_storage"], set())
+        self.assertTrue(ok, detail)
+
 
 if __name__ == "__main__":
     unittest.main()
