@@ -1,0 +1,44 @@
+{
+  "status": "OK",
+  "total_dropped_items": 3,
+  "inserted_count": 3,
+  "remaining_count": 0,
+  "reintroduced_objects_by_cluster": {
+    "misc_storage": [
+      {
+        "object_id": "console_table__reintroduced_1",
+        "object_type": "console_table",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 4850,
+          "min_y": 100,
+          "max_x": 5910,
+          "max_y": 450
+        }
+      },
+      {
+        "object_id": "bean_bag__reintroduced_1",
+        "object_type": "bean_bag",
+        "rotation_ccw": 90,
+        "bbox": {
+          "min_x": 5200,
+          "min_y": 1600,
+          "max_x": 5900,
+          "max_y": 2380
+        }
+      },
+      {
+        "object_id": "pet_bed__reintroduced_1",
+        "object_type": "pet_bed",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 5000,
+          "min_y": 1150,
+          "max_x": 5880,
+          "max_y": 1300
+        }
+      }
+    ]
+  },
+  "remaining_dropped_objects_by_cluster": {}
+}

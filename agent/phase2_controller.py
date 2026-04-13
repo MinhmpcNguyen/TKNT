@@ -10,6 +10,7 @@ from agent.cluster_placer import (
     MacroClusterPlacer,
     build_phase2_payload,
     compile_phase2_to_final_output,
+    make_no_improvement_repair,
 )
 from agent.phase2_judge import Phase2Judge
 from cluster_placer.tools_v2 import (
@@ -37,6 +38,17 @@ _OBJECT_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "front_access": ("front access", "front clearance", "clearance"),
     "object_pose": ("object", "chair", "nightstand", "lamp", "desk", "sofa"),
     "local_fidelity": ("internal", "local", "variant", "fidelity"),
+}
+_PLANNER_OBJECT_INTENTS = {
+    "face_object",
+    "face_away_from_object",
+    "front_to_open_space",
+    "preserve_front_access",
+    "back_to_wall",
+    "face_entry",
+    "front_to_entry",
+    "face_window",
+    "front_to_window",
 }
 
 
@@ -272,6 +284,91 @@ def _judge_issue_families(judge_eval: dict[str, Any]) -> list[str]:
     texts.extend(judge_eval.get("top_issues") or [])
     texts.extend(judge_eval.get("repair_advice") or [])
     return _issue_families_from_texts(texts)
+
+
+def _has_macro_orientation_pressure(evaluation: dict[str, Any]) -> bool:
+    metrics = evaluation.get("metrics") or {}
+    critical_rows = [
+        row
+        for row in (metrics.get("orientation_debug") or [])
+        if isinstance(row, dict) and int(row.get("penalty_mm") or 0) >= 300
+    ]
+    if not critical_rows:
+        return False
+
+    if any(
+        str(row.get("kind") or "")
+        in {"cluster_directional_relation", "cluster_orientation"}
+        for row in critical_rows
+    ):
+        return True
+
+    macro_object_intents = {
+        "face_object",
+        "face_away_from_object",
+        "front_to_open_space",
+        "preserve_front_access",
+        "back_to_wall",
+    }
+    affected_clusters = {
+        str(row.get("cluster_id") or "")
+        for row in critical_rows
+        if str(row.get("kind") or "") == "object_orientation"
+        and str(row.get("intent") or "") in macro_object_intents
+        and isinstance(row.get("cluster_id"), str)
+    }
+    return len({cluster_id for cluster_id in affected_clusters if cluster_id}) >= 2
+
+
+def _planner_object_pressure_summary(evaluation: dict[str, Any]) -> dict[str, Any]:
+    metrics = evaluation.get("metrics") or {}
+    diagnosis = evaluation.get("diagnosis") or {}
+
+    planner_object_penalty = 0
+    macro_penalty = 0
+    planner_clusters: set[str] = set()
+    planner_objects: set[tuple[str, str]] = set()
+
+    for row in metrics.get("orientation_debug") or []:
+        if not isinstance(row, dict):
+            continue
+        penalty = int(row.get("penalty_mm") or 0)
+        if penalty <= 0:
+            continue
+        kind = str(row.get("kind") or "").strip().lower()
+        if (
+            kind == "object_orientation"
+            and str(row.get("intent") or "").strip().lower() in _PLANNER_OBJECT_INTENTS
+        ):
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            object_id = str(row.get("object_id") or "").strip()
+            planner_object_penalty += penalty
+            if cluster_id:
+                planner_clusters.add(cluster_id)
+            if cluster_id and object_id:
+                planner_objects.add((cluster_id, object_id))
+        elif kind in {"cluster_directional_relation", "cluster_orientation"}:
+            macro_penalty += penalty
+
+    prioritized_objects = [
+        row
+        for row in diagnosis.get("prioritized_objects") or []
+        if isinstance(row, dict)
+        and isinstance(row.get("cluster_id"), str)
+        and isinstance(row.get("object_id"), str)
+    ]
+    dominant = bool(
+        planner_object_penalty >= max(900, macro_penalty)
+        and len(planner_clusters) <= 2
+        and (planner_objects or prioritized_objects)
+    )
+    return {
+        "dominant": dominant,
+        "planner_object_penalty": planner_object_penalty,
+        "macro_penalty": macro_penalty,
+        "cluster_count": len(planner_clusters),
+        "object_count": len(planner_objects) or len(prioritized_objects),
+    }
 
 
 def _summarize_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -662,6 +759,7 @@ def _should_enter_object_refine_phase(
     iteration: int,
     history: list[dict[str, Any]],
     macro_shortlist: list[dict[str, Any]],
+    baseline_evaluation: dict[str, Any],
 ) -> bool:
     positive_macro = any(
         bool(item.get("evaluation", {}).get("hard_valid"))
@@ -689,6 +787,15 @@ def _should_enter_object_refine_phase(
         )
         <= 0
     ]
+
+    planner_object_pressure = _planner_object_pressure_summary(baseline_evaluation)
+    if _has_macro_orientation_pressure(baseline_evaluation) and not bool(
+        planner_object_pressure.get("dominant")
+    ):
+        return False
+
+    if bool(planner_object_pressure.get("dominant")):
+        return iteration >= 2 or len(stalled_macro_attempts) >= 1
 
     return iteration >= 4 or len(stalled_macro_attempts) >= 2
 
@@ -754,6 +861,8 @@ def _recommended_search_phase(
     history: list[dict[str, Any]],
 ) -> str:
     if not bool(evaluation.get("hard_valid")):
+        return "macro_layout"
+    if _has_macro_orientation_pressure(evaluation):
         return "macro_layout"
 
     history_context = _build_history_context(history)
@@ -877,7 +986,25 @@ def _fallback_moves(
             return "variant_switch"
         if kind == "cluster_pose":
             proposal = move.get("proposal") or {}
-            transform = ((proposal.get("cluster_transforms") or [None])[0]) or {}
+            transforms = proposal.get("cluster_transforms") or []
+            transform = (transforms or [None])[0] or {}
+            if len(transforms) > 1:
+                if any(
+                    int(row.get("rot") or 0)
+                    != int(
+                        _seed_transform_map(payload.get("seed_layout") or {})
+                        .get(
+                            str(row.get("cluster_id") or ""),
+                            {},
+                        )
+                        .get("rot")
+                        or 0
+                    )
+                    for row in transforms
+                    if isinstance(row, dict)
+                ):
+                    return "cluster_pair_rotation"
+                return "cluster_pair_translation"
             seed_row = _seed_transform_map(payload.get("seed_layout") or {}).get(
                 str(transform.get("cluster_id") or ""),
                 {},
@@ -997,6 +1124,35 @@ def _forced_object_moves(
 
     prioritized_objects = []
     diagnosis = payload.get("repair_debug") or {}
+    meaningful_object_intents = {
+        "face_object",
+        "face_away_from_object",
+        "front_to_open_space",
+        "preserve_front_access",
+        "back_to_wall",
+        "face_entry",
+        "front_to_entry",
+        "face_window",
+        "front_to_window",
+    }
+    critical_orientation_targets = []
+    for row in (
+        (diagnosis.get("repair_targets") or {}).get("top_critical_orientation_issues")
+    ) or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("kind") or "") != "object_orientation":
+            continue
+        intent = str(row.get("intent") or "").strip().lower()
+        cid = row.get("cluster_id")
+        oid = row.get("object_id")
+        if (
+            intent in meaningful_object_intents
+            and isinstance(cid, str)
+            and isinstance(oid, str)
+        ):
+            critical_orientation_targets.append((cid, oid))
+
     targets = (
         (diagnosis.get("repair_targets") or {}).get("prioritized_objects")
         or (diagnosis.get("seed_verify") or {})
@@ -1004,13 +1160,16 @@ def _forced_object_moves(
         .get("prioritized_objects")
         or []
     )
-    for row in targets:
-        if not isinstance(row, dict):
-            continue
-        cid = row.get("cluster_id")
-        oid = row.get("object_id")
-        if isinstance(cid, str) and isinstance(oid, str):
-            prioritized_objects.append((cid, oid))
+    if critical_orientation_targets:
+        prioritized_objects.extend(critical_orientation_targets)
+    else:
+        for row in targets:
+            if not isinstance(row, dict):
+                continue
+            cid = row.get("cluster_id")
+            oid = row.get("object_id")
+            if isinstance(cid, str) and isinstance(oid, str):
+                prioritized_objects.append((cid, oid))
 
     if not prioritized_objects:
         for row in payload.get("objects_world") or []:
@@ -1031,43 +1190,129 @@ def _forced_object_moves(
     )
 
     forced: list[dict[str, Any]] = []
-    for cluster_id, object_id in prioritized_objects[:6]:
+    single_repairs: list[dict[str, Any]] = []
+    seen_single_repairs: set[tuple[str, str, str, str]] = set()
+    seen_pair_repairs: set[str] = set()
+
+    def _append_single_repair(
+        *,
+        cluster_id: str,
+        object_id: str,
+        op: str,
+        params: dict[str, Any],
+        note: str,
+    ) -> None:
+        repair_sig = (
+            cluster_id,
+            object_id,
+            op,
+            json.dumps(params, sort_keys=True, ensure_ascii=True),
+        )
+        if repair_sig in seen_single_repairs:
+            return
+        seen_single_repairs.add(repair_sig)
+        repair = {
+            "cluster_id": cluster_id,
+            "object_id": object_id,
+            "op": op,
+            "params": deepcopy(params),
+        }
+        forced.append(
+            {
+                "cluster_transforms": [],
+                "selected_variants": [],
+                "object_repairs": [repair],
+                "notes": [note],
+            }
+        )
+        single_repairs.append(repair)
+
+    for idx, (cluster_id, object_id) in enumerate(prioritized_objects[:6]):
         for rot in (90, 180, 270):
+            _append_single_repair(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                op="rotate_object",
+                params={"rot": rot},
+                note=f"Controller forced object rotation for {cluster_id}.{object_id}.",
+            )
+        for axis in ("x", "y"):
+            _append_single_repair(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                op="mirror_object",
+                params={"axis": axis},
+                note=f"Controller forced object mirror for {cluster_id}.{object_id}.",
+            )
+        if idx < 4:
+            for dx, dy in ((0.0, -1.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)):
+                _append_single_repair(
+                    cluster_id=cluster_id,
+                    object_id=object_id,
+                    op="set_front_override",
+                    params={"dx": dx, "dy": dy},
+                    note=(
+                        "Controller forced front override for "
+                        f"{cluster_id}.{object_id}."
+                    ),
+                )
+        for dx, dy in (
+            (grid_mm, 0),
+            (-grid_mm, 0),
+            (0, grid_mm),
+            (0, -grid_mm),
+            (grid_mm, grid_mm),
+            (grid_mm, -grid_mm),
+            (-grid_mm, grid_mm),
+            (-grid_mm, -grid_mm),
+        ):
+            _append_single_repair(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                op="nudge_object",
+                params={"dx": dx, "dy": dy},
+                note=f"Controller forced object nudge for {cluster_id}.{object_id}.",
+            )
+
+    pair_budget = 10
+    for left_index, left in enumerate(single_repairs[:16]):
+        for right in single_repairs[left_index + 1 : 16]:
+            left_cluster_id = str(left.get("cluster_id") or "")
+            right_cluster_id = str(right.get("cluster_id") or "")
+            if not left_cluster_id or not right_cluster_id:
+                continue
+            if left_cluster_id == right_cluster_id:
+                continue
+            ordered_repairs = sorted(
+                [deepcopy(left), deepcopy(right)],
+                key=lambda row: (
+                    str(row.get("cluster_id") or ""),
+                    str(row.get("object_id") or ""),
+                    str(row.get("op") or ""),
+                    json.dumps(
+                        row.get("params") or {}, sort_keys=True, ensure_ascii=True
+                    ),
+                ),
+            )
+            pair_sig = json.dumps(ordered_repairs, sort_keys=True, ensure_ascii=True)
+            if pair_sig in seen_pair_repairs:
+                continue
+            seen_pair_repairs.add(pair_sig)
             forced.append(
                 {
                     "cluster_transforms": [],
                     "selected_variants": [],
-                    "object_repairs": [
-                        {
-                            "cluster_id": cluster_id,
-                            "object_id": object_id,
-                            "op": "rotate_object",
-                            "params": {"rot": rot},
-                        }
-                    ],
+                    "object_repairs": ordered_repairs,
                     "notes": [
-                        f"Controller forced object rotation for {cluster_id}.{object_id}."
+                        "Controller forced synchronized object repair for "
+                        f"{left_cluster_id}.{left.get('object_id')} and "
+                        f"{right_cluster_id}.{right.get('object_id')}."
                     ],
                 }
             )
-        for dx, dy in ((grid_mm, 0), (-grid_mm, 0), (0, grid_mm), (0, -grid_mm)):
-            forced.append(
-                {
-                    "cluster_transforms": [],
-                    "selected_variants": [],
-                    "object_repairs": [
-                        {
-                            "cluster_id": cluster_id,
-                            "object_id": object_id,
-                            "op": "nudge_object",
-                            "params": {"dx": dx, "dy": dy},
-                        }
-                    ],
-                    "notes": [
-                        f"Controller forced object nudge for {cluster_id}.{object_id}."
-                    ],
-                }
-            )
+            pair_budget -= 1
+            if pair_budget <= 0:
+                return forced
     return forced
 
 
@@ -1245,6 +1490,294 @@ def _should_promote_candidate(
     return False
 
 
+def _is_orientation_snap_move(payload: dict[str, Any], move: dict[str, Any]) -> bool:
+    if not isinstance(move, dict):
+        return False
+    kind = str(move.get("kind") or "")
+    proposal = move.get("proposal") or {}
+    if kind == "cluster_variant":
+        return bool((proposal.get("selected_variants") or []))
+    if kind != "cluster_pose":
+        return False
+
+    transforms = proposal.get("cluster_transforms") or []
+    if len(transforms) != 1 or not isinstance(transforms[0], dict):
+        return False
+    transform = transforms[0]
+    cluster_id = str(transform.get("cluster_id") or "")
+    if not cluster_id:
+        return False
+    seed_map = _seed_transform_map(payload.get("seed_layout") or {})
+    seed_row = seed_map.get(cluster_id) or {}
+    return int(transform.get("rot") or 0) != int(seed_row.get("rot") or 0)
+
+
+def _is_object_orientation_snap_move(move: dict[str, Any]) -> bool:
+    if not isinstance(move, dict):
+        return False
+    if str(move.get("kind") or "") != "object_pose":
+        return False
+    repairs = (move.get("proposal") or {}).get("object_repairs") or []
+    if len(repairs) != 1 or not isinstance(repairs[0], dict):
+        return False
+    return str(repairs[0].get("op") or "") in {
+        "rotate_object",
+        "mirror_object",
+        "set_front_override",
+    }
+
+
+def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    layout_intent = relation_plan.get("layout_intent_profile") or {}
+    primary_cluster_id = layout_intent.get("primary_cluster_id")
+    secondary_cluster_id = layout_intent.get("secondary_cluster_id")
+    focus_mode = str(layout_intent.get("focus_mode") or "").strip().lower()
+    pairs: list[tuple[str, str]] = []
+
+    if (
+        focus_mode == "viewing"
+        and isinstance(primary_cluster_id, str)
+        and primary_cluster_id
+        and isinstance(secondary_cluster_id, str)
+        and secondary_cluster_id
+        and secondary_cluster_id != primary_cluster_id
+    ):
+        pairs.append((primary_cluster_id, secondary_cluster_id))
+
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+            continue
+        a = row.get("a")
+        b = row.get("b")
+        if not isinstance(a, str) or not isinstance(b, str) or not a or not b:
+            continue
+        pair = (a, b)
+        if pair not in pairs and (b, a) not in pairs:
+            pairs.append(pair)
+
+    return pairs
+
+
+def _postsolve_orientation_snap(
+    *,
+    payload: dict[str, Any],
+    repair: dict[str, Any],
+    rounds: int = 2,
+    move_limit: int = 48,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    promoted_payload = PromotePhase2RepairToSeedPayload(payload=payload, repair=repair)
+    baseline_repair = _canonical_repair(promoted_payload)
+    baseline_evaluation = EvaluatePhase2Proposal(
+        payload=promoted_payload,
+        repair=baseline_repair,
+    )
+
+    if not bool(baseline_evaluation.get("hard_valid")):
+        return payload, repair, baseline_evaluation
+
+    current_payload = promoted_payload
+    current_repair = baseline_repair
+    current_evaluation = baseline_evaluation
+
+    for _ in range(max(1, int(rounds))):
+        macro_moves = (
+            EnumeratePhase2RepairMoves(
+                payload=current_payload,
+                limit=move_limit,
+            ).get("moves")
+            or []
+        )
+        object_payload = deepcopy(current_payload)
+        _set_search_phase(object_payload, "object_refine")
+        object_moves = (
+            EnumeratePhase2RepairMoves(
+                payload=object_payload,
+                limit=move_limit,
+            ).get("moves")
+            or []
+        )
+
+        best_macro_candidate: tuple[dict[str, Any], dict[str, Any]] | None = None
+        best_macro_delta = 0
+        best_object_candidate: tuple[dict[str, Any], dict[str, Any]] | None = None
+        best_object_delta = 0
+        seen_signatures: set[str] = set()
+        orientation_moves_by_cluster: dict[str, list[dict[str, Any]]] = {}
+
+        for move in object_moves:
+            if not _is_object_orientation_snap_move(move):
+                continue
+            proposal = _canonical_repair(
+                current_payload,
+                move.get("proposal") or {},
+                notes=[
+                    "Post-solve object orientation snap: "
+                    f"{move.get('reason') or 'object orientation move'}"
+                ],
+            )
+            signature = _proposal_signature(proposal)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            evaluation = EvaluatePhase2Proposal(
+                payload=current_payload,
+                repair=proposal,
+            )
+            if not bool(evaluation.get("hard_valid")):
+                continue
+            delta_score = _delta_score(evaluation)
+            if delta_score > best_object_delta:
+                best_object_delta = delta_score
+                best_object_candidate = (proposal, evaluation)
+
+        for move in macro_moves:
+            if not _is_orientation_snap_move(current_payload, move):
+                continue
+            cluster_id = str(move.get("cluster_id") or "")
+            if cluster_id:
+                orientation_moves_by_cluster.setdefault(cluster_id, []).append(move)
+            proposal = _canonical_repair(
+                current_payload,
+                move.get("proposal") or {},
+                notes=[
+                    f"Post-solve orientation snap: {move.get('reason') or 'orientation move'}"
+                ],
+            )
+            signature = _proposal_signature(proposal)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            evaluation = EvaluatePhase2Proposal(
+                payload=current_payload, repair=proposal
+            )
+            if not bool(evaluation.get("hard_valid")):
+                continue
+            delta_score = _delta_score(evaluation)
+            if delta_score > best_macro_delta:
+                best_macro_delta = delta_score
+                best_macro_candidate = (proposal, evaluation)
+
+        for left_cluster_id, right_cluster_id in _viewing_cluster_pairs(
+            current_payload
+        ):
+            left_moves = orientation_moves_by_cluster.get(left_cluster_id) or []
+            right_moves = orientation_moves_by_cluster.get(right_cluster_id) or []
+            for left_move in left_moves[:4]:
+                for right_move in right_moves[:4]:
+                    pair_partial = {
+                        "cluster_transforms": deepcopy(
+                            (
+                                (left_move.get("proposal") or {}).get(
+                                    "cluster_transforms"
+                                )
+                                or []
+                            )
+                        )
+                        + deepcopy(
+                            (
+                                (right_move.get("proposal") or {}).get(
+                                    "cluster_transforms"
+                                )
+                                or []
+                            )
+                        ),
+                        "selected_variants": deepcopy(
+                            (
+                                (left_move.get("proposal") or {}).get(
+                                    "selected_variants"
+                                )
+                                or []
+                            )
+                        )
+                        + deepcopy(
+                            (
+                                (right_move.get("proposal") or {}).get(
+                                    "selected_variants"
+                                )
+                                or []
+                            )
+                        ),
+                        "object_repairs": [],
+                    }
+                    proposal = _canonical_repair(
+                        current_payload,
+                        pair_partial,
+                        notes=[
+                            "Post-solve orientation snap: paired focal reorientation for "
+                            f"{left_cluster_id} and {right_cluster_id}"
+                        ],
+                    )
+                    signature = _proposal_signature(proposal)
+                    if signature in seen_signatures:
+                        continue
+                    seen_signatures.add(signature)
+                    evaluation = EvaluatePhase2Proposal(
+                        payload=current_payload,
+                        repair=proposal,
+                    )
+                    if not bool(evaluation.get("hard_valid")):
+                        continue
+                    delta_score = _delta_score(evaluation)
+                    if delta_score > best_macro_delta:
+                        best_macro_delta = delta_score
+                        best_macro_candidate = (proposal, evaluation)
+
+        chosen_candidate: tuple[dict[str, Any], dict[str, Any]] | None = None
+        chosen_delta = 0
+        if best_object_candidate is not None and best_object_delta > 0:
+            chosen_candidate = best_object_candidate
+            chosen_delta = best_object_delta
+        elif best_macro_candidate is not None and best_macro_delta > 0:
+            chosen_candidate = best_macro_candidate
+            chosen_delta = best_macro_delta
+
+        if chosen_candidate is None or chosen_delta <= 0:
+            break
+
+        candidate_repair, candidate_evaluation = chosen_candidate
+        current_payload = PromotePhase2RepairToSeedPayload(
+            payload=current_payload,
+            repair=candidate_repair,
+        )
+        current_repair = _canonical_repair(current_payload)
+        current_evaluation = EvaluatePhase2Proposal(
+            payload=current_payload,
+            repair=current_repair,
+        )
+        if not bool(current_evaluation.get("hard_valid")):
+            break
+
+    return current_payload, current_repair, current_evaluation
+
+
+def build_phase2_preview_candidate(
+    *,
+    payload: dict[str, Any],
+    rounds: int = 1,
+    move_limit: int = 24,
+    note: str = "Fast preview from solver seed.",
+) -> dict[str, Any]:
+    baseline_repair = make_no_improvement_repair(payload, note=note)
+    snapped_payload, snapped_repair, snapped_eval = _postsolve_orientation_snap(
+        payload=payload,
+        repair=baseline_repair,
+        rounds=rounds,
+        move_limit=move_limit,
+    )
+    compilable_payload = deepcopy(snapped_payload)
+    compilable_payload["phase2_placer"] = {"phase2_repair": snapped_repair}
+    absolute_layout = compile_phase2_to_final_output(compilable_payload)
+    return {
+        "payload": snapped_payload,
+        "proposal": snapped_repair,
+        "evaluation": snapped_eval,
+        "absolute_layout": absolute_layout,
+    }
+
+
 @dataclass(frozen=True)
 class Phase2Controller:
     placer: MacroClusterPlacer = field(default_factory=MacroClusterPlacer)
@@ -1327,6 +1860,7 @@ class Phase2Controller:
                     iteration=iteration,
                     history=history,
                     macro_shortlist=deterministic_shortlist,
+                    baseline_evaluation=current_baseline,
                 )
             ):
                 search_phase = "object_refine"
@@ -1590,6 +2124,24 @@ class Phase2Controller:
             )
             final_tool_eval = deepcopy(best_hard_valid_eval)
             best_judge_eval = deepcopy(best_hard_valid_judge)
+
+        snapped_payload, snapped_repair, snapped_evaluation = (
+            _postsolve_orientation_snap(
+                payload=final_payload,
+                repair=final_repair,
+            )
+        )
+        if (
+            bool(snapped_evaluation.get("hard_valid"))
+            and _delta_score(snapped_evaluation) > 0
+        ):
+            logger.info(
+                "Phase2Controller applied post-solve orientation snap delta_score=%s",
+                _delta_score(snapped_evaluation),
+            )
+            final_payload = deepcopy(snapped_payload)
+            final_repair = deepcopy(snapped_repair)
+            final_tool_eval = deepcopy(snapped_evaluation)
 
         final_payload["phase2_placer"] = {"phase2_repair": deepcopy(final_repair)}
         absolute_layout = compile_phase2_to_final_output(final_payload)

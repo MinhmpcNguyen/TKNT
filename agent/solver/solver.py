@@ -162,6 +162,33 @@ def _candidate_from_dict(item: dict[str, Any]) -> Candidate:
     )
 
 
+def _primary_seed_problem_clusters(
+    problem_clusters: list[str],
+    *,
+    cluster_ids: list[str],
+    max_clusters: int = 2,
+) -> list[str]:
+    ordered: list[str] = []
+    for cluster_id in problem_clusters or cluster_ids:
+        clean_cluster_id = str(cluster_id or "").strip()
+        if not clean_cluster_id or clean_cluster_id in ordered:
+            continue
+        ordered.append(clean_cluster_id)
+        if len(ordered) >= max(1, int(max_clusters)):
+            break
+    return ordered
+
+
+def _expanded_candidate_limit(initial_candidates_per_cluster: int) -> int:
+    base_limit = max(12, int(initial_candidates_per_cluster))
+    return max(24, base_limit + 8)
+
+
+def _round_candidate_growth_limit(initial_candidates_per_cluster: int) -> int:
+    base_limit = max(12, int(initial_candidates_per_cluster))
+    return max(8, min(12, base_limit // 2))
+
+
 def _candidate_score(c: Candidate) -> int:
     score = int(c.rough_score)
     score += int(round(2200.0 * c.anchor_priority))
@@ -419,7 +446,7 @@ def _enumerate_initial_candidates(
     grid_mm: int,
     max_candidates_per_cluster: int,
     max_variants_per_cluster: int,
-) -> dict[str, list[Candidate]]:
+) -> tuple[dict[str, list[Candidate]], list[str]]:
     enum = _require_attr(tools, "EnumerateClusterCandidates")
     res = enum(
         room_model=room_model,
@@ -432,12 +459,40 @@ def _enumerate_initial_candidates(
     if res.get("result") != "OK":
         raise RuntimeError(f"EnumerateClusterCandidates failed: {res}")
     out: dict[str, list[Candidate]] = {}
+    cluster_order: list[str] = []
     for row in res.get("clusters") or []:
         cid = str(row.get("cluster_id") or "")
         if not cid:
             continue
         out[cid] = [_candidate_from_dict(x) for x in (row.get("candidates") or [])]
-    return out
+        cluster_order.append(cid)
+    return out, cluster_order
+
+
+def _merge_cluster_order(*orders: Sequence[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for order in orders:
+        for cluster_id in order:
+            clean_cluster_id = str(cluster_id or "").strip()
+            if not clean_cluster_id or clean_cluster_id in seen:
+                continue
+            merged.append(clean_cluster_id)
+            seen.add(clean_cluster_id)
+    return merged
+
+
+def _ordered_cluster_ids(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    *,
+    cluster_order: Sequence[str] | None = None,
+) -> list[str]:
+    preferred_order = _merge_cluster_order(cluster_order or (), candidates_by_cluster)
+    return [
+        cluster_id
+        for cluster_id in preferred_order
+        if cluster_id in candidates_by_cluster
+    ]
 
 
 def _relax_relation_plan_for_candidate_search(
@@ -500,9 +555,10 @@ def _augment_with_relaxed_candidates(
     cluster_allowed_rotations: dict[str, set[int]],
     max_variants_per_cluster: int,
     base_candidate_limit: int,
+    cluster_order: Sequence[str] | None = None,
 ) -> dict[str, list[Candidate]]:
     relaxed_plan = _relax_relation_plan_for_candidate_search(relation_plan)
-    extra_candidates = _enumerate_initial_candidates(
+    extra_candidates, extra_cluster_order = _enumerate_initial_candidates(
         tools,
         room_model=room_model,
         clusters_outlines=clusters_outlines,
@@ -517,7 +573,12 @@ def _augment_with_relaxed_candidates(
     )
 
     merged: dict[str, list[Candidate]] = {}
-    for cid in sorted(set(current_candidates.keys()) | set(extra_candidates.keys())):
+    merged_order = _merge_cluster_order(
+        cluster_order or tuple(current_candidates.keys()),
+        extra_cluster_order,
+        tuple(extra_candidates.keys()),
+    )
+    for cid in merged_order:
         merged[cid] = _dedupe_candidates(
             list(current_candidates.get(cid, [])) + list(extra_candidates.get(cid, []))
         )[: max(base_candidate_limit + 32, 64)]
@@ -620,6 +681,7 @@ def _build_pair_terms(
     grid_mm: int,
     candidates_by_cluster: dict[str, list[Candidate]],
     candidate_geoms: dict[tuple[str, int], Any],
+    cluster_order: Sequence[str] | None = None,
     max_pair_bonus_abs: int = 12000,
 ) -> tuple[
     set[tuple[tuple[str, int], tuple[str, int]]],
@@ -627,7 +689,10 @@ def _build_pair_terms(
 ]:
     incompatible: set[tuple[tuple[str, int], tuple[str, int]]] = set()
     pair_bonus: dict[tuple[tuple[str, int], tuple[str, int]], int] = {}
-    cluster_ids = sorted(candidates_by_cluster.keys())
+    cluster_ids = _ordered_cluster_ids(
+        candidates_by_cluster,
+        cluster_order=cluster_order,
+    )
     cache: dict[tuple[Any, ...], dict[str, Any]] = {}
 
     for i, a_id in enumerate(cluster_ids):
@@ -896,6 +961,7 @@ def _solve_one_round(
     relation_plan: Any,
     grid_mm: int,
     candidates_by_cluster: dict[str, list[Candidate]],
+    cluster_order: Sequence[str],
     variant_payload_lookup: dict[str, dict[str, dict[str, Any]]],
     time_limit_s: float,
     num_workers: int,
@@ -915,23 +981,28 @@ def _solve_one_round(
         grid_mm=grid_mm,
         candidates_by_cluster=candidates_by_cluster,
         candidate_geoms=candidate_geoms,
+        cluster_order=cluster_order,
     )
 
     model = cp_model.CpModel()
     xvars: dict[tuple[str, int], cp_model.IntVar] = {}
-    for cid, cands in candidates_by_cluster.items():
+    ordered_pick_vars: list[cp_model.IntVar] = []
+    for cid in _ordered_cluster_ids(candidates_by_cluster, cluster_order=cluster_order):
+        cands = candidates_by_cluster[cid]
         vars_for_cluster = []
         for i, cand in enumerate(cands):
             var = model.NewBoolVar(f"pick[{cid},{i}]")
             xvars[(cid, i)] = var
             vars_for_cluster.append(var)
         model.AddExactlyOne(vars_for_cluster)
+        ordered_pick_vars.extend(vars_for_cluster)
 
     for a_key, b_key in sorted(incompatible):
         model.Add(xvars[a_key] + xvars[b_key] <= 1)
 
     objective_terms: list[Any] = []
-    for cid, cands in candidates_by_cluster.items():
+    for cid in _ordered_cluster_ids(candidates_by_cluster, cluster_order=cluster_order):
+        cands = candidates_by_cluster[cid]
         for i, cand in enumerate(cands):
             objective_terms.append(_candidate_score(cand) * xvars[(cid, i)])
 
@@ -945,6 +1016,17 @@ def _solve_one_round(
         objective_terms.append(int(bonus) * z)
 
     model.Maximize(sum(objective_terms))
+
+    add_decision_strategy = getattr(model, "AddDecisionStrategy", None)
+    choose_first = getattr(cp_model, "CHOOSE_FIRST", None)
+    select_max_value = getattr(cp_model, "SELECT_MAX_VALUE", None)
+    if (
+        callable(add_decision_strategy)
+        and choose_first is not None
+        and select_max_value is not None
+        and ordered_pick_vars
+    ):
+        add_decision_strategy(ordered_pick_vars, choose_first, select_max_value)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(time_limit_s)
@@ -1392,7 +1474,7 @@ def solve_layout(
         clusters_c,
         max_variants_per_cluster=max_variants_per_cluster,
     )
-    candidates_by_cluster = _enumerate_initial_candidates(
+    candidates_by_cluster, cluster_order = _enumerate_initial_candidates(
         tools,
         room_model=room_model_c,
         clusters_outlines=clusters_c,
@@ -1426,7 +1508,10 @@ def solve_layout(
             "Solver skipped clusters without hard-valid candidates: %s",
             skipped_candidate_clusters,
         )
-    cluster_ids = sorted(candidates_by_cluster.keys())
+    cluster_ids = _ordered_cluster_ids(
+        candidates_by_cluster,
+        cluster_order=cluster_order,
+    )
     if not cluster_ids:
         notes = ["No candidates were generated."]
         if skipped_candidate_clusters:
@@ -1476,6 +1561,7 @@ def solve_layout(
                 relation_plan=relation_plan_aug,
                 grid_mm=grid_mm,
                 candidates_by_cluster=current_candidates,
+                cluster_order=cluster_ids,
                 variant_payload_lookup=variant_payload_lookup,
                 time_limit_s=time_limit_s,
                 num_workers=num_workers,
@@ -1498,6 +1584,7 @@ def solve_layout(
                     cluster_allowed_rotations=cluster_allowed_rots,
                     max_variants_per_cluster=max_variants_per_cluster,
                     base_candidate_limit=initial_candidates_per_cluster,
+                    cluster_order=cluster_ids,
                 )
                 used_relaxed_candidate_expansion = True
                 continue
@@ -1570,8 +1657,11 @@ def solve_layout(
             for x in (repair.get("prioritized_clusters") or [])
             if isinstance(x, dict) and isinstance(x.get("cluster_id"), str)
         ]
-        if not problem_clusters:
-            problem_clusters = list(cluster_ids)
+        problem_clusters = _primary_seed_problem_clusters(
+            problem_clusters,
+            cluster_ids=cluster_ids,
+            max_clusters=2,
+        )
 
         logger.info(
             "Solver refine clusters at round %s/%s: %s",
@@ -1587,15 +1677,17 @@ def solve_layout(
             grid_mm=grid_mm,
             candidates_by_cluster=current_candidates,
             chosen=chosen,
-            problematic_cluster_ids=problem_clusters[: max(2, len(problem_clusters))],
+            problematic_cluster_ids=problem_clusters,
             max_variants_per_cluster=max_variants_per_cluster,
             cluster_allowed_rotations=cluster_allowed_rots,
-            add_limit_per_cluster=40,
+            add_limit_per_cluster=_round_candidate_growth_limit(
+                initial_candidates_per_cluster
+            ),
         )
         # Keep the search exact but bounded.
         for cid, vals in current_candidates.items():
             current_candidates[cid] = _dedupe_candidates(vals)[
-                : max(24, initial_candidates_per_cluster + 24)
+                : _expanded_candidate_limit(initial_candidates_per_cluster)
             ]
 
     notes = [

@@ -29,6 +29,65 @@ Candidate = _solver.Candidate
 
 
 class SolverArchitectureTest(unittest.TestCase):
+    def test_ordered_cluster_ids_prefers_enumerator_priority(self) -> None:
+        base_candidate = Candidate(
+            cluster_id="placeholder",
+            variant_id="base",
+            variant_family="base",
+            variant_priority=1.0,
+            x=0,
+            y=0,
+            rot=0,
+            anchor_kind="seed",
+            anchor_priority=1.0,
+            stage="seed",
+            hard_valid=True,
+            acceptable_valid=True,
+            rough_score=100,
+            orientation_penalty_mm=0,
+            critical_orientation_penalty_mm=0,
+            focal_orientation_penalty_mm=0,
+            quality_gate_reasons=(),
+            hard_error_codes=(),
+            state_signature="ok",
+        )
+        candidates_by_cluster = {
+            "support": [
+                base_candidate.__class__(
+                    **{**base_candidate.__dict__, "cluster_id": "support"}
+                )
+            ],
+            "media": [
+                base_candidate.__class__(
+                    **{**base_candidate.__dict__, "cluster_id": "media"}
+                )
+            ],
+            "seating": [
+                base_candidate.__class__(
+                    **{**base_candidate.__dict__, "cluster_id": "seating"}
+                )
+            ],
+        }
+
+        ordered = _solver._ordered_cluster_ids(
+            candidates_by_cluster,
+            cluster_order=["media", "seating"],
+        )
+
+        self.assertEqual(ordered, ["media", "seating", "support"])
+
+    def test_primary_seed_problem_clusters_limits_to_top_two(self) -> None:
+        problem_clusters = _solver._primary_seed_problem_clusters(
+            ["media_zone", "seating_zone", "utility_storage"],
+            cluster_ids=["media_zone", "seating_zone", "utility_storage"],
+        )
+
+        self.assertEqual(problem_clusters, ["media_zone", "seating_zone"])
+
+    def test_primary_seed_candidate_growth_is_tightly_bounded(self) -> None:
+        self.assertEqual(_solver._round_candidate_growth_limit(28), 12)
+        self.assertEqual(_solver._expanded_candidate_limit(28), 36)
+
     def test_skip_clusters_without_candidates_filters_related_payloads(self) -> None:
         sleep_candidate = Candidate(
             cluster_id="sleep",

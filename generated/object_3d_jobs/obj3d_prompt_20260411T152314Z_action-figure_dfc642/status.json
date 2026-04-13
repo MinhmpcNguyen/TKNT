@@ -1,0 +1,98 @@
+{
+  "job_id": "obj3d_prompt_20260411T152314Z_action-figure_dfc642",
+  "job_dir": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642",
+  "mode": "prompt",
+  "stage": "done",
+  "updated_at_utc": "2026-04-11T15:25:36+00:00",
+  "message": "3D generation finished successfully.",
+  "error": null,
+  "progress_current": 3,
+  "progress_total": 3,
+  "artifact_paths": {
+    "generated_image": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/generated_image.png",
+    "ollama_prompt": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/ollama_prompt.txt",
+    "ollama_negative_prompt": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/ollama_negative_prompt.txt",
+    "ollama_request": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/ollama_request.json",
+    "ollama_response": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/ollama_response.json",
+    "preprocessed_image": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/preprocessed_for_triposr.png",
+    "mesh_glb": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/0/mesh.glb",
+    "mesh_glb_preferred": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/0/mesh.glb",
+    "triposr_stdout_log": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/triposr_stdout.log",
+    "triposr_stderr_log": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/triposr_stderr.log"
+  },
+  "actions": [
+    {
+      "stage": "queued",
+      "message": "Queued 3D generation from prompt.",
+      "updated_at_utc": "2026-04-11T15:23:14+00:00",
+      "progress_current": 0,
+      "progress_total": 3,
+      "error": null
+    },
+    {
+      "stage": "generating_image",
+      "message": "Generating a white-background reference image with Ollama.",
+      "updated_at_utc": "2026-04-11T15:23:14+00:00",
+      "progress_current": 1,
+      "progress_total": 3,
+      "error": null
+    },
+    {
+      "stage": "preprocessing_image",
+      "message": "Preprocessing the generated image for TripoSR.",
+      "updated_at_utc": "2026-04-11T15:23:55+00:00",
+      "progress_current": 2,
+      "progress_total": 3,
+      "error": null
+    },
+    {
+      "stage": "running_triposr",
+      "message": "Running TripoSR mesh reconstruction.",
+      "updated_at_utc": "2026-04-11T15:23:56+00:00",
+      "progress_current": 3,
+      "progress_total": 3,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "3D generation finished successfully.",
+      "updated_at_utc": "2026-04-11T15:25:36+00:00",
+      "progress_current": 3,
+      "progress_total": 3,
+      "error": null
+    },
+    {
+      "stage": "persisted_inventory_asset",
+      "message": "Saved generated object into the user's inventory.",
+      "updated_at_utc": "2026-04-11T15:25:36+00:00"
+    }
+  ],
+  "result": {
+    "mesh_glb_path": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/0/mesh.glb",
+    "preferred_mesh_glb_path": "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/0/mesh.glb",
+    "occupancy_ratio": 0.18235301971435547,
+    "bbox_occupancy_ratio": 0.3612813949584961,
+    "triposr_command": [
+      "/Users/Yuki/TKNT/.conda_envs/prj-tknt/bin/python3.11",
+      "run.py",
+      "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/inputs/preprocessed_for_triposr.png",
+      "--device",
+      "auto",
+      "--pretrained-model-name-or-path",
+      "stabilityai/TripoSR",
+      "--output-dir",
+      "/Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr",
+      "--model-save-format",
+      "glb",
+      "--no-remove-bg",
+      "--mc-resolution",
+      "256",
+      "--mc-threshold",
+      "12.0"
+    ],
+    "texture_bake_error": "TripoSR failed. See /Users/Yuki/TKNT/generated/object_3d_jobs/obj3d_prompt_20260411T152314Z_action-figure_dfc642/triposr/textured/triposr_baked_stderr.log. Error excerpt:\n                ^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/Yuki/TKNT/third_party/TripoSR/tsr/bake_texture.py\", line 140, in positions_to_colors\n    queried_grid = model.renderer.query_triplane(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/Yuki/TKNT/third_party/TripoSR/tsr/models/nerf_renderer.py\", line 78, in query_triplane\n    net_out = chunk_batch(_query_chunk, self.chunk_size, positions)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/Yuki/TKNT/third_party/TripoSR/tsr/utils.py\", line 169, in chunk_batch\n    out_chunk = func(\n                ^^^^^\n  File \"/Users/Yuki/TKNT/third_party/TripoSR/tsr/models/nerf_renderer.py\", line 61, in _query_chunk\n    out: torch.Tensor = F.grid_sample(\n                        ^^^^^^^^^^^^^^\n  File \"/Users/Yuki/TKNT/.conda_envs/prj-tknt/lib/python3.11/site-packages/torch/nn/functional.py\", line 5242, in grid_sample\n    return torch.grid_sampler(input, grid, mode_enum, padding_mode_enum, align_corners)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: grid_sampler(): expected input and grid to be on same device, but input is on mps:0 and grid is on cpu",
+    "persisted_asset_id": "asset_5c6444ec12924f1ea429c0e19c41d785",
+    "persisted_asset_name": "action figure",
+    "inventory_refresh_required": true
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 
 from common import build_shared_parser, ensure_parent_dir, resolve_torch_dtype
 from common import seed_everything, select_runtime, validate_optional_image
@@ -10,6 +11,7 @@ MODEL_ID = "timbrooks/instruct-pix2pix"
 
 def parse_args() -> argparse.Namespace:
     parser = build_shared_parser("Run InstructPix2Pix on macOS-friendly settings.")
+    parser.set_defaults(height=512, width=512)
     parser.add_argument(
         "--image-guidance-scale",
         type=float,
@@ -34,6 +36,11 @@ def parse_args() -> argparse.Namespace:
         default=MODEL_ID,
         help="Model identifier or local model path.",
     )
+    parser.add_argument(
+        "--no-resize-input",
+        action="store_true",
+        help="Do not resize the input image to the requested width and height before editing.",
+    )
     return parser.parse_args()
 
 
@@ -52,8 +59,18 @@ def main() -> int:
 
     runtime = select_runtime(torch_module=torch, requested_device=args.device)
     torch_dtype = resolve_torch_dtype(torch_module=torch, dtype_name=runtime.torch_dtype_name)
+    if runtime.device == "mps":
+        # On Apple Silicon, float16 image-edit runs can become numerically unstable
+        # and produce black images. Prefer float32 here even though it is slower.
+        torch_dtype = torch.float32
+        if args.height > 512 or args.width > 512:
+            warnings.warn(
+                "On macOS/MPS, InstructPix2Pix is more stable at 512x512. "
+                "Higher resolutions may be slow or unstable.",
+                stacklevel=2,
+            )
 
-    print(f"Loading {args.model_id} on device={runtime.device} dtype={runtime.torch_dtype_name}")
+    print(f"Loading {args.model_id} on device={runtime.device} dtype={torch_dtype}")
     pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
         args.model_id,
         torch_dtype=torch_dtype,
@@ -64,9 +81,13 @@ def main() -> int:
     seed_everything(torch_module=torch, seed=args.seed)
 
     input_image = Image.open(args.image).convert("RGB")
+    if not args.no_resize_input:
+        input_image = input_image.resize((args.width, args.height), Image.LANCZOS)
     image = pipe(
         prompt=args.prompt,
         image=input_image,
+        height=args.height,
+        width=args.width,
         guidance_scale=args.guidance_scale,
         image_guidance_scale=args.image_guidance_scale,
         num_inference_steps=args.num_inference_steps,
@@ -79,6 +100,8 @@ def main() -> int:
 def configure_pipeline(*, pipe: object, device: str) -> None:
     pipe.to(device)
     pipe.enable_attention_slicing()
+    if hasattr(pipe, "enable_vae_slicing"):
+        pipe.enable_vae_slicing()
 
 
 if __name__ == "__main__":

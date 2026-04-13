@@ -15,6 +15,7 @@ from cluster_placer.tools_v2 import (  # type: ignore
     DiagnosePhase2Seed,
     EnumeratePhase2RepairMoves,
     CompileAcceptedPhase2Proposal,
+    EvaluatePhase2Proposal,
 )
 from layout.grid_policy import normalize_layout_grid_mm, normalize_room_context_grid
 
@@ -437,6 +438,103 @@ def build_phase2_payload(
         if not active_ids:
             active_ids = set(merged.keys()) | set(outlines.keys())
 
+        def _build_generic_variant_rows() -> Dict[str, List[Dict[str, Any]]]:
+            if not outlines or not active_ids:
+                return {}
+            try:
+                from cluster_placer.tools import BuildGenericClusterVariants
+
+                info = BuildGenericClusterVariants(
+                    clusters_outlines=outlines,
+                    cluster_ids=sorted(active_ids),
+                    max_variants_per_cluster=8,
+                    include_variant_payloads=True,
+                )
+            except Exception:
+                return {}
+            if info.get("result") != "OK":
+                return {}
+
+            out: Dict[str, List[Dict[str, Any]]] = {}
+            for row in info.get("clusters") or []:
+                cid = str(row.get("cluster_id") or "")
+                if not cid:
+                    continue
+                variants: List[Dict[str, Any]] = []
+                for variant in row.get("variants") or []:
+                    if not isinstance(variant, dict):
+                        continue
+                    if not isinstance(variant.get("cluster_payload"), dict):
+                        continue
+                    variants.append(deepcopy(variant))
+                if variants:
+                    out[cid] = variants
+            return out
+
+        generic_variant_rows_by_cluster = _build_generic_variant_rows()
+
+        def _merge_variant_card_geometry(
+            base_card: Dict[str, Any],
+            variant_row: Dict[str, Any],
+        ) -> Dict[str, Any] | None:
+            if isinstance(variant_row.get("card"), dict):
+                return deepcopy(variant_row["card"])
+
+            cluster_payload = variant_row.get("cluster_payload")
+            if not isinstance(cluster_payload, dict):
+                if isinstance(variant_row.get("cluster_footprint"), dict):
+                    cluster_payload = variant_row
+                else:
+                    return None
+
+            card = deepcopy(base_card)
+            for key in (
+                "cluster_id",
+                "local_frame",
+                "local_placements",
+                "cluster_footprint",
+                "orientation_meta",
+                "notes",
+                "missing",
+            ):
+                value = cluster_payload.get(key)
+                if value is not None:
+                    card[key] = deepcopy(value)
+            card.pop("available_variants", None)
+            card.pop("variants", None)
+            return card
+
+        def _normalize_available_variants(
+            *,
+            base_card: Dict[str, Any],
+            explicit_rows: List[Dict[str, Any]],
+            fallback_rows: List[Dict[str, Any]],
+        ) -> List[Dict[str, Any]]:
+            rows = explicit_rows or fallback_rows
+            out: List[Dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                variant_id = str(row.get("variant_id") or "").strip()
+                if not variant_id or variant_id in seen_ids:
+                    continue
+                card = _merge_variant_card_geometry(base_card, row)
+                if not isinstance(card, dict):
+                    continue
+                seen_ids.add(variant_id)
+                out.append(
+                    {
+                        "variant_id": variant_id,
+                        "family": str(row.get("family") or ""),
+                        "priority": float(row.get("priority") or 0.0),
+                        "ops": deepcopy(row.get("ops") or []),
+                        "signature": row.get("signature"),
+                        "card": card,
+                    }
+                )
+            return out
+
         cards: List[Dict[str, Any]] = []
         for cid in sorted(active_ids):
             merged_row = merged.get(cid, {})
@@ -465,8 +563,7 @@ def build_phase2_payload(
                     except Exception:
                         pass
 
-            # keep variants if present on either merged or outline side
-            available_variants = []
+            explicit_variant_rows: List[Dict[str, Any]] = []
             for key in ("available_variants", "variants"):
                 src = None
                 if isinstance(outline_row.get(key), list):
@@ -474,40 +571,37 @@ def build_phase2_payload(
                 elif isinstance(merged_row.get(key), list):
                     src = merged_row.get(key)
                 if isinstance(src, list):
-                    available_variants = deepcopy(src)
+                    explicit_variant_rows = deepcopy(src)
                     break
 
-            cards.append(
-                {
-                    "cluster_id": cid,
-                    "tag": merged_row.get("tag"),
-                    "members": deepcopy(merged_row.get("members") or []),
-                    "anchors": deepcopy(merged_row.get("anchors") or []),
-                    "hard_constraints": deepcopy(
-                        merged_row.get("hard_constraints") or []
-                    ),
-                    "soft_constraints": deepcopy(
-                        merged_row.get("soft_constraints") or []
-                    ),
-                    "cluster_rules": deepcopy(merged_row.get("cluster_rules") or {}),
-                    "decisions": deepcopy(decisions),
-                    "object_sizes": object_sizes,
-                    "local_placements": deepcopy(
-                        outline_row.get("local_placements") or []
-                    ),
-                    "cluster_footprint": deepcopy(
-                        outline_row.get("cluster_footprint") or {}
-                    ),
-                    "orientation_meta": deepcopy(
-                        outline_row.get("orientation_meta") or {}
-                    ),
-                    "available_variants": available_variants,
-                    "source": {
-                        "merged_from_04": bool(merged_row),
-                        "outline_from_05_or_solver": bool(outline_row),
-                    },
-                }
+            base_card = {
+                "cluster_id": cid,
+                "tag": merged_row.get("tag"),
+                "members": deepcopy(merged_row.get("members") or []),
+                "anchors": deepcopy(merged_row.get("anchors") or []),
+                "hard_constraints": deepcopy(merged_row.get("hard_constraints") or []),
+                "soft_constraints": deepcopy(merged_row.get("soft_constraints") or []),
+                "cluster_rules": deepcopy(merged_row.get("cluster_rules") or {}),
+                "decisions": deepcopy(decisions),
+                "object_sizes": object_sizes,
+                "local_placements": deepcopy(outline_row.get("local_placements") or []),
+                "cluster_footprint": deepcopy(
+                    outline_row.get("cluster_footprint") or {}
+                ),
+                "orientation_meta": deepcopy(outline_row.get("orientation_meta") or {}),
+                "source": {
+                    "merged_from_04": bool(merged_row),
+                    "outline_from_05_or_solver": bool(outline_row),
+                },
+            }
+            available_variants = _normalize_available_variants(
+                base_card=base_card,
+                explicit_rows=explicit_variant_rows,
+                fallback_rows=generic_variant_rows_by_cluster.get(cid) or [],
             )
+            base_card["available_variants"] = available_variants
+
+            cards.append(base_card)
         return cards
 
     def _top_object_debug(
@@ -802,24 +896,22 @@ def _enumerated_object_move_signatures(
             continue
         proposal = move.get("proposal") or {}
         repairs = proposal.get("object_repairs") or []
-        if len(repairs) != 1:
-            continue
-        repair = repairs[0]
-        if not isinstance(repair, dict):
-            continue
-        cluster_id = repair.get("cluster_id")
-        object_id = repair.get("object_id")
-        op = repair.get("op")
-        if not (
-            isinstance(cluster_id, str)
-            and isinstance(object_id, str)
-            and isinstance(op, str)
-        ):
-            continue
-        params_json = json.dumps(
-            repair.get("params") or {}, sort_keys=True, ensure_ascii=True
-        )
-        out.add((cluster_id, object_id, op, params_json))
+        for repair in repairs:
+            if not isinstance(repair, dict):
+                continue
+            cluster_id = repair.get("cluster_id")
+            object_id = repair.get("object_id")
+            op = repair.get("op")
+            if not (
+                isinstance(cluster_id, str)
+                and isinstance(object_id, str)
+                and isinstance(op, str)
+            ):
+                continue
+            params_json = json.dumps(
+                repair.get("params") or {}, sort_keys=True, ensure_ascii=True
+            )
+            out.add((cluster_id, object_id, op, params_json))
     return out
 
 
@@ -1265,6 +1357,133 @@ def _default_no_improvement(
     return make_no_improvement_repair(payload, note=note)
 
 
+def _repair_signature(repair: Dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "cluster_transforms": repair.get("cluster_transforms") or [],
+            "selected_variants": repair.get("selected_variants") or [],
+            "object_repairs": repair.get("object_repairs") or [],
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+
+
+def _has_macro_orientation_pressure(evaluation: Dict[str, Any]) -> bool:
+    metrics = evaluation.get("metrics") or {}
+    for row in metrics.get("orientation_debug") or []:
+        if not isinstance(row, dict):
+            continue
+        if int(row.get("penalty_mm") or 0) < 300:
+            continue
+        kind = str(row.get("kind") or "")
+        intent = str(row.get("intent") or "")
+        relation = str(row.get("relation") or "")
+        if kind in {"cluster_directional_relation", "cluster_orientation"}:
+            return True
+        if relation == "face_each_other" or intent == "face_object":
+            return True
+    return False
+
+
+def _deterministic_move_rank(
+    evaluation: Dict[str, Any],
+    *,
+    move_kind: str,
+) -> tuple[int, int, int, int, int, int]:
+    comparison = evaluation.get("baseline_comparison") or {}
+    delta_score = int(comparison.get("delta_score") or 0)
+    candidate_score = int(comparison.get("candidate_score") or 0)
+    hard_valid = 1 if bool(evaluation.get("hard_valid")) else 0
+    positive_delta = 1 if delta_score > 0 else 0
+    orientation_priority = 0
+    if _has_macro_orientation_pressure(evaluation):
+        if move_kind in {"cluster_variant", "cluster_pose"}:
+            orientation_priority = 1
+        elif move_kind == "object_pose":
+            orientation_priority = -1
+    move_priority = 0
+    if move_kind == "cluster_variant":
+        move_priority = 3
+    elif move_kind == "cluster_pose":
+        move_priority = 2
+    elif move_kind == "object_pose":
+        move_priority = 1
+    return (
+        hard_valid,
+        positive_delta,
+        delta_score,
+        candidate_score,
+        orientation_priority,
+        move_priority,
+    )
+
+
+def _deterministic_phase2_proposal(
+    payload: Dict[str, Any],
+    *,
+    move_limit: int,
+) -> Dict[str, Any]:
+    compact_payload = prepare_phase2_llm_payload(payload, move_limit=move_limit)
+    baseline = make_no_improvement_repair(compact_payload)
+    baseline_evaluation = EvaluatePhase2Proposal(
+        payload=compact_payload, repair=baseline
+    )
+    moves = (compact_payload.get("tool_context") or {}).get("enumerated_moves") or []
+
+    best_proposal = baseline
+    best_rank = _deterministic_move_rank(
+        baseline_evaluation,
+        move_kind="seed_retain",
+    )
+    best_reason = "Retained the current seed because no deterministic move improved it."
+    seen_signatures = {_repair_signature(best_proposal)}
+
+    for move in moves:
+        if not isinstance(move, dict):
+            continue
+        reason = str(move.get("reason") or "Deterministic repair move.")
+        raw_proposal = {
+            "status": "REPAIRED",
+            "cluster_transforms": deepcopy(
+                ((move.get("proposal") or {}).get("cluster_transforms") or [])
+            ),
+            "selected_variants": deepcopy(
+                ((move.get("proposal") or {}).get("selected_variants") or [])
+            ),
+            "object_repairs": deepcopy(
+                ((move.get("proposal") or {}).get("object_repairs") or [])
+            ),
+            "notes": [f"Deterministic placer: {reason}"],
+        }
+        try:
+            proposal = normalize_and_validate_repair_output(
+                compact_payload, raw_proposal
+            )
+        except ValueError:
+            continue
+        signature = _repair_signature(proposal)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        evaluation = EvaluatePhase2Proposal(payload=compact_payload, repair=proposal)
+        rank = _deterministic_move_rank(
+            evaluation,
+            move_kind=str(move.get("kind") or ""),
+        )
+        if rank > best_rank:
+            best_rank = rank
+            best_proposal = proposal
+            best_reason = reason
+
+    if best_proposal["status"] == "NO_IMPROVEMENT":
+        best_proposal["notes"] = [best_reason]
+    elif not best_proposal.get("notes"):
+        best_proposal["notes"] = [f"Deterministic placer selected: {best_reason}"]
+
+    return best_proposal
+
+
 def make_no_improvement_repair(
     payload: Dict[str, Any], note: str | None = None
 ) -> Dict[str, Any]:
@@ -1378,6 +1597,9 @@ class MacroClusterPlacer:
         payload: Dict[str, Any],
         max_attempts: int = 3,
     ) -> Dict[str, Any]:
+        if self.llm_call is _call_openai:
+            move_limit = max(24, max_attempts * 24)
+            return _deterministic_phase2_proposal(payload, move_limit=move_limit)
         result = run_phase2_placer(
             full_payload=payload,
             llm_call=self.llm_call,

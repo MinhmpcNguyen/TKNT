@@ -5,9 +5,10 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import pipeline, inventory
+from api.routes import account, auth, inventory, object_3d, pipeline
 from config import root_config
 from config.logging_config import setup_logging
+from db.runtime_init import ensure_runtime_schema
 
 app = FastAPI(title="TKNT Pipeline API", version="0.2.0")
 logger = logging.getLogger(__name__)
@@ -17,7 +18,15 @@ logger = logging.getLogger(__name__)
 def _startup_logging() -> None:
     # Ensure our internal logs (agents/RAG/search) show up when running via uvicorn.
     setup_logging()
+    _initialize_runtime_schema()
     _log_runtime_profile()
+
+
+def _initialize_runtime_schema() -> None:
+    try:
+        ensure_runtime_schema()
+    except Exception as exc:
+        logger.exception("Runtime schema initialization skipped: %s", exc)
 
 
 def _log_runtime_profile() -> None:
@@ -87,7 +96,10 @@ app.add_middleware(
 )
 
 app.include_router(pipeline.router)
+app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(inventory.router)
+app.include_router(object_3d.router)
 
 
 @app.get("/")

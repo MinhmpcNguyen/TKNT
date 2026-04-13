@@ -1,0 +1,41 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "sleep_zone",
+      "x": 2350,
+      "y": 150,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_zone",
+      "x": 4600,
+      "y": 2750,
+      "rot": 270
+    },
+    {
+      "cluster_id": "work_zone",
+      "x": 200,
+      "y": 1500,
+      "rot": 270
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "sleep_zone",
+      "variant_id": "sleep_zone::base"
+    },
+    {
+      "cluster_id": "storage_zone",
+      "variant_id": "storage_zone::base"
+    },
+    {
+      "cluster_id": "work_zone",
+      "variant_id": "work_zone::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Try a small grid translation for failing cluster sleep_zone"
+  ]
+}

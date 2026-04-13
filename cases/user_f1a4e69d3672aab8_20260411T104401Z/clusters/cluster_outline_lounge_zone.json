@@ -1,0 +1,121 @@
+{
+  "status": "OK",
+  "cluster_id": "lounge_zone",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "armchair",
+      "x": 0,
+      "y": 0,
+      "rot": 270
+    },
+    {
+      "id": "floor_lamp",
+      "x": 0,
+      "y": 850,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "armchair",
+        "x": 0,
+        "y": 0,
+        "w": 710,
+        "h": 840
+      },
+      {
+        "id": "floor_lamp",
+        "x": 0,
+        "y": 850,
+        "w": 350,
+        "h": 320
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 710,
+      "max_y": 1170
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 710,
+          "y": 0
+        },
+        {
+          "x": 710,
+          "y": 840
+        },
+        {
+          "x": 350,
+          "y": 840
+        },
+        {
+          "x": 350,
+          "y": 1170
+        },
+        {
+          "x": 0,
+          "y": 1170
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "cluster_axis_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "important_objects": {
+      "armchair": {
+        "front_local": {
+          "dx": 1,
+          "dy": 0
+        },
+        "axis_local": {
+          "dx": 0,
+          "dy": -1
+        }
+      },
+      "floor_lamp": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

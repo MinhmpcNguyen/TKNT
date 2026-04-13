@@ -1,0 +1,198 @@
+{
+  "status": "OK",
+  "cluster_id": "storage_zone",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "dresser",
+      "x": 150,
+      "y": 1400,
+      "rot": 180
+    },
+    {
+      "id": "laundry_basket",
+      "x": 1850,
+      "y": 1450,
+      "rot": 0
+    },
+    {
+      "id": "storage_cabinet",
+      "x": 1050,
+      "y": 1450,
+      "rot": 0
+    },
+    {
+      "id": "tv_console",
+      "x": 2250,
+      "y": 1450,
+      "rot": 0
+    },
+    {
+      "id": "wardrobe",
+      "x": 150,
+      "y": 800,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "dresser",
+        "x": 150,
+        "y": 1400,
+        "w": 880,
+        "h": 480
+      },
+      {
+        "id": "laundry_basket",
+        "x": 1850,
+        "y": 1450,
+        "w": 390,
+        "h": 360
+      },
+      {
+        "id": "storage_cabinet",
+        "x": 1050,
+        "y": 1450,
+        "w": 610,
+        "h": 410
+      },
+      {
+        "id": "tv_console",
+        "x": 2250,
+        "y": 1450,
+        "w": 1260,
+        "h": 380
+      },
+      {
+        "id": "wardrobe",
+        "x": 150,
+        "y": 800,
+        "w": 810,
+        "h": 600
+      }
+    ],
+    "local_bbox": {
+      "min_x": 150,
+      "min_y": 800,
+      "max_x": 3510,
+      "max_y": 1880
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 150,
+          "y": 800
+        },
+        {
+          "x": 3510,
+          "y": 800
+        },
+        {
+          "x": 3510,
+          "y": 1830
+        },
+        {
+          "x": 1660,
+          "y": 1830
+        },
+        {
+          "x": 1660,
+          "y": 1860
+        },
+        {
+          "x": 1030,
+          "y": 1860
+        },
+        {
+          "x": 1030,
+          "y": 1880
+        },
+        {
+          "x": 150,
+          "y": 1880
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": -1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "wardrobe": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "dresser": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": -1,
+          "dy": 0
+        }
+      },
+      "storage_cabinet": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "laundry_basket": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "tv_console": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

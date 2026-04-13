@@ -208,6 +208,16 @@ class PostgresAssetRepository:
                 rows = cur.fetchall()
         return [_row_to_asset_file(row) for row in rows]
 
+    def get_asset_file(self, asset_file_id: str) -> AssetFile | None:
+        query = "SELECT * FROM asset_files WHERE id = %(asset_file_id)s"
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"asset_file_id": asset_file_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_asset_file(row)
+
     def upsert_embedding(self, embedding: AssetEmbedding) -> None:
         query = """
             INSERT INTO asset_embeddings (
@@ -305,7 +315,9 @@ def _asset_file_to_params(asset_file: AssetFile) -> dict[str, object]:
     }
 
 
-def _build_asset_filter_query(asset_filter: AssetFilter) -> tuple[str, dict[str, object]]:
+def _build_asset_filter_query(
+    asset_filter: AssetFilter,
+) -> tuple[str, dict[str, object]]:
     clauses = ["tenant_id = %(tenant_id)s"]
     params: dict[str, object] = {"tenant_id": asset_filter.tenant_id}
 

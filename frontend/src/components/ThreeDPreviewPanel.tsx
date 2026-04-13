@@ -1,11 +1,44 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  renderSnapshotImage,
+  type SnapshotImageRenderApiResponse,
+  type SnapshotImageRenderResult,
+} from '../api';
 import { useEditorStore } from '../store';
 import { polygonBounds } from '../utils/geometry';
 import { getNumericBbox, getWorldBboxFromPlacement, placementMatchesStyledObject } from '../utils/styledLayout';
+import {
+  buildThreeSnapshotArtifact,
+  type SnapshotOpeningRecord,
+  type SnapshotObjectRecord,
+  type ThreeSnapshotRenderState,
+} from '../utils/threeSnapshot';
+import { buildLayoutReferenceImageDataUrl } from '../utils/layoutReferenceImage';
+import {
+  planRotationToYawRad,
+  yawRadToPlanRotationDeg,
+} from '../utils/planOrientation';
+import {
+  applyInventoryModelPreviewOverride,
+  buildGlbPreviewModel,
+  disposeThreeObject,
+} from '../three/models';
+import {
+  collectReintroducedObjects,
+  getInventoryDimensionsMm,
+  isReintroducedIdentifier,
+  isShelfLikePreviewType,
+  isUserGeneratedPreviewItem,
+  resolveInventoryItemForPreview,
+  resolveWallHungPreviewDepthMm,
+  type InventoryPreviewResolution,
+} from '../three/inventoryDiagnostics';
 import { buildObjectProxy } from '../three/proxies';
 
 type RenderObject = {
   id: string;
+  assetId?: string | null;
+  rawAssetId?: string | null;
   type: string;
   colorHex: string;
   material?: string | null;
@@ -13,9 +46,34 @@ type RenderObject = {
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   placeOn?: { method: string; targetId?: string | null } | null;
   draggable?: boolean;
+  reintroduced?: boolean;
+};
+
+type ResolvedRenderObject = RenderObject & {
+  inventoryResolution: InventoryPreviewResolution;
+};
+
+type ObjectVisualDiagnostic = {
+  objectId: string;
+  label: string;
+  rawAssetId: string | null;
+  resolvedAssetId: string | null;
+  reintroduced: boolean;
+  status:
+    | 'glb_loading'
+    | 'glb_loaded'
+    | 'proxy_no_inventory_match'
+    | 'proxy_no_model_descriptor'
+    | 'proxy_low_confidence_match'
+    | 'proxy_aspect_mismatch'
+    | 'proxy_no_loader'
+    | 'proxy_model_load_error';
+  reason: string;
 };
 
 const MM_TO_M = 0.001;
+const SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD = 0.5;
+const REINTRODUCED_ASSET_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
 
 function defaultHeightMm(type: string): number {
   const t = type.toLowerCase();
@@ -34,13 +92,109 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function planRotationToYawRad(rotationDeg: number): number {
-  return (rotationDeg * Math.PI) / 180;
+function sanitizeSnapshotFileSegment(value: string | null | undefined): string {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'current-layout';
 }
 
-function yawRadToPlanRotationDeg(yawRad: number): number {
-  const rotationDeg = (yawRad * 180) / Math.PI;
-  return ((rotationDeg % 360) + 360) % 360;
+function normalizeRenderAssetId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+  const normalized = raw.replace(REINTRODUCED_ASSET_ID_PATTERN, '').trim();
+  return normalized || raw;
+}
+
+function buildSnapshotFileStem(variantId: string | null, capturedAt: string): string {
+  const normalizedDate = capturedAt.replace(/[:.]/g, '-');
+  return `layout-3d-${sanitizeSnapshotFileSegment(variantId)}-${normalizedDate}`;
+}
+
+function resolveOpeningSegmentMm(
+  item: any
+): { p1: { x: number; y: number }; p2: { x: number; y: number } } | null {
+  if (item?.start_mm && item?.end_mm) {
+    return {
+      p1: { x: Number(item.start_mm.x ?? 0), y: Number(item.start_mm.y ?? 0) },
+      p2: { x: Number(item.end_mm.x ?? 0), y: Number(item.end_mm.y ?? 0) },
+    };
+  }
+  if (Array.isArray(item?.segment_mm) && item.segment_mm.length >= 2) {
+    return {
+      p1: {
+        x: Number(item.segment_mm[0]?.x ?? 0),
+        y: Number(item.segment_mm[0]?.y ?? 0),
+      },
+      p2: {
+        x: Number(item.segment_mm[1]?.x ?? 0),
+        y: Number(item.segment_mm[1]?.y ?? 0),
+      },
+    };
+  }
+  if (Array.isArray(item?.segmentMm) && item.segmentMm.length >= 2) {
+    return {
+      p1: {
+        x: Number(item.segmentMm[0]?.x ?? 0),
+        y: Number(item.segmentMm[0]?.y ?? 0),
+      },
+      p2: {
+        x: Number(item.segmentMm[1]?.x ?? 0),
+        y: Number(item.segmentMm[1]?.y ?? 0),
+      },
+    };
+  }
+  return null;
+}
+
+function normalizeSnapshotOpenings(items: any[]): SnapshotOpeningRecord[] {
+  return items
+    .map((item) => {
+      const segment = resolveOpeningSegmentMm(item);
+      if (!segment) return null;
+      return {
+        id: String(item?.id ?? 'opening'),
+        segmentMm: [
+          { x: segment.p1.x, y: segment.p1.y },
+          { x: segment.p2.x, y: segment.p2.y },
+        ],
+      };
+    })
+    .filter((item): item is SnapshotOpeningRecord => item !== null);
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 0);
+}
+
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error('Unable to encode the 3D canvas as PNG.'));
+    }, 'image/png');
+  });
+}
+
+function canvasToDataUrl(canvas: HTMLCanvasElement): string {
+  return canvas.toDataURL('image/png');
 }
 
 export const ThreeDPreviewPanel: React.FC = () => {
@@ -52,11 +206,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
     styledResult,
     inventory,
     userInput,
+    selectedVariantId,
     selectedWallId,
     selectWall,
     updatePlacement,
     removePlacement,
     setDesign,
+    upsertSavedRender,
   } = useEditorStore();
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,6 +223,28 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const selectedIdRef = useRef<string | null>(null);
   const updateRotatorsVisibilityRef = useRef<(() => void) | null>(null);
   const controlsRef = useRef<any>(null);
+  const rendererRef = useRef<any>(null);
+  const sceneRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
+  const rotatorGroupRef = useRef<any>(null);
+  const renderStateRef = useRef<ThreeSnapshotRenderState | null>(null);
+  const [captureStatus, setCaptureStatus] = useState<{
+    tone: 'neutral' | 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [renderStatus, setRenderStatus] = useState<{
+    tone: 'neutral' | 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [isRenderingImage, setIsRenderingImage] = useState(false);
+  const [renderedSnapshotImage, setRenderedSnapshotImage] =
+    useState<SnapshotImageRenderResult | null>(null);
+  const [savedRenderId, setSavedRenderId] = useState<string | null>(null);
+  const [renderPrompt, setRenderPrompt] = useState('');
+  const [objectVisualDiagnostics, setObjectVisualDiagnostics] = useState<
+    Record<string, ObjectVisualDiagnostic>
+  >({});
 
   useEffect(() => {
     editModeRef.current = editMode;
@@ -87,6 +265,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
     }
     updateRotatorsVisibilityRef.current?.();
   }, [editMode, selectedId]);
+
+  useEffect(() => {
+    if (!renderStateRef.current) return;
+    renderStateRef.current.variantId = selectedVariantId;
+    renderStateRef.current.selectedObjectId = selectedId;
+    renderStateRef.current.selectedWallId = selectedWallId;
+    renderStateRef.current.editMode = editMode;
+  }, [editMode, selectedId, selectedVariantId, selectedWallId]);
 
   const objects: RenderObject[] = useMemo(() => {
     const out: RenderObject[] = [];
@@ -130,8 +316,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
           }
         }
 
+        const rawAssetId =
+          placement?.asset_id ??
+          obj.asset_id ??
+          obj.assetId ??
+          obj.object_id ??
+          null;
         out.push({
           id,
+          assetId: normalizeRenderAssetId(rawAssetId) ?? null,
+          rawAssetId: typeof rawAssetId === 'string' ? rawAssetId : null,
           type: objType,
           colorHex: String(obj.color_hex ?? '#cfcac2'),
           material: obj.material ?? null,
@@ -141,6 +335,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           draggable:
             placementsById.has(id) &&
             placementsById.get(id)?.constraint_mode !== 'locked',
+          reintroduced:
+            isReintroducedIdentifier(obj.object_id) ||
+            isReintroducedIdentifier(rawAssetId) ||
+            isReintroducedIdentifier(id),
         });
       }
 
@@ -150,6 +348,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
         const bbox = getWorldBboxFromPlacement(p);
         out.push({
           id: pid,
+          assetId: normalizeRenderAssetId(p.asset_id ?? null) ?? null,
+          rawAssetId: typeof p.asset_id === 'string' ? p.asset_id : null,
           type: p.category,
           colorHex: p.color_hex ?? '#cfcac2',
           material: null,
@@ -157,6 +357,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           bbox,
           placeOn: { method: 'floor', targetId: 'floor' },
           draggable: p.constraint_mode !== 'locked',
+          reintroduced:
+            isReintroducedIdentifier(p.asset_id) ||
+            isReintroducedIdentifier(p.placement_id) ||
+            isReintroducedIdentifier(pid),
         });
       }
 
@@ -167,6 +371,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
       const pid = String(placement.placement_id ?? placement.id ?? placement.object_id ?? '');
       out.push({
         id: pid || String(out.length + 1),
+        assetId: normalizeRenderAssetId(placement.asset_id ?? null) ?? null,
+        rawAssetId:
+          typeof placement.asset_id === 'string' ? placement.asset_id : null,
         type: placement.category,
         colorHex: placement.color_hex ?? '#cfcac2',
         material: null,
@@ -174,10 +381,252 @@ export const ThreeDPreviewPanel: React.FC = () => {
         bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
         draggable: placement.constraint_mode !== 'locked',
+        reintroduced:
+          isReintroducedIdentifier(placement.asset_id) ||
+          isReintroducedIdentifier(placement.placement_id),
       });
     }
     return out;
   }, [styledResult, design]);
+
+  const resolvedObjects: ResolvedRenderObject[] = useMemo(
+    () =>
+      objects.map((obj) => {
+        const targetWidthMm = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
+        const targetDepthMm = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
+        const inventoryResolution = resolveInventoryItemForPreview({
+          inventory,
+          assetId: obj.assetId ?? obj.rawAssetId ?? null,
+          objectType: obj.type,
+          material: obj.material ?? null,
+          preferredStyle: userInput.style,
+          targetWidthMm,
+          targetDepthMm,
+          targetHeightMm: defaultHeightMm(obj.type),
+        });
+        return {
+          ...obj,
+          inventoryResolution,
+        };
+      }),
+    [inventory, objects, userInput.style]
+  );
+
+  const reintroducedObjects = useMemo(() => {
+    const fromSummary = collectReintroducedObjects(styledResult);
+    if (fromSummary.length > 0) {
+      return fromSummary;
+    }
+    return resolvedObjects
+      .filter((obj) => obj.reintroduced)
+      .map((obj) => ({
+        clusterId: null,
+        objectId: obj.id,
+        objectType: obj.type,
+      }));
+  }, [resolvedObjects, styledResult]);
+
+  const proxyObjects = useMemo(
+    () =>
+      Object.values(objectVisualDiagnostics)
+        .filter((item) => item.status !== 'glb_loaded' && item.status !== 'glb_loading')
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [objectVisualDiagnostics]
+  );
+
+  useEffect(() => {
+    const nextDiagnostics = Object.fromEntries(
+      resolvedObjects.map((obj) => {
+        const modelResolution = obj.inventoryResolution.modelResolution;
+        let status: ObjectVisualDiagnostic['status'] = 'proxy_no_inventory_match';
+        let reason = obj.inventoryResolution.reason;
+        if (obj.inventoryResolution.item) {
+          if (obj.inventoryResolution.glbEligible && modelResolution?.descriptor) {
+            status = 'glb_loading';
+            reason = obj.inventoryResolution.glbReason;
+          } else if (modelResolution?.descriptor) {
+            status = 'proxy_low_confidence_match';
+            reason = obj.inventoryResolution.glbReason;
+          } else {
+            status = 'proxy_no_model_descriptor';
+            reason = modelResolution?.reason ?? 'Matched inventory asset has no GLB metadata.';
+          }
+        }
+        return [
+          obj.id,
+          {
+            objectId: obj.id,
+            label: obj.type,
+            rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+            resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+            reintroduced: Boolean(obj.reintroduced),
+            status,
+            reason,
+          } satisfies ObjectVisualDiagnostic,
+        ];
+      })
+    );
+    setObjectVisualDiagnostics(nextDiagnostics);
+  }, [resolvedObjects]);
+
+  async function handleCaptureSnapshot(): Promise<void> {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderState = renderStateRef.current;
+    if (
+      !renderer ||
+      !scene ||
+      !camera ||
+      !renderState ||
+      !(renderer.domElement instanceof HTMLCanvasElement)
+    ) {
+      setCaptureStatus({
+        tone: 'error',
+        text: '3D preview is not ready yet. Please wait for the scene to finish loading.',
+      });
+      return;
+    }
+
+    setIsCapturing(true);
+    setCaptureStatus({
+      tone: 'neutral',
+      text: 'Capturing the current 3D view...',
+    });
+
+    const rotatorGroup = rotatorGroupRef.current;
+    const previousRotatorVisibility =
+      typeof rotatorGroup?.visible === 'boolean' ? rotatorGroup.visible : null;
+
+    try {
+      if (rotatorGroup && previousRotatorVisibility !== null) {
+        rotatorGroup.visible = false;
+      }
+      controlsRef.current?.update?.();
+      renderer.render(scene, camera);
+
+      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
+      const pngBlob = await canvasToPngBlob(renderer.domElement);
+      const jsonBlob = new Blob([JSON.stringify(snapshotArtifact, null, 2)], {
+        type: 'application/json',
+      });
+      const fileStem = buildSnapshotFileStem(
+        snapshotArtifact.variantId ?? selectedVariantId,
+        snapshotArtifact.capturedAt
+      );
+
+      downloadBlob(pngBlob, `${fileStem}.png`);
+      downloadBlob(jsonBlob, `${fileStem}.json`);
+
+      setCaptureStatus({
+        tone: 'success',
+        text: `Saved snapshot PNG and JSON with ${snapshotArtifact.visibleObjectCount} visible objects.`,
+      });
+    } catch (captureError) {
+      setCaptureStatus({
+        tone: 'error',
+        text:
+          captureError instanceof Error
+            ? captureError.message
+            : 'Failed to capture the current 3D snapshot.',
+      });
+    } finally {
+      if (rotatorGroup && previousRotatorVisibility !== null) {
+        rotatorGroup.visible = previousRotatorVisibility;
+      }
+      setIsCapturing(false);
+    }
+  }
+
+  async function handleRenderSnapshotImage(): Promise<void> {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderState = renderStateRef.current;
+    if (
+      !renderer ||
+      !scene ||
+      !camera ||
+      !renderState ||
+      !(renderer.domElement instanceof HTMLCanvasElement)
+    ) {
+      setRenderStatus({
+        tone: 'error',
+        text: '3D preview is not ready yet. Please wait for the scene to finish loading.',
+      });
+      return;
+    }
+
+    setIsRenderingImage(true);
+    setRenderStatus({
+      tone: 'neutral',
+      text: 'Capturing the current view and sending it to OpenRouter Gemini...',
+    });
+
+    const hiddenNodes: Array<{ visible: boolean; node: { visible: boolean } }> = [];
+    const hideNode = (node: unknown): void => {
+      if (!node || typeof node !== 'object' || !('visible' in node)) {
+        return;
+      }
+      const visible = (node as { visible: boolean }).visible;
+      hiddenNodes.push({ node: node as { visible: boolean }, visible });
+      (node as { visible: boolean }).visible = false;
+    };
+
+    try {
+      const rotatorGroup = rotatorGroupRef.current;
+      if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
+        hideNode(rotatorGroup);
+      }
+      scene.traverse((node: any) => {
+        if (node?.userData?.aiRenderHide === true && typeof node.visible === 'boolean') {
+          hideNode(node);
+        }
+      });
+      controlsRef.current?.update?.();
+      renderer.render(scene, camera);
+      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
+      const snapshotImageDataUrl = canvasToDataUrl(renderer.domElement);
+      const layoutReferenceImageDataUrl = buildLayoutReferenceImageDataUrl({
+        floorplan: activeFloorplan,
+        design,
+      });
+      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
+        {
+          snapshotPayload: snapshotArtifact as Record<string, unknown>,
+          snapshotImageDataUrl,
+          layoutReferenceImageDataUrl,
+          userPrompt: renderPrompt,
+        }
+      );
+      setRenderedSnapshotImage(renderResult.render);
+      if (renderResult.saved_render) {
+        upsertSavedRender(renderResult.saved_render);
+        setSavedRenderId(renderResult.saved_render.id);
+      } else {
+        setSavedRenderId(null);
+      }
+      setRenderStatus({
+        tone: 'success',
+        text: `Generated image with ${renderResult.render.models.image_model_name}.`,
+      });
+    } catch (renderError) {
+      setRenderStatus({
+        tone: 'error',
+        text:
+          renderError instanceof Error
+            ? renderError.message
+            : 'Failed to generate an image from the current snapshot.',
+      });
+    } finally {
+      for (let index = hiddenNodes.length - 1; index >= 0; index -= 1) {
+        hiddenNodes[index].node.visible = hiddenNodes[index].visible;
+      }
+      controlsRef.current?.update?.();
+      renderer.render(scene, camera);
+      setIsRenderingImage(false);
+    }
+  }
 
   useEffect(() => {
     if (viewMode !== '3d') return;
@@ -200,17 +649,31 @@ export const ThreeDPreviewPanel: React.FC = () => {
       try {
         const THREE_URL = new URL('../vendor/three/three.module.js', import.meta.url).toString();
         const ORBIT_URL = new URL('../vendor/three/OrbitControls.js', import.meta.url).toString();
+        const GLTF_LOADER_URL = new URL(
+          '../vendor/three/loaders/GLTFLoader.js',
+          import.meta.url
+        ).toString();
 
         const THREE: any = await import(/* @vite-ignore */ THREE_URL);
         const controlsMod: any = await import(/* @vite-ignore */ ORBIT_URL);
         const OrbitControls = controlsMod.OrbitControls;
+        let GLTFLoader: any = null;
+        try {
+          const gltfLoaderMod: any = await import(/* @vite-ignore */ GLTF_LOADER_URL);
+          GLTFLoader = gltfLoaderMod.GLTFLoader ?? null;
+        } catch {
+          GLTFLoader = null;
+        }
 
         if (disposed || !el.isConnected) return;
         if (import.meta.env.DEV) {
           console.debug('[3D] init', { width, height });
         }
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          preserveDrawingBuffer: true,
+        });
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.setSize(width, height);
         renderer.setClearColor(0xf6f4ef, 1);
@@ -231,6 +694,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
         el.appendChild(renderer.domElement);
 
         const scene = new THREE.Scene();
+        sceneRef.current = scene;
+        rendererRef.current = renderer;
         const ambient = new THREE.AmbientLight(0xffffff, 0.85);
         scene.add(ambient);
         const dir = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -263,7 +728,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         let minY = roomBounds?.minY ?? 0;
         let maxX = roomBounds?.maxX ?? 6000;
         let maxY = roomBounds?.maxY ?? 4000;
-        if (!roomBounds && objects.length) {
+        if (!roomBounds && resolvedObjects.length) {
           minX = Infinity;
           minY = Infinity;
           maxX = -Infinity;
@@ -277,7 +742,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           : null;
         const outlierLimit = roomSpan ? roomSpan * 4 : null;
 
-        for (const obj of objects) {
+        for (const obj of resolvedObjects) {
           const { minX: ox1, minY: oy1, maxX: ox2, maxY: oy2 } = obj.bbox;
           if (![ox1, oy1, ox2, oy2].every((v) => Number.isFinite(v))) continue;
           if (outlierLimit !== null) {
@@ -314,6 +779,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         camera.far = Math.max(500, maxDimM * 8);
         camera.updateProjectionMatrix();
         camera.position.set(0, Math.max(2.5, maxDimM * 0.9), Math.max(3.5, maxDimM * 1.2));
+        cameraRef.current = camera;
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enabled = editModeRef.current === 'idle';
         controls.enableRotate = true;
@@ -328,6 +794,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           styledResult?.room?.surfaces?.floor_color_hex ??
           styledResult?.room?.surfaces?.floorColorHex ??
           '#f0ece4';
+        const ceilingColorHex =
+          styledResult?.room?.surfaces?.ceiling_color_hex ??
+          styledResult?.room?.surfaces?.ceilingColorHex ??
+          null;
 
         const floorPts =
           roomPts.length >= 3
@@ -354,6 +824,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
         const grid = new THREE.GridHelper(Math.max(spanX, spanY) * MM_TO_M * 1.2, 20, 0xd6d1c7, 0xd6d1c7);
         grid.position.y = 0.001;
+        grid.userData.aiRenderHide = true;
         scene.add(grid);
 
         const wallHeightMm = Number(userInput.height ?? 2800);
@@ -388,13 +859,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             doors: [],
             windows: [],
           };
-        const resolveSegment = (item: any): { p1: any; p2: any } | null => {
-          if (item?.start_mm && item?.end_mm) return { p1: item.start_mm, p2: item.end_mm };
-          if (Array.isArray(item?.segment_mm) && item.segment_mm.length >= 2) {
-            return { p1: item.segment_mm[0], p2: item.segment_mm[1] };
-          }
-          return null;
-        };
+        const resolveSegment = (item: any): { p1: any; p2: any } | null => resolveOpeningSegmentMm(item);
         const wallGroup = new THREE.Group();
         scene.add(wallGroup);
         for (const wall of walls) {
@@ -426,6 +891,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           mesh.userData = {
             wallId,
             wallMesh: true,
+            wallOpacity,
           };
           // 2D plan uses +Y "up". Our 3D preview maps plan Y to -Z so 3D matches the 2D canvas orientation.
           mesh.position.set((midX - centerXmm) * MM_TO_M, wallHeight / 2, -(midY - centerYmm) * MM_TO_M);
@@ -556,22 +1022,29 @@ export const ThreeDPreviewPanel: React.FC = () => {
           return { xMm: useLeft ? leftX : rightX, yMm: useLeft ? leftY : rightY, seg };
         };
 
-        const invByType = new Map<string, number>();
-        const invById = new Map<string, number>();
-        for (const item of inventory ?? []) {
-          const height = Number(item.height_mm ?? 0);
-          if (item?.asset_id && height > 0) {
-            invById.set(item.asset_id, height);
-          }
-          if (item?.category && height > 0 && !invByType.has(item.category)) {
-            invByType.set(item.category, height);
-          }
+        if (!GLTFLoader) {
+          setObjectVisualDiagnostics((current) => {
+            const next = { ...current };
+            for (const obj of resolvedObjects) {
+              if (next[obj.id]?.status !== 'glb_loading') {
+                continue;
+              }
+              next[obj.id] = {
+                ...next[obj.id],
+                status: 'proxy_no_loader',
+                reason: 'GLTFLoader is unavailable in the current frontend bundle.',
+              };
+            }
+            return next;
+          });
         }
 
         const heightById = new Map<string, number>();
-        for (const obj of objects) {
-          const invHeight = invById.get(obj.id) ?? invByType.get(obj.type);
-          const hMm = invHeight && invHeight > 0 ? invHeight : defaultHeightMm(obj.type);
+        for (const obj of resolvedObjects) {
+          const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
+          const hMm =
+            inventoryDimensions?.height ??
+            defaultHeightMm(obj.type);
           heightById.set(obj.id, hMm);
         }
 
@@ -732,14 +1205,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
         }
 
         const draggableById = new Map<string, boolean>();
-        for (const obj of objects) {
+        for (const obj of resolvedObjects) {
           draggableById.set(obj.id, !!obj.draggable);
         }
 
         const proxyById = new Map<string, any>();
+        const objectMetadataById = new Map<string, SnapshotObjectRecord>();
         const rotatorById = new Map<string, any>();
 
-        for (const obj of objects) {
+        for (const obj of resolvedObjects) {
           const wMmPlan = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
           const dMmPlan = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
           const cxMm = (obj.bbox.minX + obj.bbox.maxX) / 2;
@@ -759,16 +1233,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
           // Our 2D outputs store a world-axis-aligned bbox for the already-rotated footprint.
           // If we rotate the proxy mesh by rotCcw again, we must use the *unrotated* footprint dims
           // (i.e., de-rotate bbox dims) so the world footprint stays correct.
+          const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
+          const isWallHung = method === 'hang_on' && !isCeiling;
           let wMm = wMmPlan;
           let dMm = dMmPlan;
-          const isWallHung = method === 'hang_on' && !isCeiling;
           if (!isWallHung && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
             const tmp = wMm;
             wMm = dMm;
             dMm = tmp;
           }
 
-          // Default (floor) dimensions.
+          // Keep the target box anchored to the styled-layout footprint, but let GLBs
+          // preserve their native proportions inside that box via uniform scaling.
           const hMmDefault = heightById.get(obj.id) ?? defaultHeightMm(obj.type);
           let wM = wMm * MM_TO_M;
           let dM = dMm * MM_TO_M;
@@ -776,9 +1252,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           // Wall-hung items in a 2D plan typically use bbox as (width x height).
           if (isWallHung) {
-            hM = Math.max(0.06, dMm * MM_TO_M);
-            const thicknessM = clamp(hM * 0.08, 0.02, 0.06);
-            dM = thicknessM;
+            wM = Math.max(0.06, wMmPlan * MM_TO_M);
+            hM = Math.max(0.06, dMmPlan * MM_TO_M);
+            const thicknessMm = resolveWallHungPreviewDepthMm({
+              objectType: obj.type,
+              planWidthMm: wMmPlan,
+              planHeightMm: dMmPlan,
+              inventoryDimensions,
+            });
+            dM = Math.max(0.02, thicknessMm * MM_TO_M);
           }
 
           let baseY = 0;
@@ -795,8 +1277,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           let pxMm = cxMm;
           let pyMm = cyMm;
           // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
-          // Our proxy meshes already use +Z as their visual front, which corresponds to plan -Y.
-          // So plan rotation can map directly to yaw without an extra 180-degree offset.
+          // Proxies and GLBs both share the same plan-rotation convention.
           let rotY = planRotationToYawRad(rotCcwDeg);
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
@@ -807,17 +1288,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
             }
           }
 
-          const proxy = buildObjectProxy(THREE, {
-            type: obj.type,
-            wM,
-            dM,
-            hM,
-            colorHex: obj.colorHex,
-            material: obj.material ?? null,
-          });
-          proxy.position.set((pxMm - centerXmm) * MM_TO_M, baseY, -(pyMm - centerYmm) * MM_TO_M);
-          proxy.rotation.y = rotY;
-          proxy.userData = {
+          const objectRoot = new THREE.Group();
+          objectRoot.position.set(
+            (pxMm - centerXmm) * MM_TO_M,
+            baseY,
+            -(pyMm - centerYmm) * MM_TO_M
+          );
+          objectRoot.rotation.y = rotY;
+          objectRoot.userData = {
             objectId: obj.id,
             draggable: draggableById.get(obj.id) ?? false,
             baseY,
@@ -825,8 +1303,158 @@ export const ThreeDPreviewPanel: React.FC = () => {
             wMm,
             dMm,
           };
-          objectGroup.add(proxy);
-          proxyById.set(obj.id, proxy);
+
+          const fallbackProxy = buildObjectProxy(THREE, {
+            type: obj.type,
+            wM,
+            dM,
+            hM,
+            colorHex: obj.colorHex,
+            material: obj.material ?? null,
+          });
+          objectRoot.add(fallbackProxy);
+          objectGroup.add(objectRoot);
+          proxyById.set(obj.id, objectRoot);
+          objectMetadataById.set(obj.id, {
+            id: obj.id,
+            type: obj.type,
+            colorHex: obj.colorHex,
+            material: obj.material ?? null,
+            bboxMm: {
+              minX: Math.round(obj.bbox.minX),
+              minY: Math.round(obj.bbox.minY),
+              maxX: Math.round(obj.bbox.maxX),
+              maxY: Math.round(obj.bbox.maxY),
+            },
+            planPositionMm: {
+              x: Math.round(pxMm),
+              y: Math.round(pyMm),
+              z: Math.round((baseY + hM / 2) / MM_TO_M),
+            },
+            dimensionsMm: {
+              width: Math.round(wM / MM_TO_M),
+              depth: Math.round(dM / MM_TO_M),
+              height: Math.round(hM / MM_TO_M),
+            },
+            planRotationDeg: Math.round(rotCcwDeg * 100) / 100,
+            sceneYawDeg: Math.round(yawRadToPlanRotationDeg(rotY) * 100) / 100,
+            placeOn: obj.placeOn
+              ? {
+                  method: String(obj.placeOn.method ?? 'floor'),
+                  targetId: obj.placeOn.targetId ?? null,
+                }
+              : null,
+          });
+
+          const modelDescriptor = obj.inventoryResolution.glbEligible
+            ? obj.inventoryResolution.modelResolution?.descriptor ?? null
+            : null;
+          const preserveGeneratedMeshShape = isUserGeneratedPreviewItem(
+            obj.inventoryResolution.item
+          );
+          const stretchWallHungToLayoutBox =
+            isWallHung &&
+            isShelfLikePreviewType(obj.type) &&
+            !preserveGeneratedMeshShape;
+          if (GLTFLoader && modelDescriptor) {
+            const resolvedFitStrategy = isWallHung
+              ? stretchWallHungToLayoutBox
+                ? 'wall-plane'
+                : preserveGeneratedMeshShape
+                  ? 'wall-plane-uniform'
+                  : 'wall-plane-uniform-or-proxy'
+              : preserveGeneratedMeshShape
+                ? 'footprint-uniform'
+                : 'footprint-uniform-or-proxy';
+            const previewOverride = applyInventoryModelPreviewOverride({
+              descriptor: modelDescriptor,
+              context: 'panel',
+              fitStrategy: resolvedFitStrategy,
+              wM,
+              dM,
+              hM,
+            });
+            const resolvedAssetId =
+              obj.inventoryResolution.item?.asset_id?.toLowerCase() ?? null;
+            const isSectionalSofaFamily =
+              obj.type.toLowerCase().includes('sectional_sofa') ||
+              resolvedAssetId?.startsWith('sectional_sofa_') === true;
+            const needsSectionalFacingFallback =
+              isSectionalSofaFamily &&
+              !(previewOverride.applied?.rotationDegOffset === 180);
+            const descriptorForPanel = needsSectionalFacingFallback
+              ? {
+                  ...previewOverride.descriptor,
+                  rotationDeg: previewOverride.descriptor.rotationDeg + 180,
+                }
+              : previewOverride.descriptor;
+            void buildGlbPreviewModel({
+                THREE,
+                GLTFLoader,
+                descriptor: descriptorForPanel,
+                wM: previewOverride.wM,
+                dM: previewOverride.dM,
+                hM: previewOverride.hM,
+                fitStrategy: previewOverride.fitStrategy,
+                colorHex: obj.colorHex,
+                preserveMaterialTextures: preserveGeneratedMeshShape,
+                minimumHorizontalAspectRatio: preserveGeneratedMeshShape ? 0.45 : null,
+              })
+              .then((model) => {
+                if (disposed || !objectRoot.parent) {
+                  disposeThreeObject(model);
+                  return;
+                }
+                setObjectVisualDiagnostics((current) => ({
+                  ...current,
+                  [obj.id]: {
+                    ...(current[obj.id] ?? {
+                      objectId: obj.id,
+                      label: obj.type,
+                      rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+                      resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+                      reintroduced: Boolean(obj.reintroduced),
+                    }),
+                    status: 'glb_loaded',
+                    reason: previewOverride.applied
+                      ? `Loaded GLB with preview override for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
+                      : needsSectionalFacingFallback
+                        ? `Loaded GLB with sectional sofa panel facing fallback for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
+                      : `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
+                  },
+                }));
+                const previousChildren = [...objectRoot.children];
+                for (const child of previousChildren) {
+                  objectRoot.remove(child);
+                }
+                for (const child of previousChildren) {
+                  disposeThreeObject(child);
+                }
+                objectRoot.add(model);
+              })
+              .catch((modelError: unknown) => {
+                const reason =
+                  modelError instanceof Error
+                    ? modelError.message
+                    : 'Failed to load GLB, so the object stayed on the proxy mesh.';
+                const isAspectMismatch = reason.includes('proxy fallback stays in place');
+                setObjectVisualDiagnostics((current) => ({
+                  ...current,
+                  [obj.id]: {
+                    ...(current[obj.id] ?? {
+                      objectId: obj.id,
+                      label: obj.type,
+                      rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+                      resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+                      reintroduced: Boolean(obj.reintroduced),
+                    }),
+                    status: isAspectMismatch ? 'proxy_aspect_mismatch' : 'proxy_model_load_error',
+                    reason,
+                  },
+                }));
+                // Keep the procedural proxy as fallback when model loading fails.
+              });
+          }
 
           // Rotation handle (torus + knob) for draggable floor objects.
           if (draggableById.get(obj.id) && method !== 'hang_on') {
@@ -846,14 +1474,56 @@ export const ThreeDPreviewPanel: React.FC = () => {
             const rotator = new THREE.Group();
             rotator.add(ring);
             rotator.add(knob);
-            rotator.position.copy(proxy.position);
-            rotator.rotation.y = proxy.rotation.y;
+            rotator.position.copy(objectRoot.position);
+            rotator.rotation.y = objectRoot.rotation.y;
             rotator.userData = { objectId: obj.id, rotator: true };
             rotator.visible = false;
             rotatorGroup.add(rotator);
             rotatorById.set(obj.id, rotator);
           }
         }
+
+        rotatorGroupRef.current = rotatorGroup;
+        renderStateRef.current = {
+          THREE,
+          renderer,
+          camera,
+          controls,
+          objectGroup,
+          wallGroup,
+          proxyById,
+          objectMetadataById,
+          roomBoundsMm: {
+            minX: Math.round(bounds.minX),
+            minY: Math.round(bounds.minY),
+            maxX: Math.round(bounds.maxX),
+            maxY: Math.round(bounds.maxY),
+          },
+          roomPolygonMm: roomPts.map((point) => ({
+            x: Number(point.x),
+            y: Number(point.y),
+          })),
+          roomCenterMm: {
+            x: centerXmm,
+            y: centerYmm,
+          },
+          roomOpenings: {
+            doors: normalizeSnapshotOpenings(Array.isArray(openings.doors) ? openings.doors : []),
+            windows: normalizeSnapshotOpenings(
+              Array.isArray(openings.windows) ? openings.windows : []
+            ),
+          },
+          roomSurfaceColors: {
+            wallColorHex,
+            floorColorHex,
+            ceilingColorHex,
+          },
+          variantId: selectedVariantId,
+          selectedObjectId: selectedIdRef.current,
+          selectedWallId,
+          editMode: editModeRef.current,
+          wallOcclusionOpacityThreshold: SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD,
+        };
 
         const updateRotatorsVisibility = () => {
           const mode = editModeRef.current;
@@ -1201,6 +1871,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
       } catch {
         // ignore
       }
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
+      rotatorGroupRef.current = null;
+      renderStateRef.current = null;
       if (import.meta.env.DEV) {
         console.debug('[3D] cleanup');
       }
@@ -1208,8 +1883,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
   }, [
     viewMode,
     activeFloorplan,
-    objects,
-    inventory,
+    resolvedObjects,
     styledResult,
     userInput.height,
     design,
@@ -1225,6 +1899,24 @@ export const ThreeDPreviewPanel: React.FC = () => {
       <div className="three-panel-header">
         <div className="three-panel-title">3D Preview</div>
         <div className="three-panel-actions">
+          <button
+            className="ghost"
+            disabled={isCapturing}
+            onClick={() => {
+              void handleCaptureSnapshot();
+            }}
+          >
+            {isCapturing ? 'Capturing...' : 'Capture'}
+          </button>
+          <button
+            className="ghost"
+            disabled={isRenderingImage}
+            onClick={() => {
+              void handleRenderSnapshotImage();
+            }}
+          >
+            {isRenderingImage ? 'Generating...' : 'Generate Image'}
+          </button>
           <button
             className="ghost"
             onClick={() => {
@@ -1262,6 +1954,37 @@ export const ThreeDPreviewPanel: React.FC = () => {
           {!selectedId && selectedWallId ? (
             <div className="three-panel-hint">Selected wall: {selectedWallId}</div>
           ) : null}
+          {captureStatus ? (
+            <div
+              aria-live="polite"
+              className={`three-panel-status ${captureStatus.tone}`}
+            >
+              {captureStatus.text}
+            </div>
+          ) : null}
+          {renderStatus ? (
+            <div
+              aria-live="polite"
+              className={`three-panel-status ${renderStatus.tone}`}
+            >
+              {renderStatus.text}
+            </div>
+          ) : null}
+          <div className="three-panel-prompt">
+            <label htmlFor="three-render-prompt">Image Prompt</label>
+            <textarea
+              id="three-render-prompt"
+              className="three-panel-prompt-input"
+              rows={3}
+              disabled={isRenderingImage}
+              placeholder="Describe the look you want, for example: warm Japandi materials, soft natural daylight, premium photorealistic styling."
+              value={renderPrompt}
+              onChange={(event) => setRenderPrompt(event.target.value)}
+            />
+            <div className="three-panel-prompt-note">
+              The current 3D view is captured as the structural source image. Floor grid lines are removed before sending it to Gemini.
+            </div>
+          </div>
           <div className="three-panel-hint">
             Click-drag to orbit. Click an object to select it, or click a wall to adjust its opacity.
           </div>
@@ -1280,6 +2003,100 @@ export const ThreeDPreviewPanel: React.FC = () => {
           </div>
         ) : null}
       </div>
+      {reintroducedObjects.length > 0 || proxyObjects.length > 0 ? (
+        <div className="three-debug-grid">
+          {reintroducedObjects.length > 0 ? (
+            <div className="three-debug-card">
+              <div className="three-debug-title">
+                Reintroduced Objects ({reintroducedObjects.length})
+              </div>
+              <div className="three-debug-list">
+                {reintroducedObjects.map((item) => (
+                  <div
+                    key={`${item.clusterId ?? 'no-cluster'}-${item.objectId}`}
+                    className="three-debug-item"
+                  >
+                    <strong>{item.objectType}</strong>
+                    <span>{item.objectId}</span>
+                    {item.clusterId ? <span>cluster: {item.clusterId}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {proxyObjects.length > 0 ? (
+            <div className="three-debug-card">
+              <div className="three-debug-title">
+                Proxy Fallbacks ({proxyObjects.length})
+              </div>
+              <div className="three-debug-list">
+                {proxyObjects.map((item) => (
+                  <div key={item.objectId} className="three-debug-item">
+                    <strong>{item.label}</strong>
+                    <span>
+                      raw: {item.rawAssetId ?? 'n/a'} | inventory:{' '}
+                      {item.resolvedAssetId ?? 'not matched'}
+                    </span>
+                    <span>{item.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {renderedSnapshotImage ? (
+        <div className="three-render-output">
+          <div className="three-render-output-header">
+            <div>
+              <strong>AI Render</strong>
+              <div className="muted">
+                Image: {renderedSnapshotImage.models.image_model_name} | Aspect:{' '}
+                {renderedSnapshotImage.image.aspect_ratio} | Max tokens:{' '}
+                {renderedSnapshotImage.models.max_tokens} | 2D reference:{' '}
+                {renderedSnapshotImage.request.layout_reference_used ? 'on' : 'off'}
+              </div>
+            </div>
+            <div className="three-render-chip-row">
+              <span className="three-render-chip">OpenRouter Gemini</span>
+              {savedRenderId ? (
+                <span className="three-render-chip fallback">
+                  Saved to account: {savedRenderId}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <div className="three-render-output-grid">
+            <div className="three-render-image-wrap">
+              <img
+                className="three-render-image"
+                src={renderedSnapshotImage.image.data_url}
+                alt="Generated architectural render from the current 3D snapshot"
+              />
+            </div>
+            <div className="three-render-meta">
+              <div className="three-render-section">
+                <strong>User Prompt</strong>
+                <p>{renderedSnapshotImage.request.user_prompt}</p>
+              </div>
+              <div className="three-render-section">
+                <strong>System Prompt Source</strong>
+                <p>Gemini system prompt + original user prompt + current 3D layout image.</p>
+              </div>
+              {renderedSnapshotImage.request.layout_reference_enabled ? (
+                <div className="three-render-section">
+                  <strong>2D Layout Reference</strong>
+                  <p>
+                    {renderedSnapshotImage.request.layout_reference_used
+                      ? 'Enabled from backend env and sent as an extra reference image.'
+                      : 'Enabled in code path, but no 2D reference image was used for this render.'}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

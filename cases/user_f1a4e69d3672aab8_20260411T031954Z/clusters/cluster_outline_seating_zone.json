@@ -1,0 +1,229 @@
+{
+  "status": "OK",
+  "cluster_id": "seating_zone",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "armchair",
+      "x": 1750,
+      "y": 2100,
+      "rot": 180
+    },
+    {
+      "id": "coffee_table",
+      "x": 0,
+      "y": 2100,
+      "rot": 0
+    },
+    {
+      "id": "floor_lamp",
+      "x": 3150,
+      "y": 2100,
+      "rot": 270
+    },
+    {
+      "id": "ottoman",
+      "x": 900,
+      "y": 2100,
+      "rot": 0
+    },
+    {
+      "id": "sectional_sofa",
+      "x": 0,
+      "y": 900,
+      "rot": 0
+    },
+    {
+      "id": "side_table",
+      "x": 2750,
+      "y": 2100,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "armchair",
+        "x": 1750,
+        "y": 2100,
+        "w": 840,
+        "h": 710
+      },
+      {
+        "id": "coffee_table",
+        "x": 0,
+        "y": 2100,
+        "w": 900,
+        "h": 500
+      },
+      {
+        "id": "floor_lamp",
+        "x": 3150,
+        "y": 2100,
+        "w": 320,
+        "h": 350
+      },
+      {
+        "id": "ottoman",
+        "x": 900,
+        "y": 2100,
+        "w": 540,
+        "h": 500
+      },
+      {
+        "id": "sectional_sofa",
+        "x": 0,
+        "y": 900,
+        "w": 2540,
+        "h": 920
+      },
+      {
+        "id": "side_table",
+        "x": 2750,
+        "y": 2100,
+        "w": 390,
+        "h": 370
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 900,
+      "max_x": 3470,
+      "max_y": 2810
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 0,
+          "y": 900
+        },
+        {
+          "x": 3470,
+          "y": 900
+        },
+        {
+          "x": 3470,
+          "y": 2450
+        },
+        {
+          "x": 3140,
+          "y": 2450
+        },
+        {
+          "x": 3140,
+          "y": 2470
+        },
+        {
+          "x": 2590,
+          "y": 2470
+        },
+        {
+          "x": 2590,
+          "y": 2810
+        },
+        {
+          "x": 1750,
+          "y": 2810
+        },
+        {
+          "x": 1750,
+          "y": 2600
+        },
+        {
+          "x": 0,
+          "y": 2600
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": -1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "sectional_sofa": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "coffee_table": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "ottoman": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "armchair": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": -1,
+          "dy": 0
+        }
+      },
+      "side_table": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "floor_lamp": {
+        "front_local": {
+          "dx": 1,
+          "dy": 0
+        },
+        "axis_local": {
+          "dx": 0,
+          "dy": -1
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

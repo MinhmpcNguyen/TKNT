@@ -5020,6 +5020,133 @@ def _dense_semantic_anchor_specs_for_cluster(
     return specs
 
 
+def _rescue_semantic_anchor_specs_for_cluster(
+    *,
+    room_bbox: Tuple[float, float, float, float],
+    opening_ctx: Dict[str, Any],
+    width: float,
+    height: float,
+    grid_mm: int,
+    hints: Dict[str, Any],
+) -> List[Tuple[int, int, str, float]]:
+    specs = list(
+        _dense_semantic_anchor_specs_for_cluster(
+            room_bbox=room_bbox,
+            opening_ctx=opening_ctx,
+            width=width,
+            height=height,
+            grid_mm=grid_mm,
+            hints=hints,
+        )
+    )
+    x1, y1, x2, y2 = [float(v) for v in room_bbox]
+    max_x = max(x1, x2 - width)
+    max_y = max(y1, y2 - height)
+    span_x = max(0.0, max_x - x1)
+    span_y = max(0.0, max_y - y1)
+
+    wall_priority = (
+        0.76 if hints.get("prefer_wall") or hints.get("avoid_center") else 0.68
+    )
+    center_priority = 0.62 if hints.get("prefer_center") else 0.54
+    wall_fractions = (0.02, 0.12, 0.22, 0.35, 0.5, 0.65, 0.78, 0.88, 0.98)
+
+    for frac in wall_fractions:
+        px = int(_snap_to_grid(x1 + span_x * frac, grid_mm))
+        py = int(_snap_to_grid(y1 + span_y * frac, grid_mm))
+        specs.extend(
+            [
+                (px, int(_snap_to_grid(y1, grid_mm)), "rescue_top", wall_priority),
+                (
+                    px,
+                    int(_snap_to_grid(max_y, grid_mm)),
+                    "rescue_bottom",
+                    wall_priority,
+                ),
+                (int(_snap_to_grid(x1, grid_mm)), py, "rescue_left", wall_priority),
+                (int(_snap_to_grid(max_x, grid_mm)), py, "rescue_right", wall_priority),
+            ]
+        )
+
+    center_x = int(_snap_to_grid(x1 + 0.5 * span_x, grid_mm))
+    center_y = int(_snap_to_grid(y1 + 0.5 * span_y, grid_mm))
+    lane_offsets = (-2 * grid_mm, -grid_mm, 0, grid_mm, 2 * grid_mm)
+    for offset in lane_offsets:
+        specs.extend(
+            [
+                (
+                    center_x + offset,
+                    int(_snap_to_grid(y1, grid_mm)),
+                    "rescue_center_col_top",
+                    center_priority,
+                ),
+                (
+                    center_x + offset,
+                    int(_snap_to_grid(max_y, grid_mm)),
+                    "rescue_center_col_bottom",
+                    center_priority,
+                ),
+                (
+                    int(_snap_to_grid(x1, grid_mm)),
+                    center_y + offset,
+                    "rescue_center_row_left",
+                    center_priority,
+                ),
+                (
+                    int(_snap_to_grid(max_x, grid_mm)),
+                    center_y + offset,
+                    "rescue_center_row_right",
+                    center_priority,
+                ),
+            ]
+        )
+
+    for key, prefix in (("doors", "door"), ("windows", "window")):
+        for mid_x, mid_y in _opening_midpoints(opening_ctx, key):
+            projected_x = int(
+                _snap_to_grid(min(max(mid_x - 0.5 * width, x1), max_x), grid_mm)
+            )
+            projected_y = int(
+                _snap_to_grid(min(max(mid_y - 0.5 * height, y1), max_y), grid_mm)
+            )
+            specs.extend(
+                [
+                    (
+                        projected_x,
+                        int(_snap_to_grid(y1, grid_mm)),
+                        f"rescue_{prefix}_top",
+                        0.66,
+                    ),
+                    (
+                        projected_x,
+                        int(_snap_to_grid(max_y, grid_mm)),
+                        f"rescue_{prefix}_bottom",
+                        0.66,
+                    ),
+                    (
+                        int(_snap_to_grid(x1, grid_mm)),
+                        projected_y,
+                        f"rescue_{prefix}_left",
+                        0.66,
+                    ),
+                    (
+                        int(_snap_to_grid(max_x, grid_mm)),
+                        projected_y,
+                        f"rescue_{prefix}_right",
+                        0.66,
+                    ),
+                ]
+            )
+
+    return _dedupe_anchor_specs(
+        specs,
+        room_bbox=room_bbox,
+        width=width,
+        height=height,
+        grid_mm=grid_mm,
+    )
+
+
 def _dedupe_anchor_specs(
     specs: List[Tuple[int, int, str, float]],
     *,
@@ -6064,6 +6191,83 @@ def _enumerate_candidates_for_one_cluster(
                     variant,
                     variantized_clusters,
                 )
+
+    if len(candidates) < max(4, min(10, max_candidates_per_cluster // 3)):
+        for variant in variants:
+            vcinfo = deepcopy(variant.get("cluster_payload") or cinfo)
+            variantized_clusters = _materialize_variantized_clusters_payload(
+                clusters_outlines, {cluster_id: vcinfo}
+            )
+            variant_bonus = float(variant.get("priority") or 0.0) * 0.08
+            for rot in (0, 90, 180, 270):
+                polys = _build_cluster_polys(Polygon, vcinfo, 0, 0, rot)
+                if not polys:
+                    continue
+                geom = _fix_geom(unary_union(polys))
+                if geom.is_empty:
+                    continue
+                gb = geom.bounds
+                width = max(0.0, float(gb[2] - gb[0]))
+                height = max(0.0, float(gb[3] - gb[1]))
+                if width <= 0.0 or height <= 0.0:
+                    continue
+                dense_specs = _dense_semantic_anchor_specs_for_cluster(
+                    room_bbox=room_bbox,
+                    opening_ctx=opening_ctx,
+                    width=width,
+                    height=height,
+                    grid_mm=grid_mm,
+                    hints=hints,
+                )
+                for x, y, anchor_kind, anchor_priority in dense_specs[:96]:
+                    evaluate_candidate(
+                        x,
+                        y,
+                        rot,
+                        anchor_kind,
+                        anchor_priority + variant_bonus,
+                        "dense_fallback",
+                        variant,
+                        variantized_clusters,
+                    )
+
+    if len(candidates) < max(2, min(6, max_candidates_per_cluster // 4)):
+        for variant in variants:
+            vcinfo = deepcopy(variant.get("cluster_payload") or cinfo)
+            variantized_clusters = _materialize_variantized_clusters_payload(
+                clusters_outlines, {cluster_id: vcinfo}
+            )
+            for rot in (0, 90, 180, 270):
+                polys = _build_cluster_polys(Polygon, vcinfo, 0, 0, rot)
+                if not polys:
+                    continue
+                geom = _fix_geom(unary_union(polys))
+                if geom.is_empty:
+                    continue
+                gb = geom.bounds
+                width = max(0.0, float(gb[2] - gb[0]))
+                height = max(0.0, float(gb[3] - gb[1]))
+                if width <= 0.0 or height <= 0.0:
+                    continue
+                rescue_specs = _rescue_semantic_anchor_specs_for_cluster(
+                    room_bbox=room_bbox,
+                    opening_ctx=opening_ctx,
+                    width=width,
+                    height=height,
+                    grid_mm=grid_mm,
+                    hints=hints,
+                )
+                for x, y, anchor_kind, anchor_priority in rescue_specs[:128]:
+                    evaluate_candidate(
+                        x,
+                        y,
+                        rot,
+                        anchor_kind,
+                        anchor_priority,
+                        "rescue_reseed",
+                        variant,
+                        variantized_clusters,
+                    )
 
     candidates = _select_diverse_candidates_for_search(
         candidates,

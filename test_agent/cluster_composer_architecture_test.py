@@ -31,6 +31,8 @@ _coerce_verifier_args = _cluster_composer._coerce_verifier_args
 _greedy_improve_valid_layout = _cluster_composer._greedy_improve_valid_layout
 _run_verifier_once = _cluster_composer._run_verifier_once
 _seed_local_layout = _cluster_composer._seed_local_layout
+_build_search_seed_states = _cluster_composer._build_search_seed_states
+_generate_compaction_moves = _cluster_composer._generate_compaction_moves
 _tool_rank = _cluster_composer._tool_rank
 _build_preferred_patches = _cluster_composer_tools._build_preferred_patches
 _extract_grid_mm = _cluster_composer._extract_grid_mm
@@ -119,6 +121,125 @@ def _build_work_cluster_with_semantic_intent() -> dict[str, Any]:
             {
                 "object_type": "office_chair",
                 "rep_dims_m": {"L": 0.55, "W": 0.55},
+                "priority": "primary",
+                "clearance_mm": 0,
+            },
+        ],
+    }
+
+
+def _build_dense_living_cluster() -> dict[str, Any]:
+    return {
+        "cluster_id": "seating_zone",
+        "members": [
+            "sectional_sofa",
+            "sofa",
+            "coffee_table",
+            "ottoman",
+            "recliner",
+        ],
+        "anchors": ["sectional_sofa", "sofa"],
+        "hard_constraints": [
+            {"type": "no_overlap", "a": "sectional_sofa", "b": "sofa"},
+            {"type": "no_overlap", "a": "sectional_sofa", "b": "coffee_table"},
+            {"type": "no_overlap", "a": "sectional_sofa", "b": "ottoman"},
+            {"type": "no_overlap", "a": "sectional_sofa", "b": "recliner"},
+            {"type": "no_overlap", "a": "sofa", "b": "coffee_table"},
+            {"type": "no_overlap", "a": "sofa", "b": "ottoman"},
+            {"type": "no_overlap", "a": "sofa", "b": "recliner"},
+            {"type": "no_overlap", "a": "coffee_table", "b": "ottoman"},
+            {"type": "no_overlap", "a": "coffee_table", "b": "recliner"},
+            {"type": "no_overlap", "a": "ottoman", "b": "recliner"},
+        ],
+        "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+                "sectional_sofa": [0, 90],
+                "sofa": [0, 90],
+                "coffee_table": [0, 90],
+                "ottoman": [0, 90],
+                "recliner": [0, 90],
+            },
+            "access_requirements": [],
+        },
+        "decisions": [
+            {
+                "object_type": "sectional_sofa",
+                "rep_dims_m": {"L": 2.54, "W": 0.92},
+                "priority": "anchor",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "sofa",
+                "rep_dims_m": {"L": 1.79, "W": 0.81},
+                "priority": "anchor",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "coffee_table",
+                "rep_dims_m": {"L": 0.9, "W": 0.5},
+                "priority": "primary",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "ottoman",
+                "rep_dims_m": {"L": 0.54, "W": 0.5},
+                "priority": "secondary",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "recliner",
+                "rep_dims_m": {"L": 0.88, "W": 0.76},
+                "priority": "primary",
+                "clearance_mm": 0,
+            },
+        ],
+    }
+
+
+def _build_compact_living_anchor_cluster() -> dict[str, Any]:
+    return {
+        "cluster_id": "living_zone",
+        "members": ["sectional_sofa", "coffee_table"],
+        "anchors": ["sectional_sofa"],
+        "hard_constraints": [
+            {"type": "no_overlap", "a": "sectional_sofa", "b": "coffee_table"}
+        ],
+        "soft_constraints": [],
+        "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+                "sectional_sofa": [0],
+                "coffee_table": [0],
+            },
+            "facing": {
+                "sectional_sofa": {
+                    "front": "top",
+                    "notes": "Sectional faces upward in local cluster space.",
+                }
+            },
+            "semantic_placements": [
+                {
+                    "id": "coffee_table",
+                    "relative_to": "sectional_sofa",
+                    "kind": "anchor_side",
+                    "side_options": ["head", "left", "right"],
+                    "gap_min": 100,
+                    "gap_max": 100,
+                    "selection": "best_fit",
+                }
+            ],
+        },
+        "decisions": [
+            {
+                "object_type": "sectional_sofa",
+                "rep_dims_m": {"L": 2.0, "W": 0.8},
+                "priority": "anchor",
+                "clearance_mm": 0,
+            },
+            {
+                "object_type": "coffee_table",
+                "rep_dims_m": {"L": 0.6, "W": 0.4},
                 "priority": "primary",
                 "clearance_mm": 0,
             },
@@ -412,6 +533,85 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
         self.assertEqual(by_id["office_chair"]["rot"], 180)
         self.assertEqual(by_id["office_chair"]["y"], 600)
         self.assertEqual(by_id["office_chair"]["x"], 300)
+
+    def test_seed_layout_prefers_smallest_anchor_side_footprint(self) -> None:
+        cluster = _build_compact_living_anchor_cluster()
+
+        placements = _seed_local_layout(cluster)
+        by_id = {row["id"]: row for row in placements}
+
+        self.assertEqual(by_id["sectional_sofa"]["x"], 0)
+        self.assertEqual(by_id["sectional_sofa"]["y"], 0)
+        self.assertEqual(by_id["coffee_table"]["x"], by_id["sectional_sofa"]["x"])
+        self.assertGreater(by_id["coffee_table"]["y"], by_id["sectional_sofa"]["y"])
+
+    def test_build_search_seed_states_includes_rotated_layouts(self) -> None:
+        cluster = _build_work_cluster_with_semantic_intent()
+
+        seeds = _build_search_seed_states(cluster)
+        signatures = {
+            tuple((row["id"], row["x"], row["y"], row["rot"]) for row in seed)
+            for seed in seeds
+        }
+
+        self.assertGreaterEqual(len(signatures), 4)
+
+    def test_compact_wrap_seed_reduces_span_for_dense_cluster(self) -> None:
+        cluster = _build_dense_living_cluster()
+
+        row_seed = _seed_local_layout(cluster, strategy="row")
+        compact_seed = _seed_local_layout(cluster, strategy="compact_wrap")
+
+        row_bbox = _cluster_composer._build_cluster_output_from_placements(
+            cluster=cluster,
+            placements=row_seed,
+        )["cluster_footprint"]["local_bbox"]
+        compact_bbox = _cluster_composer._build_cluster_output_from_placements(
+            cluster=cluster,
+            placements=compact_seed,
+        )["cluster_footprint"]["local_bbox"]
+
+        row_span = int(row_bbox["max_x"]) - int(row_bbox["min_x"])
+        compact_span = int(compact_bbox["max_x"]) - int(compact_bbox["min_x"])
+        self.assertLess(compact_span, row_span)
+
+    def test_build_search_seed_states_include_non_linear_topology(self) -> None:
+        cluster = _build_dense_living_cluster()
+
+        seeds = _build_search_seed_states(cluster)
+        row_seed = _seed_local_layout(cluster, strategy="row")
+        row_signature = tuple(
+            (row["id"], row["x"], row["y"], row["rot"]) for row in row_seed
+        )
+
+        self.assertTrue(
+            any(
+                tuple((row["id"], row["x"], row["y"], row["rot"]) for row in seed)
+                != row_signature
+                for seed in seeds
+            )
+        )
+
+    def test_generate_compaction_moves_pulls_objects_toward_origin(self) -> None:
+        cluster = _build_work_cluster_with_semantic_intent()
+
+        moves = _generate_compaction_moves(
+            cluster=cluster,
+            placements=[
+                {"id": "desk", "x": 0, "y": 0, "rot": 0},
+                {"id": "office_chair", "x": 900, "y": 600, "rot": 180},
+            ],
+            grid_mm=50,
+        )
+
+        self.assertTrue(
+            any(
+                isinstance(move, dict)
+                and move.get("move_object") == "office_chair"
+                and move.get("reason") in {"COMPACT_LEFT_EDGE", "COMPACT_TOP_EDGE"}
+                for move in moves
+            )
+        )
 
     def test_verifier_enforces_center_span_for_docked_dependents(self) -> None:
         cluster = _build_work_cluster_with_semantic_intent()

@@ -19,6 +19,61 @@ fake_clients_package.__path__ = []  # type: ignore[attr-defined]
 sys.modules["clients"] = fake_clients_package
 
 fake_llm_module = types.ModuleType("clients.llm_client")
+LAST_CHAT_KWARGS: dict[str, object] = {}
+CHAT_COMPLETION_CALLS: list[dict[str, object]] = []
+CHAT_COMPLETION_OUTCOMES: list[object] = []
+
+
+def _default_style_plan_payload() -> dict[str, object]:
+    return {
+        "room_surfaces": {
+            "wall_color_hex": "#EDE3D6",
+            "floor_color_hex": "#AF7F52",
+            "ceiling_color_hex": "#FAF6EF",
+        },
+        "opening_colors": {
+            "doors": [{"id": "door_1", "color_hex": "#7B5F49"}],
+            "windows": [{"id": "window_1", "color_hex": "#E6D8C8"}],
+        },
+        "object_styles": [
+            {
+                "instance_id": "desk_1",
+                "color_hex": "#8D6B4D",
+                "material": "oak_wood",
+            },
+            {
+                "instance_id": "bed_1",
+                "color_hex": "#C2B5A3",
+                "material": "linen",
+            },
+            {
+                "instance_id": "desk_lamp_001",
+                "color_hex": "#C76B42",
+                "material": "brushed_metal",
+            },
+            {
+                "instance_id": "laptop_001",
+                "color_hex": "#444444",
+                "material": "anodized_aluminum",
+            },
+            {
+                "instance_id": "rug_001",
+                "color_hex": "#B9835A",
+                "material": "woven_wool",
+            },
+            {
+                "instance_id": "curtain_001",
+                "color_hex": "#D8C4AE",
+                "material": "linen",
+            },
+            {
+                "instance_id": "ceiling_light_001",
+                "color_hex": "#D5A45D",
+                "material": "brass",
+            },
+        ],
+        "notes": ["Palette locked from the requested Japandi direction."],
+    }
 
 
 class _FakeMessage:
@@ -38,60 +93,18 @@ class _FakeResponse:
 
 class _FakeClient:
     def chat_completion(self, *args: object, **kwargs: object) -> _FakeResponse:
-        _ = args, kwargs
-        return _FakeResponse(
-            json.dumps(
-                {
-                    "room_surfaces": {
-                        "wall_color_hex": "#EDE3D6",
-                        "floor_color_hex": "#AF7F52",
-                        "ceiling_color_hex": "#FAF6EF",
-                    },
-                    "opening_colors": {
-                        "doors": [],
-                        "windows": [{"id": "window_1", "color_hex": "#E6D8C8"}],
-                    },
-                    "object_styles": [
-                        {
-                            "instance_id": "desk_1",
-                            "color_hex": "#8D6B4D",
-                            "material": "oak_wood",
-                        },
-                        {
-                            "instance_id": "bed_1",
-                            "color_hex": "#C2B5A3",
-                            "material": "linen",
-                        },
-                        {
-                            "instance_id": "desk_lamp_001",
-                            "color_hex": "#C76B42",
-                            "material": "brushed_metal",
-                        },
-                        {
-                            "instance_id": "laptop_001",
-                            "color_hex": "#444444",
-                            "material": "anodized_aluminum",
-                        },
-                        {
-                            "instance_id": "rug_001",
-                            "color_hex": "#B9835A",
-                            "material": "woven_wool",
-                        },
-                        {
-                            "instance_id": "curtain_001",
-                            "color_hex": "#D8C4AE",
-                            "material": "linen",
-                        },
-                        {
-                            "instance_id": "ceiling_light_001",
-                            "color_hex": "#D5A45D",
-                            "material": "brass",
-                        },
-                    ],
-                    "notes": ["Palette locked from the requested Japandi direction."],
-                }
-            )
-        )
+        _ = args
+        LAST_CHAT_KWARGS.clear()
+        LAST_CHAT_KWARGS.update(kwargs)
+        CHAT_COMPLETION_CALLS.append(dict(kwargs))
+        if CHAT_COMPLETION_OUTCOMES:
+            outcome = CHAT_COMPLETION_OUTCOMES.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            if isinstance(outcome, str):
+                return _FakeResponse(outcome)
+            return _FakeResponse(json.dumps(outcome))
+        return _FakeResponse(json.dumps(_default_style_plan_payload()))
 
 
 fake_llm_module.get_llm_client = lambda *args, **kwargs: _FakeClient()
@@ -186,7 +199,15 @@ def _sample_layout() -> dict[str, object]:
             ],
             "obstacles": [],
             "openings": {
-                "doors": [],
+                "doors": [
+                    {
+                        "id": "door_1",
+                        "segment_mm": [
+                            {"x": 4000, "y": 900},
+                            {"x": 4000, "y": 1700},
+                        ],
+                    }
+                ],
                 "windows": [
                     {
                         "id": "window_1",
@@ -199,7 +220,15 @@ def _sample_layout() -> dict[str, object]:
             },
         },
         "openings": {
-            "doors": [],
+            "doors": [
+                {
+                    "id": "door_1",
+                    "segment_mm": [
+                        {"x": 4000, "y": 900},
+                        {"x": 4000, "y": 1700},
+                    ],
+                }
+            ],
             "windows": [
                 {
                     "id": "window_1",
@@ -250,6 +279,123 @@ def _sample_layout() -> dict[str, object]:
 
 
 class StylistArchitectureTest(unittest.TestCase):
+    def setUp(self) -> None:
+        LAST_CHAT_KWARGS.clear()
+        CHAT_COMPLETION_CALLS.clear()
+        CHAT_COMPLETION_OUTCOMES.clear()
+
+    def test_generate_style_plan_forwards_explicit_model_name(self) -> None:
+        Stylist().generate_style_plan(
+            layout_json=_sample_layout(),
+            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+            tenant_id="demo_tenant",
+            model_name="gemma-4-31b-it",
+        )
+
+        self.assertEqual(LAST_CHAT_KWARGS.get("model_name"), "gemma-4-31b-it")
+
+    def test_variant_five_wraps_back_to_gemma_four(self) -> None:
+        self.assertEqual(
+            _stylist.stylist_model_name_for_variant(5),
+            "gemma-4-31b-it",
+        )
+
+    def test_generate_style_plan_retries_next_model_on_503_unavailable(self) -> None:
+        CHAT_COMPLETION_OUTCOMES.extend(
+            [
+                RuntimeError(
+                    "Server error '503 Service Unavailable' for url "
+                    "'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' "
+                    'Gemini response body: {"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'
+                ),
+                _default_style_plan_payload(),
+            ]
+        )
+
+        style_plan = Stylist().generate_style_plan(
+            layout_json=_sample_layout(),
+            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+            tenant_id="demo_tenant",
+            model_name="gemini-2.5-flash",
+        )
+
+        self.assertEqual(len(CHAT_COMPLETION_CALLS), 2)
+        self.assertEqual(
+            [call.get("model_name") for call in CHAT_COMPLETION_CALLS],
+            [
+                "gemini-2.5-flash",
+                "gemma-4-31b-it",
+            ],
+        )
+        self.assertEqual(
+            style_plan["room_surfaces"]["wall_color_hex"],
+            "#EDE3D6",
+        )
+
+    def test_generate_style_plan_retries_next_model_on_invalid_json(self) -> None:
+        CHAT_COMPLETION_OUTCOMES.extend(
+            [
+                '{"room_surfaces":{"wall_color_hex":"#F0F0F0"',
+                _default_style_plan_payload(),
+            ]
+        )
+
+        style_plan = Stylist().generate_style_plan(
+            layout_json=_sample_layout(),
+            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+            tenant_id="demo_tenant",
+            model_name="gemma-4-31b-it",
+        )
+
+        self.assertEqual(len(CHAT_COMPLETION_CALLS), 2)
+        self.assertEqual(
+            [call.get("model_name") for call in CHAT_COMPLETION_CALLS],
+            [
+                "gemma-4-31b-it",
+                "gemini-3.1-flash-lite-preview",
+            ],
+        )
+        self.assertEqual(
+            style_plan["room_surfaces"]["wall_color_hex"],
+            "#EDE3D6",
+        )
+
+    def test_generate_style_plan_repairs_code_fenced_trailing_comma_json(self) -> None:
+        CHAT_COMPLETION_OUTCOMES.append(
+            """```json
+{
+  "room_surfaces": {
+    "wall_color_hex": "#EDE3D6",
+    "floor_color_hex": "#AF7F52",
+    "ceiling_color_hex": "#FAF6EF",
+  },
+  "opening_colors": {
+    "doors": [{"id": "door_1", "color_hex": "#7B5F49"}],
+    "windows": [{"id": "window_1", "color_hex": "#E6D8C8"}],
+  },
+  "object_styles": [],
+  "notes": ["Palette locked from the requested Japandi direction."],
+}
+```"""
+        )
+
+        style_plan = Stylist().generate_style_plan(
+            layout_json=_sample_layout(),
+            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+            tenant_id="demo_tenant",
+            model_name="gemma-4-31b-it",
+        )
+
+        self.assertEqual(len(CHAT_COMPLETION_CALLS), 1)
+        self.assertEqual(
+            style_plan["room_surfaces"]["wall_color_hex"],
+            "#EDE3D6",
+        )
+        self.assertEqual(
+            style_plan["opening_colors"]["windows"][0]["id"],
+            "window_1",
+        )
+
     def test_generate_hard_codes_accessory_layout_and_only_uses_llm_for_style(
         self,
     ) -> None:
@@ -268,6 +414,10 @@ class StylistArchitectureTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "OK")
         self.assertEqual(result["room"]["surfaces"]["wall_color_hex"], "#EDE3D6")
+        self.assertEqual(result["room"]["surfaces"]["floor_color_hex"], "#AF7F52")
+        self.assertEqual(
+            result["room"]["opening_colors"]["doors"][0]["color_hex"], "#7B5F49"
+        )
         self.assertEqual(
             result["room"]["opening_colors"]["windows"][0]["color_hex"], "#E6D8C8"
         )

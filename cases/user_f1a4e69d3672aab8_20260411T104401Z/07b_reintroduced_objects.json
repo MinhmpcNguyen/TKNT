@@ -1,0 +1,78 @@
+{
+  "status": "OK",
+  "total_dropped_items": 4,
+  "inserted_count": 2,
+  "remaining_count": 2,
+  "reintroduced_objects_by_cluster": {
+    "sleep_zone": [
+      {
+        "object_id": "bench__reintroduced_1",
+        "object_type": "bench",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 4950,
+          "min_y": 100,
+          "max_x": 5880,
+          "max_y": 500
+        }
+      }
+    ],
+    "work_zone": [
+      {
+        "object_id": "office_chair__reintroduced_1",
+        "object_type": "office_chair",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 5400,
+          "min_y": 750,
+          "max_x": 5980,
+          "max_y": 1300
+        }
+      }
+    ]
+  },
+  "remaining_dropped_objects_by_cluster": {
+    "storage_zone": [
+      {
+        "cluster_id": "storage_zone",
+        "object_type": "bookshelf",
+        "category": "bookshelf",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.63,
+          "W": 0.25,
+          "H": 2.22,
+          "A": 0.1575,
+          "R": 2.52,
+          "source_id": "bookshelf_001"
+        },
+        "rationale": "Deterministic policy marked bookshelf as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      }
+    ],
+    "lounge_zone": [
+      {
+        "cluster_id": "lounge_zone",
+        "object_type": "side_table",
+        "category": "side_table",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.39,
+          "W": 0.37,
+          "H": 0.58,
+          "A": 0.1443,
+          "R": 1.0540540540540542,
+          "source_id": "side_table_007"
+        },
+        "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      }
+    ]
+  }
+}

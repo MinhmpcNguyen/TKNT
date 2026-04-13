@@ -20,6 +20,8 @@ type FloorplanPreparation = {
   shiftDy: number;
 };
 
+const REINTRODUCED_OBJECT_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
+
 export function preparePipelineResultLayouts(params: {
   roomPayload: any;
   resultPayload: any;
@@ -39,12 +41,21 @@ export function preparePipelineResultLayouts(params: {
     delete baseStyledPayload.variants;
     delete baseStyledPayload.selected_variant_id;
   }
-  const shiftedStyledResult = shiftStyledLayout(
+  const baseAbsoluteLayout =
+    resultPayload?.absolute_layout && typeof resultPayload.absolute_layout === 'object'
+      ? resultPayload.absolute_layout
+      : {};
+  const enrichedBaseStyledPayload = enrichRotationCcw(
     baseStyledPayload,
+    baseAbsoluteLayout,
+  );
+  const shiftedStyledResult = shiftStyledLayout(
+    enrichedBaseStyledPayload,
     shiftDx,
     shiftDy,
   );
-  const design = buildDesignFromStyledLayout(shiftedStyledResult, floorplan);
+  const styledFloorplan = applyStyledRoomAppearance(floorplan, shiftedStyledResult);
+  const design = buildDesignFromStyledLayout(shiftedStyledResult, styledFloorplan);
 
   const rawVariants = Array.isArray(resultPayload?.variants) ? resultPayload.variants : [];
   const variants = rawVariants
@@ -56,7 +67,10 @@ export function preparePipelineResultLayouts(params: {
         shiftDy,
       }),
     )
-    .filter((variant): variant is LayoutVariant => variant !== null);
+    .filter(
+      (variant: LayoutVariant | null): variant is LayoutVariant =>
+        variant !== null,
+    );
 
   const selectedVariantId = resolveSelectedVariantId(
     resultPayload?.selected_variant_id,
@@ -64,7 +78,7 @@ export function preparePipelineResultLayouts(params: {
   );
 
   return {
-    floorplan,
+    floorplan: styledFloorplan,
     styledResult: shiftedStyledResult,
     design,
     variants,
@@ -102,6 +116,7 @@ function prepareLayoutVariant(params: {
     shiftDx,
     shiftDy,
   );
+  const styledFloorplan = applyStyledRoomAppearance(floorplan, shiftedStyledResult);
 
   return {
     variant_id: variantId,
@@ -110,6 +125,21 @@ function prepareLayoutVariant(params: {
     reason: String(variant.reason ?? ''),
     layout_score: Number(variant.layout_score ?? 0),
     hard_valid: Boolean(variant.hard_valid),
+    complete:
+      variant.complete === undefined ? undefined : Boolean(variant.complete),
+    gallery_eligible:
+      variant.gallery_eligible === undefined
+        ? undefined
+        : Boolean(variant.gallery_eligible),
+    coverage_ratio:
+      variant.coverage_ratio === undefined
+        ? undefined
+        : Number(variant.coverage_ratio ?? 0),
+    missing_cluster_ids: Array.isArray(variant.missing_cluster_ids)
+      ? variant.missing_cluster_ids
+          .map((item: unknown) => String(item ?? '').trim())
+          .filter(Boolean)
+      : undefined,
     notes: Array.isArray(variant.notes)
       ? variant.notes
           .map((item: unknown) => String(item ?? '').trim())
@@ -117,7 +147,8 @@ function prepareLayoutVariant(params: {
       : [],
     absolute_layout: rawAbsoluteLayout,
     styled_result: shiftedStyledResult,
-    design: buildDesignFromStyledLayout(shiftedStyledResult, floorplan),
+    design: buildDesignFromStyledLayout(shiftedStyledResult, styledFloorplan),
+    cluster_previews: buildClusterPreviewsFromAbsoluteLayout(rawAbsoluteLayout),
   };
 }
 
@@ -132,6 +163,53 @@ function resolveSelectedVariantId(
     return selectedVariantId;
   }
   return variants[0]?.variant_id ?? null;
+}
+
+function buildClusterPreviewsFromAbsoluteLayout(
+  absoluteLayout: Record<string, unknown>,
+): Record<string, unknown> {
+  const objects = Array.isArray(absoluteLayout?.objects)
+    ? absoluteLayout.objects
+    : [];
+  const grouped = new Map<
+    string,
+    Array<{ x: number; y: number; w: number; h: number }>
+  >();
+
+  for (const row of objects) {
+    if (!row || typeof row !== 'object') {
+      continue;
+    }
+    const clusterId = String((row as any).cluster_id ?? '').trim();
+    const bbox = (row as any).bbox;
+    if (!clusterId || !bbox || typeof bbox !== 'object') {
+      continue;
+    }
+    const minX = Number((bbox as any).min_x ?? 0);
+    const minY = Number((bbox as any).min_y ?? 0);
+    const maxX = Number((bbox as any).max_x ?? minX);
+    const maxY = Number((bbox as any).max_y ?? minY);
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const rects = grouped.get(clusterId) ?? [];
+    rects.push({ x: minX, y: minY, w: width, h: height });
+    grouped.set(clusterId, rects);
+  }
+
+  return Object.fromEntries(
+    Array.from(grouped.entries()).map(([clusterId, rects]) => [
+      clusterId,
+      {
+        payload: {
+          cluster_id: clusterId,
+          cluster_footprint: {
+            type: 'union_of_rects',
+            rects,
+          },
+        },
+      },
+    ]),
+  );
 }
 
 function buildFloorplanFromRoomArtifact(
@@ -313,24 +391,31 @@ function buildDesignFromStyledLayout(
   }
   const objects = Array.isArray(styledPayload?.objects) ? styledPayload.objects : [];
   const placements = objects.map((objectRow: any, index: number) => {
+    const category = String(objectRow?.object_type ?? 'item');
+    const rawInstanceId = String(
+      objectRow?.instance_id ?? objectRow?.id ?? objectRow?.object_id ?? `obj_${index}`,
+    );
+    const placeOn = normalizePlaceOn(objectRow?.place_on);
     const manualInput =
       objectRow?.manual_input && typeof objectRow.manual_input === 'object'
         ? objectRow.manual_input
         : null;
+    const normalizedAssetId =
+      normalizeLayoutAssetId(
+        manualInput?.asset_id ??
+          rawInstanceId ??
+          objectRow?.object_id ??
+          category,
+      ) ?? rawInstanceId;
     if (manualInput) {
       return {
         placement_id: String(
           manualInput.placement_id ??
-            objectRow?.instance_id ??
+            rawInstanceId ??
             `manual_${index}`,
         ),
-        asset_id: String(
-          manualInput.asset_id ??
-            objectRow?.instance_id ??
-            objectRow?.object_type ??
-            `manual_${index}`,
-        ),
-        category: String(manualInput.category ?? objectRow?.object_type ?? 'item'),
+        asset_id: normalizedAssetId,
+        category: String(manualInput.category ?? category),
         position_mm: {
           x: Number(manualInput.position_mm?.x ?? 0),
           y: Number(manualInput.position_mm?.y ?? 0),
@@ -354,18 +439,21 @@ function buildDesignFromStyledLayout(
             : manualInput.constraint_mode === 'pinned'
               ? 'pinned'
               : 'free',
+        place_on: placeOn,
       };
     }
     const rotationDeg = Number(objectRow?.rotation_ccw ?? 0);
     const bbox = getNumericBbox(objectRow);
-    const footprint = getLocalFootprintFromWorldBbox(bbox, rotationDeg);
+    const footprint = normalizePlacementFootprint(
+      category,
+      getLocalFootprintFromWorldBbox(bbox, rotationDeg),
+      placeOn,
+    );
     const center = getBboxCenter(bbox);
     return {
-      placement_id: String(objectRow?.instance_id ?? `obj_${index}`),
-      asset_id: String(
-        objectRow?.instance_id ?? objectRow?.object_type ?? `obj_${index}`,
-      ),
-      category: String(objectRow?.object_type ?? 'item'),
+      placement_id: rawInstanceId,
+      asset_id: normalizedAssetId,
+      category,
       position_mm: center,
       rotation_deg: rotationDeg,
       footprint_mm: footprint,
@@ -374,12 +462,141 @@ function buildDesignFromStyledLayout(
       anchor: 'center' as const,
       source: 'generated' as const,
       constraint_mode: 'free' as const,
+      place_on: placeOn,
     };
   });
 
   return {
     floorplan_geometry: floorplan,
     placements,
+  };
+}
+
+function normalizeLayoutAssetId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+  const normalized = raw.replace(REINTRODUCED_OBJECT_ID_PATTERN, '').trim();
+  return normalized || raw;
+}
+
+function normalizePlaceOn(
+  placeOn: any,
+): {
+  method: string;
+  target_instance_id?: string | null;
+} | null {
+  if (!placeOn || typeof placeOn !== 'object') {
+    return null;
+  }
+  const method = String(placeOn.method ?? '').trim();
+  if (!method) {
+    return null;
+  }
+  const targetInstanceId =
+    typeof placeOn.target_instance_id === 'string' && placeOn.target_instance_id.trim()
+      ? placeOn.target_instance_id.trim()
+      : null;
+  return {
+    method,
+    target_instance_id: targetInstanceId,
+  };
+}
+
+function normalizePlacementFootprint(
+  category: string,
+  footprint: { w: number; d: number },
+  placeOn: { method: string; target_instance_id?: string | null } | null,
+): { w: number; d: number } {
+  if (
+    placeOn?.method === 'hang_on' &&
+    isSlimWallMountedCategory(category)
+  ) {
+    const longSide = Math.max(footprint.w, footprint.d, 1);
+    const shortSide = Math.max(24, Math.min(72, Math.min(footprint.w, footprint.d, 60)));
+    return { w: longSide, d: shortSide };
+  }
+  return footprint;
+}
+
+function isSlimWallMountedCategory(category: string): boolean {
+  const lowered = category.toLowerCase();
+  return lowered.includes('mirror');
+}
+
+function applyStyledRoomAppearance(
+  floorplan: FloorplanGeometry | null,
+  styledPayload: any,
+): FloorplanGeometry | null {
+  if (!floorplan) {
+    return null;
+  }
+  const surfaces = styledPayload?.room?.surfaces;
+  const openingColors =
+    styledPayload?.room?.opening_colors ?? styledPayload?.room?.openingColors;
+  const wallColor =
+    typeof surfaces?.wall_color_hex === 'string'
+      ? surfaces.wall_color_hex
+      : null;
+  const floorColor =
+    typeof surfaces?.floor_color_hex === 'string'
+      ? surfaces.floor_color_hex
+      : null;
+  const doorColors = new Map<string, string>();
+  const windowColors = new Map<string, string>();
+
+  if (Array.isArray(openingColors?.doors)) {
+    for (const row of openingColors.doors) {
+      const id =
+        typeof row?.id === 'string' && row.id.trim() ? row.id.trim() : null;
+      const color =
+        typeof row?.color_hex === 'string' && row.color_hex.trim()
+          ? row.color_hex.trim()
+          : null;
+      if (id && color) {
+        doorColors.set(id, color);
+      }
+    }
+  }
+
+  if (Array.isArray(openingColors?.windows)) {
+    for (const row of openingColors.windows) {
+      const id =
+        typeof row?.id === 'string' && row.id.trim() ? row.id.trim() : null;
+      const color =
+        typeof row?.color_hex === 'string' && row.color_hex.trim()
+          ? row.color_hex.trim()
+          : null;
+      if (id && color) {
+        windowColors.set(id, color);
+      }
+    }
+  }
+
+  return {
+    ...floorplan,
+    room: {
+      ...floorplan.room,
+      floor_color_hex: floorColor ?? floorplan.room.floor_color_hex,
+    },
+    walls: floorplan.walls.map((wall) => ({
+      ...wall,
+      color_hex: wallColor ?? wall.color_hex,
+    })),
+    openings: {
+      doors: floorplan.openings.doors.map((door) => ({
+        ...door,
+        color_hex: doorColors.get(door.door_id) ?? door.color_hex,
+      })),
+      windows: floorplan.openings.windows.map((windowRow) => ({
+        ...windowRow,
+        color_hex: windowColors.get(windowRow.window_id) ?? windowRow.color_hex,
+      })),
+    },
   };
 }
 

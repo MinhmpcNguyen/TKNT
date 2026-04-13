@@ -1,0 +1,7 @@
+{
+  "model": "x/flux2-klein:latest",
+  "prompt": "Create exactly one isolated object that matches the description below.\nThe object must be centered, fully visible, and occupy most of the frame.\nUse a pure solid white background only.\nDo not add any environment, room context, floor plane, props, hands, people, text, or watermark.\nKeep the silhouette clean and the object readable for 3D reconstruction.\n\nObject description:\nA dog figure with white background",
+  "negative_prompt": "room, environment, floor plane, table, stand, pedestal, shelf, multiple objects, clutter, busy scene, colored background, gradient background, dark background, patterned background, text, watermark, logo, border, cropped object, cut off, partial object, person, hand, reflection",
+  "size": "1024x1024",
+  "response_format": "b64_json"
+}

@@ -1,0 +1,571 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_zone",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 100
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "foot of the bed"
+          },
+          "nightstand": {
+            "front": "top",
+            "notes": "drawer side"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": [
+          {
+            "id": "nightstand",
+            "relative_to": "bed",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "bed",
+          "category": "bed",
+          "cluster_id": "sleep_zone",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked bed as anchor in sleep; kept at quantity 1 with size tier M for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.96,
+            "W": 1.69,
+            "H": 0.48,
+            "A": 3.3124,
+            "R": 1.1597633136094674,
+            "source_id": "bed_014"
+          }
+        },
+        {
+          "object_type": "nightstand",
+          "category": "nightstand",
+          "cluster_id": "sleep_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked nightstand as secondary in sleep; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.43,
+            "W": 0.35,
+            "H": 0.53,
+            "A": 0.1505,
+            "R": 1.2285714285714286,
+            "source_id": "nightstand_003"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_zone",
+      "tag": "work",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "bottom",
+            "notes": "user side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "b_edge": "front",
+            "span": "center",
+            "gap_min": 0,
+            "gap_max": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "face_base"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "desk",
+          "category": "desk",
+          "cluster_id": "work_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked desk as anchor in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.98,
+            "W": 0.51,
+            "H": 0.78,
+            "A": 0.4998,
+            "R": 1.9215686274509802,
+            "source_id": "desk_004"
+          }
+        },
+        {
+          "object_type": "chair",
+          "category": "chair",
+          "cluster_id": "work_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked chair as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 0.85,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "chair_008"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_zone",
+      "tag": "storage",
+      "members": [
+        "wardrobe",
+        "dresser",
+        "storage_cabinet",
+        "laundry_basket",
+        "tv_console"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "wardrobe",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dresser",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "storage_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "wardrobe",
+          "b": "dresser",
+          "edge": "back",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dresser": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "bottom",
+            "notes": "door side"
+          },
+          "dresser": {
+            "front": "bottom",
+            "notes": "drawer side"
+          },
+          "storage_cabinet": {
+            "front": "bottom",
+            "notes": "door side"
+          },
+          "tv_console": {
+            "front": "bottom",
+            "notes": "screen side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dresser",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "dresser",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "laundry_basket",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit"
+          },
+          {
+            "id": "storage_cabinet",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "tv_console",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "wardrobe",
+          "category": "wardrobe",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked wardrobe as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.81,
+            "W": 0.6,
+            "H": 2.4,
+            "A": 0.486,
+            "R": 1.35,
+            "source_id": "wardrobe_008"
+          }
+        },
+        {
+          "object_type": "dresser",
+          "category": "dresser",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked dresser as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.88,
+            "W": 0.48,
+            "H": 0.8,
+            "A": 0.4224,
+            "R": 1.8333333333333335,
+            "source_id": "dresser_009"
+          }
+        },
+        {
+          "object_type": "storage_cabinet",
+          "category": "storage_cabinet",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked storage_cabinet as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.61,
+            "W": 0.41,
+            "H": 1.78,
+            "A": 0.2501,
+            "R": 1.4878048780487805,
+            "source_id": "storage_cabinet_002"
+          }
+        },
+        {
+          "object_type": "laundry_basket",
+          "category": "laundry_basket",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked laundry_basket as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.36,
+            "H": 0.58,
+            "A": 0.1404,
+            "R": 1.0833333333333335,
+            "source_id": "laundry_basket_002"
+          }
+        },
+        {
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked tv_console as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.26,
+            "W": 0.38,
+            "H": 0.58,
+            "A": 0.4788,
+            "R": 3.3157894736842106,
+            "source_id": "tv_console_002"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "lounge_zone",
+      "tag": "living",
+      "members": [
+        "armchair",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "armchair"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "floor_lamp",
+          "b": "armchair",
+          "weight": 2
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "armchair": {
+            "front": "top",
+            "notes": "seating side"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": [
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "armchair",
+          "category": "armchair",
+          "cluster_id": "lounge_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked armchair as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "lounge_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Partitioned into functional zones: sleep, work, storage, and lounge."
+  ],
+  "missing": []
+}

@@ -4,7 +4,7 @@ import json
 import math
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, TypedDict
 
 try:
     from shapely.geometry import LineString, Point, Polygon
@@ -14,9 +14,26 @@ except Exception as e:  # pragma: no cover
 
 from cluster_composer.constraint_score import (
     build_object_specs_from_cluster,
+    build_rects,
+    edge_gap,
+    get_front_base,
+    normalize_objects,
+    normalize_placements,
+    perpendicular_overlap_len,
+    resolve_anchor_side,
+    resolve_edge_token_to_base_side,
+    rotate_side,
     score_cluster_constraints,
 )
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_layout_grid_mm
+
+
+class ClusterPreferenceProfile(TypedDict):
+    prefer: set[str]
+    avoid: set[str]
+    intents: set[str]
+    viewing_partner: str | None
+    viewing_role: str | None
 
 
 # -----------------------------------------------------------------------------
@@ -606,6 +623,7 @@ def materialize_phase2_state(
         for oid, rect in rect_map.items():
             geom = transform_rect_world(rect, tx, ty, crot)
             poly = _bbox_poly(geom["bbox"])
+            placement = local_placement_map.get(oid) or {}
             obj_meta = (
                 important.get(oid) if isinstance(important.get(oid), dict) else {}
             )
@@ -623,11 +641,12 @@ def materialize_phase2_state(
                 dx, dy = abs(front_local[0]), abs(front_local[1])
                 size_along_access = w if dx >= dy else h
             required_clearance = int(round(0.25 * size_along_access))
+            object_rot = (int(placement.get("rot") or 0) + crot) % 360
             row = {
                 "cluster_id": cid,
                 "variant_id": variant_id,
                 "object_id": oid,
-                "rotation_ccw": crot,
+                "rotation_ccw": object_rot,
                 "local_rect": {
                     "x": int(round(float(rect.get("x", 0)))),
                     "y": int(round(float(rect.get("y", 0)))),
@@ -1140,17 +1159,19 @@ def _cluster_intents_by_id(payload: Dict[str, Any]) -> Dict[str, set[str]]:
 
 def _cluster_preference_profile(
     payload: Dict[str, Any],
-) -> Dict[str, Dict[str, set[str]]]:
+) -> dict[str, ClusterPreferenceProfile]:
     relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
-    out: Dict[str, Dict[str, set[str]]] = {}
+    out: dict[str, ClusterPreferenceProfile] = {}
 
-    def _slot(cluster_id: str) -> Dict[str, set[str]]:
+    def _slot(cluster_id: str) -> ClusterPreferenceProfile:
         return out.setdefault(
             cluster_id,
             {
                 "prefer": set(),
                 "avoid": set(),
                 "intents": set(),
+                "viewing_partner": None,
+                "viewing_role": None,
             },
         )
 
@@ -1194,7 +1215,109 @@ def _cluster_preference_profile(
             if text:
                 slot["intents"].add(text)
 
+    layout_intent = relation_plan.get("layout_intent_profile") or {}
+    if isinstance(layout_intent, dict):
+        focus_mode = str(layout_intent.get("focus_mode") or "mixed").strip().lower()
+        primary_cluster_id = layout_intent.get("primary_cluster_id")
+        secondary_cluster_id = layout_intent.get("secondary_cluster_id")
+        support_behavior = str(
+            layout_intent.get("support_cluster_behavior") or "balanced"
+        ).strip()
+        center_open_preference = str(
+            layout_intent.get("center_open_preference") or "medium"
+        ).strip()
+        distribution_mode = str(
+            layout_intent.get("distribution_mode") or "balanced"
+        ).strip()
+
+        if isinstance(primary_cluster_id, str) and primary_cluster_id:
+            for cluster_id in list(out.keys()):
+                if cluster_id == primary_cluster_id:
+                    continue
+                slot = _slot(cluster_id)
+                if support_behavior == "recede":
+                    slot["prefer"].add("recess_or_edge")
+                    slot["avoid"].add("center")
+                if center_open_preference == "high":
+                    slot["avoid"].add("center")
+                if distribution_mode == "edge_weighted":
+                    slot["prefer"].add("recess_or_edge")
+
+        if (
+            focus_mode == "viewing"
+            and isinstance(primary_cluster_id, str)
+            and primary_cluster_id
+            and isinstance(secondary_cluster_id, str)
+            and secondary_cluster_id
+            and secondary_cluster_id != primary_cluster_id
+        ):
+            primary_slot = _slot(primary_cluster_id)
+            secondary_slot = _slot(secondary_cluster_id)
+            primary_slot["viewing_partner"] = secondary_cluster_id
+            primary_slot["viewing_role"] = "primary"
+            secondary_slot["viewing_partner"] = primary_cluster_id
+            secondary_slot["viewing_role"] = "secondary"
+            primary_slot["prefer"].update({"wall", "far_from_entry"})
+            secondary_slot["prefer"].update({"wall", "far_from_entry"})
+            secondary_slot["avoid"].add("center")
+            secondary_slot["prefer"].discard("window_side")
+
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+            continue
+        a = row.get("a")
+        b = row.get("b")
+        if not isinstance(a, str) or not isinstance(b, str) or not a or not b:
+            continue
+        slot_a = _slot(a)
+        slot_b = _slot(b)
+        if not slot_a.get("viewing_partner"):
+            slot_a["viewing_partner"] = b
+        if not slot_b.get("viewing_partner"):
+            slot_b["viewing_partner"] = a
+
     return out
+
+
+def _viewing_cluster_pairs(payload: Dict[str, Any]) -> list[tuple[str, str]]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    pairs: list[tuple[str, str]] = []
+
+    def _append_pair(a: str, b: str) -> None:
+        if not a or not b or a == b:
+            return
+        pair = (a, b)
+        reverse_pair = (b, a)
+        if pair not in pairs and reverse_pair not in pairs:
+            pairs.append(pair)
+
+    layout_intent = relation_plan.get("layout_intent_profile") or {}
+    if isinstance(layout_intent, dict):
+        focus_mode = str(layout_intent.get("focus_mode") or "").strip().lower()
+        primary_cluster_id = str(layout_intent.get("primary_cluster_id") or "").strip()
+        secondary_cluster_id = str(
+            layout_intent.get("secondary_cluster_id") or ""
+        ).strip()
+        if (
+            focus_mode == "viewing"
+            and primary_cluster_id
+            and secondary_cluster_id
+            and primary_cluster_id != secondary_cluster_id
+        ):
+            _append_pair(primary_cluster_id, secondary_cluster_id)
+
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+            continue
+        a = str(row.get("a") or "").strip()
+        b = str(row.get("b") or "").strip()
+        _append_pair(a, b)
+
+    return pairs
 
 
 def _preferred_zone_for_cluster(intents: set[str]) -> str | None:
@@ -1472,6 +1595,245 @@ def _cluster_poly(cluster: Dict[str, Any]) -> Any:
     return _bbox_poly(cluster.get("bbox") or {})
 
 
+def _normalize_semantic_proximity(value: Any) -> str:
+    if not isinstance(value, str):
+        return "balanced"
+    token = value.strip().lower()
+    if token in {"compact", "balanced", "loose"}:
+        return token
+    return "balanced"
+
+
+def _target_gap_for_proximity(gap_min: int, gap_max: int, proximity: str) -> int:
+    if proximity == "compact":
+        return gap_min
+    if proximity == "loose":
+        return gap_max
+    return int(round((gap_min + gap_max) / 2.0))
+
+
+def _qualifier_world_for_anchor_option(
+    side_token: str, cluster_rot: int
+) -> tuple[str, str | None]:
+    base_side, qualifier_local = resolve_anchor_side(side_token)
+    if base_side == "head":
+        base_side = "top"
+    elif base_side == "foot":
+        base_side = "bottom"
+    mapped_side = rotate_side(base_side, cluster_rot)
+    qualifier_world = None
+    if qualifier_local in {"left", "right"}:
+        qualifier_world = rotate_side(qualifier_local, cluster_rot)
+    return mapped_side, qualifier_world
+
+
+def _qualifier_matches_centers(
+    *,
+    qualifier_world: str | None,
+    subject_rect: tuple[int, int, int, int],
+    base_rect: tuple[int, int, int, int],
+) -> bool:
+    if qualifier_world is None:
+        return True
+    subject_center = (
+        (subject_rect[0] + subject_rect[2]) / 2.0,
+        (subject_rect[1] + subject_rect[3]) / 2.0,
+    )
+    base_center = (
+        (base_rect[0] + base_rect[2]) / 2.0,
+        (base_rect[1] + base_rect[3]) / 2.0,
+    )
+    if qualifier_world == "left":
+        return subject_center[0] <= base_center[0]
+    if qualifier_world == "right":
+        return subject_center[0] >= base_center[0]
+    if qualifier_world == "top":
+        return subject_center[1] >= base_center[1]
+    if qualifier_world == "bottom":
+        return subject_center[1] <= base_center[1]
+    return True
+
+
+def _best_anchor_side_option(
+    *,
+    side_options: list[str],
+    cluster_rot: int,
+    subject_rect: tuple[int, int, int, int],
+    base_rect: tuple[int, int, int, int],
+) -> tuple[str, str, str | None] | None:
+    best: tuple[float, str, str, str | None] | None = None
+    for side_token in side_options:
+        mapped_side, qualifier_world = _qualifier_world_for_anchor_option(
+            side_token, cluster_rot
+        )
+        gap_mm = edge_gap(subject_rect, base_rect, mapped_side)
+        qualifier_penalty = 0.0
+        if not _qualifier_matches_centers(
+            qualifier_world=qualifier_world,
+            subject_rect=subject_rect,
+            base_rect=base_rect,
+        ):
+            qualifier_penalty = 10_000.0
+        score = qualifier_penalty + abs(float(gap_mm))
+        candidate = (score, side_token, mapped_side, qualifier_world)
+        if best is None or candidate < best:
+            best = candidate
+    if best is None:
+        return None
+    return best[1], best[2], best[3]
+
+
+def _measure_semantic_proximity(
+    *,
+    record: Dict[str, Any],
+    placements: Dict[str, Dict[str, Any]],
+    rects: Dict[str, tuple[int, int, int, int]],
+    facing_map: Dict[str, Any],
+    specs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any] | None:
+    subject_id = str(record.get("id") or "").strip()
+    base_id = str(record.get("relative_to") or "").strip()
+    kind = str(record.get("kind") or "").strip().lower()
+    if not subject_id or not base_id or subject_id not in rects or base_id not in rects:
+        return None
+
+    gap_min = int(record.get("gap_min") or 0)
+    gap_max = int(record.get("gap_max") or gap_min)
+    if gap_max < gap_min:
+        gap_min, gap_max = gap_max, gap_min
+    proximity = _normalize_semantic_proximity(record.get("proximity"))
+    target_gap = _target_gap_for_proximity(gap_min, gap_max, proximity)
+
+    subject_rect = rects[subject_id]
+    base_rect = rects[base_id]
+    cluster_rot = int((placements.get(base_id) or {}).get("rot") or 0) % 360
+
+    mapped_side: str | None = None
+    relation_token: str | None = None
+    qualifier_world: str | None = None
+    overlap_mm: int | None = None
+
+    if kind == "dock_to_edge":
+        base_front = get_front_base(base_id, facing_map, specs)
+        base_side = resolve_edge_token_to_base_side(
+            str(record.get("b_edge") or "front"), base_front
+        )
+        mapped_side = rotate_side(base_side, cluster_rot)
+        relation_token = str(record.get("b_edge") or "")
+        overlap_mm = perpendicular_overlap_len(subject_rect, base_rect, mapped_side)
+    elif kind == "anchor_side":
+        side_options = record.get("side_options")
+        if not isinstance(side_options, list) or not side_options:
+            return None
+        chosen = _best_anchor_side_option(
+            side_options=[
+                str(item).strip().lower() for item in side_options if str(item).strip()
+            ],
+            cluster_rot=cluster_rot,
+            subject_rect=subject_rect,
+            base_rect=base_rect,
+        )
+        if chosen is None:
+            return None
+        relation_token, mapped_side, qualifier_world = chosen
+    else:
+        return None
+
+    if mapped_side is None:
+        return None
+
+    gap_mm = edge_gap(subject_rect, base_rect, mapped_side)
+    penalty_mm = abs(int(gap_mm) - int(target_gap))
+    if penalty_mm <= 0:
+        return None
+
+    return {
+        "subject_id": subject_id,
+        "base_id": base_id,
+        "kind": kind,
+        "proximity": proximity,
+        "mapped_side": mapped_side,
+        "relation_token": relation_token,
+        "qualifier_world": qualifier_world,
+        "gap_mm": int(gap_mm),
+        "gap_min_mm": int(gap_min),
+        "gap_max_mm": int(gap_max),
+        "target_gap_mm": int(target_gap),
+        "penalty_mm": int(penalty_mm),
+        "overlap_mm": None if overlap_mm is None else int(overlap_mm),
+    }
+
+
+def _score_semantic_proximity_preferences(
+    cluster: Dict[str, Any],
+) -> tuple[float, Dict[tuple[str, str], float], List[Dict[str, Any]]]:
+    cluster_rules = cluster.get("cluster_rules") or {}
+    if not isinstance(cluster_rules, dict):
+        return 0.0, {}, []
+    semantic_placements = cluster_rules.get("semantic_placements")
+    if not isinstance(semantic_placements, list) or not semantic_placements:
+        return 0.0, {}, []
+
+    local_placements = deepcopy(cluster.get("local_placements") or [])
+    if not local_placements:
+        return 0.0, {}, []
+
+    specs = normalize_objects(build_object_specs_from_cluster(cluster))
+    placements = normalize_placements(local_placements)
+    rects = build_rects(placements, specs, use_clearance=False)
+    facing_map = (
+        cluster_rules.get("facing")
+        if isinstance(cluster_rules.get("facing"), dict)
+        else {}
+    )
+
+    cluster_penalty = 0.0
+    object_penalty: Dict[tuple[str, str], float] = {}
+    debug_rows: List[Dict[str, Any]] = []
+    cluster_id = str(cluster.get("cluster_id") or "")
+
+    for raw_record in semantic_placements:
+        if not isinstance(raw_record, dict):
+            continue
+        measurement = _measure_semantic_proximity(
+            record=raw_record,
+            placements=placements,
+            rects=rects,
+            facing_map=facing_map,
+            specs=specs,
+        )
+        if measurement is None:
+            continue
+        penalty_mm = float(measurement["penalty_mm"])
+        cluster_penalty += penalty_mm
+        key = (cluster_id, str(measurement["subject_id"]))
+        object_penalty[key] = object_penalty.get(key, 0.0) + penalty_mm
+        debug_rows.append(
+            {
+                "kind": "cluster_internal_constraint",
+                "cluster_id": cluster_id,
+                "constraint_type": "semantic_proximity",
+                "penalty_mm": int(round(penalty_mm)),
+                "hard": False,
+                "subjects": {
+                    "a": measurement["subject_id"],
+                    "b": measurement["base_id"],
+                },
+                "proximity": measurement["proximity"],
+                "mapped_side": measurement["mapped_side"],
+                "relation_token": measurement["relation_token"],
+                "qualifier_world": measurement["qualifier_world"],
+                "gap_mm": measurement["gap_mm"],
+                "gap_min_mm": measurement["gap_min_mm"],
+                "gap_max_mm": measurement["gap_max_mm"],
+                "target_gap_mm": measurement["target_gap_mm"],
+                "overlap_mm": measurement["overlap_mm"],
+            }
+        )
+
+    return cluster_penalty, object_penalty, debug_rows
+
+
 def _score_cluster_internal_fidelity(
     state: Dict[str, Any],
 ) -> tuple[Dict[str, float], Dict[Tuple[str, str], float], List[Dict[str, Any]]]:
@@ -1540,6 +1902,17 @@ def _score_cluster_internal_fidelity(
             share = weighted / float(len(member_ids))
             for oid in member_ids:
                 object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + share
+
+        semantic_cluster_penalty, semantic_object_penalty, semantic_debug_rows = (
+            _score_semantic_proximity_preferences(cluster)
+        )
+        if semantic_cluster_penalty > 0:
+            cluster_penalty[cid] = (
+                cluster_penalty.get(cid, 0.0) + semantic_cluster_penalty
+            )
+        for key, value in semantic_object_penalty.items():
+            object_penalty[key] = object_penalty.get(key, 0.0) + value
+        debug_rows.extend(semantic_debug_rows)
 
     debug_rows.sort(
         key=lambda row: (
@@ -2710,6 +3083,40 @@ def score_phase2_state(
             }
         )
 
+    state_objects = [
+        row for row in (state.get("objects") or []) if isinstance(row, dict)
+    ]
+
+    def _resolve_relation_target_object(
+        *,
+        cluster_id: str,
+        object_id: str,
+        target_object_id: str,
+        target_object_cluster_id: str | None,
+    ) -> Dict[str, Any] | None:
+        if not target_object_id:
+            return None
+        preferred_cluster_id = (
+            target_object_cluster_id.strip()
+            if isinstance(target_object_cluster_id, str)
+            and target_object_cluster_id.strip()
+            else None
+        )
+        fallback_match: Dict[str, Any] | None = None
+        for row in state_objects:
+            if str(row.get("object_id") or "") != target_object_id:
+                continue
+            row_cluster_id = str(row.get("cluster_id") or "")
+            if row_cluster_id == cluster_id and target_object_id == object_id:
+                continue
+            if preferred_cluster_id is not None:
+                if row_cluster_id == preferred_cluster_id:
+                    return row
+                continue
+            if fallback_match is None:
+                fallback_match = row
+        return fallback_match
+
     # relation-plan specific object intents
     for item in relation_plan.get("object_orientations") or []:
         if not isinstance(item, dict):
@@ -2731,6 +3138,8 @@ def score_phase2_state(
             float(target["world_center"]["y"]),
         )
         front_world = parse_vec2(target.get("front_world"))
+        target_object_id = str(item.get("target_object_id") or "")
+        target_object_cluster_id = item.get("target_object_cluster_id")
         for intent in intents:
             intent = str(intent).lower()
             pen = 0.0
@@ -2763,6 +3172,26 @@ def score_phase2_state(
                 )
                 req = int(target.get("required_clearance_mm") or 0)
                 pen = max(0.0, req - front_clear) * 2.0
+            elif intent in {"face_object", "face_away_from_object"}:
+                target_object = _resolve_relation_target_object(
+                    cluster_id=cid,
+                    object_id=oid,
+                    target_object_id=target_object_id,
+                    target_object_cluster_id=target_object_cluster_id
+                    if isinstance(target_object_cluster_id, str)
+                    else None,
+                )
+                if target_object is not None:
+                    target_center = (
+                        float(target_object["world_center"]["x"]),
+                        float(target_object["world_center"]["y"]),
+                    )
+                    desired_vec = _vec_from_to(center, target_center)
+                    if desired_vec is not None and intent == "face_away_from_object":
+                        desired_vec = (-desired_vec[0], -desired_vec[1])
+                    dot = _dot(front_world, desired_vec)
+                    weight = 860.0 if intent == "face_object" else 780.0
+                    pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * weight
             if pen > 0:
                 object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + pen
                 cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
@@ -2774,6 +3203,13 @@ def score_phase2_state(
                         "intent": intent,
                         "penalty_mm": int(round(pen)),
                         "dot": None if dot is None else round(dot, 3),
+                        "target_object_id": target_object_id or None,
+                        "target_object_cluster_id": (
+                            target_object_cluster_id
+                            if isinstance(target_object_cluster_id, str)
+                            and target_object_cluster_id
+                            else None
+                        ),
                     }
                 )
 
@@ -2837,6 +3273,110 @@ def score_phase2_state(
                         "dot": None if dot is None else round(dot, 3),
                     }
                 )
+
+    cluster_state_by_id = {
+        str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
+    }
+    cluster_preferences = _cluster_preference_profile(payload)
+    for cluster_a_id, cluster_b_id in _viewing_cluster_pairs(payload):
+        cluster_a = cluster_state_by_id.get(cluster_a_id)
+        cluster_b = cluster_state_by_id.get(cluster_b_id)
+        if not isinstance(cluster_a, dict) or not isinstance(cluster_b, dict):
+            continue
+
+        profile_a = cluster_preferences.get(cluster_a_id, {})
+        profile_b = cluster_preferences.get(cluster_b_id, {})
+        role_a = str(profile_a.get("viewing_role") or "").strip().lower()
+        role_b = str(profile_b.get("viewing_role") or "").strip().lower()
+        if role_b == "primary" and role_a != "primary":
+            primary_cluster_id, secondary_cluster_id = cluster_b_id, cluster_a_id
+            primary_cluster = cluster_b
+            secondary_cluster = cluster_a
+        else:
+            primary_cluster_id, secondary_cluster_id = cluster_a_id, cluster_b_id
+            primary_cluster = cluster_a
+            secondary_cluster = cluster_b
+
+        primary_center = (
+            float((primary_cluster.get("world_center") or {}).get("x") or 0.0),
+            float((primary_cluster.get("world_center") or {}).get("y") or 0.0),
+        )
+        secondary_center = (
+            float((secondary_cluster.get("world_center") or {}).get("x") or 0.0),
+            float((secondary_cluster.get("world_center") or {}).get("y") or 0.0),
+        )
+        primary_front = parse_vec2(primary_cluster.get("front_world"))
+        secondary_front = parse_vec2(secondary_cluster.get("front_world"))
+        primary_target = _vec_from_to(primary_center, secondary_center)
+        secondary_target = _vec_from_to(secondary_center, primary_center)
+
+        primary_dot = _dot(primary_front, primary_target)
+        secondary_dot = _dot(secondary_front, secondary_target)
+        primary_penalty = (
+            max(0.0, 1.0 - (primary_dot if primary_dot is not None else -1.0)) * 980.0
+        )
+        secondary_penalty = (
+            max(0.0, 1.0 - (secondary_dot if secondary_dot is not None else -1.0))
+            * 880.0
+        )
+
+        primary_edge_distance = float(
+            room_poly.boundary.distance(Point(primary_center))
+        )
+        secondary_edge_distance = float(
+            room_poly.boundary.distance(Point(secondary_center))
+        )
+        depth_penalty = max(0.0, primary_edge_distance - secondary_edge_distance) * 0.55
+
+        pair_axis = _vec_from_to(primary_center, secondary_center)
+        axis_alignment = max(abs(pair_axis[0]), abs(pair_axis[1])) if pair_axis else 0.0
+        axis_penalty = max(0.0, 0.94 - axis_alignment) * 520.0
+
+        pair_penalties = (
+            (
+                primary_cluster_id,
+                primary_penalty + (depth_penalty * 0.65) + (axis_penalty * 0.5),
+                primary_dot,
+                "primary",
+            ),
+            (
+                secondary_cluster_id,
+                secondary_penalty + (depth_penalty * 0.35) + (axis_penalty * 0.5),
+                secondary_dot,
+                "secondary",
+            ),
+        )
+        for cluster_id, penalty, dot, role in pair_penalties:
+            if penalty <= 0.0:
+                continue
+            cluster_penalty[cluster_id] = cluster_penalty.get(cluster_id, 0.0) + penalty
+            orientation_debug.append(
+                {
+                    "kind": "cluster_directional_relation",
+                    "cluster_id": cluster_id,
+                    "other_cluster_id": (
+                        secondary_cluster_id
+                        if cluster_id == primary_cluster_id
+                        else primary_cluster_id
+                    ),
+                    "relation": "face_each_other",
+                    "role": role,
+                    "penalty_mm": int(round(penalty)),
+                    "dot": None if dot is None else round(dot, 3),
+                }
+            )
+
+        if depth_penalty > 0.0:
+            global_layout_debug.append(
+                {
+                    "kind": "viewing_pair_depth",
+                    "primary_cluster_id": primary_cluster_id,
+                    "secondary_cluster_id": secondary_cluster_id,
+                    "penalty_mm": int(round(depth_penalty)),
+                    "primary_edge_distance_mm": int(round(primary_edge_distance)),
+                    "secondary_edge_distance_mm": int(round(secondary_edge_distance)),
+                }
+            )
 
     internal_cluster_penalty, internal_object_penalty, internal_debug = (
         _score_cluster_internal_fidelity(state)
@@ -2941,6 +3481,49 @@ def score_phase2_state(
 # -----------------------------------------------------------------------------
 # Public tool API
 # -----------------------------------------------------------------------------
+def _toward_base_direction_for_side(side: str) -> tuple[int, int]:
+    if side == "top":
+        return (0, -1)
+    if side == "bottom":
+        return (0, 1)
+    if side == "left":
+        return (1, 0)
+    if side == "right":
+        return (-1, 0)
+    return (0, 0)
+
+
+def _spacing_offsets_for_debug_row(
+    row: Dict[str, Any], *, grid_mm: int
+) -> list[tuple[int, int]]:
+    mapped_side = str(row.get("mapped_side") or "").strip().lower()
+    if mapped_side not in {"top", "bottom", "left", "right"}:
+        return []
+    gap_mm = int(row.get("gap_mm") or 0)
+    target_gap_mm = int(row.get("target_gap_mm") or 0)
+    if gap_mm == target_gap_mm:
+        return []
+
+    toward_dx, toward_dy = _toward_base_direction_for_side(mapped_side)
+    if toward_dx == 0 and toward_dy == 0:
+        return []
+
+    if gap_mm > target_gap_mm:
+        step_dx, step_dy = toward_dx, toward_dy
+    else:
+        step_dx, step_dy = -toward_dx, -toward_dy
+
+    distance_mm = abs(gap_mm - target_gap_mm)
+    multipliers = [1]
+    if distance_mm >= int(grid_mm * 1.5):
+        multipliers.append(2)
+
+    return [
+        (step_dx * grid_mm * factor, step_dy * grid_mm * factor)
+        for factor in multipliers
+    ]
+
+
 def DiagnosePhase2Seed(*, payload: Dict[str, Any]) -> Dict[str, Any]:
     state = materialize_phase2_state(payload, repair=None)
     score = score_phase2_state(payload, state)
@@ -2987,7 +3570,40 @@ def EnumeratePhase2RepairMoves(
         str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
     }
     room_poly = state["room_polygon"]
+    room_center = state["room_center"]
+    state_objects = [
+        row for row in (state.get("objects") or []) if isinstance(row, dict)
+    ]
+    object_state_by_key = {
+        (
+            str(row.get("cluster_id") or ""),
+            str(row.get("object_id") or ""),
+        ): row
+        for row in state_objects
+        if isinstance(row.get("cluster_id"), str)
+        and isinstance(row.get("object_id"), str)
+    }
+    object_index_by_key = {
+        (
+            str(row.get("cluster_id") or ""),
+            str(row.get("object_id") or ""),
+        ): index
+        for index, row in enumerate(state_objects)
+        if isinstance(row.get("cluster_id"), str)
+        and isinstance(row.get("object_id"), str)
+    }
     openings = _openings(payload)
+    orientation_debug = score.get("orientation_debug") or []
+    viewing_orientation_pressure = any(
+        isinstance(row, dict)
+        and int(row.get("penalty_mm") or 0) >= 300
+        and (
+            str(row.get("kind") or "") == "cluster_directional_relation"
+            or str(row.get("relation") or "") == "face_each_other"
+            or str(row.get("intent") or "") == "face_object"
+        )
+        for row in orientation_debug
+    )
 
     macro_moves: List[Dict[str, Any]] = []
     object_moves: List[Dict[str, Any]] = []
@@ -3043,21 +3659,79 @@ def EnumeratePhase2RepairMoves(
         if not isinstance(cluster, dict):
             return []
         profile = cluster_preferences.get(
-            cluster_id, {"prefer": set(), "avoid": set(), "intents": set()}
+            cluster_id,
+            {
+                "prefer": set(),
+                "avoid": set(),
+                "intents": set(),
+                "viewing_partner": None,
+                "viewing_role": None,
+            },
         )
         prefer_tags = set(profile.get("prefer") or set())
         avoid_tags = set(profile.get("avoid") or set())
         intents = set(profile.get("intents") or set())
+        viewing_partner_id = profile.get("viewing_partner")
+        viewing_role = str(profile.get("viewing_role") or "").strip().lower()
         center = (
             float((cluster.get("world_center") or {}).get("x") or 0.0),
             float((cluster.get("world_center") or {}).get("y") or 0.0),
         )
         targets: list[tuple[tuple[float, float], str]] = []
-        if "window_side" in prefer_tags or intents & {
-            "face_window",
-            "front_to_window",
-            "axis_parallel_window",
-        }:
+        room_bounds = room_poly.bounds
+        max_distance = (
+            max(
+                float(room_bounds[2] - room_bounds[0]),
+                float(room_bounds[3] - room_bounds[1]),
+            )
+            * 2.0
+        )
+
+        if isinstance(viewing_partner_id, str) and viewing_partner_id:
+            partner_cluster = cluster_state_by_id.get(viewing_partner_id)
+            if isinstance(partner_cluster, dict):
+                partner_center = (
+                    float((partner_cluster.get("world_center") or {}).get("x") or 0.0),
+                    float((partner_cluster.get("world_center") or {}).get("y") or 0.0),
+                )
+                away_vector = (
+                    center[0] - partner_center[0],
+                    center[1] - partner_center[1],
+                )
+                if normalize_vec(away_vector) is not None:
+                    targets.append((away_vector, "away from the viewing partner"))
+                    clearance = _directional_clearance_mm(
+                        center,
+                        away_vector,
+                        room_poly,
+                        [],
+                        max_distance=max_distance,
+                    )
+                    if clearance > float(grid_mm):
+                        unit = normalize_vec(away_vector)
+                        if unit is not None:
+                            targets.append(
+                                (
+                                    (
+                                        unit[0] * clearance,
+                                        unit[1] * clearance,
+                                    ),
+                                    "toward the opposite viewing wall",
+                                )
+                            )
+
+        suppress_window_side = viewing_role == "secondary" and isinstance(
+            viewing_partner_id, str
+        )
+        if not suppress_window_side and (
+            "window_side" in prefer_tags
+            or intents
+            & {
+                "face_window",
+                "front_to_window",
+                "axis_parallel_window",
+            }
+        ):
             midpoint = _nearest_midpoint(center, openings.get("windows") or [])
             if midpoint is not None:
                 targets.append(
@@ -3142,6 +3816,102 @@ def EnumeratePhase2RepairMoves(
                 out.append((offset, reason))
         return out
 
+    def _ordered_viewing_pairs() -> list[tuple[str, str]]:
+        ordered: list[tuple[str, str]] = []
+        for cluster_a_id, cluster_b_id in _viewing_cluster_pairs(payload):
+            profile_a = cluster_preferences.get(cluster_a_id, {})
+            profile_b = cluster_preferences.get(cluster_b_id, {})
+            role_a = str(profile_a.get("viewing_role") or "").strip().lower()
+            role_b = str(profile_b.get("viewing_role") or "").strip().lower()
+            if role_b == "primary" and role_a != "primary":
+                pair = (cluster_b_id, cluster_a_id)
+            else:
+                pair = (cluster_a_id, cluster_b_id)
+            if pair not in ordered:
+                ordered.append(pair)
+        return ordered
+
+    def _pair_priority_offsets(
+        cluster_id: str, *, primary: bool
+    ) -> list[tuple[tuple[int, int], str]]:
+        offsets = _targeted_macro_offsets(cluster_id)
+        if not offsets:
+            return []
+        preferred_reasons = (
+            (
+                "opposite viewing wall",
+                "longest wall",
+                "room edge",
+                "away from the entry zone",
+            )
+            if primary
+            else (
+                "away from the viewing partner",
+                "away from the entry zone",
+                "room edge",
+            )
+        )
+        filtered = [
+            item
+            for item in offsets
+            if any(reason in item[1] for reason in preferred_reasons)
+        ]
+        if filtered:
+            return filtered[:2]
+        return offsets[:2]
+
+    viewing_pairs = _ordered_viewing_pairs()
+    for primary_cluster_id, secondary_cluster_id in viewing_pairs:
+        for cluster_id in (primary_cluster_id, secondary_cluster_id):
+            if cluster_id not in priority_cluster_ids:
+                priority_cluster_ids.append(cluster_id)
+
+    for primary_cluster_id, secondary_cluster_id in viewing_pairs:
+        primary_transform = tmap.get(primary_cluster_id)
+        secondary_transform = tmap.get(secondary_cluster_id)
+        if not isinstance(primary_transform, dict) or not isinstance(
+            secondary_transform, dict
+        ):
+            continue
+        primary_offsets = _pair_priority_offsets(primary_cluster_id, primary=True)
+        secondary_offsets = _pair_priority_offsets(secondary_cluster_id, primary=False)
+        if not primary_offsets or not secondary_offsets:
+            continue
+
+        for (primary_dx, primary_dy), primary_reason in primary_offsets:
+            for (secondary_dx, secondary_dy), secondary_reason in secondary_offsets:
+                macro_moves.append(
+                    {
+                        "kind": "cluster_pose",
+                        "cluster_id": primary_cluster_id,
+                        "proposal": {
+                            "cluster_transforms": [
+                                {
+                                    **deepcopy(primary_transform),
+                                    "x": int(primary_transform.get("x") or 0)
+                                    + primary_dx,
+                                    "y": int(primary_transform.get("y") or 0)
+                                    + primary_dy,
+                                },
+                                {
+                                    **deepcopy(secondary_transform),
+                                    "x": int(secondary_transform.get("x") or 0)
+                                    + secondary_dx,
+                                    "y": int(secondary_transform.get("y") or 0)
+                                    + secondary_dy,
+                                },
+                            ],
+                            "selected_variants": [],
+                            "object_repairs": [],
+                        },
+                        "reason": (
+                            f"Realign viewing pair {primary_cluster_id} and "
+                            f"{secondary_cluster_id}: move focal cluster "
+                            f"{primary_reason} and viewing partner {secondary_reason}"
+                        ),
+                    }
+                )
+
     # Macro-first: variants, cluster rotation, then small translations.
     for cid in priority_cluster_ids:
         tf = tmap.get(cid) or {"cluster_id": cid, "x": 0, "y": 0, "rot": 0}
@@ -3225,9 +3995,227 @@ def EnumeratePhase2RepairMoves(
             )
 
     # Object-level only after macro moves.
+    front_access_intents = {
+        "preserve_front_access",
+        "front_to_open_space",
+        "face_window",
+        "front_to_window",
+        "face_entry",
+        "front_to_entry",
+        "back_to_wall",
+    }
+    facing_intents = {"face_object", "face_away_from_object"}
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    relation_object_intents: dict[tuple[str, str], set[str]] = {}
+    relation_object_targets: dict[tuple[str, str], dict[str, str]] = {}
+    spacing_rows_by_object: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    ordered_object_keys: list[tuple[str, str]] = []
+    object_move_entries: list[dict[str, Any]] = []
+    seen_object_move_signatures: set[str] = set()
+
+    def _register_object_key(
+        cluster_id: str, object_id: str, intents: set[str] | None = None
+    ) -> None:
+        key = (cluster_id, object_id)
+        if key not in ordered_object_keys:
+            ordered_object_keys.append(key)
+        if intents:
+            relation_object_intents.setdefault(key, set()).update(intents)
+
+    def _append_object_move(
+        *,
+        cluster_id: str,
+        object_id: str | None,
+        proposal: dict[str, Any],
+        reason: str,
+        planner_priority: bool,
+        priority_index: int,
+    ) -> None:
+        repairs = deepcopy((proposal.get("object_repairs") or []))
+        if not repairs:
+            return
+        move_signature = json.dumps(repairs, sort_keys=True, ensure_ascii=True)
+        if move_signature in seen_object_move_signatures:
+            return
+        seen_object_move_signatures.add(move_signature)
+        involved_clusters = sorted(
+            {
+                str(item.get("cluster_id") or "")
+                for item in repairs
+                if isinstance(item, dict) and str(item.get("cluster_id") or "").strip()
+            }
+        )
+        move = {
+            "kind": "object_pose",
+            "cluster_id": cluster_id,
+            "proposal": {
+                "cluster_transforms": [],
+                "selected_variants": [],
+                "object_repairs": repairs,
+            },
+            "reason": reason,
+        }
+        if object_id is not None:
+            move["object_id"] = object_id
+        if len(involved_clusters) > 1:
+            move["secondary_cluster_ids"] = involved_clusters[1:]
+        object_move_entries.append(
+            {
+                "move": move,
+                "planner_priority": planner_priority,
+                "priority_index": priority_index,
+                "repair_count": len(repairs),
+                "cluster_count": len(involved_clusters),
+            }
+        )
+
+    def _resolve_relation_target_object(
+        *,
+        cluster_id: str,
+        object_id: str,
+        target_object_id: str,
+        target_object_cluster_id: str | None,
+    ) -> dict[str, Any] | None:
+        if not target_object_id:
+            return None
+        preferred_cluster_id = (
+            target_object_cluster_id.strip()
+            if isinstance(target_object_cluster_id, str)
+            and target_object_cluster_id.strip()
+            else None
+        )
+        fallback_match: dict[str, Any] | None = None
+        for row in state_objects:
+            if str(row.get("object_id") or "") != target_object_id:
+                continue
+            row_cluster_id = str(row.get("cluster_id") or "")
+            if row_cluster_id == cluster_id and target_object_id == object_id:
+                continue
+            if preferred_cluster_id is not None:
+                if row_cluster_id == preferred_cluster_id:
+                    return row
+                continue
+            if fallback_match is None:
+                fallback_match = row
+        return fallback_match
+
+    def _world_vector_to_local(
+        cluster_rot: int, vector: tuple[float, float] | None
+    ) -> tuple[float, float] | None:
+        if vector is None:
+            return None
+        return normalize_vec(rotate_vec_ccw_90s(vector, (-int(cluster_rot or 0)) % 360))
+
+    def _front_override_dirs(
+        cluster_id: str, object_id: str, intents: set[str]
+    ) -> list[tuple[float, float]]:
+        obj = object_state_by_key.get((cluster_id, object_id))
+        if not isinstance(obj, dict):
+            return []
+        center = (
+            float((obj.get("world_center") or {}).get("x") or 0.0),
+            float((obj.get("world_center") or {}).get("y") or 0.0),
+        )
+        cluster_rot = int(obj.get("rotation_ccw") or 0)
+        blockers = _scoring_object_blockers(
+            state, object_index_by_key.get((cluster_id, object_id), -1)
+        )
+        world_targets: list[tuple[float, float] | None] = []
+
+        if intents & {"face_window", "front_to_window"}:
+            midpoint = _nearest_midpoint(center, openings.get("windows") or [])
+            if midpoint is not None:
+                world_targets.append(_vec_from_to(center, midpoint))
+        if intents & {"face_entry", "front_to_entry"}:
+            midpoint = _nearest_midpoint(center, openings.get("doors") or [])
+            if midpoint is not None:
+                world_targets.append(_vec_from_to(center, midpoint))
+        if intents & {"front_to_open_space", "preserve_front_access"}:
+            best_dir, _ = _best_open_dir(center, room_center, room_poly, blockers)
+            world_targets.append(best_dir)
+        if "back_to_wall" in intents:
+            world_targets.append(_nearest_wall_inward_dir(center, room_poly))
+        if intents & {"face_object", "face_away_from_object"}:
+            relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
+            target = _resolve_relation_target_object(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                target_object_id=str(relation_target.get("target_object_id") or ""),
+                target_object_cluster_id=(
+                    str(relation_target.get("target_object_cluster_id") or "")
+                    if relation_target.get("target_object_cluster_id")
+                    else None
+                ),
+            )
+            if isinstance(target, dict):
+                target_center = (
+                    float((target.get("world_center") or {}).get("x") or 0.0),
+                    float((target.get("world_center") or {}).get("y") or 0.0),
+                )
+                target_vector = _vec_from_to(center, target_center)
+                if "face_away_from_object" in intents and target_vector is not None:
+                    world_targets.append((-target_vector[0], -target_vector[1]))
+                else:
+                    world_targets.append(target_vector)
+
+        out: list[tuple[float, float]] = []
+        seen_dirs: set[tuple[float, float]] = set()
+        for vector in world_targets:
+            local_dir = _world_vector_to_local(cluster_rot, vector)
+            if local_dir is None:
+                continue
+            signature = (round(local_dir[0], 3), round(local_dir[1], 3))
+            if signature in seen_dirs:
+                continue
+            seen_dirs.add(signature)
+            out.append(local_dir)
+        return out[:3]
+
+    for row in relation_plan.get("object_orientations") or []:
+        if not isinstance(row, dict):
+            continue
+        cid = str(row.get("cluster_id") or "").strip()
+        oid = str(row.get("object_id") or "").strip()
+        if not cid or not oid:
+            continue
+        intents = {
+            str(intent).strip().lower()
+            for intent in (row.get("intents") or [])
+            if str(intent).strip()
+        }
+        if intents & (front_access_intents | facing_intents):
+            _register_object_key(cid, oid, intents)
+            relation_object_targets[(cid, oid)] = {
+                "target_object_id": str(row.get("target_object_id") or "").strip(),
+                "target_object_cluster_id": str(
+                    row.get("target_object_cluster_id") or ""
+                ).strip(),
+            }
+
+    for row in score.get("global_layout_debug") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("kind") or "") != "cluster_internal_constraint":
+            continue
+        if str(row.get("constraint_type") or "") != "semantic_proximity":
+            continue
+        subjects = row.get("subjects") or {}
+        cid = str(row.get("cluster_id") or "").strip()
+        oid = str(subjects.get("a") or "").strip()
+        if not cid or not oid:
+            continue
+        spacing_rows_by_object.setdefault((cid, oid), []).append(deepcopy(row))
+        _register_object_key(cid, oid)
+
     for row in score["prioritized_objects"][:6]:
-        cid = row["cluster_id"]
-        oid = row["object_id"]
+        cid = str(row.get("cluster_id") or "").strip()
+        oid = str(row.get("object_id") or "").strip()
+        if not cid or not oid:
+            continue
+        _register_object_key(cid, oid)
+
+    same_cluster_swap_pairs: list[tuple[str, str, str]] = []
+    for priority_index, (cid, oid) in enumerate(ordered_object_keys):
         dominant_rows = [
             entry
             for entry in score.get("orientation_debug") or []
@@ -3240,49 +4228,81 @@ def EnumeratePhase2RepairMoves(
             for entry in dominant_rows
             if int(entry.get("penalty_mm") or 0) >= 200
         }
-        if dominant_intents & {
-            "front_to_open_space",
-            "face_window",
-            "front_to_window",
-            "face_entry",
-            "front_to_entry",
-            "back_to_wall",
-        }:
-            for rot in (90, 180, 270):
-                object_moves.append(
-                    {
-                        "kind": "object_pose",
-                        "cluster_id": cid,
-                        "object_id": oid,
-                        "proposal": {
-                            "cluster_transforms": [],
-                            "selected_variants": [],
-                            "object_repairs": [
-                                {
-                                    "cluster_id": cid,
-                                    "object_id": oid,
-                                    "op": "rotate_object",
-                                    "params": {"rot": rot},
-                                }
-                            ],
-                        },
-                        "reason": f"Try rotating {cid}.{oid}",
-                    }
-                )
-        for dx, dy in (
-            (GLOBAL_LAYOUT_GRID_MM, 0),
-            (-GLOBAL_LAYOUT_GRID_MM, 0),
-            (0, GLOBAL_LAYOUT_GRID_MM),
-            (0, -GLOBAL_LAYOUT_GRID_MM),
+        spacing_rows = spacing_rows_by_object.get((cid, oid), [])
+        effective_intents = dominant_intents | relation_object_intents.get(
+            (cid, oid), set()
+        )
+        planner_priority = bool(relation_object_intents.get((cid, oid)))
+        if viewing_orientation_pressure and not (
+            effective_intents & (front_access_intents | facing_intents) or spacing_rows
         ):
-            object_moves.append(
-                {
-                    "kind": "object_pose",
-                    "cluster_id": cid,
-                    "object_id": oid,
-                    "proposal": {
-                        "cluster_transforms": [],
-                        "selected_variants": [],
+            continue
+
+        if effective_intents & (front_access_intents | facing_intents):
+            for rot in (90, 180, 270):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
+                        "object_repairs": [
+                            {
+                                "cluster_id": cid,
+                                "object_id": oid,
+                                "op": "rotate_object",
+                                "params": {"rot": rot},
+                            }
+                        ]
+                    },
+                    reason=f"Try rotating {cid}.{oid}",
+                    planner_priority=planner_priority,
+                    priority_index=priority_index,
+                )
+            for axis in ("x", "y"):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
+                        "object_repairs": [
+                            {
+                                "cluster_id": cid,
+                                "object_id": oid,
+                                "op": "mirror_object",
+                                "params": {"axis": axis},
+                            }
+                        ]
+                    },
+                    reason=f"Try mirroring {cid}.{oid} across the local {axis} axis",
+                    planner_priority=planner_priority,
+                    priority_index=priority_index,
+                )
+            for local_dir in _front_override_dirs(cid, oid, effective_intents):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
+                        "object_repairs": [
+                            {
+                                "cluster_id": cid,
+                                "object_id": oid,
+                                "op": "set_front_override",
+                                "params": {"dx": local_dir[0], "dy": local_dir[1]},
+                            }
+                        ]
+                    },
+                    reason=f"Try a planner-driven front override for {cid}.{oid}",
+                    planner_priority=True,
+                    priority_index=priority_index,
+                )
+        for spacing_row in spacing_rows[:2]:
+            proximity = str(spacing_row.get("proximity") or "balanced")
+            mapped_side = str(spacing_row.get("mapped_side") or "")
+            gap_mm = int(spacing_row.get("gap_mm") or 0)
+            target_gap_mm = int(spacing_row.get("target_gap_mm") or 0)
+            for dx, dy in _spacing_offsets_for_debug_row(spacing_row, grid_mm=grid_mm):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
                         "object_repairs": [
                             {
                                 "cluster_id": cid,
@@ -3290,11 +4310,147 @@ def EnumeratePhase2RepairMoves(
                                 "op": "nudge_object",
                                 "params": {"dx": dx, "dy": dy},
                             }
-                        ],
+                        ]
                     },
-                    "reason": f"Try nudging {cid}.{oid}",
-                }
+                    reason=(
+                        f"Adjust {cid}.{oid} {proximity} spacing on the {mapped_side} side "
+                        f"(current gap {gap_mm}mm, target {target_gap_mm}mm)"
+                    ),
+                    planner_priority=False,
+                    priority_index=priority_index,
+                )
+        allow_nudges = (
+            bool(effective_intents & front_access_intents)
+            or bool(spacing_rows)
+            or (not viewing_orientation_pressure and not dominant_intents)
+        )
+        if allow_nudges:
+            for dx, dy in (
+                (GLOBAL_LAYOUT_GRID_MM, 0),
+                (-GLOBAL_LAYOUT_GRID_MM, 0),
+                (0, GLOBAL_LAYOUT_GRID_MM),
+                (0, -GLOBAL_LAYOUT_GRID_MM),
+                (GLOBAL_LAYOUT_GRID_MM, GLOBAL_LAYOUT_GRID_MM),
+                (GLOBAL_LAYOUT_GRID_MM, -GLOBAL_LAYOUT_GRID_MM),
+                (-GLOBAL_LAYOUT_GRID_MM, GLOBAL_LAYOUT_GRID_MM),
+                (-GLOBAL_LAYOUT_GRID_MM, -GLOBAL_LAYOUT_GRID_MM),
+            ):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
+                        "object_repairs": [
+                            {
+                                "cluster_id": cid,
+                                "object_id": oid,
+                                "op": "nudge_object",
+                                "params": {"dx": dx, "dy": dy},
+                            }
+                        ]
+                    },
+                    reason=f"Try nudging {cid}.{oid}",
+                    planner_priority=planner_priority,
+                    priority_index=priority_index,
+                )
+        for other_cid, other_oid in ordered_object_keys[priority_index + 1 :]:
+            if other_cid != cid:
+                continue
+            if other_oid == oid:
+                continue
+            same_cluster_swap_pairs.append((cid, oid, other_oid))
+            break
+
+    for priority_index, (cid, oid, other_oid) in enumerate(same_cluster_swap_pairs[:4]):
+        planner_priority = bool(relation_object_intents.get((cid, oid))) or bool(
+            relation_object_intents.get((cid, other_oid))
+        )
+        _append_object_move(
+            cluster_id=cid,
+            object_id=oid,
+            proposal={
+                "object_repairs": [
+                    {
+                        "cluster_id": cid,
+                        "object_id": oid,
+                        "op": "swap_objects",
+                        "params": {"other_object_id": other_oid},
+                    }
+                ]
+            },
+            reason=f"Try swapping {cid}.{oid} with {cid}.{other_oid}",
+            planner_priority=planner_priority,
+            priority_index=priority_index,
+        )
+
+    single_object_moves = [
+        entry for entry in object_move_entries if entry["repair_count"] == 1
+    ]
+    pair_budget = 12
+    for left_index, left in enumerate(single_object_moves[:18]):
+        left_move = left["move"]
+        left_repairs = (left_move.get("proposal") or {}).get("object_repairs") or []
+        if len(left_repairs) != 1 or not isinstance(left_repairs[0], dict):
+            continue
+        left_repair = left_repairs[0]
+        left_cluster_id = str(left_repair.get("cluster_id") or "")
+        left_object_id = str(left_repair.get("object_id") or "")
+        for right in single_object_moves[left_index + 1 : 18]:
+            right_move = right["move"]
+            right_repairs = (right_move.get("proposal") or {}).get(
+                "object_repairs"
+            ) or []
+            if len(right_repairs) != 1 or not isinstance(right_repairs[0], dict):
+                continue
+            right_repair = right_repairs[0]
+            right_cluster_id = str(right_repair.get("cluster_id") or "")
+            right_object_id = str(right_repair.get("object_id") or "")
+            if not left_cluster_id or not right_cluster_id:
+                continue
+            if left_cluster_id == right_cluster_id:
+                continue
+            ordered_repairs = sorted(
+                [deepcopy(left_repair), deepcopy(right_repair)],
+                key=lambda row: (
+                    str(row.get("cluster_id") or ""),
+                    str(row.get("object_id") or ""),
+                    str(row.get("op") or ""),
+                    json.dumps(
+                        row.get("params") or {}, sort_keys=True, ensure_ascii=True
+                    ),
+                ),
             )
+            _append_object_move(
+                cluster_id=left_cluster_id,
+                object_id=left_object_id,
+                proposal={"object_repairs": ordered_repairs},
+                reason=(
+                    "Try synchronized planner-first object refinement for "
+                    f"{left_cluster_id}.{left_object_id} and "
+                    f"{right_cluster_id}.{right_object_id}"
+                ),
+                planner_priority=bool(
+                    left["planner_priority"] or right["planner_priority"]
+                ),
+                priority_index=min(
+                    int(left["priority_index"]), int(right["priority_index"])
+                ),
+            )
+            pair_budget -= 1
+            if pair_budget <= 0:
+                break
+        if pair_budget <= 0:
+            break
+
+    object_move_entries.sort(
+        key=lambda entry: (
+            -int(bool(entry["planner_priority"])),
+            -int(entry["cluster_count"]),
+            -int(entry["repair_count"]),
+            int(entry["priority_index"]),
+            str((entry["move"].get("proposal") or {}).get("object_repairs") or ""),
+        )
+    )
+    object_moves = [deepcopy(entry["move"]) for entry in object_move_entries]
 
     moves = object_moves if search_phase == "object_refine" else macro_moves
 
@@ -3555,6 +4711,43 @@ def ResolvePhase2HardViolations(
     }
 
 
+_DIRECTIONAL_OBJECT_KEYWORDS = (
+    "tv_console",
+    "media_shelf",
+    "shelf",
+    "console",
+    "sofa",
+    "sectional",
+    "recliner",
+    "armchair",
+    "chair",
+    "desk",
+    "vanity",
+    "bed",
+    "wardrobe",
+    "cabinet",
+    "dresser",
+    "nightstand",
+)
+
+
+def _is_directional_object_id(object_id: str) -> bool:
+    text = str(object_id or "").strip().lower()
+    return any(keyword in text for keyword in _DIRECTIONAL_OBJECT_KEYWORDS)
+
+
+def _rotation_from_front_world(front_world: Any) -> int | None:
+    vec = parse_vec2(front_world)
+    if vec is None:
+        return None
+    dx, dy = float(vec[0]), float(vec[1])
+    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+        return None
+    deg = math.degrees(math.atan2(dx, -dy))
+    snapped = int(round(deg / 90.0)) * 90
+    return snapped % 360
+
+
 def CompileAcceptedPhase2Proposal(
     *, payload: Dict[str, Any], repair: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -3568,13 +4761,19 @@ def CompileAcceptedPhase2Proposal(
         room["obstacles"] = deepcopy(room_model.get("obstacles") or [])
     objects = []
     for row in state.get("objects") or []:
+        object_id = str(row.get("object_id") or "")
+        rotation_ccw = int(row.get("rotation_ccw") or 0)
+        if _is_directional_object_id(object_id):
+            semantic_rotation = _rotation_from_front_world(row.get("front_world"))
+            if semantic_rotation is not None:
+                rotation_ccw = semantic_rotation
         objects.append(
             {
-                "object_id": row["object_id"],
+                "object_id": object_id,
                 "cluster_id": row["cluster_id"],
                 "polygon_ccw": deepcopy(row["polygon_ccw"]),
                 "bbox": deepcopy(row["bbox"]),
-                "rotation_ccw": int(row.get("rotation_ccw") or 0),
+                "rotation_ccw": rotation_ccw,
                 "source_rect": deepcopy(row.get("local_rect") or {}),
             }
         )

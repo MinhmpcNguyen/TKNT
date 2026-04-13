@@ -1,0 +1,41 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "media_zone",
+      "x": 2000,
+      "y": 3800,
+      "rot": 180
+    },
+    {
+      "cluster_id": "misc_storage",
+      "x": 5500,
+      "y": 1150,
+      "rot": 270
+    },
+    {
+      "cluster_id": "seating_zone",
+      "x": 1400,
+      "y": 150,
+      "rot": 0
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "misc_storage",
+      "variant_id": "misc_storage::base"
+    },
+    {
+      "cluster_id": "seating_zone",
+      "variant_id": "seating_zone::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Controller forced macro translation for media_zone."
+  ]
+}

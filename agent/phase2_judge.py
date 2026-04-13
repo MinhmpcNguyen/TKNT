@@ -35,7 +35,28 @@ _MACRO_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
 _OBJECT_ISSUE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "front_access": ("front access", "front clearance", "clearance"),
     "object_pose": ("object", "chair", "nightstand", "lamp", "desk", "sofa"),
-    "local_fidelity": ("internal", "local", "variant", "fidelity"),
+    "local_fidelity": (
+        "internal",
+        "local",
+        "variant",
+        "fidelity",
+        "spacing",
+        "gap",
+        "crowded",
+        "too close",
+        "too far",
+    ),
+}
+_PLANNER_OBJECT_INTENTS = {
+    "face_object",
+    "face_away_from_object",
+    "front_to_open_space",
+    "preserve_front_access",
+    "back_to_wall",
+    "face_entry",
+    "front_to_entry",
+    "face_window",
+    "front_to_window",
 }
 
 
@@ -65,9 +86,8 @@ class Phase2Judge:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> str:
-        if get_llm_client is None:
-            raise RuntimeError("LLM client is unavailable")
-        messages = self.build_messages(input_payload)
+        _ = temperature
+        _ = max_tokens
         logger.info(
             "Phase2Judge input: hard_valid=%s baseline_score=%s candidate_score=%s",
             ((input_payload.get("hard_check_summary") or {}).get("hard_valid")),
@@ -84,19 +104,8 @@ class Phase2Judge:
                 ).get("score")
             ),
         )
-        response = get_llm_client(provider="gemini").chat_completion(
-            messages,
-            model_key="helper",
-            model_name=(
-                GeminiConfig.AGENT_MODELS.get("judge")
-                if GeminiConfig is not None
-                else None
-            ),
-            temperature=temperature,
-            max_tokens=max_tokens,
-            thinking_level="high",
-        )
-        return _extract_content(response)
+        payload = _build_deterministic_judge_payload(input_payload)
+        return json.dumps(payload, ensure_ascii=True)
 
     def generate(
         self,
@@ -136,6 +145,170 @@ def run_phase2_judge(
     raw = llm_call(system_prompt=system_prompt, user_payload_json=user_payload_json)
     parsed = _calibrate_judge_payload(payload, _parse_json(raw))
     return Phase2JudgeOutput.model_validate(parsed).model_dump()
+
+
+def _build_deterministic_judge_payload(
+    input_payload: Mapping[str, object],
+) -> dict[str, Any]:
+    hard_check = input_payload.get("hard_check_summary") or {}
+    comparison = input_payload.get("comparison_summary") or {}
+    diagnosis = input_payload.get("diagnosis") or {}
+    metrics = input_payload.get("metrics") or {}
+
+    hard_valid = bool(hard_check.get("hard_valid"))
+    delta_score = int(comparison.get("delta_score") or 0)
+    severe_metric_count = _count_severe_metric_rows(metrics)
+    priority_clusters = _cluster_priority_fallback(input_payload)
+    top_issues = _build_top_issues(
+        hard_check=hard_check,
+        diagnosis=diagnosis,
+        metrics=metrics,
+    )
+    issue_families = _issue_families_from_texts(top_issues)
+    planner_object_pressure = _planner_object_pressure_summary(input_payload)
+    repair_advice = _build_repair_advice(
+        hard_valid=hard_valid,
+        delta_score=delta_score,
+        issue_families=issue_families,
+        severe_metric_count=severe_metric_count,
+        planner_object_pressure=planner_object_pressure,
+    )
+
+    if not hard_valid:
+        verdict = "REJECT"
+        reasonableness_score = 10
+    elif delta_score >= 1200 and severe_metric_count == 0:
+        verdict = "ACCEPT"
+        reasonableness_score = 90
+    elif delta_score >= 600 and severe_metric_count <= 1:
+        verdict = "ACCEPT"
+        reasonableness_score = 86
+    elif delta_score > 0:
+        verdict = "REVISE"
+        reasonableness_score = 72 if severe_metric_count <= 1 else 62
+    elif severe_metric_count <= 1:
+        verdict = "REVISE"
+        reasonableness_score = 58
+    else:
+        verdict = "REJECT"
+        reasonableness_score = 30
+
+    return {
+        "reasonableness_score": reasonableness_score,
+        "verdict": verdict,
+        "top_issues": top_issues[:4],
+        "repair_advice": repair_advice[:3],
+        "priority_clusters": priority_clusters[:4],
+    }
+
+
+def _build_top_issues(
+    *,
+    hard_check: Mapping[str, object],
+    diagnosis: Mapping[str, object],
+    metrics: Mapping[str, object],
+) -> list[str]:
+    issues: list[str] = []
+    errors = hard_check.get("errors") or []
+    if isinstance(errors, Sequence):
+        for error in errors[:3]:
+            if not isinstance(error, Mapping):
+                continue
+            code = str(error.get("code") or "hard-invalid")
+            issues.append(f"Hard-validity failed due to {code.lower()}.")
+
+    for finding in diagnosis.get("key_findings") or []:
+        text = str(finding).strip()
+        if text and text not in issues:
+            issues.append(text)
+        if len(issues) >= 4:
+            break
+
+    if issues:
+        return issues
+
+    main_paths = (metrics.get("main_path_clearance") or {}).get("paths") or []
+    for row in main_paths:
+        if not isinstance(row, Mapping):
+            continue
+        shortage = int(row.get("clearance_shortage_mm") or 0)
+        target_cluster_id = str(row.get("target_cluster_id") or "").strip()
+        if shortage >= 80 and target_cluster_id:
+            issues.append(
+                f"Circulation to {target_cluster_id} still has a {shortage}mm clearance shortage."
+            )
+            break
+
+    if issues:
+        return issues
+
+    internal_rows = metrics.get("cluster_internal_constraint_fidelity") or []
+    for row in internal_rows:
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("constraint_type") or "") != "semantic_proximity":
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        subjects = row.get("subjects") or {}
+        object_id = str(subjects.get("a") or "").strip()
+        base_id = str(subjects.get("b") or "").strip()
+        proximity = str(row.get("proximity") or "balanced")
+        if cluster_id and object_id and base_id:
+            issues.append(
+                f"{cluster_id} still has awkward {proximity} spacing between {object_id} and {base_id}."
+            )
+            break
+
+    if issues:
+        return issues
+
+    prioritized_clusters = diagnosis.get("prioritized_clusters") or []
+    for row in prioritized_clusters:
+        if not isinstance(row, Mapping):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        orientation_penalty = int(row.get("orientation_penalty_mm") or 0)
+        if cluster_id and orientation_penalty > 0:
+            issues.append(
+                f"{cluster_id} still has orientation pressure ({orientation_penalty}mm penalty)."
+            )
+            break
+
+    return issues or ["Layout still needs another repair pass."]
+
+
+def _build_repair_advice(
+    *,
+    hard_valid: bool,
+    delta_score: int,
+    issue_families: list[str],
+    severe_metric_count: int,
+    planner_object_pressure: Mapping[str, object] | None = None,
+) -> list[str]:
+    if not hard_valid:
+        return ["Repair hard validity before spending search on softer layout goals."]
+    if delta_score <= 0:
+        return [
+            "Switch macro direction instead of repeating the same local move family."
+        ]
+    planner_object_pressure = planner_object_pressure or {}
+    if bool(planner_object_pressure.get("dominant")):
+        return [
+            "Use planner-first object refinement and allow a synchronized two-cluster object repair if needed."
+        ]
+    if {"orientation", "focal", "circulation", "zoning", "openings"}.intersection(
+        issue_families
+    ):
+        return [
+            "Use a macro repair: rotate clusters, switch variants, or rebalance zones."
+        ]
+    if {"front_access", "object_pose", "local_fidelity"}.intersection(issue_families):
+        return [
+            "Use object-level refinement for front access, object pose, or local fidelity."
+        ]
+    if severe_metric_count >= 2:
+        return ["Prefer macro repair because multiple global metrics are still severe."]
+    return ["Keep improving the current layout without breaking hard validity."]
 
 
 def make_file_response_adapter(path: str | Path) -> JudgeLLMCallable:
@@ -250,6 +423,7 @@ def _infer_next_step_mode(
     issue_texts.extend(calibrated_payload.get("repair_advice") or [])
     issue_texts.extend(diagnosis.get("key_findings") or [])
     issue_families = set(_issue_families_from_texts(issue_texts))
+    planner_object_pressure = _planner_object_pressure_summary(input_payload)
 
     macro_metric_pressure = bool(
         severe_metric_count >= 2
@@ -263,6 +437,8 @@ def _infer_next_step_mode(
 
     if delta_score <= 0:
         return "macro_layout"
+    if bool(planner_object_pressure.get("dominant")):
+        return "object_refine"
     if issue_families.intersection(
         {"orientation", "focal", "circulation", "zoning", "openings"}
     ):
@@ -325,6 +501,59 @@ def _count_severe_metric_rows(metrics: Mapping[str, object]) -> int:
         if float(row.get("blocked_ratio") or 0.0) >= 0.18:
             severe += 1
     return severe
+
+
+def _planner_object_pressure_summary(
+    input_payload: Mapping[str, object],
+) -> dict[str, object]:
+    metrics = input_payload.get("metrics") or {}
+    diagnosis = input_payload.get("diagnosis") or {}
+
+    planner_object_penalty = 0
+    macro_penalty = 0
+    planner_clusters: set[str] = set()
+    planner_objects: set[tuple[str, str]] = set()
+
+    for row in metrics.get("orientation_debug") or []:
+        if not isinstance(row, Mapping):
+            continue
+        penalty = int(row.get("penalty_mm") or 0)
+        if penalty <= 0:
+            continue
+        kind = str(row.get("kind") or "").strip().lower()
+        if (
+            kind == "object_orientation"
+            and str(row.get("intent") or "").strip().lower() in _PLANNER_OBJECT_INTENTS
+        ):
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            object_id = str(row.get("object_id") or "").strip()
+            planner_object_penalty += penalty
+            if cluster_id:
+                planner_clusters.add(cluster_id)
+            if cluster_id and object_id:
+                planner_objects.add((cluster_id, object_id))
+        elif kind in {"cluster_directional_relation", "cluster_orientation"}:
+            macro_penalty += penalty
+
+    prioritized_objects = [
+        row
+        for row in diagnosis.get("prioritized_objects") or []
+        if isinstance(row, Mapping)
+        and isinstance(row.get("cluster_id"), str)
+        and isinstance(row.get("object_id"), str)
+    ]
+    dominant = bool(
+        planner_object_penalty >= max(900, macro_penalty)
+        and len(planner_clusters) <= 2
+        and (planner_objects or prioritized_objects)
+    )
+    return {
+        "dominant": dominant,
+        "planner_object_penalty": planner_object_penalty,
+        "macro_penalty": macro_penalty,
+        "cluster_count": len(planner_clusters),
+        "object_count": len(planner_objects) or len(prioritized_objects),
+    }
 
 
 def _calibrate_judge_payload(

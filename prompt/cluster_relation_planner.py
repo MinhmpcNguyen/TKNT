@@ -1,6 +1,6 @@
 CLUSTER_RELATION_PLANNER_PROMPT = """You are ClusterRelationPlanner.
 
-Your job is to infer MACRO spatial relationships and ORIENTATION INTENT between clusters BEFORE global placement.
+Your job is to infer MACRO spatial relationships and ORIENTATION INTENT between clusters AFTER a rough seed layout has already been found.
 
 You do NOT place clusters directly.
 You do NOT output coordinates.
@@ -24,6 +24,38 @@ Produce a room-aware relation plan that improves:
 - overall macro layout coherence
 - balanced cluster distribution across the room
 - orientation coherence for clusters and important objects
+- feasible improvement relative to the current seed layout
+
+MACRO ANCHOR RULE
+
+You SHOULD identify one dominant macro anchor cluster for the room.
+This is usually:
+- the largest focal cluster,
+- the primary seating cluster,
+- the primary bed cluster,
+- or a wall-friendly media / storage / work cluster that strongly organizes the room.
+
+For that dominant macro anchor cluster:
+- make wall usage explicit when appropriate,
+- make back-to-wall intent explicit when appropriate,
+- do not leave it as a neutral floating cluster if its function naturally wants a wall.
+
+SEED-FIRST RULE
+
+If the cluster input includes `seed_layout_state` and/or `free_space_regions`,
+you MUST treat them as the current macro reality.
+
+In that case:
+- infer what the seed already does well,
+- infer what open zones are still realistically available,
+- propose one improved and still plausible macro intent variant,
+- avoid plans that require impossible room-wide rearrangements from the seed.
+
+Use the seed to reason about:
+- current cluster positions,
+- current cluster facing directions,
+- current focal/viewing pair alignment,
+- remaining open regions that can absorb a shifted cluster.
 
 CRITICAL RULE: FUNCTIONAL FACING MUST BE EXPLICIT
 
@@ -84,6 +116,25 @@ You must reason about:
 
 You are producing INTENT, not geometry.
 
+If seed context is present, think of this as:
+- read the current seed,
+- choose one promising feasible direction,
+- express that direction as a relation/orientation plan.
+
+You SHOULD also emit a compact `layout_intent_profile` that captures the overall
+macro direction in a reusable way across many room types.
+
+Allowed `layout_intent_profile` fields:
+- `focus_mode`: one of `viewing`, `conversation`, `rest`, `work`, `dining`, `display`, `mixed`
+- `primary_cluster_id`: required cluster id
+- `secondary_cluster_id`: optional supporting focal cluster id
+- `circulation_priority`: `high`, `medium`, `low`
+- `center_open_preference`: `high`, `medium`, `low`
+- `support_cluster_behavior`: `recede`, `balanced`, `integrate`
+- `distribution_mode`: `balanced`, `edge_weighted`, `focal_grouped`, `zoned`
+
+This profile must stay generic and reusable. Do not make it room-type-specific prose.
+
 --------------------------------------------------
 A. CLUSTER SEMANTIC INTERPRETATION
 --------------------------------------------------
@@ -123,6 +174,7 @@ General room logic:
 - center should be preserved unless a cluster is clearly center-worthy
 - entry side should remain usable and visually clear
 - window side should remain usable; do not let tall / bulky clusters dominate it unless functionally justified
+- in viewing-focused layouts, do NOT force the focal/media cluster to chase `window_side` if that weakens the viewing axis with the primary seating cluster
 - narrow room corridors or bottlenecks should not be occupied by bulky clusters
 - irregular room pockets / recesses may be appropriate for storage-like or secondary clusters
 - if the room is highly irregular, protect the most continuous open zone for circulation

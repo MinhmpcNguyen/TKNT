@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TypedDict
 from unittest import mock
 
+import httpx
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -222,6 +224,85 @@ class GeminiClientArchitectureTest(unittest.TestCase):
             "medium",
         )
 
+    def test_chat_completion_skips_thinking_for_known_unsupported_model(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        captured: dict[str, object] = {}
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            captured["url"] = url
+            captured["payload"] = payload
+            return {"modelVersion": "gemma-4-31b-it", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_key="primary",
+            model_name="gemma-4-31b-it",
+            thinking_level="medium",
+        )
+
+        self.assertEqual(
+            captured["url"],
+            "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent",
+        )
+        self.assertNotIn("generationConfig", captured["payload"])
+        self.assertEqual(response["modelVersion"], "gemma-4-31b-it")
+
+    def test_chat_completion_retries_without_thinking_when_model_rejects_it(
+        self,
+    ) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        original_models = set(GeminiClient._thinking_level_unsupported_models)
+        self.addCleanup(
+            lambda: (
+                GeminiClient._thinking_level_unsupported_models.clear(),
+                GeminiClient._thinking_level_unsupported_models.update(original_models),
+            )
+        )
+
+        captured_payloads: list[dict[str, object]] = []
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            captured_payloads.append(payload)
+            if len(captured_payloads) == 1:
+                request = httpx.Request("POST", url)
+                response = httpx.Response(
+                    400,
+                    request=request,
+                    text=(
+                        '{"error":{"message":"Thinking level is not supported for this model."}}'
+                    ),
+                )
+                raise httpx.HTTPStatusError(
+                    "Thinking level is not supported for this model.",
+                    request=request,
+                    response=response,
+                )
+            return {"modelVersion": "future-model", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_key="primary",
+            model_name="future-model",
+            thinking_level="medium",
+        )
+
+        self.assertEqual(len(captured_payloads), 2)
+        self.assertEqual(
+            captured_payloads[0]["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "medium",
+        )
+        self.assertNotIn("generationConfig", captured_payloads[1])
+        self.assertIn("future-model", GeminiClient._thinking_level_unsupported_models)
+        self.assertEqual(response["modelVersion"], "future-model")
+
     def test_chat_completion_uses_model_name_override(self) -> None:
         client = GeminiClient.__new__(GeminiClient)
         captured: dict[str, object] = {}
@@ -247,6 +328,139 @@ class GeminiClientArchitectureTest(unittest.TestCase):
             "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent",
         )
         self.assertEqual(response["modelVersion"], "gemma-3-27b-it")
+
+    def test_chat_completion_falls_back_after_retryable_503(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        attempted_urls: list[str] = []
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            attempted_urls.append(url)
+            if "gemini-3.1-flash-lite-preview" in url:
+                request = httpx.Request("POST", url)
+                response = httpx.Response(
+                    503,
+                    request=request,
+                    text=(
+                        '{"error":{"code":503,"message":"This model is currently '
+                        'experiencing high demand.","status":"UNAVAILABLE"}}'
+                    ),
+                )
+                raise httpx.HTTPStatusError(
+                    "503 high demand",
+                    request=request,
+                    response=response,
+                )
+            return {"modelVersion": "gemini-3-flash-preview", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_name="gemini-3.1-flash-lite-preview",
+        )
+
+        self.assertEqual(
+            attempted_urls,
+            [
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+            ],
+        )
+        self.assertEqual(response["modelVersion"], "gemini-3-flash-preview")
+
+    def test_chat_completion_tries_requested_model_before_fallback_pool(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        attempted_urls: list[str] = []
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            attempted_urls.append(url)
+            if "custom-model" in url:
+                request = httpx.Request("POST", url)
+                response = httpx.Response(
+                    503,
+                    request=request,
+                    text=(
+                        '{"error":{"code":503,"message":"This model is currently '
+                        'experiencing high demand.","status":"UNAVAILABLE"}}'
+                    ),
+                )
+                raise httpx.HTTPStatusError(
+                    "503 high demand",
+                    request=request,
+                    response=response,
+                )
+            return {"modelVersion": "gemini-3.1-flash-lite-preview", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_name="custom-model",
+        )
+
+        self.assertEqual(
+            attempted_urls[:2],
+            [
+                "https://generativelanguage.googleapis.com/v1beta/models/custom-model:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+            ],
+        )
+        self.assertEqual(response["modelVersion"], "gemini-3.1-flash-lite-preview")
+
+    def test_tool_chat_completion_falls_back_after_retryable_503(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        attempted_urls: list[str] = []
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            attempted_urls.append(url)
+            if "gemini-3.1-flash-lite-preview" in url:
+                request = httpx.Request("POST", url)
+                response = httpx.Response(
+                    503,
+                    request=request,
+                    text=(
+                        '{"error":{"code":503,"message":"This model is currently '
+                        'experiencing high demand.","status":"UNAVAILABLE"}}'
+                    ),
+                )
+                raise httpx.HTTPStatusError(
+                    "503 high demand",
+                    request=request,
+                    response=response,
+                )
+            return {"modelVersion": "gemini-3-flash-preview", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_raw_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_name="gemini-3.1-flash-lite-preview",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "description": "Lookup something",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(
+            attempted_urls,
+            [
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+            ],
+        )
+        self.assertEqual(response["modelVersion"], "gemini-3-flash-preview")
 
     def test_factory_returns_explicit_gemini_provider(self) -> None:
         fake_module = types.ModuleType("clients.gemini_client")

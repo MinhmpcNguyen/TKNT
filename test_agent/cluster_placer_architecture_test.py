@@ -65,6 +65,29 @@ class ClusterPlacerArchitectureTest(unittest.TestCase):
         self.assertIn(("right", "top"), region_buckets)
         self.assertIn(("left", "middle"), region_buckets)
 
+    def test_rescue_semantic_anchor_specs_expand_wall_and_center_search(self) -> None:
+        specs = tools._rescue_semantic_anchor_specs_for_cluster(
+            room_bbox=(0.0, 0.0, 6000.0, 4000.0),
+            opening_ctx={
+                "doors": [{"midpoint": (0.0, 2000.0)}],
+                "windows": [{"midpoint": (3000.0, 4000.0)}],
+            },
+            width=1800.0,
+            height=900.0,
+            grid_mm=50,
+            hints={
+                "prefer_wall": True,
+                "avoid_center": True,
+                "prefer_center": False,
+            },
+        )
+
+        kinds = {item[2] for item in specs}
+        self.assertIn("rescue_left", kinds)
+        self.assertIn("rescue_right", kinds)
+        self.assertIn("rescue_center_col_top", kinds)
+        self.assertIn("rescue_window_bottom", kinds)
+
 
 if __name__ == "__main__":
     unittest.main()

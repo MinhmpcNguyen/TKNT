@@ -44,10 +44,13 @@ OUTPUT JSON ONLY:
 
 RULES
 - Return every object instance exactly once in object_styles.
+- You may recolor walls, floors, and ceilings when it improves the requested style.
 - Keep large furniture calmer than small accents.
 - Accessories can carry stronger accent colors.
 - Keep surfaces coherent with the furniture palette.
 - Doors and windows should feel consistent with the room palette.
+- Never use pure black or near-black colors for furniture, decor, or other movable objects.
+- Mirrors and other glass-like objects should stay light, reflective, and airy rather than dark.
 - Output JSON only.
 - No markdown.
 - No explanations outside JSON.

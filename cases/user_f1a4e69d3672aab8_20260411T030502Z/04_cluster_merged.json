@@ -1,0 +1,186 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "tag": "living",
+      "members": [
+        "sectional_sofa"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "sectional_sofa",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "bottom",
+            "notes": "facing the coffee table"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "sectional_sofa",
+          "category": "sectional_sofa",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked sectional_sofa as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 2.54,
+            "W": 0.92,
+            "H": 0.85,
+            "A": 2.3368,
+            "R": 2.760869565217391,
+            "source_id": "sectional_sofa_004"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "facing the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked tv_console as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.26,
+            "W": 0.38,
+            "H": 0.58,
+            "A": 0.4788,
+            "R": 3.3157894736842106,
+            "source_id": "tv_console_002"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_misc",
+      "tag": "storage",
+      "members": [
+        "bookshelf"
+      ],
+      "anchors": [
+        "bookshelf"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {},
+        "access_requirements": [
+          {
+            "id": "bookshelf",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "cluster_id": "storage_misc",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked bookshelf as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters partitioned by functional zones: Seating, Media, and Storage/Misc."
+  ],
+  "missing": []
+}

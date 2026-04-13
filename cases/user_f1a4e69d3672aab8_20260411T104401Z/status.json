@@ -1,0 +1,386 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260411T104401Z",
+  "stage": "done",
+  "updated_at_utc": "2026-04-11T11:06:09.658496+00:00",
+  "message": "5/5 final layout options ready.",
+  "progress_current": 5,
+  "progress_total": 5,
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-11T10:44:01.599968+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-11T10:44:01.788588+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-11T10:44:11.378971+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-11T10:44:11.531482+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 1/1",
+      "updated_at_utc": "2026-04-11T10:44:14.124257+00:00",
+      "progress_current": 1,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-04-11T10:44:14.124484+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable.",
+      "updated_at_utc": "2026-04-11T10:44:14.125103+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable ready.",
+      "updated_at_utc": "2026-04-11T10:45:00.905421+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: seed_focal_axis.",
+      "updated_at_utc": "2026-04-11T10:45:00.905951+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: seed_focal_axis ready.",
+      "updated_at_utc": "2026-04-11T10:45:06.741693+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: seed_open_center.",
+      "updated_at_utc": "2026-04-11T10:45:06.742217+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: seed_open_center ready.",
+      "updated_at_utc": "2026-04-11T10:46:33.887518+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: seed_edge_weighted.",
+      "updated_at_utc": "2026-04-11T10:46:33.888049+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: seed_edge_weighted ready.",
+      "updated_at_utc": "2026-04-11T10:47:16.264222+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 5/5: seed_zoned.",
+      "updated_at_utc": "2026-04-11T10:47:16.264608+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 5/5: seed_zoned ready.",
+      "updated_at_utc": "2026-04-11T10:48:55.403527+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 5/5",
+      "updated_at_utc": "2026-04-11T10:48:55.408886+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 0/5",
+      "updated_at_utc": "2026-04-11T10:48:55.409399+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 1/3: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-11T10:48:55.410508+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 1/3: concept-guided seed solved successfully.",
+      "updated_at_utc": "2026-04-11T10:50:57.800600+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 1/5",
+      "updated_at_utc": "2026-04-11T10:50:57.806754+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 1/3: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-11T10:50:57.807723+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 1/3: concept-guided seed solved successfully.",
+      "updated_at_utc": "2026-04-11T10:52:49.772973+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 2/5",
+      "updated_at_utc": "2026-04-11T10:52:49.773661+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 1/3: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-11T10:52:49.774566+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 1/3: concept-guided seed solved successfully.",
+      "updated_at_utc": "2026-04-11T10:54:53.164520+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 3/5",
+      "updated_at_utc": "2026-04-11T10:54:53.165243+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 1/3: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-11T10:54:53.166216+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 1/3: concept-guided seed solved successfully.",
+      "updated_at_utc": "2026-04-11T10:57:03.191300+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 4/5",
+      "updated_at_utc": "2026-04-11T10:57:03.191866+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 1/3: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-11T10:57:03.193517+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 1/3: concept-guided seed solved successfully.",
+      "updated_at_utc": "2026-04-11T10:59:05.903019+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-04-11T10:59:05.903649+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 0/5",
+      "updated_at_utc": "2026-04-11T10:59:05.903978+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 1/5 Reintroduced 2 dropped object(s).",
+      "updated_at_utc": "2026-04-11T10:59:34.404191+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 2/5 Reintroduced 3 dropped object(s).",
+      "updated_at_utc": "2026-04-11T11:00:03.534623+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 3/5 Reintroduced 1 dropped object(s).",
+      "updated_at_utc": "2026-04-11T11:00:29.481498+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 4/5 Reintroduced 2 dropped object(s).",
+      "updated_at_utc": "2026-04-11T11:01:01.622559+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_placer",
+      "message": "Judging planned layouts 5/5 Reintroduced 3 dropped object(s).",
+      "updated_at_utc": "2026-04-11T11:01:40.363348+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 0/5",
+      "updated_at_utc": "2026-04-11T11:01:40.363861+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 1/5",
+      "updated_at_utc": "2026-04-11T11:02:48.610025+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 2/5",
+      "updated_at_utc": "2026-04-11T11:03:06.325475+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 3/5",
+      "updated_at_utc": "2026-04-11T11:03:27.717733+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 4/5",
+      "updated_at_utc": "2026-04-11T11:05:03.210911+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 5/5",
+      "updated_at_utc": "2026-04-11T11:06:09.517060+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "layout_variants",
+      "message": "Assembling final gallery 0/1",
+      "updated_at_utc": "2026-04-11T11:06:09.517754+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "5/5 final layout options ready.",
+      "updated_at_utc": "2026-04-11T11:06:09.658496+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    }
+  ]
+}

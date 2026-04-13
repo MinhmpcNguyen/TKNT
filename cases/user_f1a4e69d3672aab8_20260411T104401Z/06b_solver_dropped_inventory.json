@@ -1,0 +1,102 @@
+{
+  "status": "OK",
+  "total_dropped_items": 4,
+  "clusters": [
+    {
+      "cluster_id": "lounge_zone",
+      "items": [
+        {
+          "cluster_id": "lounge_zone",
+          "object_type": "side_table",
+          "category": "side_table",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          },
+          "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "sleep_zone",
+      "items": [
+        {
+          "cluster_id": "sleep_zone",
+          "object_type": "bench",
+          "category": "bench",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.93,
+            "W": 0.4,
+            "H": 0.41,
+            "A": 0.37200000000000005,
+            "R": 2.325,
+            "source_id": "bench_004"
+          },
+          "rationale": "Deterministic policy marked bench as secondary in sleep; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_zone",
+      "items": [
+        {
+          "cluster_id": "storage_zone",
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          },
+          "rationale": "Deterministic policy marked bookshelf as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_zone",
+      "items": [
+        {
+          "cluster_id": "work_zone",
+          "object_type": "office_chair",
+          "category": "office_chair",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.58,
+            "W": 0.55,
+            "H": 1.01,
+            "A": 0.319,
+            "R": 1.0545454545454545,
+            "source_id": "office_chair_001"
+          },
+          "rationale": "Deterministic policy marked office_chair as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

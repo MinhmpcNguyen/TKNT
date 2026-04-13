@@ -23,6 +23,7 @@ export type Door = {
   wall_id?: string | null;
   start_mm: Point;
   end_mm: Point;
+  color_hex?: string | null;
   leaf_width_mm?: number | null;
   hinge_side?: 'left' | 'right' | null;
   open_angle_deg?: number | null;
@@ -34,6 +35,7 @@ export type Window = {
   wall_id?: string | null;
   start_mm: Point;
   end_mm: Point;
+  color_hex?: string | null;
   sill_height_mm?: number | null;
   height_mm?: number | null;
 };
@@ -65,6 +67,10 @@ export type Placement = {
   anchor: 'center';
   source?: PlacementSource;
   constraint_mode?: PlacementConstraintMode;
+  place_on?: {
+    method: string;
+    target_instance_id?: string | null;
+  } | null;
 };
 
 export type TopView = {
@@ -80,11 +86,42 @@ export type InventoryItem = {
   height_mm: number;
   top_view: TopView;
   style_tags: string[];
+  material?: string | null;
   material_tags: string[];
   price?: number | null;
   color_hex?: string | null;
   room_type?: string | null;
   attributes?: Record<string, unknown> | null;
+};
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  tenant_id: string;
+};
+
+export type SavedLayoutRecord = {
+  id: string;
+  name: string;
+  floorplan_json: Record<string, unknown>;
+  design_json?: Record<string, unknown> | null;
+  styled_result_json?: Record<string, unknown> | null;
+  meta: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type GeneratedRenderRecord = {
+  id: string;
+  source: string;
+  model_name: string;
+  prompt: string;
+  negative_prompt?: string | null;
+  mime_type: string;
+  meta: Record<string, unknown>;
+  created_at?: string | null;
+  file_url: string;
 };
 
 export type TemplateItem = {
@@ -107,10 +144,15 @@ export type LayoutVariant = {
   reason: string;
   layout_score: number;
   hard_valid: boolean;
+  complete?: boolean;
+  gallery_eligible?: boolean;
+  coverage_ratio?: number;
+  missing_cluster_ids?: string[];
   notes: string[];
   absolute_layout: Record<string, unknown>;
   styled_result: Record<string, unknown>;
   design: DesignPlanV1 | null;
+  cluster_previews?: Record<string, unknown>;
 };
 
 export type Violation = {

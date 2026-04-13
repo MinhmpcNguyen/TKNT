@@ -1260,7 +1260,9 @@ def _extract_semantic_placements(cluster: dict[str, Any]) -> list[dict[str, Any]
     return out
 
 
-def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
+def _seed_local_layout(
+    cluster: dict[str, Any], *, strategy: str = "row"
+) -> list[dict[str, Any]]:
     members = _member_ids(cluster)
     if not members:
         return []
@@ -1370,45 +1372,13 @@ def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
         base_row_ids = back_row_ids
         back_row_ids = []
 
-    placements: dict[str, dict[str, Any]] = {}
-
-    row_gap = max(grid_mm, 150)
-    back_row_gap = max(grid_mm, 250)
-
-    # ---- place main freestanding row at y = 0
-    x_cursor = 0
-    for oid in base_row_ids:
-        spec = spec_by_id[oid]
-        rot = _seed_first_allowed_rotation(spec, prefer=0)
-        w, h = _seed_rotated_wh(spec, rot)
-
-        x = _seed_snap_up_value(x_cursor, grid_mm)
-        y = 0
-
-        placements[oid] = {"id": oid, "x": int(x), "y": int(y), "rot": int(rot)}
-        x_cursor = x + w + row_gap
-
-    # ---- place optional/back-row freestanding below main row
-    max_main_h = 0
-    for oid in base_row_ids:
-        spec = spec_by_id[oid]
-        rot = placements[oid]["rot"]
-        _, h = _seed_rotated_wh(spec, rot)
-        max_main_h = max(max_main_h, h)
-
-    back_y = -_seed_snap_up_value(max_main_h + back_row_gap, grid_mm)
-    back_x_cursor = 0
-
-    for oid in back_row_ids:
-        spec = spec_by_id[oid]
-        rot = _seed_first_allowed_rotation(spec, prefer=0)
-        w, h = _seed_rotated_wh(spec, rot)
-
-        x = _seed_snap_up_value(back_x_cursor, grid_mm)
-        y = back_y
-
-        placements[oid] = {"id": oid, "x": int(x), "y": int(y), "rot": int(rot)}
-        back_x_cursor = x + w + row_gap
+    placements = _seed_place_freestanding(
+        spec_by_id=spec_by_id,
+        grid_mm=grid_mm,
+        base_row_ids=base_row_ids,
+        back_row_ids=back_row_ids,
+        strategy=strategy,
+    )
 
     # ---- place dependents relative to their base
     unresolved = relations[:]
@@ -1448,10 +1418,13 @@ def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
 
     # ---- any leftover members: place on a far fallback row
     fallback_ids = [m for m in members if m in spec_by_id and m not in placements]
-    fallback_y = back_y - _seed_snap_up_value(
-        max(max_main_h, 600) + back_row_gap, grid_mm
+    fallback_y = _seed_fallback_y(
+        spec_by_id=spec_by_id,
+        placements=placements,
+        grid_mm=grid_mm,
     )
     fallback_x = 0
+    fallback_gap = max(grid_mm, 150)
 
     for oid in fallback_ids:
         spec = spec_by_id[oid]
@@ -1465,9 +1438,227 @@ def _seed_local_layout(cluster: dict[str, Any]) -> list[dict[str, Any]]:
             "y": int(fallback_y),
             "rot": int(rot),
         }
-        fallback_x = x + w + row_gap
+        fallback_x = x + w + fallback_gap
 
     return _seed_normalize_to_origin(list(placements.values()))
+
+
+def _seed_place_freestanding(
+    *,
+    spec_by_id: dict[str, dict[str, Any]],
+    grid_mm: int,
+    base_row_ids: list[str],
+    back_row_ids: list[str],
+    strategy: str,
+) -> dict[str, dict[str, Any]]:
+    if strategy == "compact_wrap":
+        return _seed_place_wrapped_layout(
+            object_ids=[*base_row_ids, *back_row_ids],
+            spec_by_id=spec_by_id,
+            grid_mm=grid_mm,
+            compactness=1.20,
+        )
+    if strategy == "balanced_wrap":
+        return _seed_place_wrapped_layout(
+            object_ids=[*base_row_ids, *back_row_ids],
+            spec_by_id=spec_by_id,
+            grid_mm=grid_mm,
+            compactness=1.45,
+        )
+    if strategy == "two_column":
+        return _seed_place_two_column_layout(
+            object_ids=[*base_row_ids, *back_row_ids],
+            spec_by_id=spec_by_id,
+            grid_mm=grid_mm,
+        )
+    return _seed_place_row_layout(
+        spec_by_id=spec_by_id,
+        grid_mm=grid_mm,
+        base_row_ids=base_row_ids,
+        back_row_ids=back_row_ids,
+    )
+
+
+def _seed_place_row_layout(
+    *,
+    spec_by_id: dict[str, dict[str, Any]],
+    grid_mm: int,
+    base_row_ids: list[str],
+    back_row_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    placements: dict[str, dict[str, Any]] = {}
+    row_gap = max(grid_mm, 150)
+    back_row_gap = max(grid_mm, 250)
+
+    x_cursor = 0
+    for oid in base_row_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        w, _ = _seed_rotated_wh(spec, rot)
+        x = _seed_snap_up_value(x_cursor, grid_mm)
+        placements[oid] = {"id": oid, "x": int(x), "y": 0, "rot": int(rot)}
+        x_cursor = x + w + row_gap
+
+    max_main_h = 0
+    for oid in base_row_ids:
+        spec = spec_by_id[oid]
+        rot = placements[oid]["rot"]
+        _, h = _seed_rotated_wh(spec, rot)
+        max_main_h = max(max_main_h, h)
+
+    back_y = -_seed_snap_up_value(max_main_h + back_row_gap, grid_mm)
+    back_x_cursor = 0
+    for oid in back_row_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        w, _ = _seed_rotated_wh(spec, rot)
+        x = _seed_snap_up_value(back_x_cursor, grid_mm)
+        placements[oid] = {"id": oid, "x": int(x), "y": int(back_y), "rot": int(rot)}
+        back_x_cursor = x + w + row_gap
+
+    return placements
+
+
+def _seed_place_wrapped_layout(
+    *,
+    object_ids: list[str],
+    spec_by_id: dict[str, dict[str, Any]],
+    grid_mm: int,
+    compactness: float,
+) -> dict[str, dict[str, Any]]:
+    placements: dict[str, dict[str, Any]] = {}
+    if not object_ids:
+        return placements
+
+    row_gap = max(grid_mm, 150)
+    target_span = _seed_wrap_target_span(
+        object_ids=object_ids,
+        spec_by_id=spec_by_id,
+        grid_mm=grid_mm,
+        compactness=compactness,
+    )
+    x_cursor = 0
+    y_cursor = 0
+    row_height = 0
+
+    for oid in object_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        w, h = _seed_rotated_wh(spec, rot)
+        proposed_x = _seed_snap_up_value(x_cursor, grid_mm)
+        if proposed_x > 0 and proposed_x + w > target_span:
+            y_cursor += row_height + row_gap
+            x_cursor = 0
+            row_height = 0
+            proposed_x = 0
+        placements[oid] = {
+            "id": oid,
+            "x": int(proposed_x),
+            "y": int(y_cursor),
+            "rot": int(rot),
+        }
+        x_cursor = proposed_x + w + row_gap
+        row_height = max(row_height, h)
+
+    return placements
+
+
+def _seed_place_two_column_layout(
+    *,
+    object_ids: list[str],
+    spec_by_id: dict[str, dict[str, Any]],
+    grid_mm: int,
+) -> dict[str, dict[str, Any]]:
+    placements: dict[str, dict[str, Any]] = {}
+    if not object_ids:
+        return placements
+
+    row_gap = max(grid_mm, 150)
+    left_ids: list[str] = []
+    right_ids: list[str] = []
+    left_height = 0
+    right_height = 0
+    left_width = 0
+
+    for oid in object_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        w, h = _seed_rotated_wh(spec, rot)
+        if left_height <= right_height:
+            left_ids.append(oid)
+            left_height += h + row_gap
+            left_width = max(left_width, w)
+        else:
+            right_ids.append(oid)
+            right_height += h + row_gap
+
+    y_cursor = 0
+    for oid in left_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        _, h = _seed_rotated_wh(spec, rot)
+        placements[oid] = {"id": oid, "x": 0, "y": int(y_cursor), "rot": int(rot)}
+        y_cursor += h + row_gap
+
+    x_right = _seed_snap_up_value(left_width + row_gap, grid_mm)
+    y_cursor = 0
+    for oid in right_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        _, h = _seed_rotated_wh(spec, rot)
+        placements[oid] = {
+            "id": oid,
+            "x": int(x_right),
+            "y": int(y_cursor),
+            "rot": int(rot),
+        }
+        y_cursor += h + row_gap
+
+    return placements
+
+
+def _seed_wrap_target_span(
+    *,
+    object_ids: list[str],
+    spec_by_id: dict[str, dict[str, Any]],
+    grid_mm: int,
+    compactness: float,
+) -> int:
+    total_area = 0
+    max_width = 0
+    for oid in object_ids:
+        spec = spec_by_id[oid]
+        rot = _seed_first_allowed_rotation(spec, prefer=0)
+        w, h = _seed_rotated_wh(spec, rot)
+        total_area += w * h
+        max_width = max(max_width, w)
+
+    estimated_span = int(round(math.sqrt(max(total_area, 1)) * compactness))
+    return max(max_width, _seed_snap_up_value(estimated_span, grid_mm))
+
+
+def _seed_fallback_y(
+    *,
+    spec_by_id: dict[str, dict[str, Any]],
+    placements: dict[str, dict[str, Any]],
+    grid_mm: int,
+) -> int:
+    if not placements:
+        return 0
+
+    max_y = 0
+    max_h = 0
+    for placement in placements.values():
+        if not isinstance(placement, dict):
+            continue
+        spec = spec_by_id.get(str(placement.get("id") or ""))
+        if spec is None:
+            continue
+        rot = int(placement.get("rot", 0) or 0)
+        _, h = _seed_rotated_wh(spec, rot)
+        max_y = max(max_y, int(placement.get("y", 0)) + h)
+        max_h = max(max_h, h)
+    return max_y + _seed_snap_up_value(max(max_h, 600) + max(grid_mm, 250), grid_mm)
 
 
 def _seed_build_priority_map(cluster: dict[str, Any]) -> dict[str, int]:
@@ -1771,7 +1962,7 @@ def _seed_semantic_side_options(rel: dict[str, Any]) -> list[str]:
     for item in raw:
         if not isinstance(item, str):
             continue
-        token = item.strip().lower()
+        token = _seed_normalize_anchor_side_token(item)
         if token in {
             "head_left",
             "head_right",
@@ -1786,6 +1977,33 @@ def _seed_semantic_side_options(rel: dict[str, Any]) -> list[str]:
         }:
             out.append(token)
     return out
+
+
+def _seed_normalize_anchor_side_token(value: str) -> str:
+    token = value.strip().lower()
+    mapping = {
+        "front": "head",
+        "back": "foot",
+        "front_left": "head_left",
+        "front_right": "head_right",
+        "back_left": "foot_left",
+        "back_right": "foot_right",
+        "front_left_up": "head_left",
+        "front_right_up": "head_right",
+        "upper_left": "head_left",
+        "upper_right": "head_right",
+        "left_up": "head_left",
+        "right_up": "head_right",
+        "left_upper": "head_left",
+        "right_upper": "head_right",
+        "left_side": "left",
+        "right_side": "right",
+        "beside_left": "left",
+        "beside_right": "right",
+        "in_front": "head",
+        "behind": "foot",
+    }
+    return mapping.get(token, token)
 
 
 def _seed_choose_relative_rotation(
@@ -2053,27 +2271,109 @@ def _validate_local_placements_full(
 
 
 def _build_search_seed_states(cluster: dict[str, Any]) -> list[list[dict[str, Any]]]:
-    base = _seed_local_layout(cluster)
-    if not base:
-        return []
-
     seeds: list[list[dict[str, Any]]] = []
     seen: set[str] = set()
 
-    for candidate in (
-        _canonicalize_local_placements(base),
-        _mirror_seed_layout(base, cluster, axis="x"),
-        _mirror_seed_layout(base, cluster, axis="y"),
-    ):
-        if not candidate:
+    base_layouts = [
+        _seed_local_layout(cluster, strategy="row"),
+        _seed_local_layout(cluster, strategy="compact_wrap"),
+        _seed_local_layout(cluster, strategy="balanced_wrap"),
+        _seed_local_layout(cluster, strategy="two_column"),
+    ]
+
+    for base in base_layouts:
+        if not base:
             continue
-        signature = _placements_signature(candidate)
-        if signature in seen:
-            continue
-        seen.add(signature)
-        seeds.append(candidate)
+        for candidate in (
+            _canonicalize_local_placements(base),
+            _mirror_seed_layout(base, cluster, axis="x"),
+            _mirror_seed_layout(base, cluster, axis="y"),
+            _rotate_seed_layout(base, cluster, degrees=90),
+            _rotate_seed_layout(base, cluster, degrees=180),
+            _rotate_seed_layout(base, cluster, degrees=270),
+        ):
+            if not candidate:
+                continue
+            signature = _placements_signature(candidate)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            seeds.append(candidate)
 
     return seeds
+
+
+def _rotate_seed_layout(
+    placements: list[dict[str, Any]],
+    cluster: dict[str, Any],
+    *,
+    degrees: int,
+) -> list[dict[str, Any]]:
+    canonical = _canonicalize_local_placements(placements)
+    if not canonical:
+        return []
+
+    degrees = int(degrees) % 360
+    if degrees not in {90, 180, 270}:
+        return []
+
+    spec_by_id = {
+        s["id"]: s
+        for s in _build_object_specs(cluster)
+        if isinstance(s, dict) and isinstance(s.get("id"), str)
+    }
+    rects: list[dict[str, Any]] = []
+    for placement in canonical:
+        spec = spec_by_id.get(placement["id"])
+        if spec is None:
+            return []
+        w = int(spec.get("w", 0) or 0)
+        h = int(spec.get("h", 0) or 0)
+        rot = int(placement["rot"]) % 360
+        if rot in (90, 270):
+            w, h = h, w
+        rects.append(
+            {
+                "id": placement["id"],
+                "x": int(placement["x"]),
+                "y": int(placement["y"]),
+                "w": w,
+                "h": h,
+                "rot": rot,
+            }
+        )
+
+    bbox = _local_bbox_from_rects(rects)
+    width = int(bbox["max_x"]) - int(bbox["min_x"])
+    height = int(bbox["max_y"]) - int(bbox["min_y"])
+    rotated: list[dict[str, Any]] = []
+    for rect in rects:
+        x = int(rect["x"])
+        y = int(rect["y"])
+        w = int(rect["w"])
+        h = int(rect["h"])
+        rot = int(rect["rot"]) % 360
+
+        if degrees == 90:
+            new_x = height - (y + h)
+            new_y = x
+        elif degrees == 180:
+            new_x = width - (x + w)
+            new_y = height - (y + h)
+        else:
+            new_x = y
+            new_y = width - (x + w)
+
+        rotated.append(
+            {
+                "id": rect["id"],
+                "x": int(new_x),
+                "y": int(new_y),
+                "rot": int((rot + degrees) % 360),
+            }
+        )
+
+    return _seed_normalize_to_origin(rotated)
 
 
 def _mirror_seed_layout(
@@ -2391,6 +2691,13 @@ def _collect_patch_candidates(
             placements=placements,
         )
     )
+    out.extend(
+        _generate_compaction_moves(
+            cluster=cluster,
+            placements=placements,
+            grid_mm=grid_mm,
+        )
+    )
 
     deduped: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -2597,6 +2904,161 @@ def _generate_rotation_escape_moves(
             )
 
     return moves
+
+
+def _generate_compaction_moves(
+    *,
+    cluster: dict[str, Any],
+    placements: list[dict[str, Any]],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    canonical = _canonicalize_local_placements(placements)
+    if not canonical:
+        return []
+
+    spec_by_id = {
+        s["id"]: s
+        for s in _build_object_specs(cluster)
+        if isinstance(s, dict) and isinstance(s.get("id"), str)
+    }
+    rects: list[dict[str, Any]] = []
+    for placement in canonical:
+        spec = spec_by_id.get(placement["id"])
+        if spec is None:
+            continue
+        w = int(spec.get("w", 0) or 0)
+        h = int(spec.get("h", 0) or 0)
+        rot = int(placement.get("rot", 0) or 0) % 360
+        if rot in (90, 270):
+            w, h = h, w
+        rects.append(
+            {
+                "id": placement["id"],
+                "x": int(placement["x"]),
+                "y": int(placement["y"]),
+                "w": w,
+                "h": h,
+                "rot": rot,
+            }
+        )
+
+    bbox = _local_bbox_from_rects(rects)
+    rect_by_id = {rect["id"]: rect for rect in rects if isinstance(rect.get("id"), str)}
+    moves: list[dict[str, Any]] = []
+
+    for placement in canonical:
+        object_id = placement["id"]
+        rect = rect_by_id.get(object_id)
+        if rect is None:
+            continue
+
+        left_target = _compaction_target_left(
+            rect=rect,
+            rects=rects,
+            bbox=bbox,
+        )
+        if left_target < int(rect["x"]):
+            dx = _host_snap_delta(left_target - int(rect["x"]), grid_mm)
+            if dx != 0:
+                moves.append(
+                    {
+                        "reason": "COMPACT_LEFT_EDGE",
+                        "move_object": object_id,
+                        "dx": int(dx),
+                        "dy": 0,
+                        "new_x": int(placement["x"] + dx),
+                        "new_y": int(placement["y"]),
+                        "note": "Host-generated compaction move toward the left envelope.",
+                    }
+                )
+
+        down_target = _compaction_target_down(
+            rect=rect,
+            rects=rects,
+            bbox=bbox,
+        )
+        if down_target < int(rect["y"]):
+            dy = _host_snap_delta(down_target - int(rect["y"]), grid_mm)
+            if dy != 0:
+                moves.append(
+                    {
+                        "reason": "COMPACT_TOP_EDGE",
+                        "move_object": object_id,
+                        "dx": 0,
+                        "dy": int(dy),
+                        "new_x": int(placement["x"]),
+                        "new_y": int(placement["y"] + dy),
+                        "note": "Host-generated compaction move toward the top envelope.",
+                    }
+                )
+
+    return moves
+
+
+def _compaction_target_left(
+    *,
+    rect: dict[str, Any],
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+) -> int:
+    best = int(bbox.get("min_x", 0))
+    current_x = int(rect.get("x", 0))
+    current_y = int(rect.get("y", 0))
+    current_h = int(rect.get("h", 0))
+    for other in rects:
+        if other.get("id") == rect.get("id"):
+            continue
+        other_right = int(other.get("x", 0)) + int(other.get("w", 0))
+        if other_right > current_x:
+            continue
+        if not _rects_overlap_on_axis(
+            start_a=current_y,
+            length_a=current_h,
+            start_b=int(other.get("y", 0)),
+            length_b=int(other.get("h", 0)),
+        ):
+            continue
+        best = max(best, other_right)
+    return best
+
+
+def _compaction_target_down(
+    *,
+    rect: dict[str, Any],
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+) -> int:
+    best = int(bbox.get("min_y", 0))
+    current_x = int(rect.get("x", 0))
+    current_w = int(rect.get("w", 0))
+    current_y = int(rect.get("y", 0))
+    for other in rects:
+        if other.get("id") == rect.get("id"):
+            continue
+        other_top = int(other.get("y", 0)) + int(other.get("h", 0))
+        if other_top > current_y:
+            continue
+        if not _rects_overlap_on_axis(
+            start_a=current_x,
+            length_a=current_w,
+            start_b=int(other.get("x", 0)),
+            length_b=int(other.get("w", 0)),
+        ):
+            continue
+        best = max(best, other_top)
+    return best
+
+
+def _rects_overlap_on_axis(
+    *,
+    start_a: int,
+    length_a: int,
+    start_b: int,
+    length_b: int,
+) -> bool:
+    end_a = int(start_a) + int(length_a)
+    end_b = int(start_b) + int(length_b)
+    return max(int(start_a), int(start_b)) < min(end_a, end_b)
 
 
 def _run_verifier_once(

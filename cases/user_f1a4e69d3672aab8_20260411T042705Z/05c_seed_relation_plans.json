@@ -1,0 +1,1937 @@
+{
+  "status": "OK",
+  "seed_context": {
+    "clusters": {
+      "seating_zone": {
+        "status": "OK",
+        "cluster_id": "seating_zone",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "armchair",
+            "x": 1750,
+            "y": 2100,
+            "rot": 180
+          },
+          {
+            "id": "coffee_table",
+            "x": 0,
+            "y": 2100,
+            "rot": 0
+          },
+          {
+            "id": "floor_lamp",
+            "x": 3150,
+            "y": 2100,
+            "rot": 0
+          },
+          {
+            "id": "ottoman",
+            "x": 900,
+            "y": 2100,
+            "rot": 0
+          },
+          {
+            "id": "sectional_sofa",
+            "x": 0,
+            "y": 950,
+            "rot": 0
+          },
+          {
+            "id": "side_table",
+            "x": 2750,
+            "y": 2100,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "armchair",
+              "x": 1750,
+              "y": 2100,
+              "w": 840,
+              "h": 710
+            },
+            {
+              "id": "coffee_table",
+              "x": 0,
+              "y": 2100,
+              "w": 900,
+              "h": 500
+            },
+            {
+              "id": "floor_lamp",
+              "x": 3150,
+              "y": 2100,
+              "w": 350,
+              "h": 320
+            },
+            {
+              "id": "ottoman",
+              "x": 900,
+              "y": 2100,
+              "w": 540,
+              "h": 500
+            },
+            {
+              "id": "sectional_sofa",
+              "x": 0,
+              "y": 950,
+              "w": 2540,
+              "h": 920
+            },
+            {
+              "id": "side_table",
+              "x": 2750,
+              "y": 2100,
+              "w": 390,
+              "h": 370
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 950,
+            "max_x": 3500,
+            "max_y": 2810
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 950
+              },
+              {
+                "x": 3500,
+                "y": 950
+              },
+              {
+                "x": 3500,
+                "y": 2420
+              },
+              {
+                "x": 3140,
+                "y": 2420
+              },
+              {
+                "x": 3140,
+                "y": 2470
+              },
+              {
+                "x": 2590,
+                "y": 2470
+              },
+              {
+                "x": 2590,
+                "y": 2810
+              },
+              {
+                "x": 1750,
+                "y": 2810
+              },
+              {
+                "x": 1750,
+                "y": 2600
+              },
+              {
+                "x": 0,
+                "y": 2600
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "sectional_sofa": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "coffee_table": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "ottoman": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "armchair": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": -1,
+                "dy": 0
+              }
+            },
+            "side_table": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "floor_lamp": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "seed_state": {
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 950,
+            "max_x": 3500,
+            "max_y": 2810
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        }
+      },
+      "media_zone": {
+        "status": "OK",
+        "cluster_id": "media_zone",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "bookshelf",
+            "x": 900,
+            "y": 50,
+            "rot": 0
+          },
+          {
+            "id": "media_shelf",
+            "x": 0,
+            "y": 0,
+            "rot": 0
+          },
+          {
+            "id": "tv_console",
+            "x": 0,
+            "y": 300,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "bookshelf",
+              "x": 900,
+              "y": 50,
+              "w": 630,
+              "h": 250
+            },
+            {
+              "id": "media_shelf",
+              "x": 0,
+              "y": 0,
+              "w": 870,
+              "h": 300
+            },
+            {
+              "id": "tv_console",
+              "x": 0,
+              "y": 300,
+              "w": 1260,
+              "h": 380
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1530,
+            "max_y": 680
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1530,
+                "y": 0
+              },
+              {
+                "x": 1530,
+                "y": 300
+              },
+              {
+                "x": 1260,
+                "y": 300
+              },
+              {
+                "x": 1260,
+                "y": 680
+              },
+              {
+                "x": 0,
+                "y": 680
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "tv_console": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "media_shelf": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "bookshelf": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "seed_state": {
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1530,
+            "max_y": 680
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": 1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        }
+      },
+      "misc_storage": {
+        "status": "OK",
+        "cluster_id": "misc_storage",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "storage_cabinet",
+            "x": 0,
+            "y": 0,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "storage_cabinet",
+              "x": 0,
+              "y": 0,
+              "w": 610,
+              "h": 410
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 610,
+            "max_y": 410
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 610,
+                "y": 0
+              },
+              {
+                "x": 610,
+                "y": 410
+              },
+              {
+                "x": 0,
+                "y": 410
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "storage_cabinet": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "seed_state": {
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 610,
+            "max_y": 410
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        }
+      }
+    },
+    "seed_layout_state": {
+      "notes": [
+        "No macro seed layout has been solved yet; invent a distinct macro concept from room geometry, openings, and cluster footprints.",
+        "Use the room geometry, wall opportunities, and circulation clues to create a materially distinct concept."
+      ],
+      "clusters": [
+        {
+          "cluster_id": "seating_zone",
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 950,
+            "max_x": 3500,
+            "max_y": 2810
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        },
+        {
+          "cluster_id": "media_zone",
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1530,
+            "max_y": 680
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": 1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        },
+        {
+          "cluster_id": "misc_storage",
+          "variant_id": null,
+          "world_center": {
+            "x": 2797,
+            "y": 1826
+          },
+          "world_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 610,
+            "max_y": 410
+          },
+          "rotation_ccw": 0,
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "region_tags": []
+        }
+      ]
+    },
+    "free_space_regions": [
+      {
+        "label": "open_zone_1",
+        "area_mm2": 21510800,
+        "bbox": {
+          "min_x": 0,
+          "min_y": 0,
+          "max_x": 6000,
+          "max_y": 4002
+        },
+        "center": {
+          "x": 2797,
+          "y": 1826
+        }
+      }
+    ]
+  },
+  "variants": [
+    {
+      "variant_id": "plan_1",
+      "label": "Intent 1",
+      "source": "seed_stable",
+      "planner_model_name": "gemma-3-27b-it",
+      "reason": "Keep the seed structure stable and improve the macro logic around it.",
+      "relation_plan": {
+        "status": "OK",
+        "room_id": "room_1",
+        "cluster_affinities": [
+          {
+            "cluster_id": "media_zone",
+            "prefer": [
+              "long_wall",
+              "wall",
+              "far_from_entry"
+            ],
+            "avoid": [
+              "window_blocking",
+              "door_swing"
+            ],
+            "priority": "high",
+            "reason": "Media zones benefit from wall placement but should not block windows."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "prefer": [
+              "wall",
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "entry_blocking",
+              "center"
+            ],
+            "priority": "medium",
+            "reason": "Storage is wall-friendly and should not obstruct entry."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "prefer": [
+              "center",
+              "wall",
+              "far_from_entry",
+              "long_wall"
+            ],
+            "avoid": [
+              "window_blocking",
+              "entry_blocking",
+              "center"
+            ],
+            "priority": "high",
+            "reason": "Seating should be central and have clear access."
+          }
+        ],
+        "cluster_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "intents": [
+              "face_cluster",
+              "back_to_wall",
+              "access_to_open_space"
+            ],
+            "target_cluster_id": "seating_zone",
+            "priority": "high",
+            "reason": "Orient media towards seating for viewing."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "intents": [
+              "face_cluster",
+              "inward_to_room",
+              "back_to_wall"
+            ],
+            "target_cluster_id": "media_zone",
+            "priority": "high",
+            "reason": "Orient seating towards media for viewing."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "intents": [
+              "access_to_open_space",
+              "back_to_wall"
+            ],
+            "target_cluster_id": null,
+            "priority": "medium",
+            "reason": "access-sensitive cluster should expose usable front toward open space"
+          }
+        ],
+        "object_orientations": [
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "sectional_sofa",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Sofa faces media shelf for viewing."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "media_shelf",
+            "intents": [
+              "front_to_open_space",
+              "face_object"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Expose front of media shelf to room."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intents": [
+              "front_to_open_space",
+              "preserve_front_access"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Expose front of tv console to room."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "armchair",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "important seating anchor should face focal/media anchor"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "bookshelf",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          },
+          {
+            "cluster_id": "misc_storage",
+            "object_id": "storage_cabinet",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          }
+        ],
+        "cluster_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "near",
+            "priority": "high",
+            "reason": "Seating and media should be near for viewing."
+          }
+        ],
+        "cluster_directional_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "priority": "high",
+            "reason": "Seating faces media for viewing."
+          }
+        ],
+        "circulation_plan": {
+          "main_paths": [
+            {
+              "from": "door_1",
+              "to_cluster": "seating_zone",
+              "priority": "high",
+              "reason": "Main path from entry to seating."
+            }
+          ],
+          "keep_open_regions": [
+            {
+              "type": "entry_buffer",
+              "near": "door_1",
+              "priority": "high",
+              "reason": "Keep space near entry clear."
+            }
+          ]
+        },
+        "layout_intent_profile": {
+          "focus_mode": "mixed",
+          "primary_cluster_id": "seating_zone",
+          "secondary_cluster_id": "media_zone",
+          "circulation_priority": "medium",
+          "center_open_preference": "medium",
+          "support_cluster_behavior": "balanced",
+          "distribution_mode": "balanced"
+        },
+        "placement_guidelines": [
+          "Place media zone along a long wall.",
+          "Ensure clear circulation from entry to seating.",
+          "Avoid blocking window with tall furniture.",
+          "Preserve a clear viewing relationship between sectional_sofa and media_shelf.",
+          "Do not orient sectional_sofa away from media_shelf.",
+          "Keep media_zone readable from seating_zone.",
+          "Preserve front usability for bookshelf.",
+          "Preserve front usability for tv_console.",
+          "Preserve front usability for storage_cabinet.",
+          "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+          "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+          "Preserve a materially distinct macro geometry from the other post-seed variants.",
+          "Stay close to the current seed-side occupancy and avoid unnecessary macro relocation."
+        ],
+        "notes": [
+          "Prioritized viewing relationship between seating and media.",
+          "Maintained open circulation from entry.",
+          "Seed variant policy seed_stable: distribution=balanced, center_open=medium, support_behavior=balanced.",
+          "Seed constraint fingerprint seed_stable: seed_region_preservation, primary_center_anchor, balanced_support."
+        ],
+        "missing": [],
+        "seed_variant_policy": {
+          "source": "seed_stable",
+          "constraint_tokens": [
+            "seed_region_preservation",
+            "primary_center_anchor",
+            "balanced_support"
+          ],
+          "structural_fingerprint": "focus=mixed,center=medium,support=balanced,distribution=balanced || entry_buffer:door_1 || media_zone|p=far_from_entry,long_wall,wall|a=door_swing,window_blocking,misc_storage|p=recess_or_edge,wall|a=center,entry_blocking,seating_zone|p=center,far_from_entry,long_wall,wall|a=center,entry_blocking,window_blocking || media_zone|seating_zone|near || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,back_to_wall,face_cluster|seating_zone,misc_storage|access_to_open_space,back_to_wall|,seating_zone|back_to_wall,face_cluster,inward_to_room|media_zone"
+        }
+      }
+    },
+    {
+      "variant_id": "plan_2",
+      "label": "Intent 2",
+      "source": "seed_focal_axis",
+      "planner_model_name": "gemini-3.1-flash-lite-preview",
+      "reason": "Strengthen the focal or viewing axis without forcing a full rearrangement.",
+      "relation_plan": {
+        "status": "OK",
+        "room_id": "room_1",
+        "cluster_affinities": [
+          {
+            "cluster_id": "media_zone",
+            "prefer": [
+              "wall",
+              "long_wall",
+              "far_from_entry"
+            ],
+            "avoid": [
+              "window_blocking",
+              "door_swing",
+              "center"
+            ],
+            "priority": "high",
+            "reason": "Media zone requires a stable wall for TV console and bookshelf to anchor the viewing axis."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "prefer": [
+              "center",
+              "far_from_entry",
+              "wall",
+              "long_wall"
+            ],
+            "avoid": [
+              "window_blocking",
+              "door_swing",
+              "center",
+              "entry_blocking"
+            ],
+            "priority": "high",
+            "reason": "Seating zone should be central to the room to allow circulation around it and face the media zone."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "prefer": [
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "main_path",
+              "entry_blocking"
+            ],
+            "priority": "medium",
+            "reason": "Storage cabinet should be tucked away to keep the main living area uncluttered."
+          }
+        ],
+        "cluster_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "intents": [
+              "back_to_wall",
+              "access_to_open_space",
+              "face_cluster",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": "seating_zone",
+            "priority": "high",
+            "reason": "Media zone needs to be against a wall to provide a clear focal point for the seating zone."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "intents": [
+              "face_cluster",
+              "inward_to_room",
+              "back_to_wall"
+            ],
+            "target_cluster_id": "media_zone",
+            "priority": "high",
+            "reason": "Seating must orient toward the media zone for functional viewing."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "intents": [
+              "access_to_open_space",
+              "back_to_wall"
+            ],
+            "target_cluster_id": null,
+            "priority": "medium",
+            "reason": "access-sensitive cluster should expose usable front toward open space"
+          }
+        ],
+        "object_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intents": [
+              "front_to_open_space",
+              "back_to_wall",
+              "preserve_front_access"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "TV console must face the seating area and be against a wall."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "sectional_sofa",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "tv_console",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Primary seating must face the TV console for viewing."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "armchair",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "important seating anchor should face focal/media anchor"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "media_shelf",
+            "intents": [
+              "front_to_open_space",
+              "face_object"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "focal/media anchor should present its usable front toward seating"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "bookshelf",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          },
+          {
+            "cluster_id": "misc_storage",
+            "object_id": "storage_cabinet",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          }
+        ],
+        "cluster_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "near",
+            "priority": "high",
+            "reason": "Functional viewing relationship requires proximity."
+          }
+        ],
+        "cluster_directional_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "priority": "high",
+            "reason": "Establishes the primary viewing axis of the room."
+          }
+        ],
+        "circulation_plan": {
+          "main_paths": [
+            {
+              "from": "door_1",
+              "to_cluster": "seating_zone",
+              "priority": "high",
+              "reason": "Clear path from entry to the main seating area is essential."
+            }
+          ],
+          "keep_open_regions": [
+            {
+              "type": "window_buffer",
+              "near": "window_1",
+              "priority": "high",
+              "reason": "Maintain window clearance and light access."
+            },
+            {
+              "type": "entry_buffer",
+              "near": "door_1",
+              "priority": "high",
+              "reason": "Ensure door swing and entry area remain unobstructed."
+            }
+          ]
+        },
+        "layout_intent_profile": {
+          "focus_mode": "viewing",
+          "primary_cluster_id": "seating_zone",
+          "secondary_cluster_id": "media_zone",
+          "circulation_priority": "medium",
+          "center_open_preference": "medium",
+          "support_cluster_behavior": "integrate",
+          "distribution_mode": "focal_grouped"
+        },
+        "placement_guidelines": [
+          "Place media_zone on the wall opposite the window or on a side wall to avoid blocking window light.",
+          "Position seating_zone centrally, ensuring the sectional_sofa faces the tv_console.",
+          "Keep the area between the door and the seating zone clear for circulation.",
+          "Use the misc_storage cabinet in a corner or against a wall away from the main traffic path.",
+          "Preserve a clear viewing relationship between sectional_sofa and media_shelf.",
+          "Do not orient sectional_sofa away from media_shelf.",
+          "Keep media_zone readable from seating_zone.",
+          "Preserve front usability for bookshelf.",
+          "Preserve front usability for tv_console.",
+          "Preserve front usability for storage_cabinet.",
+          "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+          "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+          "Preserve a materially distinct macro geometry from the other post-seed variants.",
+          "Make this the strongest focal-axis option, with the primary pair reading as a grouped viewing composition."
+        ],
+        "notes": [
+          "The layout prioritizes a clear viewing axis between the seating_zone and media_zone.",
+          "Window clearance is strictly protected by avoiding tall furniture placement in front of window_1.",
+          "Seed variant policy seed_focal_axis: distribution=focal_grouped, center_open=medium, support_behavior=integrate.",
+          "Seed constraint fingerprint seed_focal_axis: focal_axis_lock, primary_faces_secondary, secondary_wall_backed."
+        ],
+        "missing": [],
+        "seed_variant_policy": {
+          "source": "seed_focal_axis",
+          "constraint_tokens": [
+            "focal_axis_lock",
+            "primary_faces_secondary",
+            "secondary_wall_backed"
+          ],
+          "structural_fingerprint": "focus=viewing,center=medium,support=integrate,distribution=focal_grouped || entry_buffer:door_1,window_buffer:window_1 || media_zone|p=far_from_entry,long_wall,wall|a=center,door_swing,window_blocking,misc_storage|p=recess_or_edge|a=entry_blocking,main_path,seating_zone|p=center,far_from_entry,long_wall,wall|a=center,door_swing,entry_blocking,window_blocking || media_zone|seating_zone|near || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|seating_zone,misc_storage|access_to_open_space,back_to_wall|,seating_zone|back_to_wall,face_cluster,inward_to_room|media_zone"
+        }
+      }
+    },
+    {
+      "variant_id": "plan_3",
+      "label": "Intent 3",
+      "source": "seed_open_center",
+      "planner_model_name": "gemma-4-31b-it",
+      "reason": "Protect a cleaner open center and clearer entry circulation.",
+      "relation_plan": {
+        "status": "OK",
+        "room_id": "room_1",
+        "cluster_affinities": [
+          {
+            "cluster_id": "media_zone",
+            "prefer": [
+              "long_wall",
+              "wall",
+              "far_from_entry"
+            ],
+            "avoid": [
+              "window_blocking",
+              "door_swing",
+              "entry_blocking"
+            ],
+            "priority": "high",
+            "reason": "Media units are typically wall-bound and serve as the room's focal anchor."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "prefer": [
+              "center",
+              "far_from_entry",
+              "wall",
+              "long_wall"
+            ],
+            "avoid": [
+              "door_swing",
+              "window_clearance",
+              "entry_blocking",
+              "center",
+              "window_blocking"
+            ],
+            "priority": "high",
+            "reason": "Primary lounge area should be centrally located for comfort but must not obstruct the entrance or window access."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "prefer": [
+              "recess_or_edge",
+              "wall",
+              "far_from_entry"
+            ],
+            "avoid": [
+              "center",
+              "main_path",
+              "bottleneck"
+            ],
+            "priority": "high",
+            "reason": "Support storage should recede to the edges to maintain the requested clean center lane."
+          }
+        ],
+        "cluster_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "intents": [
+              "back_to_wall",
+              "access_to_open_space",
+              "face_cluster"
+            ],
+            "target_cluster_id": "seating_zone",
+            "priority": "high",
+            "reason": "Ensure TV and shelves are against a wall and accessible from the room center."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "intents": [
+              "face_cluster",
+              "inward_to_room",
+              "back_to_wall",
+              "access_to_open_space"
+            ],
+            "target_cluster_id": "media_zone",
+            "priority": "high",
+            "reason": "Seating must be oriented toward the media focal point."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "intents": [
+              "back_to_wall",
+              "access_to_open_space"
+            ],
+            "target_cluster_id": null,
+            "priority": "medium",
+            "reason": "Storage should be tucked against a wall with the front facing the room."
+          }
+        ],
+        "object_orientations": [
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "sectional_sofa",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "tv_console",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Primary seating must face the TV for functional viewing."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "armchair",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "tv_console",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Secondary seating should also be oriented toward the focal point."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intents": [
+              "front_to_open_space",
+              "face_object",
+              "preserve_front_access"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "The TV must be visible and accessible from the primary seating."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "object_id": "storage_cabinet",
+            "intents": [
+              "preserve_front_access",
+              "back_to_wall",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Ensure the cabinet is usable and does not block circulation."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "media_shelf",
+            "intents": [
+              "front_to_open_space",
+              "face_object"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "focal/media anchor should present its usable front toward seating"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "bookshelf",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          }
+        ],
+        "cluster_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "near",
+            "priority": "high",
+            "reason": "Viewing distance requirements necessitate proximity between seating and media."
+          },
+          {
+            "a": "seating_zone",
+            "b": "misc_storage",
+            "relation": "separate",
+            "priority": "medium",
+            "reason": "Keep support storage away from the primary lounge to maintain an open feel."
+          }
+        ],
+        "cluster_directional_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "priority": "high",
+            "reason": "Establish a clear viewing axis between the lounge and the TV."
+          }
+        ],
+        "circulation_plan": {
+          "main_paths": [
+            {
+              "from": "door_1",
+              "to_cluster": "seating_zone",
+              "priority": "high",
+              "reason": "Direct and clear path from entry to the main living area."
+            }
+          ],
+          "keep_open_regions": [
+            {
+              "type": "entry_buffer",
+              "near": "door_1",
+              "priority": "high",
+              "reason": "Prevent clutter immediately inside the entrance."
+            },
+            {
+              "type": "center_lane",
+              "near": "seating_zone",
+              "priority": "high",
+              "reason": "User specifically requested a cleaner center lane to avoid a cluttered central field."
+            },
+            {
+              "type": "window_buffer",
+              "near": "window_1",
+              "priority": "medium",
+              "reason": "Maintain light and access to the window."
+            },
+            {
+              "type": "center_lane",
+              "near": "room_center",
+              "priority": "high",
+              "reason": "Open-center variant should preserve a visibly cleaner center lane."
+            }
+          ]
+        },
+        "layout_intent_profile": {
+          "focus_mode": "mixed",
+          "primary_cluster_id": "seating_zone",
+          "secondary_cluster_id": "media_zone",
+          "circulation_priority": "high",
+          "center_open_preference": "high",
+          "support_cluster_behavior": "recede",
+          "distribution_mode": "balanced"
+        },
+        "placement_guidelines": [
+          "Place media_zone along the longest continuous wall (top wall) to anchor the room.",
+          "Position seating_zone facing the media_zone, shifted slightly to preserve a clear path from the door.",
+          "Tuck misc_storage against a side wall or in a corner far from the entry to reduce visual pressure in the center.",
+          "Ensure no furniture overlaps the window_1_clearance or door_1_swing zones.",
+          "Preserve a clear viewing relationship between sectional_sofa and media_shelf.",
+          "Do not orient sectional_sofa away from media_shelf.",
+          "Keep media_zone readable from seating_zone.",
+          "Preserve front usability for bookshelf.",
+          "Preserve front usability for tv_console.",
+          "Preserve front usability for storage_cabinet.",
+          "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+          "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+          "Preserve a materially distinct macro geometry from the other post-seed variants.",
+          "Keep the center visibly more open than the stable and focal-axis variants."
+        ],
+        "notes": [
+          "The plan prioritizes a 'clean center lane' by pushing the storage cluster to the periphery and aligning the viewing axis along the room's length.",
+          "Seed variant policy seed_open_center: distribution=balanced, center_open=high, support_behavior=recede.",
+          "Seed constraint fingerprint seed_open_center: center_lane_lock, support_far_from_primary, support_edge_bias."
+        ],
+        "missing": [],
+        "seed_variant_policy": {
+          "source": "seed_open_center",
+          "constraint_tokens": [
+            "center_lane_lock",
+            "support_far_from_primary",
+            "support_edge_bias"
+          ],
+          "structural_fingerprint": "focus=mixed,center=high,support=recede,distribution=balanced || center_lane:room_center,center_lane:seating_zone,entry_buffer:door_1,window_buffer:window_1 || media_zone|p=far_from_entry,long_wall,wall|a=door_swing,entry_blocking,window_blocking,misc_storage|p=far_from_entry,recess_or_edge,wall|a=bottleneck,center,main_path,seating_zone|p=center,far_from_entry,long_wall,wall|a=center,door_swing,entry_blocking,window_blocking,window_clearance || media_zone|seating_zone|near,misc_storage|seating_zone|separate || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,back_to_wall,face_cluster|seating_zone,misc_storage|access_to_open_space,back_to_wall|,seating_zone|access_to_open_space,back_to_wall,face_cluster,inward_to_room|media_zone"
+        }
+      }
+    },
+    {
+      "variant_id": "plan_4",
+      "label": "Intent 4",
+      "source": "seed_edge_weighted",
+      "planner_model_name": "gemma-3-27b-it",
+      "reason": "Move support pressure toward edges or recesses to free the main zone.",
+      "relation_plan": {
+        "status": "OK",
+        "room_id": "room_1",
+        "cluster_affinities": [
+          {
+            "cluster_id": "media_zone",
+            "prefer": [
+              "long_wall",
+              "wall",
+              "far_from_entry",
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "window_blocking",
+              "door_swing",
+              "center",
+              "main_path"
+            ],
+            "priority": "high",
+            "reason": "Media zones benefit from wall placement but should not block windows."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "prefer": [
+              "wall",
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "entry_blocking",
+              "center",
+              "main_path",
+              "bottleneck"
+            ],
+            "priority": "high",
+            "reason": "Storage is wall-friendly and should not obstruct entry."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "prefer": [
+              "center",
+              "wall",
+              "far_from_entry",
+              "long_wall",
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "window_blocking",
+              "entry_blocking",
+              "center",
+              "main_path"
+            ],
+            "priority": "high",
+            "reason": "Seating should be central and have clear access."
+          }
+        ],
+        "cluster_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "intents": [
+              "face_cluster",
+              "back_to_wall",
+              "access_to_open_space",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": "seating_zone",
+            "priority": "high",
+            "reason": "Orient media towards seating for viewing."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "intents": [
+              "face_cluster",
+              "inward_to_room",
+              "back_to_wall",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": "media_zone",
+            "priority": "high",
+            "reason": "Orient seating towards media for viewing."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "intents": [
+              "access_to_open_space",
+              "back_to_wall",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": null,
+            "priority": "medium",
+            "reason": "access-sensitive cluster should expose usable front toward open space"
+          }
+        ],
+        "object_orientations": [
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "sectional_sofa",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Sofa faces media shelf for viewing."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "media_shelf",
+            "intents": [
+              "front_to_open_space",
+              "face_object"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Expose front of media shelf to room."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intents": [
+              "front_to_open_space",
+              "preserve_front_access"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Expose front of tv console to room."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "armchair",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "important seating anchor should face focal/media anchor"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "bookshelf",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          },
+          {
+            "cluster_id": "misc_storage",
+            "object_id": "storage_cabinet",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          }
+        ],
+        "cluster_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "near",
+            "priority": "high",
+            "reason": "Seating and media should be near for viewing."
+          },
+          {
+            "a": "misc_storage",
+            "b": "seating_zone",
+            "relation": "separate",
+            "priority": "high",
+            "reason": "Avoid cluttering seating area with storage."
+          }
+        ],
+        "cluster_directional_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "priority": "high",
+            "reason": "Seating and media should face each other for viewing."
+          }
+        ],
+        "circulation_plan": {
+          "main_paths": [
+            {
+              "from": "door_1",
+              "to_cluster": "seating_zone",
+              "priority": "high",
+              "reason": "Main path from entry to seating."
+            }
+          ],
+          "keep_open_regions": [
+            {
+              "type": "entry_buffer",
+              "near": "door_1",
+              "priority": "high",
+              "reason": "Keep entry clear."
+            },
+            {
+              "type": "center_lane",
+              "near": "seating_zone",
+              "priority": "medium",
+              "reason": "Maintain open space around seating."
+            },
+            {
+              "type": "center_lane",
+              "near": "room_center",
+              "priority": "high",
+              "reason": "Edge-weighted variant should keep the premium center field relatively free."
+            }
+          ]
+        },
+        "layout_intent_profile": {
+          "focus_mode": "mixed",
+          "primary_cluster_id": "seating_zone",
+          "secondary_cluster_id": "media_zone",
+          "circulation_priority": "high",
+          "center_open_preference": "high",
+          "support_cluster_behavior": "recede",
+          "distribution_mode": "edge_weighted"
+        },
+        "placement_guidelines": [
+          "Place media zone along a long wall.",
+          "Keep storage clusters away from main circulation paths.",
+          "Ensure clear access to seating from the entry.",
+          "Preserve a clear viewing relationship between sectional_sofa and media_shelf.",
+          "Do not orient sectional_sofa away from media_shelf.",
+          "Keep media_zone readable from seating_zone.",
+          "Preserve front usability for bookshelf.",
+          "Preserve front usability for tv_console.",
+          "Preserve front usability for storage_cabinet.",
+          "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+          "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+          "Preserve a materially distinct macro geometry from the other post-seed variants.",
+          "Make perimeter pressure stronger than the open-center variant so the main zone reads clearly edge-weighted."
+        ],
+        "notes": [
+          "Prioritized viewing relationship between seating and media.",
+          "Pushed storage to perimeter to maximize open space.",
+          "Seed variant policy seed_edge_weighted: distribution=edge_weighted, center_open=high, support_behavior=recede.",
+          "Seed constraint fingerprint seed_edge_weighted: perimeter_bias_lock, all_clusters_avoid_center, wall_backed_primary_pair."
+        ],
+        "missing": [],
+        "seed_variant_policy": {
+          "source": "seed_edge_weighted",
+          "constraint_tokens": [
+            "perimeter_bias_lock",
+            "all_clusters_avoid_center",
+            "wall_backed_primary_pair"
+          ],
+          "structural_fingerprint": "focus=mixed,center=high,support=recede,distribution=edge_weighted || center_lane:room_center,center_lane:seating_zone,entry_buffer:door_1 || media_zone|p=far_from_entry,long_wall,recess_or_edge,wall|a=center,door_swing,main_path,window_blocking,misc_storage|p=recess_or_edge,wall|a=bottleneck,center,entry_blocking,main_path,seating_zone|p=center,far_from_entry,long_wall,recess_or_edge,wall|a=center,entry_blocking,main_path,window_blocking || media_zone|seating_zone|near,misc_storage|seating_zone|separate || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|seating_zone,misc_storage|access_to_open_space,axis_parallel_wall,back_to_wall|,seating_zone|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|media_zone"
+        }
+      }
+    },
+    {
+      "variant_id": "plan_5",
+      "label": "Intent 5",
+      "source": "seed_zoned",
+      "planner_model_name": "gemma-4-31b-it",
+      "reason": "Create a more clearly zoned arrangement from the current seed.",
+      "relation_plan": {
+        "status": "OK",
+        "room_id": "room_1",
+        "cluster_affinities": [
+          {
+            "cluster_id": "media_zone",
+            "prefer": [
+              "long_wall",
+              "wall",
+              "far_from_entry"
+            ],
+            "avoid": [
+              "entry_blocking",
+              "window_blocking",
+              "door_swing",
+              "center"
+            ],
+            "priority": "high",
+            "reason": "Focal media zone should be anchored to a primary wall to organize the room and avoid blocking the window."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "prefer": [
+              "center",
+              "wall",
+              "far_from_entry",
+              "long_wall"
+            ],
+            "avoid": [
+              "door_swing",
+              "window_clearance",
+              "center",
+              "window_blocking",
+              "entry_blocking",
+              "main_path"
+            ],
+            "priority": "high",
+            "reason": "Seating should be centrally located for comfort and circulation, while strictly avoiding the door swing and window clearance."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "prefer": [
+              "wall",
+              "far_from_entry",
+              "recess_or_edge"
+            ],
+            "avoid": [
+              "main_path",
+              "center"
+            ],
+            "priority": "high",
+            "reason": "Support storage should be tucked away to create a separate territory and keep the main circulation clear."
+          }
+        ],
+        "cluster_orientations": [
+          {
+            "cluster_id": "media_zone",
+            "intents": [
+              "back_to_wall",
+              "access_to_open_space",
+              "face_cluster",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": "seating_zone",
+            "priority": "high",
+            "reason": "Media units must be against the wall with the front facing the room."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "intents": [
+              "face_cluster",
+              "inward_to_room",
+              "back_to_wall",
+              "access_to_open_space"
+            ],
+            "target_cluster_id": "media_zone",
+            "priority": "high",
+            "reason": "Primary seating must face the focal media zone."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "intents": [
+              "back_to_wall",
+              "access_to_open_space",
+              "axis_parallel_wall"
+            ],
+            "target_cluster_id": null,
+            "priority": "medium",
+            "reason": "Storage should be wall-anchored and accessible."
+          }
+        ],
+        "object_orientations": [
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "sectional_sofa",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "tv_console",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Primary seating anchor must face the primary focal anchor."
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intents": [
+              "front_to_open_space",
+              "face_object",
+              "preserve_front_access"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "TV console must be visible and face the primary seating."
+          },
+          {
+            "cluster_id": "misc_storage",
+            "object_id": "storage_cabinet",
+            "intents": [
+              "preserve_front_access",
+              "back_to_wall",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "Ensure the cabinet is usable and doesn't block circulation."
+          },
+          {
+            "cluster_id": "seating_zone",
+            "object_id": "armchair",
+            "intents": [
+              "face_object"
+            ],
+            "target_object_id": "media_shelf",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "important seating anchor should face focal/media anchor"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "media_shelf",
+            "intents": [
+              "front_to_open_space",
+              "face_object"
+            ],
+            "target_object_id": "sectional_sofa",
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "focal/media anchor should present its usable front toward seating"
+          },
+          {
+            "cluster_id": "media_zone",
+            "object_id": "bookshelf",
+            "intents": [
+              "preserve_front_access",
+              "front_to_open_space"
+            ],
+            "target_object_id": null,
+            "target_object_cluster_id": null,
+            "priority": "high",
+            "reason": "object has meaningful front usability and should preserve access"
+          }
+        ],
+        "cluster_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "near",
+            "priority": "high",
+            "reason": "Viewing distance requires proximity between seating and media."
+          },
+          {
+            "a": "seating_zone",
+            "b": "misc_storage",
+            "relation": "separate",
+            "priority": "high",
+            "reason": "User requested a visibly separate support zone."
+          },
+          {
+            "a": "misc_storage",
+            "b": "media_zone",
+            "relation": "separate",
+            "priority": "medium",
+            "reason": "Support zone should not collapse back into the primary pair."
+          }
+        ],
+        "cluster_directional_relations": [
+          {
+            "a": "seating_zone",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "priority": "high",
+            "reason": "Essential for the viewing relationship."
+          }
+        ],
+        "circulation_plan": {
+          "main_paths": [
+            {
+              "from": "door_1",
+              "to_cluster": "seating_zone",
+              "priority": "high",
+              "reason": "Clear path from entrance to the main living area."
+            }
+          ],
+          "keep_open_regions": [
+            {
+              "type": "entry_buffer",
+              "near": "door_1",
+              "priority": "high",
+              "reason": "Prevent congestion at the room entrance."
+            },
+            {
+              "type": "window_buffer",
+              "near": "window_1",
+              "priority": "high",
+              "reason": "Maintain light and access to the window."
+            },
+            {
+              "type": "center_lane",
+              "near": "seating_zone",
+              "priority": "medium",
+              "reason": "Ensure the room feels open and uncluttered."
+            }
+          ]
+        },
+        "layout_intent_profile": {
+          "focus_mode": "mixed",
+          "primary_cluster_id": "seating_zone",
+          "secondary_cluster_id": "media_zone",
+          "circulation_priority": "medium",
+          "center_open_preference": "medium",
+          "support_cluster_behavior": "recede",
+          "distribution_mode": "zoned"
+        },
+        "placement_guidelines": [
+          "Place media_zone on the top long wall (Y=4000) to maximize distance from the window.",
+          "Center the seating_zone in the room, facing the media_zone, ensuring it does not overlap the door swing or window clearance.",
+          "Position misc_storage on the right wall (X=6000) to isolate it as a separate support territory.",
+          "Maintain a clear corridor from the door (X=0) to the seating area.",
+          "Preserve a clear viewing relationship between sectional_sofa and media_shelf.",
+          "Do not orient sectional_sofa away from media_shelf.",
+          "Keep media_zone readable from seating_zone.",
+          "Preserve front usability for bookshelf.",
+          "Preserve front usability for tv_console.",
+          "Preserve front usability for storage_cabinet.",
+          "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+          "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+          "Preserve a materially distinct macro geometry from the other post-seed variants.",
+          "Create the clearest support-versus-primary zoning split of the post-seed variants."
+        ],
+        "notes": [
+          "The layout prioritizes a clear viewing axis between the sectional sofa and the TV console.",
+          "The support zone is intentionally pushed to the room's periphery to satisfy the 'separate territory' requirement.",
+          "Seed variant policy seed_zoned: distribution=zoned, center_open=medium, support_behavior=recede.",
+          "Seed constraint fingerprint seed_zoned: primary_zone_claim, support_zone_split, support_separate_from_secondary."
+        ],
+        "missing": [],
+        "seed_variant_policy": {
+          "source": "seed_zoned",
+          "constraint_tokens": [
+            "primary_zone_claim",
+            "support_zone_split",
+            "support_separate_from_secondary"
+          ],
+          "structural_fingerprint": "focus=mixed,center=medium,support=recede,distribution=zoned || center_lane:seating_zone,entry_buffer:door_1,window_buffer:window_1 || media_zone|p=far_from_entry,long_wall,wall|a=center,door_swing,entry_blocking,window_blocking,misc_storage|p=far_from_entry,recess_or_edge,wall|a=center,main_path,seating_zone|p=center,far_from_entry,long_wall,wall|a=center,door_swing,entry_blocking,main_path,window_blocking,window_clearance || media_zone|misc_storage|separate,media_zone|seating_zone|near,misc_storage|seating_zone|separate || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|seating_zone,misc_storage|access_to_open_space,axis_parallel_wall,back_to_wall|,seating_zone|access_to_open_space,back_to_wall,face_cluster,inward_to_room|media_zone"
+        }
+      }
+    }
+  ]
+}

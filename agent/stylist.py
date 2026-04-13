@@ -12,12 +12,12 @@ from agent_schema.stylist_schema import StylistOutput
 from clients.llm_client import get_llm_client
 from prompt.stylist import STYLIST_PROMPT
 from prompt.system import SYSTEM_PROMPT
-from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
 from stylist.deterministic_layout import (
     DEFAULT_OBJECT_COLOR,
     DEFAULT_SURFACES,
     build_deterministic_stylist_payload,
 )
+from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
 from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,22 @@ try:
     from config.gemini_config import GeminiConfig
 except Exception:  # pragma: no cover
     GeminiConfig = None  # type: ignore[assignment]
+
+
+_STYLE_VARIANT_MODEL_NAMES = (
+    "gemma-4-31b-it",
+    "gemini-3.1-flash-lite-preview",
+    "gemma-3-27b-it",
+    "gemini-3-flash-preview",
+    "gemma-4-31b-it",
+)
+
+
+def stylist_model_name_for_variant(variant_index: int) -> str:
+    safe_index = max(1, int(variant_index))
+    return _STYLE_VARIANT_MODEL_NAMES[
+        (safe_index - 1) % len(_STYLE_VARIANT_MODEL_NAMES)
+    ]
 
 
 @dataclass(frozen=True)
@@ -39,6 +55,7 @@ class Stylist:
         layout_json: dict[str, Any],
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
+        model_name: str | None = None,
     ) -> dict[str, Any]:
         _, payload, _, style_context = self._prepare_style_inputs(
             layout_json=layout_json,
@@ -54,7 +71,7 @@ class Stylist:
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": style_prompt},
         ]
-        return _generate_style_plan(messages)
+        return _generate_style_plan(messages, model_name=model_name)
 
     def generate_raw(
         self,
@@ -76,11 +93,13 @@ class Stylist:
         layout_json: dict[str, Any],
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
+        model_name: str | None = None,
     ) -> dict[str, Any]:
         return self.apply_style_plan(
             layout_json=layout_json,
             user_context_json=user_context_json,
             tenant_id=tenant_id,
+            model_name=model_name,
         )
 
     def apply_style_plan(
@@ -90,6 +109,7 @@ class Stylist:
         user_context_json: dict[str, Any] | None = None,
         tenant_id: str | None = None,
         style_plan: dict[str, Any] | None = None,
+        model_name: str | None = None,
     ) -> dict[str, Any]:
         normalized_layout, payload, _, style_context = self._prepare_style_inputs(
             layout_json=layout_json,
@@ -103,6 +123,7 @@ class Stylist:
                 layout_json=normalized_layout,
                 user_context_json=user_context_json,
                 tenant_id=tenant_id,
+                model_name=model_name,
             )
         )
         styled_payload = _apply_style_plan(
@@ -415,31 +436,86 @@ def _build_locked_style_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _generate_style_plan(messages: list[dict[str, str]]) -> dict[str, Any]:
-    try:
-        response = get_llm_client(provider="gemini").chat_completion(
-            messages,
-            model_key="primary",
-            model_name=(
-                GeminiConfig.AGENT_MODELS.get("stylist")
-                if GeminiConfig is not None
-                else None
-            ),
-            temperature=1.2,
-            max_tokens=1800,
-            thinking_level="medium",
+def _generate_style_plan(
+    messages: list[dict[str, str]],
+    *,
+    model_name: str | None = None,
+) -> dict[str, Any]:
+    client = get_llm_client(provider="gemini")
+    attempted_models: list[str] = []
+    last_retryable_error: Exception | None = None
+
+    for candidate_model_name in _style_plan_model_attempt_order(model_name):
+        attempted_models.append(candidate_model_name)
+        try:
+            response = client.chat_completion(
+                messages,
+                model_key="primary",
+                model_name=candidate_model_name,
+                temperature=0.35,
+                max_tokens=1800,
+                thinking_level="medium",
+            )
+            content = _extract_content_from_response(response)
+            parsed = _try_parse_json_object(content)
+            if parsed is not None and _is_style_plan_shape(parsed):
+                return parsed
+            last_retryable_error = ValueError(
+                f"Stylist returned invalid JSON: {_truncate_text(content, max_len=300)}"
+            )
+            logger.warning(
+                "Stylist model %s returned invalid JSON; retrying with the next model.",
+                candidate_model_name,
+            )
+            continue
+        except Exception as exc:
+            if _is_retryable_model_unavailable_error(exc):
+                last_retryable_error = exc
+                logger.warning(
+                    "Stylist model %s is temporarily unavailable; retrying with the next model. Error: %s",
+                    candidate_model_name,
+                    exc,
+                )
+                continue
+            logger.warning("Stylist color planner fallback triggered: %s", exc)
+            return {}
+
+    if last_retryable_error is not None:
+        logger.warning(
+            "Stylist color planner fallback triggered after exhausting failover models %s: %s",
+            attempted_models,
+            last_retryable_error,
         )
-        content = _extract_content_from_response(response)
-        parsed = _try_parse_json_object(content)
-        if parsed is not None:
-            return parsed
-        raise ValueError(
-            "Stylist returned invalid JSON: "
-            f"{_truncate_text(content, max_len=300)}"
-        )
-    except Exception as exc:
-        logger.warning("Stylist color planner fallback triggered: %s", exc)
-        return {}
+    return {}
+
+
+def _style_plan_model_attempt_order(model_name: str | None) -> list[str]:
+    configured_model_name = (
+        GeminiConfig.AGENT_MODELS.get("stylist") if GeminiConfig is not None else None
+    )
+    requested_model_name = str(model_name or configured_model_name or "").strip()
+    sequence = list(_STYLE_VARIANT_MODEL_NAMES)
+    if not requested_model_name:
+        return sequence
+    if requested_model_name in sequence:
+        start_index = sequence.index(requested_model_name)
+        return sequence[start_index:] + sequence[:start_index]
+    return [
+        requested_model_name,
+        *[name for name in sequence if name != requested_model_name],
+    ]
+
+
+def _is_retryable_model_unavailable_error(exc: Exception) -> bool:
+    error_text = str(exc).lower()
+    if not error_text:
+        return False
+    return (
+        "503 service unavailable" in error_text
+        or '"code": 503' in error_text
+        or '"status": "unavailable"' in error_text
+        or "currently experiencing high demand" in error_text
+    )
 
 
 def _apply_style_plan(
@@ -474,10 +550,15 @@ def _apply_style_plan(
             continue
         object_type = str(row.get("object_type") or "")
         instance_id = str(row.get("instance_id") or object_type)
-        row["color_hex"] = _fallback_object_color(
+        row["color_hex"] = _sanitize_object_color(
             object_type=object_type,
             instance_id=instance_id,
             palette=palette,
+            color_hex=_fallback_object_color(
+                object_type=object_type,
+                instance_id=instance_id,
+                palette=palette,
+            ),
         )
         material = row.get("material")
         if not isinstance(material, str) or not material.strip():
@@ -533,6 +614,7 @@ def _apply_style_plan(
             for row in out.get("objects") or []:
                 if not isinstance(row, dict):
                     continue
+                object_type = str(row.get("object_type") or "")
                 instance_id = row.get("instance_id")
                 if not isinstance(instance_id, str):
                     continue
@@ -541,7 +623,12 @@ def _apply_style_plan(
                     continue
                 color_hex = planned.get("color_hex")
                 if _is_hex_color(color_hex):
-                    row["color_hex"] = color_hex
+                    row["color_hex"] = _sanitize_object_color(
+                        object_type=object_type,
+                        instance_id=instance_id,
+                        palette=palette,
+                        color_hex=color_hex,
+                    )
                 material = planned.get("material")
                 if material is None:
                     row["material"] = None
@@ -734,8 +821,33 @@ def _pick_palette_color(options: list[str], *, seed: str) -> str:
     return options[index]
 
 
+def _sanitize_object_color(
+    *,
+    object_type: str,
+    instance_id: str,
+    palette: dict[str, str],
+    color_hex: Any,
+) -> str:
+    if _is_hex_color(color_hex) and not _is_near_black_hex(color_hex):
+        return color_hex
+    return _fallback_object_color(
+        object_type=object_type,
+        instance_id=instance_id,
+        palette=palette,
+    )
+
+
 def _is_hex_color(value: Any) -> bool:
     return isinstance(value, str) and bool(re.match(r"^#[0-9A-Fa-f]{6}$", value))
+
+
+def _is_near_black_hex(value: str) -> bool:
+    if not _is_hex_color(value):
+        return False
+    red = int(value[1:3], 16)
+    green = int(value[3:5], 16)
+    blue = int(value[5:7], 16)
+    return max(red, green, blue) <= 36 or (red + green + blue) <= 120
 
 
 def _extract_content_from_response(response: object) -> str:
@@ -1837,11 +1949,120 @@ def _stable_unique(items: list[str]) -> list[str]:
 def _try_parse_json_object(text: str) -> dict[str, Any] | None:
     if not text:
         return None
-    try:
-        parsed = json.loads(_extract_json_object(_coerce_json_text(text)))
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    for candidate in _json_object_parse_candidates(text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _is_style_plan_shape(payload: dict[str, Any]) -> bool:
+    room_surfaces = payload.get("room_surfaces")
+    opening_colors = payload.get("opening_colors")
+    object_styles = payload.get("object_styles")
+    return (
+        isinstance(room_surfaces, dict)
+        and isinstance(opening_colors, dict)
+        and isinstance(object_styles, list)
+    )
+
+
+def _json_object_parse_candidates(text: str) -> list[str]:
+    coerced = _coerce_json_text(text).strip()
+    if not coerced:
+        return []
+    raw_candidate = _extract_outer_json_slice(coerced).strip()
+    candidates = [
+        coerced,
+        raw_candidate,
+        _strip_trailing_json_commas(raw_candidate),
+        _close_unterminated_json(_strip_trailing_json_commas(raw_candidate)),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        cleaned = candidate.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+    return out
+
+
+def _extract_outer_json_slice(text: str) -> str:
+    start = text.find("{")
+    if start < 0:
+        return text
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char in "{[":
+            depth += 1
+            continue
+        if char in "}]":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return text[start:]
+
+
+def _strip_trailing_json_commas(text: str) -> str:
+    previous = text
+    while True:
+        cleaned = re.sub(r",(\s*[}\]])", r"\1", previous)
+        if cleaned == previous:
+            return cleaned
+        previous = cleaned
+
+
+def _close_unterminated_json(text: str) -> str:
+    if not text:
+        return text
+
+    closers: list[str] = []
+    in_string = False
+    escape = False
+    for char in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            closers.append("}")
+        elif char == "[":
+            closers.append("]")
+        elif char in "}]":
+            if closers and closers[-1] == char:
+                closers.pop()
+            else:
+                return text
+    if in_string:
+        return text
+    return text + "".join(reversed(closers))
 
 
 def _fix_place_on_targets(

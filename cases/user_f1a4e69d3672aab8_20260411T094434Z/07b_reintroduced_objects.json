@@ -1,0 +1,95 @@
+{
+  "status": "OK",
+  "total_dropped_items": 5,
+  "inserted_count": 2,
+  "remaining_count": 3,
+  "reintroduced_objects_by_cluster": {
+    "work_zone": [
+      {
+        "object_id": "bookshelf__reintroduced_1",
+        "object_type": "bookshelf",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 650,
+          "min_y": 100,
+          "max_x": 1280,
+          "max_y": 350
+        }
+      }
+    ],
+    "storage_zone": [
+      {
+        "object_id": "laundry_basket__reintroduced_1",
+        "object_type": "laundry_basket",
+        "rotation_ccw": 90,
+        "bbox": {
+          "min_x": 5550,
+          "min_y": 100,
+          "max_x": 5910,
+          "max_y": 490
+        }
+      }
+    ]
+  },
+  "remaining_dropped_objects_by_cluster": {
+    "storage_zone": [
+      {
+        "cluster_id": "storage_zone",
+        "object_type": "tv_console",
+        "category": "tv_console",
+        "size_tier": "S",
+        "priority": "primary",
+        "rep_dims_m": {
+          "L": 1.26,
+          "W": 0.38,
+          "H": 0.58,
+          "A": 0.4788,
+          "R": 3.3157894736842106,
+          "source_id": "tv_console_002"
+        },
+        "rationale": "Deterministic policy marked tv_console as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      },
+      {
+        "cluster_id": "storage_zone",
+        "object_type": "armchair",
+        "category": "armchair",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.84,
+          "W": 0.71,
+          "H": 0.85,
+          "A": 0.5963999999999999,
+          "R": 1.1830985915492958,
+          "source_id": "armchair_007"
+        },
+        "rationale": "Deterministic policy marked armchair as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      },
+      {
+        "cluster_id": "storage_zone",
+        "object_type": "chair",
+        "category": "chair",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.45,
+          "W": 0.45,
+          "H": 0.85,
+          "A": 0.2025,
+          "R": 1.0,
+          "source_id": "chair_008"
+        },
+        "rationale": "Deterministic policy marked chair as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      }
+    ]
+  }
+}

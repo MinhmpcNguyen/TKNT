@@ -1,0 +1,315 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "coffee_table",
+        "ottoman",
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "armchair"
+        },
+        {
+          "type": "requires_access",
+          "id": "sectional_sofa",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "sectional_sofa",
+          "mode": "face_each_other",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "ottoman": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "bottom",
+            "notes": "facing the coffee table"
+          },
+          "armchair": {
+            "front": "bottom",
+            "notes": "facing the coffee table"
+          },
+          "coffee_table": {
+            "front": "bottom",
+            "notes": "aligned with sofa"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "gap_min": 0,
+            "gap_max": 200,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          },
+          {
+            "id": "armchair",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 350,
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "selection": "best_fit"
+          },
+          {
+            "id": "ottoman",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "side_options": [
+              "foot",
+              "left",
+              "right"
+            ],
+            "gap_min": 50,
+            "gap_max": 250,
+            "selection": "best_fit"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "media_shelf",
+        "bookshelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            180
+          ],
+          "media_shelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "facing the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "media_shelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "bookshelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min": 0,
+            "gap_max": 200,
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "misc_storage",
+      "tag": "storage",
+      "members": [
+        "console_table",
+        "storage_cabinet",
+        "bean_bag",
+        "pet_bed"
+      ],
+      "anchors": [
+        "storage_cabinet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "storage_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "console_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "storage_cabinet": {
+            "front": "bottom",
+            "notes": "access side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      }
+    }
+  ],
+  "notes": [
+    "Clusters partitioned by functional usage: seating, media, and general storage."
+  ],
+  "missing": []
+}

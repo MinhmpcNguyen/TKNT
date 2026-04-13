@@ -1,0 +1,107 @@
+{
+  "status": "OK",
+  "cluster_id": "work_zone",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "chair",
+      "x": 50,
+      "y": 300,
+      "rot": 0
+    },
+    {
+      "id": "desk",
+      "x": 0,
+      "y": 1300,
+      "rot": 0
+    },
+    {
+      "id": "office_chair",
+      "x": 200,
+      "y": 750,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "chair",
+        "x": 50,
+        "y": 300,
+        "w": 450,
+        "h": 450
+      },
+      {
+        "id": "desk",
+        "x": 0,
+        "y": 1300,
+        "w": 980,
+        "h": 510
+      },
+      {
+        "id": "office_chair",
+        "x": 200,
+        "y": 750,
+        "w": 580,
+        "h": 550
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 300,
+      "max_x": 980,
+      "max_y": 1810
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": -1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "desk": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "chair": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "office_chair": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

@@ -2,19 +2,58 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorStore } from '../store';
 import { polygonBounds } from '../utils/geometry';
 import { getNumericBbox, getWorldBboxFromPlacement, placementMatchesStyledObject } from '../utils/styledLayout';
+import { planRotationToYawRad } from '../utils/planOrientation';
+import {
+  buildGlbPreviewModel,
+  disposeThreeObject,
+} from '../three/models';
+import {
+  collectReintroducedObjects,
+  getInventoryDimensionsMm,
+  isReintroducedIdentifier,
+  isUserGeneratedPreviewItem,
+  resolveInventoryItemForPreview,
+  resolveWallHungPreviewDepthMm,
+  type InventoryPreviewResolution,
+} from '../three/inventoryDiagnostics';
 import { buildObjectProxy } from '../three/proxies';
 
 type RenderObject = {
   id: string;
+  assetId?: string | null;
+  rawAssetId?: string | null;
   type: string;
   colorHex: string;
   material?: string | null;
   rotationCcw?: number;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   placeOn?: { method: string; targetId?: string | null } | null;
+  reintroduced?: boolean;
+};
+
+type ResolvedRenderObject = RenderObject & {
+  inventoryResolution: InventoryPreviewResolution;
+};
+
+type ObjectVisualDiagnostic = {
+  objectId: string;
+  label: string;
+  rawAssetId: string | null;
+  resolvedAssetId: string | null;
+  reintroduced: boolean;
+  status:
+    | 'glb_loading'
+    | 'glb_loaded'
+    | 'proxy_no_inventory_match'
+    | 'proxy_no_model_descriptor'
+    | 'proxy_low_confidence_match'
+    | 'proxy_no_loader'
+    | 'proxy_model_load_error';
+  reason: string;
 };
 
 const MM_TO_M = 0.001;
+const REINTRODUCED_ASSET_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
 
 function defaultHeightMm(type: string): number {
   const t = type.toLowerCase();
@@ -33,8 +72,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function planRotationToYawRad(rotationDeg: number): number {
-  return (rotationDeg * Math.PI) / 180 + Math.PI;
+function normalizeRenderAssetId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+  const normalized = raw.replace(REINTRODUCED_ASSET_ID_PATTERN, '').trim();
+  return normalized || raw;
 }
 
 export const ThreeDPreviewModal: React.FC = () => {
@@ -49,6 +96,9 @@ export const ThreeDPreviewModal: React.FC = () => {
     userInput,
   } = useEditorStore();
   const [error, setError] = useState<string | null>(null);
+  const [objectVisualDiagnostics, setObjectVisualDiagnostics] = useState<
+    Record<string, ObjectVisualDiagnostic>
+  >({});
   const activeFloorplan = floorplan ?? design?.floorplan_geometry ?? null;
 
   const objects: RenderObject[] = useMemo(() => {
@@ -76,8 +126,16 @@ export const ThreeDPreviewModal: React.FC = () => {
             rotationCcw = Number(placement.rotation_deg ?? rotationCcw ?? 0);
           }
         }
+        const rawAssetId =
+          placement?.asset_id ??
+          obj.asset_id ??
+          obj.assetId ??
+          obj.object_id ??
+          null;
         out.push({
           id,
+          assetId: normalizeRenderAssetId(rawAssetId) ?? null,
+          rawAssetId: typeof rawAssetId === 'string' ? rawAssetId : null,
           type: String(obj.object_type ?? obj.category ?? 'item'),
           colorHex: String(obj.color_hex ?? '#cfcac2'),
           material: obj.material ?? null,
@@ -85,10 +143,14 @@ export const ThreeDPreviewModal: React.FC = () => {
           bbox,
           placeOn: obj.place_on
             ? {
-                method: String(obj.place_on.method ?? 'floor'),
-                targetId: obj.place_on.target_instance_id ?? null,
-              }
+              method: String(obj.place_on.method ?? 'floor'),
+              targetId: obj.place_on.target_instance_id ?? null,
+            }
             : null,
+          reintroduced:
+            isReintroducedIdentifier(obj.object_id) ||
+            isReintroducedIdentifier(rawAssetId) ||
+            isReintroducedIdentifier(id),
         });
       }
       for (const placement of placements) {
@@ -96,12 +158,18 @@ export const ThreeDPreviewModal: React.FC = () => {
         if (!placementId || used.has(placementId)) continue;
         out.push({
           id: placementId,
+          assetId: normalizeRenderAssetId(placement.asset_id ?? null) ?? null,
+          rawAssetId:
+            typeof placement.asset_id === 'string' ? placement.asset_id : null,
           type: placement.category,
           colorHex: placement.color_hex ?? '#cfcac2',
           material: null,
           rotationCcw: Number(placement.rotation_deg ?? 0),
           bbox: getWorldBboxFromPlacement(placement),
           placeOn: { method: 'floor', targetId: 'floor' },
+          reintroduced:
+            isReintroducedIdentifier(placement.asset_id) ||
+            isReintroducedIdentifier(placement.placement_id),
         });
       }
       return out;
@@ -111,16 +179,102 @@ export const ThreeDPreviewModal: React.FC = () => {
     for (const placement of placements) {
       out.push({
         id: placement.placement_id,
+        assetId: normalizeRenderAssetId(placement.asset_id ?? null) ?? null,
+        rawAssetId:
+          typeof placement.asset_id === 'string' ? placement.asset_id : null,
         type: placement.category,
         colorHex: placement.color_hex ?? '#cfcac2',
         material: null,
         rotationCcw: Number(placement.rotation_deg ?? 0),
         bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
+        reintroduced:
+          isReintroducedIdentifier(placement.asset_id) ||
+          isReintroducedIdentifier(placement.placement_id),
       });
     }
     return out;
   }, [styledResult, design]);
+
+  const resolvedObjects: ResolvedRenderObject[] = useMemo(
+    () =>
+      objects.map((obj) => {
+        const targetWidthMm = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
+        const targetDepthMm = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
+        const inventoryResolution = resolveInventoryItemForPreview({
+          inventory,
+          assetId: obj.assetId ?? obj.rawAssetId ?? null,
+          objectType: obj.type,
+          material: obj.material ?? null,
+          preferredStyle: userInput.style,
+          targetWidthMm,
+          targetDepthMm,
+          targetHeightMm: defaultHeightMm(obj.type),
+        });
+        return {
+          ...obj,
+          inventoryResolution,
+        };
+      }),
+    [inventory, objects, userInput.style]
+  );
+
+  const reintroducedObjects = useMemo(() => {
+    const fromSummary = collectReintroducedObjects(styledResult);
+    if (fromSummary.length > 0) {
+      return fromSummary;
+    }
+    return resolvedObjects
+      .filter((obj) => obj.reintroduced)
+      .map((obj) => ({
+        clusterId: null,
+        objectId: obj.id,
+        objectType: obj.type,
+      }));
+  }, [resolvedObjects, styledResult]);
+
+  const proxyObjects = useMemo(
+    () =>
+      Object.values(objectVisualDiagnostics)
+        .filter((item) => item.status !== 'glb_loaded' && item.status !== 'glb_loading')
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [objectVisualDiagnostics]
+  );
+
+  useEffect(() => {
+    const nextDiagnostics = Object.fromEntries(
+      resolvedObjects.map((obj) => {
+        const modelResolution = obj.inventoryResolution.modelResolution;
+        let status: ObjectVisualDiagnostic['status'] = 'proxy_no_inventory_match';
+        let reason = obj.inventoryResolution.reason;
+        if (obj.inventoryResolution.item) {
+          if (obj.inventoryResolution.glbEligible && modelResolution?.descriptor) {
+            status = 'glb_loading';
+            reason = obj.inventoryResolution.glbReason;
+          } else if (modelResolution?.descriptor) {
+            status = 'proxy_low_confidence_match';
+            reason = obj.inventoryResolution.glbReason;
+          } else {
+            status = 'proxy_no_model_descriptor';
+            reason = modelResolution?.reason ?? 'Matched inventory asset has no GLB metadata.';
+          }
+        }
+        return [
+          obj.id,
+          {
+            objectId: obj.id,
+            label: obj.type,
+            rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+            resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+            reintroduced: Boolean(obj.reintroduced),
+            status,
+            reason,
+          } satisfies ObjectVisualDiagnostic,
+        ];
+      })
+    );
+    setObjectVisualDiagnostics(nextDiagnostics);
+  }, [resolvedObjects]);
 
   useEffect(() => {
     if (!threeDOpen) return;
@@ -143,10 +297,37 @@ export const ThreeDPreviewModal: React.FC = () => {
       try {
         const THREE_URL = new URL('../vendor/three/three.module.js', import.meta.url).toString();
         const ORBIT_URL = new URL('../vendor/three/OrbitControls.js', import.meta.url).toString();
+        const GLTF_LOADER_URL = new URL(
+          '../vendor/three/loaders/GLTFLoader.js',
+          import.meta.url
+        ).toString();
 
         const THREE: any = await import(/* @vite-ignore */ THREE_URL);
         const controlsMod: any = await import(/* @vite-ignore */ ORBIT_URL);
         const OrbitControls = controlsMod.OrbitControls;
+        let GLTFLoader: any = null;
+        try {
+          const gltfLoaderMod: any = await import(/* @vite-ignore */ GLTF_LOADER_URL);
+          GLTFLoader = gltfLoaderMod.GLTFLoader ?? null;
+        } catch {
+          GLTFLoader = null;
+        }
+        if (!GLTFLoader) {
+          setObjectVisualDiagnostics((current) => {
+            const next = { ...current };
+            for (const obj of resolvedObjects) {
+              if (next[obj.id]?.status !== 'glb_loading') {
+                continue;
+              }
+              next[obj.id] = {
+                ...next[obj.id],
+                status: 'proxy_no_loader',
+                reason: 'GLTFLoader is unavailable in the current frontend bundle.',
+              };
+            }
+            return next;
+          });
+        }
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -194,7 +375,7 @@ export const ThreeDPreviewModal: React.FC = () => {
         let minY = roomBounds?.minY ?? 0;
         let maxX = roomBounds?.maxX ?? 6000;
         let maxY = roomBounds?.maxY ?? 4000;
-        if (!roomBounds && objects.length) {
+        if (!roomBounds && resolvedObjects.length) {
           minX = Infinity;
           minY = Infinity;
           maxX = -Infinity;
@@ -208,7 +389,7 @@ export const ThreeDPreviewModal: React.FC = () => {
           : null;
         const outlierLimit = roomSpan ? roomSpan * 4 : null;
 
-        for (const obj of objects) {
+        for (const obj of resolvedObjects) {
           const { minX: ox1, minY: oy1, maxX: ox2, maxY: oy2 } = obj.bbox;
           if (![ox1, oy1, ox2, oy2].every((v) => Number.isFinite(v))) continue;
           if (outlierLimit !== null) {
@@ -461,22 +642,10 @@ export const ThreeDPreviewModal: React.FC = () => {
           return { xMm: useLeft ? leftX : rightX, yMm: useLeft ? leftY : rightY, seg };
         };
 
-        const invByType = new Map<string, number>();
-        const invById = new Map<string, number>();
-        for (const item of inventory ?? []) {
-          const height = Number(item.height_mm ?? 0);
-          if (item?.asset_id && height > 0) {
-            invById.set(item.asset_id, height);
-          }
-          if (item?.category && height > 0 && !invByType.has(item.category)) {
-            invByType.set(item.category, height);
-          }
-        }
-
         const heightById = new Map<string, number>();
-        for (const obj of objects) {
-          const invHeight = invById.get(obj.id) ?? invByType.get(obj.type);
-          const hMm = invHeight && invHeight > 0 ? invHeight : defaultHeightMm(obj.type);
+        for (const obj of resolvedObjects) {
+          const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
+          const hMm = inventoryDimensions?.height ?? defaultHeightMm(obj.type);
           heightById.set(obj.id, hMm);
         }
 
@@ -619,7 +788,7 @@ export const ThreeDPreviewModal: React.FC = () => {
           openingsGroup.add(group);
         }
 
-        for (const obj of objects) {
+        for (const obj of resolvedObjects) {
           const wMmPlan = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
           const dMmPlan = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
           const cxMm = (obj.bbox.minX + obj.bbox.maxX) / 2;
@@ -639,16 +808,19 @@ export const ThreeDPreviewModal: React.FC = () => {
           // Our 2D outputs store a world-axis-aligned bbox for the already-rotated footprint.
           // If we rotate the proxy mesh by rotCcw again, we must use the *unrotated* footprint dims
           // (i.e., de-rotate bbox dims) so the world footprint stays correct.
+          const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
+          const isWallHung = method === 'hang_on' && !isCeiling;
           let wMm = wMmPlan;
           let dMm = dMmPlan;
-          const isWallHung = method === 'hang_on' && !isCeiling;
           if (!isWallHung && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
             const tmp = wMm;
             wMm = dMm;
             dMm = tmp;
           }
 
-          // Default (floor) dimensions.
+          // Keep GLB and proxy visuals aligned to the styled-layout footprint so 3D
+          // stays visually consistent with the 2D plan. Inventory dimensions are still
+          // useful for height defaults and wall-hung thickness.
           const hMmDefault = heightById.get(obj.id) ?? defaultHeightMm(obj.type);
           let wM = wMm * MM_TO_M;
           let dM = dMm * MM_TO_M;
@@ -656,9 +828,15 @@ export const ThreeDPreviewModal: React.FC = () => {
 
           // Wall-hung items in a 2D plan typically use bbox as (width x height).
           if (isWallHung) {
-            hM = Math.max(0.06, dMm * MM_TO_M);
-            const thicknessM = clamp(hM * 0.08, 0.02, 0.06);
-            dM = thicknessM;
+            wM = Math.max(0.06, wMmPlan * MM_TO_M);
+            hM = Math.max(0.06, dMmPlan * MM_TO_M);
+            const thicknessMm = resolveWallHungPreviewDepthMm({
+              objectType: obj.type,
+              planWidthMm: wMmPlan,
+              planHeightMm: dMmPlan,
+              inventoryDimensions,
+            });
+            dM = Math.max(0.02, thicknessMm * MM_TO_M);
           }
 
           let baseY = 0;
@@ -674,8 +852,8 @@ export const ThreeDPreviewModal: React.FC = () => {
 
           let pxMm = cxMm;
           let pyMm = cyMm;
-          // Plan Y is mapped to -Z so 3D matches 2D canvas orientation.
-          // Therefore 2D CCW rotation maps to 3D yaw with +angle, plus PI because our proxies face +Z by default.
+          // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
+          // Our proxies and GLBs both use the same shared plan-rotation mapping.
           let rotY = planRotationToYawRad(rotCcwDeg);
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
@@ -686,7 +864,15 @@ export const ThreeDPreviewModal: React.FC = () => {
             }
           }
 
-          const proxy = buildObjectProxy(THREE, {
+          const objectRoot = new THREE.Group();
+          objectRoot.position.set(
+            (pxMm - centerXmm) * MM_TO_M,
+            baseY,
+            -(pyMm - centerYmm) * MM_TO_M
+          );
+          objectRoot.rotation.y = rotY;
+
+          const fallbackProxy = buildObjectProxy(THREE, {
             type: obj.type,
             wM,
             dM,
@@ -694,9 +880,83 @@ export const ThreeDPreviewModal: React.FC = () => {
             colorHex: obj.colorHex,
             material: obj.material ?? null,
           });
-          proxy.position.set((pxMm - centerXmm) * MM_TO_M, baseY, -(pyMm - centerYmm) * MM_TO_M);
-          proxy.rotation.y = rotY;
-          objectGroup.add(proxy);
+          objectRoot.add(fallbackProxy);
+          objectGroup.add(objectRoot);
+
+          const modelDescriptor = obj.inventoryResolution.glbEligible
+            ? obj.inventoryResolution.modelResolution?.descriptor ?? null
+            : null;
+          if (GLTFLoader && modelDescriptor) {
+            const preserveGeneratedMeshShape = isUserGeneratedPreviewItem(
+              obj.inventoryResolution.item
+            );
+            void buildGlbPreviewModel({
+                THREE,
+                GLTFLoader,
+                descriptor: modelDescriptor,
+                wM,
+                dM,
+                hM,
+                fitStrategy: isWallHung
+                  ? preserveGeneratedMeshShape
+                    ? 'wall-plane-uniform'
+                    : 'wall-plane'
+                  : preserveGeneratedMeshShape
+                    ? 'footprint-uniform'
+                    : 'footprint',
+                colorHex: obj.colorHex,
+                preserveMaterialTextures: preserveGeneratedMeshShape,
+                minimumHorizontalAspectRatio: preserveGeneratedMeshShape ? 0.45 : null,
+              })
+              .then((model) => {
+                if (disposed || !objectRoot.parent) {
+                  disposeThreeObject(model);
+                  return;
+                }
+                setObjectVisualDiagnostics((current) => ({
+                  ...current,
+                  [obj.id]: {
+                    ...(current[obj.id] ?? {
+                      objectId: obj.id,
+                      label: obj.type,
+                      rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+                      resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+                      reintroduced: Boolean(obj.reintroduced),
+                    }),
+                    status: 'glb_loaded',
+                    reason: `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
+                  },
+                }));
+                const previousChildren = [...objectRoot.children];
+                for (const child of previousChildren) {
+                  objectRoot.remove(child);
+                }
+                for (const child of previousChildren) {
+                  disposeThreeObject(child);
+                }
+                objectRoot.add(model);
+              })
+              .catch((modelError: unknown) => {
+                setObjectVisualDiagnostics((current) => ({
+                  ...current,
+                  [obj.id]: {
+                    ...(current[obj.id] ?? {
+                      objectId: obj.id,
+                      label: obj.type,
+                      rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
+                      resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+                      reintroduced: Boolean(obj.reintroduced),
+                    }),
+                    status: 'proxy_model_load_error',
+                    reason:
+                      modelError instanceof Error
+                        ? modelError.message
+                        : 'Failed to load GLB, so the object stayed on the proxy mesh.',
+                  },
+                }));
+                // Keep the procedural proxy as fallback when model loading fails.
+              });
+          }
         }
 
         const handleResize = () => {
@@ -784,7 +1044,7 @@ export const ThreeDPreviewModal: React.FC = () => {
         // ignore
       }
     };
-  }, [threeDOpen, activeFloorplan, objects, inventory, styledResult, userInput.height, design]);
+  }, [threeDOpen, activeFloorplan, resolvedObjects, styledResult, userInput.height, design]);
 
   if (!threeDOpen) return null;
 
@@ -805,6 +1065,45 @@ export const ThreeDPreviewModal: React.FC = () => {
           {!error && objects.length === 0 ? (
             <div className="three-preview-overlay">
               <div className="muted">No objects to render (only room shell).</div>
+            </div>
+          ) : null}
+          {reintroducedObjects.length > 0 || proxyObjects.length > 0 ? (
+            <div className="three-debug-overlay">
+              {reintroducedObjects.length > 0 ? (
+                <div className="three-debug-card compact">
+                  <div className="three-debug-title">
+                    Reintroduced ({reintroducedObjects.length})
+                  </div>
+                  <div className="three-debug-list">
+                    {reintroducedObjects.map((item) => (
+                      <div
+                        key={`${item.clusterId ?? 'no-cluster'}-${item.objectId}`}
+                        className="three-debug-item"
+                      >
+                        <strong>{item.objectType}</strong>
+                        <span>{item.objectId}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {proxyObjects.length > 0 ? (
+                <div className="three-debug-card compact">
+                  <div className="three-debug-title">Proxy Fallbacks ({proxyObjects.length})</div>
+                  <div className="three-debug-list">
+                    {proxyObjects.slice(0, 8).map((item) => (
+                      <div key={item.objectId} className="three-debug-item">
+                        <strong>{item.label}</strong>
+                        <span>
+                          raw: {item.rawAssetId ?? 'n/a'} | inventory:{' '}
+                          {item.resolvedAssetId ?? 'not matched'}
+                        </span>
+                        <span>{item.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

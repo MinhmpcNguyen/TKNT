@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from threading import Lock
 from types import SimpleNamespace
@@ -13,10 +14,29 @@ from clients.base_client import ChatMessage, LLMModelKey, ThinkingLevel
 from config.gemini_config import GeminiConfig
 from config.models import GeminiModelConfig
 
+logger = logging.getLogger(__name__)
+
 
 class GeminiClient:
     _instance: ClassVar["GeminiClient | None"] = None
     _lock: ClassVar[Lock] = Lock()
+    _capability_lock: ClassVar[Lock] = Lock()
+    _thinking_level_unsupported_models: ClassVar[set[str]] = set()
+    _known_thinking_level_unsupported_models: ClassVar[frozenset[str]] = frozenset(
+        {
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+        }
+    )
+    _known_thinking_level_unsupported_prefixes: ClassVar[tuple[str, ...]] = ("gemma-",)
+    _retryable_unavailable_fallback_pool: ClassVar[tuple[str, ...]] = (
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemma-3-27b-it",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemma-4-31b-it",
+    )
 
     _initialized: bool = False
     _http_client: httpx.Client
@@ -68,15 +88,12 @@ class GeminiClient:
                 tool_choice=tool_choice,
             )
 
-        payload = self._build_chat_payload(
+        data = self._post_chat_payload_with_failover(
             messages,
+            model_name=resolved_model_name,
             temperature=temperature,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
-        )
-        data = self._post_json(
-            self._build_model_url(resolved_model_name, "generateContent"),
-            payload,
         )
         return self._to_openai_style_response(data)
 
@@ -199,6 +216,150 @@ class GeminiClient:
             payload["generationConfig"] = generation_config
         return payload
 
+    def _post_chat_payload(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        model_name: str,
+        temperature: float | None,
+        max_tokens: int | None,
+        thinking_level: ThinkingLevel | None,
+    ) -> dict[str, object]:
+        applied_thinking_level = self._thinking_level_for_model(
+            model_name,
+            thinking_level,
+        )
+        payload = self._build_chat_payload(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            thinking_level=applied_thinking_level,
+        )
+        url = self._build_model_url(model_name, "generateContent")
+
+        try:
+            return self._post_json(url, payload)
+        except httpx.HTTPStatusError as exc:
+            if (
+                applied_thinking_level is None
+                or not self._is_thinking_level_unsupported_error(exc)
+            ):
+                raise
+            self._mark_thinking_level_unsupported(model_name)
+            retry_payload = self._build_chat_payload(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_level=None,
+            )
+            return self._post_json(url, retry_payload)
+
+    def _post_chat_payload_with_failover(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        model_name: str,
+        temperature: float | None,
+        max_tokens: int | None,
+        thinking_level: ThinkingLevel | None,
+    ) -> dict[str, object]:
+        candidate_models = self._fallback_model_sequence(model_name)
+        last_retryable_error: httpx.HTTPStatusError | None = None
+
+        for index, candidate_model_name in enumerate(candidate_models):
+            try:
+                return self._post_chat_payload(
+                    messages,
+                    model_name=candidate_model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_level=thinking_level,
+                )
+            except httpx.HTTPStatusError as exc:
+                if not self._is_retryable_model_unavailable_error(exc):
+                    raise
+                last_retryable_error = exc
+                if index == len(candidate_models) - 1:
+                    raise
+                logger.warning(
+                    "Gemini model fallback triggered after retryable 503 on %s; retrying with %s",
+                    candidate_model_name,
+                    candidate_models[index + 1],
+                )
+
+        if last_retryable_error is not None:
+            raise last_retryable_error
+        raise RuntimeError("Gemini fallback sequence produced no model candidates.")
+
+    @classmethod
+    def _fallback_model_sequence(cls, requested_model_name: str) -> list[str]:
+        normalized_requested = cls._normalize_model_name(requested_model_name)
+        ordered_candidates = [requested_model_name]
+        for candidate_name in cls._retryable_unavailable_fallback_pool:
+            if cls._normalize_model_name(candidate_name) == normalized_requested:
+                continue
+            ordered_candidates.append(candidate_name)
+        return ordered_candidates
+
+    @classmethod
+    def _thinking_level_for_model(
+        cls,
+        model_name: str,
+        thinking_level: ThinkingLevel | None,
+    ) -> ThinkingLevel | None:
+        if thinking_level is None:
+            return None
+        normalized_model_name = cls._normalize_model_name(model_name)
+        if not normalized_model_name:
+            return thinking_level
+        if normalized_model_name in cls._known_thinking_level_unsupported_models:
+            return None
+        if any(
+            normalized_model_name.startswith(prefix)
+            for prefix in cls._known_thinking_level_unsupported_prefixes
+        ):
+            return None
+        with cls._capability_lock:
+            if normalized_model_name in cls._thinking_level_unsupported_models:
+                return None
+        return thinking_level
+
+    @classmethod
+    def _mark_thinking_level_unsupported(cls, model_name: str) -> None:
+        normalized_model_name = cls._normalize_model_name(model_name)
+        if not normalized_model_name:
+            return
+        with cls._capability_lock:
+            cls._thinking_level_unsupported_models.add(normalized_model_name)
+
+    @staticmethod
+    def _is_thinking_level_unsupported_error(exc: httpx.HTTPStatusError) -> bool:
+        message = str(exc).lower()
+        return (
+            "thinking level is not supported" in message
+            or "thinking is not enabled" in message
+        )
+
+    @staticmethod
+    def _is_retryable_model_unavailable_error(exc: httpx.HTTPStatusError) -> bool:
+        response = exc.response
+        if response is None or response.status_code != 503:
+            return False
+        message = str(exc).lower()
+        response_body = response.text.lower()
+        return (
+            "currently experiencing high demand" in message
+            or "currently experiencing high demand" in response_body
+            or '"status": "unavailable"' in message
+            or '"status": "unavailable"' in response_body
+            or '"status":"unavailable"' in message
+            or '"status":"unavailable"' in response_body
+        )
+
+    @staticmethod
+    def _normalize_model_name(model_name: str) -> str:
+        return model_name.strip().lower()
+
     def _to_gemini_contents(
         self,
         messages: Sequence[ChatMessage],
@@ -291,15 +452,12 @@ class GeminiClient:
             tools=tools,
             tool_choice=tool_choice,
         )
-        payload = self._build_chat_payload(
+        data = self._post_chat_payload_with_failover(
             [{"role": "user", "content": prompt}],
+            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
-        )
-        data = self._post_json(
-            self._build_model_url(model_name, "generateContent"),
-            payload,
         )
         return self._to_openai_style_raw_response(data)
 

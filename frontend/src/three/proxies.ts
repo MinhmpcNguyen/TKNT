@@ -872,6 +872,51 @@ function _buildWallPanel(THREE: any, p: ProxyBuildParams): any {
   return g;
 }
 
+function _buildMirrorPanel(THREE: any, p: ProxyBuildParams): any {
+  const g = new THREE.Group();
+  const frameColor = _safeColor(THREE, p.colorHex, '#dce4ea');
+  const glassColor = new THREE.Color('#edf4f8');
+  const frameT = _clamp(Math.min(p.wM, p.hM) * 0.045, 0.01, 0.035);
+  const depth = _clamp(Math.max(0.008, p.dM * 0.5), 0.008, 0.02);
+  const matFrame = _matFor(THREE, _shade(THREE, frameColor, 0.9), p.material ?? 'metal');
+  const matGlass = new THREE.MeshStandardMaterial({
+    color: glassColor,
+    roughness: 0.08,
+    metalness: 0.02,
+    transparent: true,
+    opacity: 0.72,
+  });
+
+  const back = _box(THREE, p.wM, p.hM, depth, _matFor(THREE, _shade(THREE, frameColor, 0.78), 'wood'));
+  back.position.y = p.hM / 2;
+  g.add(back);
+
+  const glass = _box(
+    THREE,
+    Math.max(0.04, p.wM - frameT * 2.4),
+    Math.max(0.04, p.hM - frameT * 2.4),
+    Math.max(0.004, depth * 0.45),
+    matGlass,
+  );
+  glass.position.set(0, p.hM / 2, depth * 0.12);
+  g.add(glass);
+
+  const top = _box(THREE, p.wM, frameT, depth * 1.1, matFrame);
+  top.position.set(0, p.hM - frameT / 2, 0);
+  g.add(top);
+  const bot = top.clone();
+  bot.position.set(0, frameT / 2, 0);
+  g.add(bot);
+  const side = _box(THREE, frameT, p.hM, depth * 1.1, matFrame);
+  side.position.set(-p.wM / 2 + frameT / 2, p.hM / 2, 0);
+  g.add(side);
+  const side2 = side.clone();
+  side2.position.x = p.wM / 2 - frameT / 2;
+  g.add(side2);
+
+  return g;
+}
+
 function _buildDevice(
   THREE: any,
   p: ProxyBuildParams,
@@ -1331,7 +1376,8 @@ export function buildObjectProxy(THREE: any, params: ProxyBuildParams): any {
   if (t.includes('track_light')) return _buildTrackLight(THREE, p);
   if (t.includes('ceiling_light')) return _buildLamp(THREE, p, { wall: false, ceiling: true });
 
-  if (_hasAny(t, ['wall_art', 'mirror', 'clock', 'whiteboard', 'projector_screen'])) return _buildWallPanel(THREE, p);
+  if (t.includes('mirror')) return _buildMirrorPanel(THREE, p);
+  if (_hasAny(t, ['wall_art', 'clock', 'whiteboard', 'projector_screen'])) return _buildWallPanel(THREE, p);
   if (t.includes('towel_rack')) return _buildTowelRack(THREE, p);
   if (t.includes('shower_niche')) return _buildShowerNiche(THREE, p);
 

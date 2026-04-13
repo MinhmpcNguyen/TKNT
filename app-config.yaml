@@ -72,9 +72,9 @@ services:
         name: "gemini-embedding-001"
     agent_models:
       forge:
-        name: "gemma-3-27b-it"
+        name: "gemini-3.1-flash-lite-preview"
       planner:
-        name: "gemma-3-27b-it"
+        name: "gemini-3.1-flash-lite-preview"
       placer:
         name: "gemma-3-27b-it"
       placer_fallback_primary:
@@ -82,6 +82,6 @@ services:
       placer_fallback_helper:
         name: "gemini-2.5-flash-lite"
       stylist:
-        name: "gemini-3-flash-preview"
+        name: "gemini-3.1-flash-lite-preview"
       judge:
         name: "gemini-3.1-flash-lite-preview"

@@ -1,0 +1,613 @@
+{
+  "status": "OK",
+  "room": {
+    "unit": "mm",
+    "room_id": "room_1",
+    "name": "Main",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 6000,
+        "y": 0
+      },
+      {
+        "x": 6000,
+        "y": 2992
+      },
+      {
+        "x": 3491,
+        "y": 3021
+      },
+      {
+        "x": 3491,
+        "y": 4002
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "swing_radius_mm": 900,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 2000,
+              "y": 0
+            },
+            {
+              "x": 4000,
+              "y": 0
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    },
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 900,
+            "y": 1600
+          },
+          {
+            "x": 900,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 1600
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 2000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 100
+          },
+          {
+            "x": 2000,
+            "y": 100
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "room_type": "living_room"
+  },
+  "objects": [
+    {
+      "object_id": "media_shelf",
+      "cluster_id": "media_zone",
+      "polygon_ccw": [
+        {
+          "x": 5450,
+          "y": 100
+        },
+        {
+          "x": 5450,
+          "y": 970
+        },
+        {
+          "x": 5150,
+          "y": 970
+        },
+        {
+          "x": 5150,
+          "y": 100
+        }
+      ],
+      "bbox": {
+        "min_x": 5150,
+        "min_y": 100,
+        "max_x": 5450,
+        "max_y": 970
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 870,
+        "h": 300
+      }
+    },
+    {
+      "object_id": "tv_console",
+      "cluster_id": "media_zone",
+      "polygon_ccw": [
+        {
+          "x": 5150,
+          "y": 100
+        },
+        {
+          "x": 5150,
+          "y": 1360
+        },
+        {
+          "x": 4770,
+          "y": 1360
+        },
+        {
+          "x": 4770,
+          "y": 100
+        }
+      ],
+      "bbox": {
+        "min_x": 4770,
+        "min_y": 100,
+        "max_x": 5150,
+        "max_y": 1360
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 0,
+        "y": 300,
+        "w": 1260,
+        "h": 380
+      }
+    },
+    {
+      "object_id": "armchair",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 2000
+        },
+        {
+          "x": 2150,
+          "y": 2840
+        },
+        {
+          "x": 1440,
+          "y": 2840
+        },
+        {
+          "x": 1440,
+          "y": 2000
+        }
+      ],
+      "bbox": {
+        "min_x": 1440,
+        "min_y": 2000,
+        "max_x": 2150,
+        "max_y": 2840
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 1750,
+        "y": 1200,
+        "w": 840,
+        "h": 710
+      }
+    },
+    {
+      "object_id": "coffee_table",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 250
+        },
+        {
+          "x": 2150,
+          "y": 1150
+        },
+        {
+          "x": 1650,
+          "y": 1150
+        },
+        {
+          "x": 1650,
+          "y": 250
+        }
+      ],
+      "bbox": {
+        "min_x": 1650,
+        "min_y": 250,
+        "max_x": 2150,
+        "max_y": 1150
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 0,
+        "y": 1200,
+        "w": 900,
+        "h": 500
+      }
+    },
+    {
+      "object_id": "floor_lamp",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 3400
+        },
+        {
+          "x": 2150,
+          "y": 3720
+        },
+        {
+          "x": 1800,
+          "y": 3720
+        },
+        {
+          "x": 1800,
+          "y": 3400
+        }
+      ],
+      "bbox": {
+        "min_x": 1800,
+        "min_y": 3400,
+        "max_x": 2150,
+        "max_y": 3720
+      },
+      "rotation_ccw": 0,
+      "source_rect": {
+        "x": 3150,
+        "y": 1200,
+        "w": 320,
+        "h": 350
+      }
+    },
+    {
+      "object_id": "ottoman",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 1150
+        },
+        {
+          "x": 2150,
+          "y": 1690
+        },
+        {
+          "x": 1650,
+          "y": 1690
+        },
+        {
+          "x": 1650,
+          "y": 1150
+        }
+      ],
+      "bbox": {
+        "min_x": 1650,
+        "min_y": 1150,
+        "max_x": 2150,
+        "max_y": 1690
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 900,
+        "y": 1200,
+        "w": 540,
+        "h": 500
+      }
+    },
+    {
+      "object_id": "sectional_sofa",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 3350,
+          "y": 250
+        },
+        {
+          "x": 3350,
+          "y": 2790
+        },
+        {
+          "x": 2430,
+          "y": 2790
+        },
+        {
+          "x": 2430,
+          "y": 250
+        }
+      ],
+      "bbox": {
+        "min_x": 2430,
+        "min_y": 250,
+        "max_x": 3350,
+        "max_y": 2790
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 2540,
+        "h": 920
+      }
+    },
+    {
+      "object_id": "side_table",
+      "cluster_id": "seating_zone",
+      "polygon_ccw": [
+        {
+          "x": 2150,
+          "y": 3000
+        },
+        {
+          "x": 2150,
+          "y": 3390
+        },
+        {
+          "x": 1780,
+          "y": 3390
+        },
+        {
+          "x": 1780,
+          "y": 3000
+        }
+      ],
+      "bbox": {
+        "min_x": 1780,
+        "min_y": 3000,
+        "max_x": 2150,
+        "max_y": 3390
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 2750,
+        "y": 1200,
+        "w": 390,
+        "h": 370
+      }
+    },
+    {
+      "object_id": "bookshelf",
+      "cluster_id": "storage_misc",
+      "polygon_ccw": [
+        {
+          "x": 5100,
+          "y": 1950
+        },
+        {
+          "x": 5100,
+          "y": 2580
+        },
+        {
+          "x": 4850,
+          "y": 2580
+        },
+        {
+          "x": 4850,
+          "y": 1950
+        }
+      ],
+      "bbox": {
+        "min_x": 4850,
+        "min_y": 1950,
+        "max_x": 5100,
+        "max_y": 2580
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 630,
+        "h": 250
+      }
+    },
+    {
+      "object_id": "storage_cabinet",
+      "cluster_id": "storage_misc",
+      "polygon_ccw": [
+        {
+          "x": 4850,
+          "y": 1950
+        },
+        {
+          "x": 4850,
+          "y": 2560
+        },
+        {
+          "x": 4440,
+          "y": 2560
+        },
+        {
+          "x": 4440,
+          "y": 1950
+        }
+      ],
+      "bbox": {
+        "min_x": 4440,
+        "min_y": 1950,
+        "max_x": 4850,
+        "max_y": 2560
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 0,
+        "y": 250,
+        "w": 610,
+        "h": 410
+      }
+    },
+    {
+      "object_id": "console_table__reintroduced_1",
+      "instance_id": "console_table__reintroduced_1",
+      "object_type": "console_table",
+      "cluster_id": "storage_misc",
+      "rotation_ccw": 90,
+      "bbox": {
+        "min_x": 5550,
+        "min_y": 1750,
+        "max_x": 5900,
+        "max_y": 2810
+      },
+      "polygon_ccw": [
+        {
+          "x": 5550,
+          "y": 1750
+        },
+        {
+          "x": 5900,
+          "y": 1750
+        },
+        {
+          "x": 5900,
+          "y": 2810
+        },
+        {
+          "x": 5550,
+          "y": 2810
+        }
+      ],
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1060,
+        "h": 350
+      }
+    }
+  ],
+  "notes": [
+    "Controller forced macro translation for media_zone.",
+    "Reintroduced 1 deferred object(s) after judge/placer using the available free space in the room."
+  ],
+  "missing": [],
+  "coverage": {
+    "expected_cluster_ids": [
+      "seating_zone",
+      "media_zone",
+      "storage_misc"
+    ],
+    "present_cluster_ids": [
+      "media_zone",
+      "seating_zone",
+      "storage_misc"
+    ],
+    "missing_cluster_ids": [],
+    "unexpected_cluster_ids": [],
+    "primary_cluster_id": "seating_zone",
+    "primary_cluster_present": true,
+    "coverage_ratio": 1.0,
+    "complete": true,
+    "gallery_eligible": true
+  },
+  "complete": true,
+  "gallery_eligible": true,
+  "coverage_ratio": 1.0,
+  "missing_cluster_ids": [],
+  "primary_cluster_id": "seating_zone",
+  "primary_cluster_present": true,
+  "reintroduced_objects_by_cluster": {
+    "storage_misc": [
+      {
+        "object_id": "console_table__reintroduced_1",
+        "object_type": "console_table",
+        "rotation_ccw": 90,
+        "bbox": {
+          "min_x": 5550,
+          "min_y": 1750,
+          "max_x": 5900,
+          "max_y": 2810
+        }
+      }
+    ]
+  },
+  "remaining_dropped_objects_by_cluster": {
+    "storage_misc": [
+      {
+        "cluster_id": "storage_misc",
+        "object_type": "recliner",
+        "category": "recliner",
+        "size_tier": "S",
+        "priority": "primary",
+        "rep_dims_m": {
+          "L": 0.88,
+          "W": 0.76,
+          "H": 1.07,
+          "A": 0.6688000000000001,
+          "R": 1.1578947368421053,
+          "source_id": "recliner_002"
+        },
+        "rationale": "Deterministic policy marked recliner as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      },
+      {
+        "cluster_id": "storage_misc",
+        "object_type": "bean_bag",
+        "category": "bean_bag",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.78,
+          "W": 0.7,
+          "H": 0.63,
+          "A": 0.5459999999999999,
+          "R": 1.1142857142857143,
+          "source_id": "bean_bag_001"
+        },
+        "rationale": "Deterministic policy marked bean_bag as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      },
+      {
+        "cluster_id": "storage_misc",
+        "object_type": "pet_bed",
+        "category": "pet_bed",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.88,
+          "W": 0.15,
+          "H": 0.58,
+          "A": 0.132,
+          "R": 5.866666666666667,
+          "source_id": "pet_bed_002"
+        },
+        "rationale": "Deterministic policy marked pet_bed as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      }
+    ]
+  }
+}

@@ -24,11 +24,28 @@ function bboxFromRects(rects: any[]) {
 
 export const ClusterPreviewPanel: React.FC = () => {
   const clusterPreviews = useEditorStore((s) => s.clusterPreviews);
-  const entries = Object.entries(clusterPreviews);
+  const layoutVariants = useEditorStore((s) => s.layoutVariants);
+  const selectedVariantId = useEditorStore((s) => s.selectedVariantId);
+  const selectedVariant =
+    layoutVariants.find((variant) => variant.variant_id === selectedVariantId) ??
+    layoutVariants[0] ??
+    null;
+  const previewSource =
+    selectedVariant &&
+    selectedVariant.cluster_previews &&
+    Object.keys(selectedVariant.cluster_previews).length > 0
+      ? selectedVariant.cluster_previews
+      : clusterPreviews;
+  const entries = Object.entries(previewSource);
 
   return (
     <aside className="panel cluster-preview-panel">
       <h3>Cluster Preview</h3>
+      {selectedVariant ? (
+        <p className="muted">
+          Showing cluster previews for {selectedVariant.label}.
+        </p>
+      ) : null}
       {entries.length === 0 ? (
         <p className="muted">No cluster previews yet.</p>
       ) : (

@@ -25,7 +25,11 @@ normalize_and_validate_repair_output = (
 _phase2_controller = importlib.import_module("agent.phase2_controller")
 Phase2Controller = _phase2_controller.Phase2Controller
 _choose_fallback_proposal = _phase2_controller._choose_fallback_proposal
+_postsolve_orientation_snap = _phase2_controller._postsolve_orientation_snap
+build_phase2_preview_candidate = _phase2_controller.build_phase2_preview_candidate
 _select_shortlist_candidate = _phase2_controller._select_shortlist_candidate
+_has_macro_orientation_pressure = _phase2_controller._has_macro_orientation_pressure
+_should_enter_object_refine_phase = _phase2_controller._should_enter_object_refine_phase
 _should_stop_macro_search = _phase2_controller._should_stop_macro_search
 _should_stop_object_refine_search = _phase2_controller._should_stop_object_refine_search
 _should_promote_candidate = _phase2_controller._should_promote_candidate
@@ -37,6 +41,7 @@ Phase2JudgeOutput = importlib.import_module(
     "agent_schema.phase2_judge_schema"
 ).Phase2JudgeOutput
 run_phase2_judge = importlib.import_module("agent.phase2_judge").run_phase2_judge
+Phase2Judge = importlib.import_module("agent.phase2_judge").Phase2Judge
 
 _tools_v2 = importlib.import_module("cluster_placer.tools_v2")
 CompileAcceptedPhase2Proposal = _tools_v2.CompileAcceptedPhase2Proposal
@@ -46,6 +51,9 @@ EvaluatePhase2Proposal = _tools_v2.EvaluatePhase2Proposal
 
 CASE_ROOT = REPO_ROOT / "cases" / "demo_tenant_20260326T040117Z"
 CASE_ROOT_WINDOW = REPO_ROOT / "cases" / "demo_tenant_20260326T083558Z"
+CASE_ROOT_VIEWING = REPO_ROOT / "cases" / "demo_tenant_20260401T105018Z"
+CASE_ROOT_OBJECT_ROTATION = REPO_ROOT / "cases" / "demo_tenant_20260401T135135Z"
+CASE_ROOT_VARIANT_PREVIEW = REPO_ROOT / "cases" / "demo_tenant_20260401T144630Z"
 
 
 def _load_json(path: Path) -> Any:
@@ -82,6 +90,115 @@ def _window_payload() -> dict[str, Any]:
         placer_06=solver,
         cluster_constraints=None,
     )
+
+
+def _viewing_payload() -> dict[str, Any]:
+    room = _load_json(CASE_ROOT_VIEWING / "01_room_interpreter.json")
+    merged = _load_json(CASE_ROOT_VIEWING / "04_cluster_merged.json")
+    outlines = _load_json(CASE_ROOT_VIEWING / "05_cluster_outlines.json")
+    relation_plan = _load_json(CASE_ROOT_VIEWING / "05b_cluster_relation_plan.json")
+    solver = _load_json(CASE_ROOT_VIEWING / "06a_cluster_solver.json")
+    return build_phase2_payload(
+        room_01=room,
+        clusters_04=merged,
+        outlines_05=outlines,
+        relation_05b=relation_plan,
+        placer_06=solver,
+        cluster_constraints=None,
+    )
+
+
+def _object_rotation_payload() -> dict[str, Any]:
+    room = _load_json(CASE_ROOT_OBJECT_ROTATION / "01_room_interpreter.json")
+    merged = _load_json(CASE_ROOT_OBJECT_ROTATION / "04_cluster_merged.json")
+    outlines = _load_json(CASE_ROOT_OBJECT_ROTATION / "05_cluster_outlines.json")
+    relation_plan = _load_json(
+        CASE_ROOT_OBJECT_ROTATION / "05b_cluster_relation_plan.json"
+    )
+    solver = _load_json(CASE_ROOT_OBJECT_ROTATION / "06a_cluster_solver.json")
+    return build_phase2_payload(
+        room_01=room,
+        clusters_04=merged,
+        outlines_05=outlines,
+        relation_05b=relation_plan,
+        placer_06=solver,
+        cluster_constraints=None,
+    )
+
+
+def _variant_preview_payload() -> dict[str, Any]:
+    room = _load_json(CASE_ROOT_VARIANT_PREVIEW / "01_room_interpreter.json")
+    merged = _load_json(CASE_ROOT_VARIANT_PREVIEW / "04_cluster_merged.json")
+    outlines = _load_json(CASE_ROOT_VARIANT_PREVIEW / "05_cluster_outlines.json")
+    relation_plan = _load_json(
+        CASE_ROOT_VARIANT_PREVIEW / "05b_cluster_relation_plan.json"
+    )
+    solver = _load_json(CASE_ROOT_VARIANT_PREVIEW / "06a_cluster_solver.json")
+    return build_phase2_payload(
+        room_01=room,
+        clusters_04=merged,
+        outlines_05=outlines,
+        relation_05b=relation_plan,
+        placer_06=solver,
+        cluster_constraints=None,
+    )
+
+
+def _payload_with_semantic_spacing_pressure() -> tuple[dict[str, Any], str, str]:
+    payload = _variant_preview_payload()
+    cards = payload.get("cluster_cards") or []
+
+    def _apply_spacing_pressure(card_like: dict[str, Any]) -> str | None:
+        cluster_rules = card_like.setdefault("cluster_rules", {})
+        if not isinstance(cluster_rules, dict):
+            cluster_rules = {}
+            card_like["cluster_rules"] = cluster_rules
+        existing_semantic = cluster_rules.get("semantic_placements") or []
+        if isinstance(existing_semantic, list) and existing_semantic:
+            first = existing_semantic[0]
+            if isinstance(first, dict):
+                cluster_rules["semantic_placements"] = [
+                    {
+                        **deepcopy(first),
+                        "gap_min": 600,
+                        "gap_max": 1000,
+                        "proximity": "loose",
+                    }
+                ]
+                return str(first.get("id") or "")
+        local_ids = [
+            str(row.get("id") or "")
+            for row in (card_like.get("local_placements") or [])
+            if isinstance(row, dict) and str(row.get("id") or "").strip()
+        ]
+        unique_ids = list(dict.fromkeys(local_ids))
+        if len(unique_ids) < 2:
+            return None
+        cluster_rules["semantic_placements"] = [
+            {
+                "id": unique_ids[1],
+                "relative_to": unique_ids[0],
+                "kind": "anchor_side",
+                "side_options": ["left", "right", "head", "foot"],
+                "gap_min": 600,
+                "gap_max": 1000,
+                "proximity": "loose",
+                "selection": "best_fit",
+                "orientation": "same_direction",
+            }
+        ]
+        return unique_ids[1]
+
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        object_id = _apply_spacing_pressure(card)
+        if object_id:
+            for variant in card.get("available_variants") or card.get("variants") or []:
+                if isinstance(variant, dict) and isinstance(variant.get("card"), dict):
+                    _apply_spacing_pressure(variant["card"])
+            return payload, str(card.get("cluster_id") or ""), object_id
+    raise AssertionError("Expected a cluster card containing at least two objects")
 
 
 def _merge_repair(
@@ -211,6 +328,93 @@ class _RevisingJudge:
 
 
 class Phase2ArchitectureTest(unittest.TestCase):
+    def test_default_placer_uses_deterministic_search(self) -> None:
+        payload = _sample_payload()
+        placer = MacroClusterPlacer()
+
+        proposal = placer.generate_from_payload(payload=payload, max_attempts=1)
+
+        self.assertIn(proposal["status"], {"REPAIRED", "NO_IMPROVEMENT"})
+        self.assertIn("cluster_transforms", proposal)
+        self.assertIn("selected_variants", proposal)
+
+    def test_default_judge_generates_without_llm(self) -> None:
+        judge = Phase2Judge()
+        result = judge.generate(
+            {
+                "hard_check_summary": {"hard_valid": True},
+                "comparison_summary": {"delta_score": 300},
+                "metrics": {
+                    "cluster_affinity_to_preferred_zone": [],
+                    "opening_band_blocking": [],
+                    "main_path_clearance": {"paths": []},
+                    "central_congestion": [],
+                    "cluster_edge_vs_center_fit": [],
+                    "cluster_internal_constraint_fidelity": [],
+                },
+                "diagnosis": {"prioritized_clusters": [{"cluster_id": "sleep_area"}]},
+            }
+        )
+
+        self.assertIn(result.verdict, {"REVISE", "ACCEPT"})
+        self.assertIn(result.next_step_mode, {"macro_layout", "object_refine", "stop"})
+
+    def test_viewing_macro_moves_include_viewing_partner_repositioning(self) -> None:
+        payload = _viewing_payload()
+        moves = EnumeratePhase2RepairMoves(payload=payload, limit=24).get("moves") or []
+        reasons = [str(move.get("reason") or "") for move in moves]
+
+        self.assertTrue(
+            any("viewing partner" in reason.lower() for reason in reasons),
+            msg=f"Expected a viewing-partner macro move, got reasons={reasons}",
+        )
+
+    def test_viewing_macro_moves_include_pair_realignments(self) -> None:
+        payload = _viewing_payload()
+        moves = EnumeratePhase2RepairMoves(payload=payload, limit=64).get("moves") or []
+        pair_moves = [
+            move
+            for move in moves
+            if "realign viewing pair" in str(move.get("reason") or "").lower()
+            and len(((move.get("proposal") or {}).get("cluster_transforms") or [])) >= 2
+        ]
+
+        self.assertTrue(pair_moves)
+
+    def test_viewing_baseline_surfaces_directional_pair_pressure(self) -> None:
+        payload = _viewing_payload()
+        baseline = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        directional_rows = [
+            row
+            for row in (baseline.get("metrics", {}).get("orientation_debug") or [])
+            if isinstance(row, dict)
+            and str(row.get("kind") or "") == "cluster_directional_relation"
+            and str(row.get("relation") or "") == "face_each_other"
+        ]
+
+        self.assertTrue(directional_rows)
+
+    def test_viewing_baseline_keeps_macro_search_in_phase2(self) -> None:
+        payload = _viewing_payload()
+        baseline = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        self.assertTrue(_has_macro_orientation_pressure(baseline))
+        self.assertFalse(
+            _should_enter_object_refine_phase(
+                iteration=6,
+                history=[],
+                macro_shortlist=[],
+                baseline_evaluation=baseline,
+            )
+        )
+
     def test_placer_returns_proposal_only(self) -> None:
         payload = _sample_payload()
         noop = make_no_improvement_repair(payload)
@@ -335,6 +539,21 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertIn("room", compiled)
         self.assertIn("objects", compiled)
         self.assertIn("missing", compiled)
+
+    def test_compile_preserves_object_level_local_rotations(self) -> None:
+        payload = _object_rotation_payload()
+        noop = make_no_improvement_repair(payload)
+
+        compiled = CompileAcceptedPhase2Proposal(payload=payload, repair=noop)
+        by_object_id = {
+            str(row["object_id"]): int(row["rotation_ccw"])
+            for row in compiled["objects"]
+            if isinstance(row, dict)
+        }
+
+        self.assertEqual(by_object_id.get("armchair"), 90)
+        self.assertEqual(by_object_id.get("coffee_table"), 180)
+        self.assertEqual(by_object_id.get("sofa"), 0)
 
     def test_controller_recovers_when_placer_candidate_is_hard_invalid(self) -> None:
         payload = _sample_payload()
@@ -559,15 +778,36 @@ class Phase2ArchitectureTest(unittest.TestCase):
 
         self.assertTrue(object_moves)
         allowed_ops = {
-            str(
-                (((move.get("proposal") or {}).get("object_repairs") or [{}])[0]).get(
-                    "op"
-                )
-                or ""
-            )
+            str(repair.get("op") or "")
             for move in object_moves
+            for repair in ((move.get("proposal") or {}).get("object_repairs") or [])
         }
-        self.assertTrue(allowed_ops.issubset({"rotate_object", "nudge_object"}))
+        self.assertTrue(
+            allowed_ops.issubset(
+                {
+                    "rotate_object",
+                    "nudge_object",
+                    "mirror_object",
+                    "swap_objects",
+                    "set_front_override",
+                }
+            )
+        )
+        self.assertTrue(
+            all(
+                len(
+                    {
+                        str(repair.get("cluster_id") or "")
+                        for repair in (
+                            (move.get("proposal") or {}).get("object_repairs") or []
+                        )
+                        if str(repair.get("cluster_id") or "")
+                    }
+                )
+                <= 2
+                for move in object_moves
+            )
+        )
 
     def test_object_refine_rejects_macro_edits_and_nonenumerated_moves(self) -> None:
         payload = _sample_payload()
@@ -597,6 +837,11 @@ class Phase2ArchitectureTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_and_validate_repair_output(payload, invalid_macro)
 
+        other_cluster_row = next(
+            row
+            for row in payload["objects_world"]
+            if row["cluster_id"] != payload["objects_world"][0]["cluster_id"]
+        )
         invalid_swap = {
             "status": "REPAIRED",
             "cluster_transforms": deepcopy(seed["cluster_transforms"]),
@@ -606,9 +851,7 @@ class Phase2ArchitectureTest(unittest.TestCase):
                     "cluster_id": payload["objects_world"][0]["cluster_id"],
                     "object_id": payload["objects_world"][0]["object_id"],
                     "op": "swap_objects",
-                    "params": {
-                        "other_object_id": payload["objects_world"][1]["object_id"]
-                    },
+                    "params": {"other_object_id": other_cluster_row["object_id"]},
                 }
             ],
             "notes": ["Unsupported risky swap."],
@@ -701,6 +944,315 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertEqual(set(proposal_map.keys()), expected_cluster_ids)
         self.assertEqual(proposal_map[changed_cluster_id]["x"], changed_cluster["x"])
         self.assertTrue(judge.payloads)
+
+    def test_postsolve_orientation_snap_preserves_hard_validity(self) -> None:
+        payload = _sample_payload()
+        repair = make_no_improvement_repair(payload)
+
+        snapped_payload, snapped_repair, snapped_eval = _postsolve_orientation_snap(
+            payload=payload,
+            repair=repair,
+            rounds=1,
+            move_limit=16,
+        )
+
+        self.assertTrue(snapped_eval["hard_valid"])
+        self.assertIn("cluster_transforms", snapped_repair)
+        self.assertIn("seed_layout", snapped_payload)
+
+    def test_build_phase2_payload_injects_generic_cluster_variants(self) -> None:
+        payload = _viewing_payload()
+
+        cards = payload.get("cluster_cards") or []
+        variant_counts = [
+            len(card.get("available_variants") or [])
+            for card in cards
+            if isinstance(card, dict)
+        ]
+        self.assertTrue(any(count >= 3 for count in variant_counts))
+
+        first_variant = next(
+            variant
+            for card in cards
+            if isinstance(card, dict)
+            for variant in (card.get("available_variants") or [])
+            if isinstance(variant, dict)
+        )
+        self.assertIsInstance(first_variant.get("card"), dict)
+
+    def test_postsolve_orientation_snap_prefers_object_move_when_it_improves(
+        self,
+    ) -> None:
+        payload = {
+            "seed_layout": {
+                "cluster_transforms": [
+                    {"cluster_id": "tv_media", "x": 0, "y": 0, "rot": 0}
+                ],
+                "selected_variants": [
+                    {"cluster_id": "tv_media", "variant_id": "tv_media::base"}
+                ],
+            },
+            "phase_control": {"repair_phase": "macro_layout"},
+            "goals": {"relation_plan_used": {}},
+        }
+        repair = {
+            "status": "REPAIRED",
+            "cluster_transforms": [
+                {"cluster_id": "tv_media", "x": 0, "y": 0, "rot": 0}
+            ],
+            "selected_variants": [
+                {"cluster_id": "tv_media", "variant_id": "tv_media::base"}
+            ],
+            "object_repairs": [],
+            "notes": [],
+        }
+
+        original_enum = _phase2_controller.EnumeratePhase2RepairMoves
+        original_eval = _phase2_controller.EvaluatePhase2Proposal
+        original_promote = _phase2_controller.PromotePhase2RepairToSeedPayload
+
+        def _fake_enum(*, payload: dict[str, Any], limit: int = 48) -> dict[str, Any]:
+            _ = limit
+            phase = (
+                (payload.get("phase_control") or {}).get("repair_phase") or ""
+            ).strip()
+            if phase == "object_refine":
+                return {
+                    "moves": [
+                        {
+                            "kind": "object_pose",
+                            "cluster_id": "tv_media",
+                            "object_id": "tv_console",
+                            "proposal": {
+                                "cluster_transforms": [],
+                                "selected_variants": [],
+                                "object_repairs": [
+                                    {
+                                        "cluster_id": "tv_media",
+                                        "object_id": "tv_console",
+                                        "op": "rotate_object",
+                                        "params": {"rot": 90},
+                                    }
+                                ],
+                            },
+                            "reason": "Rotate tv console toward seating",
+                        }
+                    ]
+                }
+            return {
+                "moves": [
+                    {
+                        "kind": "cluster_pose",
+                        "cluster_id": "tv_media",
+                        "proposal": {
+                            "cluster_transforms": [
+                                {
+                                    "cluster_id": "tv_media",
+                                    "x": 0,
+                                    "y": 0,
+                                    "rot": 90,
+                                }
+                            ],
+                            "selected_variants": [],
+                            "object_repairs": [],
+                        },
+                        "reason": "Rotate the whole TV cluster",
+                    }
+                ]
+            }
+
+        def _fake_eval(
+            *, payload: dict[str, Any], repair: dict[str, Any]
+        ) -> dict[str, Any]:
+            _ = payload
+            has_object_repairs = bool(repair.get("object_repairs"))
+            delta = 18 if has_object_repairs else 60
+            return {
+                "hard_valid": True,
+                "baseline_comparison": {
+                    "delta_score": delta,
+                    "candidate_score": delta,
+                },
+            }
+
+        def _fake_promote(
+            *, payload: dict[str, Any], repair: dict[str, Any]
+        ) -> dict[str, Any]:
+            promoted = deepcopy(payload)
+            promoted["selected_kind"] = (
+                "object" if repair.get("object_repairs") else "cluster"
+            )
+            return promoted
+
+        try:
+            _phase2_controller.EnumeratePhase2RepairMoves = _fake_enum
+            _phase2_controller.EvaluatePhase2Proposal = _fake_eval
+            _phase2_controller.PromotePhase2RepairToSeedPayload = _fake_promote
+
+            snapped_payload, _, snapped_eval = _postsolve_orientation_snap(
+                payload=payload,
+                repair=repair,
+                rounds=1,
+                move_limit=8,
+            )
+        finally:
+            _phase2_controller.EnumeratePhase2RepairMoves = original_enum
+            _phase2_controller.EvaluatePhase2Proposal = original_eval
+            _phase2_controller.PromotePhase2RepairToSeedPayload = original_promote
+
+        self.assertTrue(snapped_eval["hard_valid"])
+        self.assertEqual(snapped_payload.get("selected_kind"), "object")
+
+    def test_face_object_orientation_is_scored_for_targeted_media_objects(self) -> None:
+        payload = _variant_preview_payload()
+
+        evaluation = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        rows = [
+            row
+            for row in (evaluation.get("metrics", {}).get("orientation_debug") or [])
+            if isinstance(row, dict)
+            and row.get("cluster_id") == "media_zone"
+            and row.get("object_id") == "tv_console"
+            and row.get("intent") == "face_object"
+        ]
+
+        self.assertTrue(rows)
+        self.assertEqual(rows[0].get("target_object_id"), "sectional_sofa")
+
+    def test_object_refine_enumeration_includes_relation_driven_tv_rotation(
+        self,
+    ) -> None:
+        payload = _variant_preview_payload()
+        payload.setdefault("phase_control", {})["repair_phase"] = "object_refine"
+
+        moves = EnumeratePhase2RepairMoves(payload=payload, limit=64).get("moves") or []
+        tv_rotation_moves = [
+            move
+            for move in moves
+            if move.get("cluster_id") == "media_zone"
+            and move.get("object_id") == "tv_console"
+            and (
+                ((move.get("proposal") or {}).get("object_repairs") or [{}])[0].get(
+                    "op"
+                )
+                == "rotate_object"
+            )
+        ]
+
+        self.assertTrue(tv_rotation_moves)
+
+    def test_phase2_scores_semantic_proximity_from_cluster_rules(self) -> None:
+        payload, cluster_id, object_id = _payload_with_semantic_spacing_pressure()
+
+        evaluation = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        rows = [
+            row
+            for row in (
+                evaluation.get("metrics", {}).get(
+                    "cluster_internal_constraint_fidelity"
+                )
+                or []
+            )
+            if isinstance(row, dict)
+            and row.get("cluster_id") == cluster_id
+            and row.get("constraint_type") == "semantic_proximity"
+            and (row.get("subjects") or {}).get("a") == object_id
+        ]
+
+        self.assertTrue(rows)
+        self.assertTrue(any(row.get("proximity") == "loose" for row in rows))
+        self.assertTrue(
+            any(
+                row.get("mapped_side") in {"left", "right", "top", "bottom"}
+                for row in rows
+            )
+        )
+        self.assertTrue(any(int(row.get("penalty_mm") or 0) > 0 for row in rows))
+
+    def test_object_refine_enumeration_includes_spacing_nudge_moves(self) -> None:
+        payload, cluster_id, object_id = _payload_with_semantic_spacing_pressure()
+        payload.setdefault("phase_control", {})["repair_phase"] = "object_refine"
+
+        moves = (
+            EnumeratePhase2RepairMoves(payload=payload, limit=200).get("moves") or []
+        )
+        spacing_moves = [
+            move
+            for move in moves
+            if move.get("cluster_id") == cluster_id
+            and move.get("object_id") == object_id
+            and "spacing" in str(move.get("reason") or "").lower()
+            and (
+                ((move.get("proposal") or {}).get("object_repairs") or [{}])[0].get(
+                    "op"
+                )
+                == "nudge_object"
+            )
+        ]
+
+        self.assertTrue(spacing_moves)
+
+    def test_object_refine_enumeration_includes_two_cluster_repairs(self) -> None:
+        payload = _variant_preview_payload()
+        payload.setdefault("phase_control", {})["repair_phase"] = "object_refine"
+
+        moves = EnumeratePhase2RepairMoves(payload=payload, limit=96).get("moves") or []
+        paired_moves = [
+            move
+            for move in moves
+            if len(((move.get("proposal") or {}).get("object_repairs") or [])) == 2
+            and len(
+                {
+                    str(repair.get("cluster_id") or "")
+                    for repair in (
+                        (move.get("proposal") or {}).get("object_repairs") or []
+                    )
+                    if str(repair.get("cluster_id") or "")
+                }
+            )
+            == 2
+        ]
+
+        self.assertTrue(paired_moves)
+
+    def test_build_phase2_preview_candidate_compiles_fast_absolute_layout(self) -> None:
+        payload = _variant_preview_payload()
+
+        preview = build_phase2_preview_candidate(
+            payload=payload,
+            rounds=1,
+            move_limit=16,
+        )
+
+        self.assertEqual(preview["absolute_layout"].get("status"), "OK")
+        self.assertTrue(preview["evaluation"].get("hard_valid"))
+
+    def test_compile_accepted_phase2_proposal_exports_directional_rotation_from_front_world(
+        self,
+    ) -> None:
+        payload = _variant_preview_payload()
+
+        compiled = CompileAcceptedPhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        rotation_by_object = {
+            str(row.get("object_id") or ""): int(row.get("rotation_ccw") or 0)
+            for row in compiled.get("objects") or []
+            if isinstance(row, dict)
+        }
+
+        self.assertEqual(rotation_by_object.get("tv_console"), 180)
+        self.assertEqual(rotation_by_object.get("sectional_sofa"), 0)
 
     def test_window_case_scores_front_to_window_and_affinity_preferences(self) -> None:
         payload = _window_payload()
@@ -847,6 +1399,60 @@ class Phase2ArchitectureTest(unittest.TestCase):
                 history=history,
                 deterministic_shortlist=shortlist,
                 search_phase="object_refine",
+            )
+        )
+
+    def test_object_refine_can_start_when_planner_object_pressure_dominates(
+        self,
+    ) -> None:
+        baseline = {
+            "metrics": {
+                "orientation_debug": [
+                    {
+                        "kind": "cluster_directional_relation",
+                        "cluster_id": "seating_zone",
+                        "penalty_mm": 900,
+                        "relation": "face_each_other",
+                    },
+                    {
+                        "kind": "object_orientation",
+                        "cluster_id": "seating_zone",
+                        "object_id": "sectional_sofa",
+                        "intent": "face_object",
+                        "penalty_mm": 2200,
+                    },
+                    {
+                        "kind": "object_orientation",
+                        "cluster_id": "media_zone",
+                        "object_id": "tv_console",
+                        "intent": "face_object",
+                        "penalty_mm": 1800,
+                    },
+                ]
+            },
+            "diagnosis": {
+                "prioritized_objects": [
+                    {"cluster_id": "seating_zone", "object_id": "sectional_sofa"},
+                    {"cluster_id": "media_zone", "object_id": "tv_console"},
+                ]
+            },
+        }
+
+        self.assertTrue(
+            _should_enter_object_refine_phase(
+                iteration=2,
+                history=[
+                    {
+                        "search_phase": "macro_layout",
+                        "tool_evaluation": {
+                            "hard_valid": True,
+                            "baseline_comparison": {"delta_score": 0},
+                        },
+                        "judge_evaluation": {"verdict": "REVISE"},
+                    }
+                ],
+                macro_shortlist=[],
+                baseline_evaluation=baseline,
             )
         )
 
@@ -1037,6 +1643,67 @@ class Phase2ArchitectureTest(unittest.TestCase):
                 "top_issues": ["Chair still needs front clearance tuning."],
                 "repair_advice": ["Use a smaller local object adjustment."],
                 "priority_clusters": ["work_area"],
+            },
+        )
+
+        self.assertEqual(result["next_step_mode"], "object_refine")
+
+    def test_judge_calibration_prefers_object_refine_for_planner_object_pressure(
+        self,
+    ) -> None:
+        payload = {
+            "hard_check_summary": {"hard_valid": True},
+            "comparison_summary": {"delta_score": 240},
+            "metrics": {
+                "cluster_affinity_to_preferred_zone": [],
+                "opening_band_blocking": [],
+                "main_path_clearance": {"paths": []},
+                "central_congestion": [],
+                "cluster_edge_vs_center_fit": [],
+                "cluster_internal_constraint_fidelity": [],
+                "orientation_debug": [
+                    {
+                        "kind": "cluster_directional_relation",
+                        "cluster_id": "seating_zone",
+                        "penalty_mm": 800,
+                        "relation": "face_each_other",
+                    },
+                    {
+                        "kind": "object_orientation",
+                        "cluster_id": "seating_zone",
+                        "object_id": "sectional_sofa",
+                        "intent": "face_object",
+                        "penalty_mm": 2100,
+                    },
+                    {
+                        "kind": "object_orientation",
+                        "cluster_id": "media_zone",
+                        "object_id": "tv_console",
+                        "intent": "face_object",
+                        "penalty_mm": 1800,
+                    },
+                ],
+            },
+            "diagnosis": {
+                "prioritized_clusters": [
+                    {"cluster_id": "seating_zone"},
+                    {"cluster_id": "media_zone"},
+                ],
+                "prioritized_objects": [
+                    {"cluster_id": "seating_zone", "object_id": "sectional_sofa"},
+                    {"cluster_id": "media_zone", "object_id": "tv_console"},
+                ],
+            },
+        }
+
+        result = run_phase2_judge(
+            payload=payload,
+            llm_call=lambda system_prompt, user_payload_json: {
+                "reasonableness_score": 74,
+                "verdict": "REVISE",
+                "top_issues": ["TV and sofa orientation still feels wrong."],
+                "repair_advice": ["Keep refining object orientation."],
+                "priority_clusters": ["seating_zone", "media_zone"],
             },
         )
 

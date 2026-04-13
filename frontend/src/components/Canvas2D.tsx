@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage, Group, Circle, Text } from 'react-konva';
 import { useEditorStore } from '../store';
 import { clamp, polygonBounds, toCanvas, fromCanvas } from '../utils/geometry';
-import { InventoryItem, Placement, Point } from '../types';
+import { Door, InventoryItem, Placement, Point, Window } from '../types';
 import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
@@ -94,7 +94,7 @@ export const Canvas2D: React.FC = () => {
       const snap = snapToWall(pos, length, floorplan.walls);
       if (!snap) return;
       if (asset.category === 'door') {
-        const nextDoor = {
+        const nextDoor: Door = {
           door_id: `door_${Date.now()}`,
           wall_id: snap.wall_id,
           start_mm: snap.start,
@@ -109,7 +109,7 @@ export const Canvas2D: React.FC = () => {
         });
         selectOpening('door', nextDoor.door_id);
       } else {
-        const nextWindow = {
+        const nextWindow: Window = {
           window_id: `window_${Date.now()}`,
           wall_id: snap.wall_id,
           start_mm: snap.start,
@@ -420,7 +420,11 @@ export const Canvas2D: React.FC = () => {
           }}
           onClick={() => selectOpening('door', door.door_id)}
         >
-          <Line points={[p1.x, p1.y, p2.x, p2.y]} stroke="#2f2f2f" strokeWidth={4} />
+          <Line
+            points={[p1.x, p1.y, p2.x, p2.y]}
+            stroke={door.color_hex || '#2f2f2f'}
+            strokeWidth={4}
+          />
           <Text
             text="door"
             fontSize={11}
@@ -474,7 +478,12 @@ export const Canvas2D: React.FC = () => {
           }}
           onClick={() => selectOpening('window', window.window_id)}
         >
-          <Line points={[p1.x, p1.y, p2.x, p2.y]} stroke="#4f7c9b" strokeWidth={4} dash={[6, 6]} />
+          <Line
+            points={[p1.x, p1.y, p2.x, p2.y]}
+            stroke={window.color_hex || '#4f7c9b'}
+            strokeWidth={4}
+            dash={[6, 6]}
+          />
           <Text
             text="window"
             fontSize={11}
@@ -513,12 +522,30 @@ export const Canvas2D: React.FC = () => {
     });
     return placements.map(({ placement }) => {
       const isLocked = placement.constraint_mode === 'locked';
+      const isCurtain = isCurtainLike(placement.category);
+      const isMirror = isMirrorLike(placement.category);
+      const matchedWindow = isCurtain
+        ? findNearestWindowForPlacement(
+            placement.position_mm,
+            floorplan?.openings.windows ?? [],
+          )
+        : null;
+      const matchedWall = isMirror && placement.place_on?.method === 'hang_on'
+        ? snapToWall(
+            placement.position_mm,
+            Math.max(
+              placement.footprint_mm.w,
+              placement.footprint_mm.d,
+              160,
+            ),
+            floorplan?.walls ?? [],
+          )
+        : null;
       const pos = toCanvasPoint(placement.position_mm);
       const w = placement.footprint_mm.w * scale;
       const d = placement.footprint_mm.d * scale;
       const isSelected = placement.placement_id === selectedPlacementId;
       const stroke = isPlacementErrored(placement.placement_id) ? '#d9534f' : '#333';
-      const isCurtain = isCurtainLike(placement.category);
       const labelText = isCurtain ? 'curtain' : placement.category;
       const labelColor = isCurtain ? '#b65a3a' : '#1f1f1f';
       const showInlineLabel = true;
@@ -533,6 +560,272 @@ export const Canvas2D: React.FC = () => {
       const tagPaddingY = Math.max(2, tagFontSize * 0.25);
       const estTextW = tagText.length * tagFontSize * 0.58;
       const tagWidth = Math.min(maxLabelWidth, Math.max(24, estTextW + tagPaddingX * 2));
+
+      if (isCurtain && matchedWindow) {
+        const start = toCanvasPoint(matchedWindow.start_mm);
+        const end = toCanvasPoint(matchedWindow.end_mm);
+        const mid = {
+          x: (start.x + end.x) / 2,
+          y: (start.y + end.y) / 2,
+        };
+        const curtainStrokeWidth = clamp(
+          placement.footprint_mm.d * scale * 0.14,
+          8,
+          16,
+        );
+        return (
+          <Group
+            key={placement.placement_id}
+            draggable={!isLocked}
+            onDragEnd={(evt) => {
+              if (isLocked) return;
+              const dx = evt.target.x() / scale;
+              const dy = -evt.target.y() / scale;
+              evt.target.position({ x: 0, y: 0 });
+              updatePlacement({
+                ...placement,
+                position_mm: {
+                  x: placement.position_mm.x + dx,
+                  y: placement.position_mm.y + dy,
+                },
+              });
+            }}
+            onClick={() => selectPlacement(placement.placement_id)}
+            onTap={() => selectPlacement(placement.placement_id)}
+          >
+            <Line
+              points={[start.x, start.y, end.x, end.y]}
+              stroke={stroke}
+              strokeWidth={curtainStrokeWidth + (isSelected ? 3 : 1)}
+              opacity={0.18}
+              lineCap="round"
+              listening={false}
+            />
+            <Line
+              points={[start.x, start.y, end.x, end.y]}
+              stroke={placement.color_hex || '#ece7dc'}
+              strokeWidth={curtainStrokeWidth}
+              opacity={0.95}
+              lineCap="round"
+              hitStrokeWidth={Math.max(18, curtainStrokeWidth + 10)}
+            />
+            {showInlineLabel && (
+              <Group
+                x={mid.x - tagWidth / 2}
+                y={mid.y - curtainStrokeWidth - tagHeight - 4}
+                listening={false}
+              >
+                <Rect
+                  width={tagWidth}
+                  height={tagHeight}
+                  fill="rgba(255,255,255,0.78)"
+                  stroke="rgba(0,0,0,0.18)"
+                  cornerRadius={5}
+                />
+                <Text
+                  text={tagText}
+                  fontSize={tagFontSize}
+                  fill={labelColor}
+                  x={tagPaddingX}
+                  y={tagPaddingY - 1}
+                  width={Math.max(0, tagWidth - tagPaddingX * 2)}
+                  ellipsis
+                />
+              </Group>
+            )}
+            {isSelected && (
+              <Group x={mid.x + 12} y={mid.y - curtainStrokeWidth - 10}>
+                <Rect
+                  width={Math.max(70, placement.category.length * 8)}
+                  height={20}
+                  fill="#fff"
+                  stroke="#333"
+                  cornerRadius={4}
+                  shadowColor="#333"
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
+                />
+                <Text
+                  text={placement.category}
+                  fontSize={12}
+                  fill="#111"
+                  x={6}
+                  y={4}
+                />
+              </Group>
+            )}
+            {isSelected && (
+              <Group
+                x={mid.x + 12}
+                y={mid.y + 14}
+                onClick={(evt) => {
+                  evt.cancelBubble = true;
+                  removePlacement(placement.placement_id);
+                }}
+                onTap={(evt) => {
+                  evt.cancelBubble = true;
+                  removePlacement(placement.placement_id);
+                }}
+              >
+                <Rect
+                  width={60}
+                  height={18}
+                  fill="#d9534f"
+                  stroke="#b52b27"
+                  cornerRadius={4}
+                  shadowColor="#000"
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
+                />
+                <Text
+                  text="Delete"
+                  fontSize={11}
+                  fill="#fff"
+                  x={10}
+                  y={3}
+                />
+              </Group>
+            )}
+          </Group>
+        );
+      }
+
+      if (isMirror && matchedWall) {
+        const start = toCanvasPoint(matchedWall.start);
+        const end = toCanvasPoint(matchedWall.end);
+        const mid = {
+          x: (start.x + end.x) / 2,
+          y: (start.y + end.y) / 2,
+        };
+        const mirrorStrokeWidth = clamp(
+          placement.footprint_mm.d * scale,
+          6,
+          12,
+        );
+        return (
+          <Group
+            key={placement.placement_id}
+            draggable={!isLocked}
+            onDragEnd={(evt) => {
+              if (isLocked) return;
+              const dx = evt.target.x() / scale;
+              const dy = -evt.target.y() / scale;
+              evt.target.position({ x: 0, y: 0 });
+              updatePlacement({
+                ...placement,
+                position_mm: {
+                  x: placement.position_mm.x + dx,
+                  y: placement.position_mm.y + dy,
+                },
+              });
+            }}
+            onClick={() => selectPlacement(placement.placement_id)}
+            onTap={() => selectPlacement(placement.placement_id)}
+          >
+            <Line
+              points={[start.x, start.y, end.x, end.y]}
+              stroke={stroke}
+              strokeWidth={mirrorStrokeWidth + (isSelected ? 3 : 1)}
+              opacity={0.2}
+              lineCap="round"
+              listening={false}
+            />
+            <Line
+              points={[start.x, start.y, end.x, end.y]}
+              stroke={placement.color_hex || '#dfe6ec'}
+              strokeWidth={mirrorStrokeWidth}
+              opacity={0.96}
+              lineCap="round"
+              hitStrokeWidth={Math.max(16, mirrorStrokeWidth + 8)}
+            />
+            <Line
+              points={[start.x, start.y, end.x, end.y]}
+              stroke="rgba(255,255,255,0.7)"
+              strokeWidth={Math.max(1.5, mirrorStrokeWidth * 0.22)}
+              opacity={0.7}
+              lineCap="round"
+              listening={false}
+            />
+            {showInlineLabel && (
+              <Group
+                x={mid.x - tagWidth / 2}
+                y={mid.y - mirrorStrokeWidth - tagHeight - 4}
+                listening={false}
+              >
+                <Rect
+                  width={tagWidth}
+                  height={tagHeight}
+                  fill="rgba(255,255,255,0.78)"
+                  stroke="rgba(0,0,0,0.18)"
+                  cornerRadius={5}
+                />
+                <Text
+                  text={tagText}
+                  fontSize={tagFontSize}
+                  fill="#647789"
+                  x={tagPaddingX}
+                  y={tagPaddingY - 1}
+                  width={Math.max(0, tagWidth - tagPaddingX * 2)}
+                  ellipsis
+                />
+              </Group>
+            )}
+            {isSelected && (
+              <Group x={mid.x + 12} y={mid.y - mirrorStrokeWidth - 10}>
+                <Rect
+                  width={Math.max(70, placement.category.length * 8)}
+                  height={20}
+                  fill="#fff"
+                  stroke="#333"
+                  cornerRadius={4}
+                  shadowColor="#333"
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
+                />
+                <Text
+                  text={placement.category}
+                  fontSize={12}
+                  fill="#111"
+                  x={6}
+                  y={4}
+                />
+              </Group>
+            )}
+            {isSelected && (
+              <Group
+                x={mid.x + 12}
+                y={mid.y + 14}
+                onClick={(evt) => {
+                  evt.cancelBubble = true;
+                  removePlacement(placement.placement_id);
+                }}
+                onTap={(evt) => {
+                  evt.cancelBubble = true;
+                  removePlacement(placement.placement_id);
+                }}
+              >
+                <Rect
+                  width={60}
+                  height={18}
+                  fill="#d9534f"
+                  stroke="#b52b27"
+                  cornerRadius={4}
+                  shadowColor="#000"
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
+                />
+                <Text
+                  text="Delete"
+                  fontSize={11}
+                  fill="#fff"
+                  x={10}
+                  y={3}
+                />
+              </Group>
+            )}
+          </Group>
+        );
+      }
 
       return (
         <Group
@@ -562,6 +855,18 @@ export const Canvas2D: React.FC = () => {
             shadowBlur={isSelected ? 6 : 0}
             shadowOffset={{ x: 0, y: 0 }}
             shadowOpacity={0.2}
+          />
+          <Line
+            points={[
+              -Math.max(12, Math.min(w * 0.24, 64)),
+              -d / 2 + Math.max(8, Math.min(d * 0.12, 18)),
+              Math.max(12, Math.min(w * 0.24, 64)),
+              -d / 2 + Math.max(8, Math.min(d * 0.12, 18)),
+            ]}
+            stroke="rgba(255,255,255,0.96)"
+            strokeWidth={Math.max(3, Math.min(Math.min(w, d) * 0.06, 8))}
+            lineCap="round"
+            listening={false}
           />
           {showInlineLabel && (
             <Group x={-w / 2 + 6} y={-d / 2 + 6} listening={false}>
@@ -796,6 +1101,31 @@ function isCurtainLike(category: string): boolean {
   return cat.includes('curtain') || cat.includes('blind') || cat.includes('drape');
 }
 
+function isMirrorLike(category: string): boolean {
+  return category.toLowerCase().includes('mirror');
+}
+
+function findNearestWindowForPlacement(
+  target: Point,
+  windows: Array<{ start_mm: Point; end_mm: Point }>,
+): { start_mm: Point; end_mm: Point } | null {
+  let best: {
+    windowRow: { start_mm: Point; end_mm: Point };
+    distance: number;
+  } | null = null;
+  for (const windowRow of windows) {
+    const center = {
+      x: (windowRow.start_mm.x + windowRow.end_mm.x) / 2,
+      y: (windowRow.start_mm.y + windowRow.end_mm.y) / 2,
+    };
+    const distance = Math.hypot(target.x - center.x, target.y - center.y);
+    if (!best || distance < best.distance) {
+      best = { windowRow, distance };
+    }
+  }
+  return best?.windowRow ?? null;
+}
+
 function findNearestPoint(
   points: Point[],
   target: Point,
@@ -803,13 +1133,13 @@ function findNearestPoint(
   maxDistance: number,
 ): { point: Point; index: number } | null {
   let best: { point: Point; index: number; dist: number } | null = null;
-  points.forEach((point, idx) => {
-    if (idx === excludeIndex) return;
+  for (const [idx, point] of points.entries()) {
+    if (idx === excludeIndex) continue;
     const dist = Math.hypot(point.x - target.x, point.y - target.y);
     if (dist <= maxDistance && (!best || dist < best.dist)) {
       best = { point, index: idx, dist };
     }
-  });
+  }
   if (!best) return null;
   return { point: best.point, index: best.index };
 }
@@ -819,13 +1149,13 @@ type WallSnap = { start: Point; end: Point; wall_id: string };
 function snapToWall(point: Point, length: number, walls: { wall_id: string; p1_mm: Point; p2_mm: Point }[]): WallSnap | null {
   if (!walls || walls.length === 0) return null;
   let best: { wall: typeof walls[number]; t: number; dist: number; len: number; dir: Point } | null = null;
-  walls.forEach((wall) => {
+  for (const wall of walls) {
     const proj = projectPointToSegment(point, wall.p1_mm, wall.p2_mm);
-    if (!proj) return;
+    if (!proj) continue;
     if (!best || proj.dist < best.dist) {
       best = { wall, t: proj.t, dist: proj.dist, len: proj.len, dir: proj.dir };
     }
-  });
+  }
   if (!best) return null;
   const half = Math.min(length / 2, Math.max(10, best.len / 2 - 10));
   const tLen = best.t * best.len;

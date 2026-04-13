@@ -1,0 +1,490 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_zone",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand",
+        "bench"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "bench"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 100
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "bench",
+          "b": "bed",
+          "b_edge": "back",
+          "span": "center",
+          "gap_min": 0,
+          "gap_max": 150
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bench": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "foot of the bed"
+          },
+          "nightstand": {
+            "front": "top",
+            "notes": "drawer side"
+          },
+          "bench": {
+            "front": "top",
+            "notes": "seating side"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": [
+          {
+            "id": "nightstand",
+            "relative_to": "bed",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          },
+          {
+            "id": "bench",
+            "relative_to": "bed",
+            "kind": "dock_to_edge",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 150,
+            "b_edge": "back",
+            "span": "center"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "work_zone",
+      "tag": "work",
+      "members": [
+        "desk",
+        "chair",
+        "office_chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "office_chair"
+        },
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "chair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "office_chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "bottom",
+            "notes": "user side"
+          },
+          "office_chair": {
+            "front": "top",
+            "notes": "seating side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "office_chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 100,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "b_edge": "front",
+            "span": "center",
+            "gap_min": 0,
+            "gap_max": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "face_base"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "storage_zone",
+      "tag": "storage",
+      "members": [
+        "wardrobe",
+        "dresser",
+        "bookshelf",
+        "storage_cabinet",
+        "laundry_basket",
+        "tv_console"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "wardrobe",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dresser",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "storage_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "wardrobe",
+          "b": "dresser",
+          "edge": "back",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dresser": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "bottom",
+            "notes": "door side"
+          },
+          "dresser": {
+            "front": "bottom",
+            "notes": "drawer side"
+          },
+          "storage_cabinet": {
+            "front": "bottom",
+            "notes": "door side"
+          },
+          "tv_console": {
+            "front": "bottom",
+            "notes": "screen side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dresser",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "bookshelf",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit"
+          },
+          {
+            "id": "dresser",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "laundry_basket",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit"
+          },
+          {
+            "id": "storage_cabinet",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "tv_console",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "lounge_zone",
+      "tag": "living",
+      "members": [
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "armchair"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "side_table"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "floor_lamp",
+          "b": "armchair",
+          "weight": 2
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "armchair": {
+            "front": "top",
+            "notes": "seating side"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": [
+          {
+            "id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 50,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Partitioned into functional zones: sleep, work, storage, and lounge."
+  ],
+  "missing": []
+}

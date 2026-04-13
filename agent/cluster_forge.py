@@ -367,6 +367,20 @@ def _normalize_anchor_side_token(value: object) -> str | None:
         "front_right": "head_right",
         "back_left": "foot_left",
         "back_right": "foot_right",
+        "front_left_up": "head_left",
+        "front_right_up": "head_right",
+        "upper_left": "head_left",
+        "upper_right": "head_right",
+        "left_up": "head_left",
+        "right_up": "head_right",
+        "left_upper": "head_left",
+        "right_upper": "head_right",
+        "left_side": "left",
+        "right_side": "right",
+        "beside_left": "left",
+        "beside_right": "right",
+        "in_front": "head",
+        "behind": "foot",
     }
     token = mapping.get(token, token)
     if token in {
@@ -746,6 +760,13 @@ def _sanitize_cluster_anchors(
             f"Cluster {cluster_id}: dropped anchors not present in members: {sorted(set(dropped))}.",
         )
 
+    kept = _cohere_primary_anchor_members(
+        payload=payload,
+        cluster_id=cluster_id,
+        cluster_tag=cluster_tag,
+        anchors=kept,
+    )
+
     if kept:
         return kept
 
@@ -845,6 +866,241 @@ def _anchor_priority_score(*, cluster_tag: str, member: str) -> int:
     return score
 
 
+def _cluster_prefers_single_anchor(cluster_tag: str) -> bool:
+    return cluster_tag in {"sleep", "work", "living", "dining", "storage", "misc"}
+
+
+def _cohere_primary_anchor_members(
+    *,
+    payload: dict[str, object],
+    cluster_id: str,
+    cluster_tag: str,
+    anchors: Sequence[str],
+) -> list[str]:
+    unique_anchors: list[str] = []
+    seen: set[str] = set()
+    for anchor in anchors:
+        if anchor in seen:
+            continue
+        seen.add(anchor)
+        unique_anchors.append(anchor)
+
+    if len(unique_anchors) <= 1 or not _cluster_prefers_single_anchor(cluster_tag):
+        return unique_anchors
+
+    best_anchor = max(
+        unique_anchors,
+        key=lambda member: _anchor_priority_score(
+            cluster_tag=cluster_tag, member=member
+        ),
+    )
+    removed = [anchor for anchor in unique_anchors if anchor != best_anchor]
+    if removed:
+        _append_payload_note(
+            payload,
+            f"Cluster {cluster_id}: kept {best_anchor!r} as the primary anchor and removed secondary anchors {removed!r} to keep downstream composition coherent.",
+        )
+    return [best_anchor]
+
+
+def _is_media_display_like(member: str) -> bool:
+    key = member.lower()
+    return any(
+        token in key
+        for token in ("tv_console", "television", "monitor", "projector", "screen")
+    )
+
+
+def _is_media_side_support_like(member: str) -> bool:
+    key = member.lower()
+    return any(token in key for token in ("media_shelf", "bookshelf", "speaker"))
+
+
+def _is_low_center_surface_like(member: str) -> bool:
+    key = member.lower()
+    return any(token in key for token in ("coffee_table", "ottoman", "bench"))
+
+
+def _is_floor_lamp_like(member: str) -> bool:
+    return "floor_lamp" in member.lower()
+
+
+def _is_anchor_side_accessory_like(member: str) -> bool:
+    key = member.lower()
+    return (
+        is_surface_side_accessory_like(member)
+        or _is_floor_lamp_like(member)
+        or "side_table" in key
+    )
+
+
+def _is_storage_anchor_like(member: str) -> bool:
+    key = member.lower()
+    return any(
+        token in key
+        for token in (
+            "wardrobe",
+            "closet",
+            "storage_cabinet",
+            "dresser",
+            "sideboard",
+            "buffet",
+            "bookshelf",
+            "media_shelf",
+            "console_table",
+            "tv_console",
+            "cabinet",
+        )
+    )
+
+
+def _is_storage_support_like(member: str) -> bool:
+    if _is_storage_anchor_like(member):
+        return True
+    key = member.lower()
+    return any(
+        token in key
+        for token in (
+            "laundry_basket",
+            "hamper",
+            "shoe_rack",
+            "basket",
+            "bin",
+            "organizer",
+            "crate",
+        )
+    )
+
+
+def _has_relative_layout_intent(
+    *,
+    cluster: Mapping[str, object],
+    semantic_placements: Sequence[Mapping[str, object]],
+    object_id: str,
+) -> bool:
+    for record in semantic_placements:
+        if record.get("id") == object_id:
+            return True
+
+    hard_constraints = cluster.get("hard_constraints")
+    if not isinstance(hard_constraints, Sequence):
+        return False
+    for constraint in hard_constraints:
+        if not isinstance(constraint, Mapping):
+            continue
+        if constraint.get("a") != object_id:
+            continue
+        if str(constraint.get("type") or "").lower() in {
+            "anchor_side",
+            "dock_to_edge",
+            "contain_in",
+        }:
+            return True
+    return False
+
+
+def _pick_related_seat_base(
+    *,
+    members: Sequence[str],
+    primary_anchor: str,
+) -> str | None:
+    best_member: str | None = None
+    best_score = -1
+    for member in members:
+        if member == primary_anchor:
+            continue
+        if not (is_seat_like(member) or is_lounge_anchor_like(member)):
+            continue
+        score = 0
+        key = member.lower()
+        if "sectional" in key:
+            score += 1_000
+        elif "sofa" in key or "loveseat" in key:
+            score += 920
+        elif is_lounge_anchor_like(member):
+            score += 820
+        elif is_seat_like(member):
+            score += 700
+        if score > best_score:
+            best_score = score
+            best_member = member
+    return best_member
+
+
+def _semantic_orientation_for_member(member: str) -> str | None:
+    if _object_prefers_explicit_facing(member):
+        return "same_direction"
+    return None
+
+
+def _normalize_semantic_proximity(value: object) -> str:
+    if not isinstance(value, str):
+        return "balanced"
+    token = value.strip().lower()
+    if token in {"compact", "balanced", "loose"}:
+        return token
+    return "balanced"
+
+
+def _anchor_uses_lounge_semantics(member: str) -> bool:
+    key = member.lower()
+    return is_lounge_anchor_like(member) or "sofa" in key or "loveseat" in key
+
+
+def _upsert_anchor_side_semantic(
+    semantic_placements: list[dict[str, object]],
+    *,
+    object_id: str,
+    relative_to: str,
+    side_options: list[str],
+    gap_min: int,
+    gap_max: int,
+    proximity: str = "balanced",
+    orientation: str | None = None,
+) -> None:
+    record: dict[str, object] = {
+        "id": object_id,
+        "relative_to": relative_to,
+        "kind": "anchor_side",
+        "side_options": side_options,
+        "gap_min": gap_min,
+        "gap_max": gap_max,
+        "proximity": _normalize_semantic_proximity(proximity),
+        "selection": "best_fit",
+    }
+    if orientation is not None:
+        record["orientation"] = orientation
+    _upsert_semantic_placement(semantic_placements, record)
+
+
+def _upsert_dock_semantic(
+    semantic_placements: list[dict[str, object]],
+    *,
+    object_id: str,
+    relative_to: str,
+    b_edge: str,
+    span: str,
+    gap_min: int,
+    gap_max: int,
+    proximity: str = "balanced",
+    orientation: str | None = None,
+) -> None:
+    record: dict[str, object] = {
+        "id": object_id,
+        "relative_to": relative_to,
+        "kind": "dock_to_edge",
+        "b_edge": b_edge,
+        "span": span,
+        "gap_min": gap_min,
+        "gap_max": gap_max,
+        "proximity": _normalize_semantic_proximity(proximity),
+        "selection": "best_fit",
+    }
+    if orientation is not None:
+        record["orientation"] = orientation
+    _upsert_semantic_placement(semantic_placements, record)
+
+
 def _should_drop_object_containment(constraint: Mapping[str, object]) -> bool:
     return (
         str(constraint.get("type") or "").lower() == "contain_in"
@@ -919,6 +1175,7 @@ def _apply_semantic_layout_intents(
                     "span": str(constraint.get("span") or "center"),
                     "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
                     "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "proximity": "compact",
                     "selection": "best_fit",
                     "orientation": "face_base",
                 },
@@ -952,6 +1209,7 @@ def _apply_semantic_layout_intents(
                     "span": str(constraint.get("span") or "center"),
                     "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
                     "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "proximity": "balanced",
                     "selection": "best_fit",
                     "orientation": "face_base",
                 },
@@ -1010,6 +1268,7 @@ def _apply_semantic_layout_intents(
                     ],
                     "gap_min": _coerce_int(constraint.get("gap_min"), default=0),
                     "gap_max": _coerce_int(constraint.get("gap_max"), default=0),
+                    "proximity": "compact",
                     "selection": "best_fit",
                     "orientation": "same_direction",
                 },
@@ -1039,10 +1298,170 @@ def _apply_semantic_layout_intents(
                         "side_options": ["left", "right"],
                         "gap_min": 50,
                         "gap_max": 200,
+                        "proximity": "balanced",
                         "selection": "best_fit",
                         "orientation": "same_direction",
                     },
                 )
+
+    anchors = [
+        anchor
+        for anchor in _coerce_str_list(cluster.get("anchors"))
+        if anchor in members
+    ]
+    primary_anchor = anchors[0] if anchors else None
+
+    if primary_anchor is not None:
+        support_seat_base = _pick_related_seat_base(
+            members=sorted(members),
+            primary_anchor=primary_anchor,
+        )
+
+        for member in sorted(members):
+            if member == primary_anchor:
+                continue
+            if _has_relative_layout_intent(
+                cluster=cluster,
+                semantic_placements=semantic_placements,
+                object_id=member,
+            ):
+                continue
+
+            if is_bed_like(primary_anchor):
+                if is_bedside_support_like(member):
+                    _upsert_anchor_side_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        side_options=["head_left", "head_right"],
+                        gap_min=0,
+                        gap_max=100,
+                        proximity="compact",
+                        orientation="same_direction",
+                    )
+                    continue
+                if is_bench_like(member) or "ottoman" in member.lower():
+                    _upsert_dock_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        b_edge="back",
+                        span="center",
+                        gap_min=0,
+                        gap_max=150,
+                        proximity="balanced",
+                        orientation="face_base",
+                    )
+                    continue
+
+            if is_work_surface_like(primary_anchor):
+                if is_seat_like(member):
+                    _upsert_dock_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        b_edge="front",
+                        span="center",
+                        gap_min=0,
+                        gap_max=100,
+                        proximity="compact",
+                        orientation="face_base",
+                    )
+                    continue
+                if _is_anchor_side_accessory_like(member):
+                    _upsert_anchor_side_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        side_options=["left", "right"],
+                        gap_min=50,
+                        gap_max=200,
+                        proximity="balanced",
+                        orientation=_semantic_orientation_for_member(member),
+                    )
+                    continue
+
+            if _is_media_display_like(primary_anchor) and _is_media_side_support_like(
+                member
+            ):
+                _upsert_anchor_side_semantic(
+                    semantic_placements,
+                    object_id=member,
+                    relative_to=primary_anchor,
+                    side_options=["left", "right"],
+                    gap_min=0,
+                    gap_max=200,
+                    proximity="balanced",
+                    orientation="same_direction",
+                )
+                continue
+
+            if _anchor_uses_lounge_semantics(primary_anchor):
+                if "coffee_table" in member.lower():
+                    _upsert_anchor_side_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        side_options=["head", "left", "right"],
+                        gap_min=100,
+                        gap_max=350,
+                        proximity="compact",
+                    )
+                    continue
+                if "ottoman" in member.lower():
+                    _upsert_anchor_side_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        side_options=["foot", "left", "right"],
+                        gap_min=50,
+                        gap_max=250,
+                        proximity="balanced",
+                    )
+                    continue
+                if is_seat_like(member):
+                    _upsert_anchor_side_semantic(
+                        semantic_placements,
+                        object_id=member,
+                        relative_to=primary_anchor,
+                        side_options=["left", "right", "head_left", "head_right"],
+                        gap_min=100,
+                        gap_max=350,
+                        proximity="loose",
+                        orientation=_semantic_orientation_for_member(member),
+                    )
+                    continue
+
+            if _is_storage_anchor_like(primary_anchor) and _is_storage_support_like(
+                member
+            ):
+                _upsert_anchor_side_semantic(
+                    semantic_placements,
+                    object_id=member,
+                    relative_to=primary_anchor,
+                    side_options=["left", "right", "head_left", "head_right"],
+                    gap_min=100,
+                    gap_max=450,
+                    proximity="loose",
+                    orientation=_semantic_orientation_for_member(member),
+                )
+                continue
+
+            if _is_anchor_side_accessory_like(member):
+                base_id = support_seat_base or primary_anchor
+                if base_id == member:
+                    base_id = primary_anchor
+                _upsert_anchor_side_semantic(
+                    semantic_placements,
+                    object_id=member,
+                    relative_to=base_id,
+                    side_options=["left", "right", "head_left", "head_right"],
+                    gap_min=50,
+                    gap_max=200,
+                    proximity="balanced",
+                    orientation=_semantic_orientation_for_member(member),
+                )
+                continue
 
     rules["semantic_placements"] = semantic_placements
 
@@ -1074,6 +1493,7 @@ def _normalize_semantic_placements(
             "id": obj_id,
             "relative_to": relative_to,
             "kind": kind.strip().lower(),
+            "proximity": _normalize_semantic_proximity(item.get("proximity")),
             "selection": _normalize_semantic_selection(item.get("selection")),
         }
         orientation = _normalize_semantic_orientation(item.get("orientation"))

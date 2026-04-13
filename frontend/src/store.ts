@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import {
+  AuthUser,
   DesignPlanV1,
   FloorplanGeometry,
+  GeneratedRenderRecord,
   InventoryItem,
   LayoutVariant,
   Placement,
   Point,
+  SavedLayoutRecord,
   TemplateItem,
   Violation,
   Wall,
@@ -29,6 +32,9 @@ export type UserInput = {
 
 export type EditorState = {
   tenantId: string;
+  authResolved: boolean;
+  authToken: string | null;
+  currentUser: AuthUser | null;
   floorplan: FloorplanGeometry | null;
   baseFloorplan: FloorplanGeometry | null;
   design: DesignPlanV1 | null;
@@ -58,6 +64,12 @@ export type EditorState = {
   snapshotEnabled: boolean;
   additionRequests: Record<string, unknown>[];
   threeDOpen: boolean;
+  savedLayouts: SavedLayoutRecord[];
+  savedRenders: GeneratedRenderRecord[];
+  setTenantId: (tenantId: string) => void;
+  setAuthResolved: (resolved: boolean) => void;
+  setAuthSession: (token: string, user: AuthUser) => void;
+  clearAuthSession: () => void;
   setFloorplan: (floorplan: FloorplanGeometry) => void;
   setBaseFloorplan: (floorplan: FloorplanGeometry) => void;
   setDesign: (design: DesignPlanV1) => void;
@@ -98,10 +110,16 @@ export type EditorState = {
   setSnapshotEnabled: (enabled: boolean) => void;
   setAdditionRequests: (requests: Record<string, unknown>[]) => void;
   setThreeDOpen: (open: boolean) => void;
+  setSavedLayouts: (layouts: SavedLayoutRecord[]) => void;
+  setSavedRenders: (renders: GeneratedRenderRecord[]) => void;
+  upsertSavedRender: (render: GeneratedRenderRecord) => void;
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   tenantId: 'demo_tenant',
+  authResolved: false,
+  authToken: null,
+  currentUser: null,
   floorplan: null,
   baseFloorplan: null,
   design: null,
@@ -144,6 +162,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   snapshotEnabled: true,
   additionRequests: [],
   threeDOpen: false,
+  savedLayouts: [],
+  savedRenders: [],
+  setTenantId: (tenantId) => set({ tenantId }),
+  setAuthResolved: (authResolved) => set({ authResolved }),
+  setAuthSession: (authToken, currentUser) =>
+    set({
+      authResolved: true,
+      authToken,
+      currentUser,
+    }),
+  clearAuthSession: () =>
+    set({
+      authResolved: true,
+      authToken: null,
+      currentUser: null,
+      tenantId: 'demo_tenant',
+      savedLayouts: [],
+      savedRenders: [],
+      inventory: [],
+    }),
   setFloorplan: (floorplan) => {
     const currentState = get();
     const normalized = normalizePoints(floorplan.room.polygon_mm);
@@ -396,6 +434,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setSnapshotEnabled: (enabled) => set({ snapshotEnabled: enabled }),
   setAdditionRequests: (requests) => set({ additionRequests: requests }),
   setThreeDOpen: (open) => set({ threeDOpen: open }),
+  setSavedLayouts: (savedLayouts) => set({ savedLayouts }),
+  setSavedRenders: (savedRenders) => set({ savedRenders }),
+  upsertSavedRender: (render) =>
+    set((state) => {
+      const next = [render, ...state.savedRenders.filter((item) => item.id !== render.id)];
+      return { savedRenders: next };
+    }),
 }));
 
 function polygonArea(points: Point[]): number {

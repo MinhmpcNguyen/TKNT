@@ -1,0 +1,332 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "sleep_zone",
+      "prefer": [
+        "wall",
+        "far_from_entry",
+        "long_wall",
+        "center"
+      ],
+      "avoid": [
+        "door_swing",
+        "center",
+        "entry_blocking",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Primary rest area should be anchored to a wall and removed from high-traffic entry zones."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "prefer": [
+        "wall",
+        "long_wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking",
+        "center"
+      ],
+      "priority": "high",
+      "reason": "Contains tall furniture (wardrobe) that must not block windows or the entry path."
+    },
+    {
+      "cluster_id": "work_zone",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "door_swing",
+        "main_path",
+        "center"
+      ],
+      "priority": "high",
+      "reason": "Work area should be tucked away to maintain a clean bedroom aesthetic."
+    },
+    {
+      "cluster_id": "lounge_zone",
+      "prefer": [
+        "window_side",
+        "recess_or_edge",
+        "wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "center",
+        "door_swing",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Lounge area benefits from natural light but must not obstruct window access."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "sleep_zone",
+      "intents": [
+        "back_to_wall",
+        "face_cluster",
+        "inward_to_room",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": "storage_zone",
+      "priority": "high",
+      "reason": "Bed should be anchored to a wall and face the TV console for viewing."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "lounge_zone",
+      "priority": "high",
+      "reason": "Storage and TV console should be wall-bound with clear front access."
+    },
+    {
+      "cluster_id": "work_zone",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk should be placed against a wall for stability and space efficiency."
+    },
+    {
+      "cluster_id": "lounge_zone",
+      "intents": [
+        "inward_to_room",
+        "face_cluster",
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "storage_zone",
+      "priority": "high",
+      "reason": "Armchair should open up toward the room center."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "sleep_zone",
+      "object_id": "bed",
+      "intents": [
+        "back_to_wall",
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Primary viewing axis from bed to TV."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "tv_console",
+      "intents": [
+        "preserve_front_access",
+        "face_object",
+        "front_to_open_space"
+      ],
+      "target_object_id": "bed",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "TV must face the bed and remain accessible."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "wardrobe",
+      "intents": [
+        "back_to_wall",
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Tall storage requires wall anchoring and front clearance."
+    },
+    {
+      "cluster_id": "work_zone",
+      "object_id": "desk",
+      "intents": [
+        "back_to_wall",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk requires wall placement and chair clearance."
+    },
+    {
+      "cluster_id": "lounge_zone",
+      "object_id": "armchair",
+      "intents": [
+        "front_to_room_center",
+        "face_object"
+      ],
+      "target_object_id": "tv_console",
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Promotes an open, inviting feel."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "dresser",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "object has meaningful front usability and should preserve access"
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "storage_cabinet",
+      "intents": [
+        "preserve_front_access",
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "object has meaningful front usability and should preserve access"
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "sleep_zone",
+      "b": "storage_zone",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Proximity supports the viewing relationship between bed and TV."
+    },
+    {
+      "a": "sleep_zone",
+      "b": "work_zone",
+      "relation": "separate",
+      "priority": "high",
+      "reason": "Separates rest and work functions for better mental zoning."
+    },
+    {
+      "a": "sleep_zone",
+      "b": "lounge_zone",
+      "relation": "separate",
+      "priority": "high",
+      "reason": "Distributes furniture to avoid clustering in one area."
+    },
+    {
+      "a": "lounge_zone",
+      "b": "storage_zone",
+      "relation": "near",
+      "priority": "high",
+      "reason": "viewing relationship benefits from practical proximity"
+    },
+    {
+      "a": "work_zone",
+      "b": "storage_zone",
+      "relation": "separate",
+      "priority": "medium",
+      "reason": "Support zone should not collapse back into the primary pair."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "lounge_zone",
+      "b": "storage_zone",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "viewing relationship between seating and focal/media clusters"
+    },
+    {
+      "a": "sleep_zone",
+      "b": "storage_zone",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Primary pair should preserve a legible viewing or conversational relationship."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "sleep_zone",
+        "priority": "high",
+        "reason": "Direct, unobstructed path from entry to the primary destination."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Prevents the entrance from feeling cramped."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "high",
+        "reason": "Ensures natural light and access to the window are preserved."
+      },
+      {
+        "type": "center_lane",
+        "near": "sleep_zone",
+        "priority": "medium",
+        "reason": "Maintains a minimal, modern feel by keeping the room center open."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "sleep_zone",
+    "secondary_cluster_id": "storage_zone",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "recede",
+    "distribution_mode": "zoned"
+  },
+  "placement_guidelines": [
+    "Place sleep_zone against the top wall (Y=4000) to maximize distance from entry.",
+    "Place storage_zone against the right wall (X=6000) to avoid blocking the window at the bottom.",
+    "Position work_zone in the top-left corner, above the door swing area.",
+    "Position lounge_zone in the bottom-left or bottom-right, ensuring it does not overlap window_1_clearance.",
+    "Ensure the bed's front axis aligns with the tv_console's front axis.",
+    "Preserve a clear viewing relationship between armchair and tv_console.",
+    "Do not orient armchair away from tv_console.",
+    "Keep storage_zone readable from lounge_zone.",
+    "Preserve front usability for dresser.",
+    "Preserve front usability for storage_cabinet.",
+    "Preserve front usability for tv_console.",
+    "Preserve front usability for wardrobe.",
+    "Do not let storage_zone chase the window side if it weakens the viewing axis with lounge_zone.",
+    "Treat sleep_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Create the clearest support-versus-primary zoning split of the post-seed variants."
+  ],
+  "notes": [
+    "The layout prioritizes a 'zoned' approach to prevent all clusters from collapsing into a single area, as requested in the variant brief.",
+    "Viewing relationship is explicitly defined between the bed and the TV console.",
+    "Dropped over-specific directional relations that were not supported by a focal/viewing macro relationship.",
+    "Seed variant policy seed_zoned: distribution=zoned, center_open=medium, support_behavior=recede.",
+    "Seed constraint fingerprint seed_zoned: primary_zone_claim, support_zone_split, support_separate_from_secondary."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_zoned",
+    "constraint_tokens": [
+      "primary_zone_claim",
+      "support_zone_split",
+      "support_separate_from_secondary"
+    ],
+    "structural_fingerprint": "focus=mixed,center=medium,support=recede,distribution=zoned || center_lane:sleep_zone,entry_buffer:door_1,window_buffer:window_1 || lounge_zone|p=far_from_entry,recess_or_edge,wall,window_side|a=center,door_swing,main_path,window_blocking,sleep_zone|p=center,far_from_entry,long_wall,wall|a=center,door_swing,entry_blocking,main_path,storage_zone|p=far_from_entry,long_wall,wall|a=center,entry_blocking,window_blocking,work_zone|p=recess_or_edge,wall|a=center,door_swing,main_path || lounge_zone|sleep_zone|separate,lounge_zone|storage_zone|near,sleep_zone|storage_zone|near,sleep_zone|work_zone|separate,storage_zone|work_zone|separate || lounge_zone|storage_zone|face_each_other,sleep_zone|storage_zone|face_each_other || lounge_zone|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|storage_zone,sleep_zone|access_to_open_space,back_to_wall,face_cluster,inward_to_room|storage_zone,storage_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|lounge_zone,work_zone|axis_parallel_wall,back_to_wall|"
+  }
+}

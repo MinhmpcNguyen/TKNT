@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +10,15 @@ from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from prompt.tier_count import TIER_COUNT_DIRECTOR, TIER_COUNT_DIRECTOR_SYSTEM
 
 logger = logging.getLogger(__name__)
+_LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
+
+
+def _layout_speed_mode() -> str:
+    return str(os.getenv(_LAYOUT_SPEED_MODE_ENV) or "").strip().lower()
+
+
+def _is_fast_layout_mode() -> bool:
+    return _layout_speed_mode() in {"fast", "speed", "speed-first", "speed_first"}
 
 
 def _get_tool_registry() -> dict[str, Any]:
@@ -182,6 +192,7 @@ def _run_hardcoded_tier_count(
     furnishing_mode = _infer_furnishing_mode(context)
     available_area_m2 = _estimate_available_area_m2(context.get("room_model_json"))
     room_scale = _classify_room_scale(available_area_m2)
+    room_affordances = _extract_room_affordances(context.get("room_model_json"))
 
     logger.info(
         "TierCount deterministic mode: available_area_m2=%.2f room_scale=%s furnishing_mode=%s",
@@ -201,6 +212,7 @@ def _run_hardcoded_tier_count(
         room_scale=room_scale,
         furnishing_mode=furnishing_mode,
         droppable_clusters=droppable_clusters,
+        room_affordances=room_affordances,
     )
 
     draft = {
@@ -209,6 +221,7 @@ def _run_hardcoded_tier_count(
             context=context,
             furnishing_mode=furnishing_mode,
             available_area_m2=available_area_m2,
+            room_affordances=room_affordances,
         ),
         "decisions": decisions,
         "global_notes": _build_deterministic_notes(
@@ -406,6 +419,7 @@ def _build_seed_decisions(
     room_scale: str,
     furnishing_mode: str,
     droppable_clusters: set[str],
+    room_affordances: dict[str, Any],
 ) -> list[dict[str, Any]]:
     if not isinstance(clusters_json, dict):
         return []
@@ -415,6 +429,7 @@ def _build_seed_decisions(
         return []
 
     decisions: list[dict[str, Any]] = []
+    cluster_lookup: dict[str, dict[str, Any]] = {}
     for cluster in clusters:
         if not isinstance(cluster, dict):
             continue
@@ -422,6 +437,7 @@ def _build_seed_decisions(
         cluster_id = cluster.get("cluster_id")
         if not isinstance(cluster_id, str) or not cluster_id:
             continue
+        cluster_lookup[cluster_id] = cluster
 
         tag = str(cluster.get("tag") or "").strip().lower()
         members = cluster.get("members")
@@ -482,7 +498,247 @@ def _build_seed_decisions(
                 }
             )
 
+    return _apply_primary_seed_sparsity(
+        decisions=decisions,
+        cluster_lookup=cluster_lookup,
+        room_scale=room_scale,
+        furnishing_mode=furnishing_mode,
+        room_affordances=room_affordances,
+    )
+
+
+def _apply_primary_seed_sparsity(
+    *,
+    decisions: list[dict[str, Any]],
+    cluster_lookup: dict[str, dict[str, Any]],
+    room_scale: str,
+    furnishing_mode: str,
+    room_affordances: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not decisions:
+        return decisions
+
+    decisions_by_cluster: dict[str, list[dict[str, Any]]] = {}
+    for row in decisions:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        decisions_by_cluster.setdefault(cluster_id, []).append(row)
+
+    for cluster_id, scoped in decisions_by_cluster.items():
+        cluster = cluster_lookup.get(cluster_id)
+        if not isinstance(cluster, dict):
+            continue
+        if not _should_use_sparse_primary_seed(
+            cluster=cluster,
+            room_scale=room_scale,
+            furnishing_mode=furnishing_mode,
+            room_affordances=room_affordances,
+        ):
+            continue
+
+        dependency_ids = _extract_seed_dependency_ids(cluster)
+        access_required_ids = _extract_cluster_access_required_ids(cluster)
+        protected_support_ids = dependency_ids | access_required_ids
+
+        anchor_rows = [
+            row
+            for row in scoped
+            if int(row.get("quantity") or 0) > 0
+            and str(row.get("priority") or "").strip().lower() == "anchor"
+        ]
+        kept_anchor_ids = {
+            str(row.get("object_type") or row.get("category") or "")
+            for row in sorted(anchor_rows, key=_anchor_seed_keep_sort_key)[
+                : _max_active_anchor_count(
+                    room_scale=room_scale,
+                    furnishing_mode=furnishing_mode,
+                    room_affordances=room_affordances,
+                )
+            ]
+        }
+        for row in anchor_rows:
+            object_type = str(row.get("object_type") or row.get("category") or "")
+            if object_type in kept_anchor_ids:
+                continue
+            row["quantity"] = 0
+            _append_seed_adjustment_rationale(
+                row,
+                "Primary seed kept one representative anchor to improve geometric feasibility.",
+            )
+
+        max_support_items = _max_sparse_support_items(
+            room_scale=room_scale,
+            furnishing_mode=furnishing_mode,
+            room_affordances=room_affordances,
+            kept_anchor_ids=kept_anchor_ids,
+        )
+        support_rows = [
+            row
+            for row in scoped
+            if int(row.get("quantity") or 0) > 0
+            and str(row.get("priority") or "").strip().lower()
+            in {"primary", "secondary", "optional"}
+            and str(row.get("object_type") or row.get("category") or "")
+            not in protected_support_ids
+        ]
+        kept_support_ids = {
+            str(row.get("object_type") or row.get("category") or "")
+            for row in sorted(support_rows, key=_support_seed_keep_sort_key)[
+                :max_support_items
+            ]
+        }
+        for row in support_rows:
+            object_type = str(row.get("object_type") or row.get("category") or "")
+            if object_type in kept_support_ids:
+                continue
+            row["quantity"] = 0
+            _append_seed_adjustment_rationale(
+                row,
+                "Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+            )
+
     return decisions
+
+
+def _extract_seed_dependency_ids(cluster: dict[str, Any]) -> set[str]:
+    dependent_ids: set[str] = set()
+
+    hard_constraints = cluster.get("hard_constraints")
+    if isinstance(hard_constraints, list):
+        for item in hard_constraints:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("type") or "") not in {
+                "dock_to_edge",
+                "anchor_side",
+                "contain_in",
+            }:
+                continue
+            member_id = item.get("a")
+            if isinstance(member_id, str) and member_id.strip():
+                dependent_ids.add(member_id)
+
+    rules = cluster.get("cluster_rules")
+    if isinstance(rules, dict):
+        semantic_placements = rules.get("semantic_placements")
+        if isinstance(semantic_placements, list):
+            for item in semantic_placements:
+                if not isinstance(item, dict):
+                    continue
+                member_id = item.get("id")
+                if isinstance(member_id, str) and member_id.strip():
+                    dependent_ids.add(member_id)
+
+    return dependent_ids
+
+
+def _should_use_sparse_primary_seed(
+    *,
+    cluster: dict[str, Any],
+    room_scale: str,
+    furnishing_mode: str,
+    room_affordances: dict[str, Any],
+) -> bool:
+    members = cluster.get("members")
+    member_count = (
+        len(
+            [member for member in members if isinstance(member, str) and member.strip()]
+        )
+        if isinstance(members, list)
+        else 0
+    )
+    anchors = cluster.get("anchors")
+    anchor_count = (
+        len(
+            [anchor for anchor in anchors if isinstance(anchor, str) and anchor.strip()]
+        )
+        if isinstance(anchors, list)
+        else 0
+    )
+    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
+
+    if _is_fast_layout_mode():
+        return member_count >= 3 or anchor_count > 0
+    if furnishing_mode == "minimal":
+        return True
+    if anchor_count > 1:
+        return True
+    if member_count >= 5 and room_scale != "large":
+        return True
+    return member_count >= 4 and irregularity_ratio < 0.92
+
+
+def _max_active_anchor_count(
+    *,
+    room_scale: str,
+    furnishing_mode: str,
+    room_affordances: dict[str, Any],
+) -> int:
+    if _is_fast_layout_mode():
+        return 1
+    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
+    if (
+        furnishing_mode == "generous"
+        and room_scale == "large"
+        and irregularity_ratio >= 0.95
+    ):
+        return 2
+    return 1
+
+
+def _max_sparse_support_items(
+    *,
+    room_scale: str,
+    furnishing_mode: str,
+    room_affordances: dict[str, Any],
+    kept_anchor_ids: set[str],
+) -> int:
+    if _is_fast_layout_mode():
+        return 0
+    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
+    large_anchor_pressure = any(
+        _member_pressure_rank(anchor_id) >= 2 for anchor_id in kept_anchor_ids
+    )
+    if furnishing_mode == "minimal":
+        if large_anchor_pressure:
+            return 0
+        return 1
+    if room_scale == "large" and irregularity_ratio >= 0.95:
+        return 2 if not large_anchor_pressure else 1
+    return 1 if not large_anchor_pressure else 0
+
+
+def _anchor_seed_keep_sort_key(row: dict[str, Any]) -> tuple[int, str]:
+    object_type = str(row.get("object_type") or row.get("category") or "")
+    return (-_member_pressure_rank(object_type), object_type)
+
+
+def _support_seed_keep_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
+    priority = str(row.get("priority") or "secondary").strip().lower()
+    priority_rank = {"primary": 0, "secondary": 1, "optional": 2}.get(priority, 3)
+    object_type = str(row.get("object_type") or row.get("category") or "")
+    return (priority_rank, _member_pressure_rank(object_type), object_type)
+
+
+def _append_seed_adjustment_rationale(row: dict[str, Any], note: str) -> None:
+    rationale = str(row.get("rationale") or "").strip()
+    if note in rationale:
+        return
+    row["rationale"] = f"{rationale} {note}".strip()
+
+
+def _member_pressure_rank(member: str | None) -> int:
+    member_key = _norm_key(member)
+    if any(token in member_key for token in LARGE_MEMBER_TOKENS):
+        return 3
+    if any(token in member_key for token in MEDIUM_MEMBER_TOKENS):
+        return 2
+    if any(token in member_key for token in SECONDARY_MEMBER_TOKENS):
+        return 1
+    return 0
 
 
 def _extract_cluster_access_required_ids(cluster: dict[str, Any]) -> set[str]:
@@ -655,6 +911,7 @@ def _build_deterministic_assumptions(
     context: dict[str, Any],
     furnishing_mode: str,
     available_area_m2: float,
+    room_affordances: dict[str, Any],
 ) -> list[str]:
     assumptions = [
         "Deterministic tier-count policy applied from cluster membership, room area, and budget heuristics."
@@ -668,6 +925,11 @@ def _build_deterministic_assumptions(
             "User notes suggest a fuller furnishing plan, so anchors and primaries start slightly larger."
         )
     assumptions.append(f"Estimated available room area is {available_area_m2:.2f} m2.")
+    fill_ratio = float(room_affordances.get("fill_ratio") or 1.0)
+    if fill_ratio < 0.92:
+        assumptions.append(
+            "Room geometry is irregular enough that the primary seed starts sparser before later refill passes."
+        )
     return assumptions
 
 
@@ -737,6 +999,34 @@ def _estimate_available_area_m2(room_model_json: Any) -> float:
     return max(0.0, room_area - obstacle_area)
 
 
+def _extract_room_affordances(room_model_json: Any) -> dict[str, Any]:
+    if not isinstance(room_model_json, dict):
+        return {
+            "bbox_width_mm": 0,
+            "bbox_height_mm": 0,
+            "bbox_area_m2": 0.0,
+            "room_area_m2": 0.0,
+            "fill_ratio": 1.0,
+        }
+
+    room = room_model_json.get("room")
+    room_polygon = room.get("polygon_ccw") if isinstance(room, dict) else None
+    polygon = room_polygon if isinstance(room_polygon, list) else []
+    room_area_m2 = _polygon_area_m2(polygon)
+    bbox = _polygon_bbox_mm(polygon)
+    bbox_width_mm = max(0, int(bbox["max_x"]) - int(bbox["min_x"]))
+    bbox_height_mm = max(0, int(bbox["max_y"]) - int(bbox["min_y"]))
+    bbox_area_m2 = (bbox_width_mm * bbox_height_mm) / 1_000_000.0
+    fill_ratio = room_area_m2 / bbox_area_m2 if bbox_area_m2 > 0 else 1.0
+    return {
+        "bbox_width_mm": bbox_width_mm,
+        "bbox_height_mm": bbox_height_mm,
+        "bbox_area_m2": bbox_area_m2,
+        "room_area_m2": room_area_m2,
+        "fill_ratio": max(0.0, min(1.0, fill_ratio)),
+    }
+
+
 def _polygon_area_m2(points_ccw_mm: list[dict[str, int]]) -> float:
     if len(points_ccw_mm) < 3:
         return 0.0
@@ -751,6 +1041,24 @@ def _polygon_area_m2(points_ccw_mm: list[dict[str, int]]) -> float:
             nxt.get("x", 0)
         ) * int(point.get("y", 0))
     return abs(total) / 2.0 / 1_000_000.0
+
+
+def _polygon_bbox_mm(points_ccw_mm: list[dict[str, int]]) -> dict[str, int]:
+    xs: list[int] = []
+    ys: list[int] = []
+    for point in points_ccw_mm:
+        if not isinstance(point, dict):
+            continue
+        xs.append(int(point.get("x", 0)))
+        ys.append(int(point.get("y", 0)))
+    if not xs or not ys:
+        return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
+    return {
+        "min_x": min(xs),
+        "min_y": min(ys),
+        "max_x": max(xs),
+        "max_y": max(ys),
+    }
 
 
 def _classify_room_scale(area_m2: float) -> str:
@@ -1044,7 +1352,7 @@ def _run_with_tools(
                         )
                         preflight_error_message = (
                             "Before calling estimate_budget, you MUST provide a valid decisions list. "
-                            "Requirement: exactly one decision per member type across all clusters, "
+                            "Requirement: exactly one decision per member within its own cluster, "
                             "quantity must be an integer >= 0, and each CORE cluster must keep at least one anchor "
                             "(quantity >= 1, using CLUSTERS_JSON.anchors when present). "
                             "DROPPABLE clusters (for example misc/decor/accent/accessory) may be reduced to all quantities = 0. "
@@ -1335,7 +1643,7 @@ def _run_with_tools(
                     "role": "user",
                     "content": (
                         "Decisions are required before final output. "
-                        "You MUST output exactly one decision per member type across all clusters, "
+                        "You MUST output exactly one decision per member within its own cluster, "
                         "quantity must be an integer >= 0, and each CORE cluster must keep at least one anchor "
                         "(quantity >= 1, using CLUSTERS_JSON.anchors when present). "
                         "DROPPABLE clusters (for example misc/decor/accent/accessory) may be reduced to all quantities = 0. "
@@ -2253,6 +2561,7 @@ def _validate_decisions(
     bad_cluster_assignment: list[str] = []
     unexpected_types: list[str] = []
     decisions_by_cluster: dict[str, dict[str, int]] = {}
+    decision_counts_by_cluster: dict[str, dict[str, int]] = {}
 
     for d in decisions:
         if not isinstance(d, dict):
@@ -2285,6 +2594,8 @@ def _validate_decisions(
         decisions_by_cluster.setdefault(cluster_id, {})[t] = (
             qty if isinstance(qty, int) else 0
         )
+        cluster_counts = decision_counts_by_cluster.setdefault(cluster_id, {})
+        cluster_counts[t] = cluster_counts.get(t, 0) + 1
 
     if bad_qty:
         return False, f"quantity must be an integer >= 0 for: {sorted(set(bad_qty))}"
@@ -2310,17 +2621,23 @@ def _validate_decisions(
         if missing:
             return False, f"missing decisions for types: {missing}"
 
-    duplicates = {t for t in types if types.count(t) > 1}
-    if duplicates:
-        return False, f"multiple decisions found for types: {sorted(duplicates)}"
+    duplicate_cluster_members = sorted(
+        f"{cluster_id}.{object_type}"
+        for cluster_id, counts in decision_counts_by_cluster.items()
+        for object_type, count in counts.items()
+        if count > 1
+    )
+    if duplicate_cluster_members:
+        return (
+            False,
+            "multiple decisions found for cluster-scoped members: "
+            f"{duplicate_cluster_members}",
+        )
 
     droppable_clusters = droppable_clusters or set()
 
     if isinstance(members_by_cluster, dict) and members_by_cluster:
         for cluster_id in sorted(members_by_cluster.keys()):
-            if cluster_id in droppable_clusters:
-                continue
-
             members = members_by_cluster.get(cluster_id) or set()
             anchors = (
                 anchors_by_cluster.get(cluster_id, set())
@@ -2328,6 +2645,19 @@ def _validate_decisions(
                 else set()
             )
             cluster_decisions = decisions_by_cluster.get(cluster_id, {})
+            missing_cluster_members = sorted(
+                member for member in members if member not in cluster_decisions
+            )
+            if missing_cluster_members:
+                return (
+                    False,
+                    "each cluster member must have exactly one decision in its own "
+                    f"cluster. missing members for {cluster_id}: "
+                    f"{missing_cluster_members}",
+                )
+
+            if cluster_id in droppable_clusters:
+                continue
 
             if anchors:
                 kept = any(cluster_decisions.get(a, 0) >= 1 for a in anchors)

@@ -1,0 +1,68 @@
+{
+  "status": "OK",
+  "total_dropped_items": 3,
+  "clusters": [
+    {
+      "cluster_id": "misc_storage",
+      "items": [
+        {
+          "cluster_id": "misc_storage",
+          "object_type": "console_table",
+          "category": "console_table",
+          "size_tier": "S",
+          "priority": "primary",
+          "rep_dims_m": {
+            "L": 1.06,
+            "W": 0.35,
+            "H": 0.76,
+            "A": 0.371,
+            "R": 3.028571428571429,
+            "source_id": "console_table_007"
+          },
+          "rationale": "Deterministic policy marked console_table as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        },
+        {
+          "cluster_id": "misc_storage",
+          "object_type": "bean_bag",
+          "category": "bean_bag",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.78,
+            "W": 0.7,
+            "H": 0.63,
+            "A": 0.5459999999999999,
+            "R": 1.1142857142857143,
+            "source_id": "bean_bag_001"
+          },
+          "rationale": "Deterministic policy marked bean_bag as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        },
+        {
+          "cluster_id": "misc_storage",
+          "object_type": "pet_bed",
+          "category": "pet_bed",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.88,
+            "W": 0.15,
+            "H": 0.58,
+            "A": 0.132,
+            "R": 5.866666666666667,
+            "source_id": "pet_bed_002"
+          },
+          "rationale": "Deterministic policy marked pet_bed as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

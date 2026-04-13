@@ -1,0 +1,482 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "coffee_table",
+        "ottoman",
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "armchair"
+        },
+        {
+          "type": "requires_access",
+          "id": "sectional_sofa",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "sectional_sofa",
+          "mode": "face_each_other",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "ottoman": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "bottom",
+            "notes": "facing the coffee table"
+          },
+          "armchair": {
+            "front": "bottom",
+            "notes": "facing the coffee table"
+          },
+          "coffee_table": {
+            "front": "bottom",
+            "notes": "aligned with sofa"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "gap_min": 0,
+            "gap_max": 200,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          },
+          {
+            "id": "armchair",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 350,
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "selection": "best_fit"
+          },
+          {
+            "id": "ottoman",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "side_options": [
+              "foot",
+              "left",
+              "right"
+            ],
+            "gap_min": 50,
+            "gap_max": 250,
+            "selection": "best_fit"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "sectional_sofa",
+          "category": "sectional_sofa",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked sectional_sofa as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 2.54,
+            "W": 0.92,
+            "H": 0.85,
+            "A": 2.3368,
+            "R": 2.760869565217391,
+            "source_id": "sectional_sofa_004"
+          }
+        },
+        {
+          "object_type": "coffee_table",
+          "category": "coffee_table",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked coffee_table as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.9,
+            "W": 0.5,
+            "H": 0.44,
+            "A": 0.45,
+            "R": 1.8,
+            "source_id": "coffee_table_006"
+          }
+        },
+        {
+          "object_type": "ottoman",
+          "category": "ottoman",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked ottoman as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.54,
+            "W": 0.5,
+            "H": 0.38,
+            "A": 0.27,
+            "R": 1.08,
+            "source_id": "ottoman_001"
+          }
+        },
+        {
+          "object_type": "armchair",
+          "category": "armchair",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked armchair as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          }
+        },
+        {
+          "object_type": "side_table",
+          "category": "side_table",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "media_shelf",
+        "bookshelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            180
+          ],
+          "media_shelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "facing the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "media_shelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "bookshelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min": 0,
+            "gap_max": 200,
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked tv_console as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.26,
+            "W": 0.38,
+            "H": 0.58,
+            "A": 0.4788,
+            "R": 3.3157894736842106,
+            "source_id": "tv_console_002"
+          }
+        },
+        {
+          "object_type": "media_shelf",
+          "category": "media_shelf",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked media_shelf as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.87,
+            "W": 0.3,
+            "H": 1.36,
+            "A": 0.261,
+            "R": 2.9,
+            "source_id": "media_shelf_003"
+          }
+        },
+        {
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked bookshelf as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "misc_storage",
+      "tag": "storage",
+      "members": [
+        "storage_cabinet"
+      ],
+      "anchors": [
+        "storage_cabinet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "storage_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "storage_cabinet": {
+            "front": "bottom",
+            "notes": "access side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "storage_cabinet",
+          "category": "storage_cabinet",
+          "cluster_id": "misc_storage",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked storage_cabinet as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.61,
+            "W": 0.41,
+            "H": 1.78,
+            "A": 0.2501,
+            "R": 1.4878048780487805,
+            "source_id": "storage_cabinet_002"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters partitioned by functional usage: seating, media, and general storage."
+  ],
+  "missing": []
+}

@@ -196,6 +196,77 @@ class ClusterForgeArchitectureTest(unittest.TestCase):
         self.assertEqual(semantic["orientation"], "same_direction")
         self.assertEqual(semantic["gap_min"], 0)
         self.assertEqual(semantic["gap_max"], 50)
+        self.assertEqual(semantic["proximity"], "compact")
+
+    def test_normalize_defaults_semantic_proximity_to_balanced(self) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "living_area",
+                    "tag": "living",
+                    "members": ["sectional_sofa", "coffee_table"],
+                    "anchors": ["sectional_sofa"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {
+                        "semantic_placements": [
+                            {
+                                "id": "coffee_table",
+                                "relative_to": "sectional_sofa",
+                                "kind": "anchor_side",
+                                "side_options": ["head"],
+                                "gap_min": 100,
+                                "gap_max": 300,
+                            }
+                        ]
+                    },
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+        semantic = normalized["clusters"][0]["cluster_rules"]["semantic_placements"][0]
+
+        self.assertEqual(semantic["proximity"], "balanced")
+
+    def test_normalize_adds_loose_storage_semantics_without_storage_tag(self) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "support_misc",
+                    "tag": "misc",
+                    "members": ["wardrobe", "bookshelf", "dresser"],
+                    "anchors": ["wardrobe"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {},
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+        semantic_rows = normalized["clusters"][0]["cluster_rules"][
+            "semantic_placements"
+        ]
+        semantic_by_id = {
+            str(row.get("id") or ""): row
+            for row in semantic_rows
+            if isinstance(row, dict)
+        }
+
+        self.assertEqual(semantic_by_id["bookshelf"]["relative_to"], "wardrobe")
+        self.assertEqual(semantic_by_id["bookshelf"]["proximity"], "loose")
+        self.assertEqual(
+            semantic_by_id["bookshelf"]["side_options"],
+            ["left", "right", "head_left", "head_right"],
+        )
+        self.assertEqual(semantic_by_id["dresser"]["proximity"], "loose")
 
     def test_normalize_sanitizes_invalid_facing_rules(self) -> None:
         payload = {
@@ -308,6 +379,171 @@ class ClusterForgeArchitectureTest(unittest.TestCase):
                 "dropped anchors not present in members" in note
                 for note in parsed.notes
             )
+        )
+
+    def test_normalize_keeps_single_primary_anchor_for_living_cluster(self) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "living_zone",
+                    "tag": "living",
+                    "members": [
+                        "sectional_sofa",
+                        "sofa",
+                        "coffee_table",
+                        "armchair",
+                    ],
+                    "anchors": ["sofa", "sectional_sofa"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {},
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+
+        self.assertEqual(
+            normalized["clusters"][0]["anchors"],
+            ["sectional_sofa"],
+        )
+        self.assertTrue(any("primary anchor" in note for note in normalized["notes"]))
+
+    def test_normalize_adds_living_anchor_semantics_for_support_items(self) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "living_zone",
+                    "tag": "living",
+                    "members": [
+                        "sectional_sofa",
+                        "coffee_table",
+                        "armchair",
+                        "side_table",
+                        "floor_lamp",
+                    ],
+                    "anchors": ["sectional_sofa"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {},
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+        semantic_by_id = {
+            item["id"]: item
+            for item in normalized["clusters"][0]["cluster_rules"][
+                "semantic_placements"
+            ]
+        }
+
+        self.assertEqual(
+            semantic_by_id["coffee_table"]["relative_to"],
+            "sectional_sofa",
+        )
+        self.assertEqual(
+            semantic_by_id["coffee_table"]["side_options"],
+            ["head", "left", "right"],
+        )
+        self.assertEqual(semantic_by_id["armchair"]["relative_to"], "sectional_sofa")
+        self.assertEqual(
+            semantic_by_id["armchair"]["side_options"],
+            ["left", "right", "head_left", "head_right"],
+        )
+        self.assertEqual(semantic_by_id["side_table"]["relative_to"], "armchair")
+        self.assertEqual(semantic_by_id["floor_lamp"]["relative_to"], "armchair")
+
+    def test_normalize_adds_generic_work_anchor_semantics_even_for_misc_cluster(
+        self,
+    ) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "flex_zone",
+                    "tag": "misc",
+                    "members": [
+                        "desk",
+                        "desk_chair",
+                        "side_table",
+                        "floor_lamp",
+                    ],
+                    "anchors": ["desk"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {},
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+        semantic_by_id = {
+            item["id"]: item
+            for item in normalized["clusters"][0]["cluster_rules"][
+                "semantic_placements"
+            ]
+        }
+
+        self.assertEqual(semantic_by_id["desk_chair"]["kind"], "dock_to_edge")
+        self.assertEqual(semantic_by_id["desk_chair"]["relative_to"], "desk")
+        self.assertEqual(semantic_by_id["desk_chair"]["b_edge"], "front")
+        self.assertEqual(semantic_by_id["desk_chair"]["span"], "center")
+        self.assertEqual(semantic_by_id["side_table"]["relative_to"], "desk")
+        self.assertEqual(
+            semantic_by_id["side_table"]["side_options"],
+            ["left", "right"],
+        )
+        self.assertEqual(semantic_by_id["floor_lamp"]["relative_to"], "desk")
+
+    def test_normalize_adds_generic_media_support_semantics_even_for_misc_cluster(
+        self,
+    ) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "display_zone",
+                    "tag": "misc",
+                    "members": [
+                        "tv_console",
+                        "media_shelf",
+                        "bookshelf",
+                    ],
+                    "anchors": ["tv_console"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {},
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+        semantic_by_id = {
+            item["id"]: item
+            for item in normalized["clusters"][0]["cluster_rules"][
+                "semantic_placements"
+            ]
+        }
+
+        self.assertEqual(semantic_by_id["media_shelf"]["relative_to"], "tv_console")
+        self.assertEqual(
+            semantic_by_id["media_shelf"]["side_options"],
+            ["left", "right"],
+        )
+        self.assertEqual(
+            semantic_by_id["media_shelf"]["orientation"],
+            "same_direction",
         )
 
 

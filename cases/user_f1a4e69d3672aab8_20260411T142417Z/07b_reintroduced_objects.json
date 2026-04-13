@@ -1,0 +1,70 @@
+{
+  "status": "OK",
+  "total_dropped_items": 4,
+  "inserted_count": 3,
+  "remaining_count": 1,
+  "reintroduced_objects_by_cluster": {
+    "sleep_zone": [
+      {
+        "object_id": "bench__reintroduced_1",
+        "object_type": "bench",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 3050,
+          "min_y": 100,
+          "max_x": 3980,
+          "max_y": 500
+        }
+      }
+    ],
+    "work_zone": [
+      {
+        "object_id": "office_chair__reintroduced_1",
+        "object_type": "office_chair",
+        "rotation_ccw": 0,
+        "bbox": {
+          "min_x": 5300,
+          "min_y": 1700,
+          "max_x": 5880,
+          "max_y": 2250
+        }
+      }
+    ],
+    "storage_zone": [
+      {
+        "object_id": "bookshelf__reintroduced_1",
+        "object_type": "bookshelf",
+        "rotation_ccw": 180,
+        "bbox": {
+          "min_x": 1350,
+          "min_y": 0,
+          "max_x": 1980,
+          "max_y": 250
+        }
+      }
+    ]
+  },
+  "remaining_dropped_objects_by_cluster": {
+    "lounge_zone": [
+      {
+        "cluster_id": "lounge_zone",
+        "object_type": "side_table",
+        "category": "side_table",
+        "size_tier": "S",
+        "priority": "secondary",
+        "rep_dims_m": {
+          "L": 0.39,
+          "W": 0.37,
+          "H": 0.58,
+          "A": 0.1443,
+          "R": 1.0540540540540542,
+          "source_id": "side_table_007"
+        },
+        "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1
+      }
+    ]
+  }
+}

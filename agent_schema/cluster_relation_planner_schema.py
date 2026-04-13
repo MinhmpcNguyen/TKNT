@@ -91,6 +91,20 @@ ClusterDirectionalRelationType = Literal[
     "turn_away",
 ]
 
+LayoutFocusMode = Literal[
+    "viewing",
+    "conversation",
+    "rest",
+    "work",
+    "dining",
+    "display",
+    "mixed",
+]
+
+SupportClusterBehavior = Literal["recede", "balanced", "integrate"]
+
+DistributionMode = Literal["balanced", "edge_weighted", "focal_grouped", "zoned"]
+
 
 def _strip_required_str(value: str, field_name: str) -> str:
     value = value.strip()
@@ -339,6 +353,39 @@ class CirculationPlan(BaseModel):
     keep_open_regions: list[KeepOpenRegion] = Field(default_factory=list)
 
 
+class LayoutIntentProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    focus_mode: LayoutFocusMode
+    primary_cluster_id: str
+    secondary_cluster_id: str | None = None
+    circulation_priority: Priority = "medium"
+    center_open_preference: Priority = "medium"
+    support_cluster_behavior: SupportClusterBehavior = "balanced"
+    distribution_mode: DistributionMode = "balanced"
+
+    @field_validator("primary_cluster_id")
+    @classmethod
+    def _primary_cluster_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "primary_cluster_id")
+
+    @field_validator("secondary_cluster_id")
+    @classmethod
+    def _secondary_cluster_optional_non_empty(cls, value: str | None) -> str | None:
+        return _strip_optional_str(value)
+
+    @model_validator(mode="after")
+    def _secondary_cluster_differs(self) -> "LayoutIntentProfile":
+        if (
+            self.secondary_cluster_id is not None
+            and self.secondary_cluster_id == self.primary_cluster_id
+        ):
+            raise ValueError(
+                "secondary_cluster_id must be different from primary_cluster_id"
+            )
+        return self
+
+
 class ClusterRelationPlannerOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -354,6 +401,7 @@ class ClusterRelationPlannerOutput(BaseModel):
     )
 
     circulation_plan: CirculationPlan = Field(default_factory=CirculationPlan)
+    layout_intent_profile: LayoutIntentProfile | None = None
     placement_guidelines: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)

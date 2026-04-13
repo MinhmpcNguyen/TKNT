@@ -4,7 +4,7 @@ import { useEditorStore } from '../store';
 import { Placement, Point } from '../types';
 import { preparePipelineResultLayouts } from '../utils/pipelineLayouts';
 
-const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 1800;
+const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 3600;
 const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
   60,
   Math.floor(
@@ -17,6 +17,7 @@ const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
 
 export const Toolbar: React.FC = () => {
   const {
+    currentUser,
     design,
     floorplan,
     tenantId,
@@ -59,6 +60,10 @@ export const Toolbar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const galleryOpen = variantPickerOpen && layoutVariants.length > 0;
 
+  type LoadFinalResult = {
+    variantCount: number;
+  };
+
   const applyVariantToEditor = (variantId: string | null) => {
     const variant =
       layoutVariants.find((item) => item.variant_id === variantId) ?? layoutVariants[0];
@@ -83,14 +88,17 @@ export const Toolbar: React.FC = () => {
     setError(null);
     clearRunLogs();
     setAdditionRequests([]);
-    setRunStatus('running', null);
+    setRunStatus('Queued pipeline build', null);
     clearLayoutVariants();
     setStyledResult(null);
+    setDesign({ floorplan_geometry: floorplan, placements: [] });
+    setViolations([]);
+    setLastDesignMeta({ iteration: null, attempt: null });
     setVariantPickerOpen(false);
     setViewMode('2d');
     try {
       const caseResp = await runPipeline({
-        user_id: tenantId || 'demo_user',
+        user_id: currentUser?.id || tenantId || 'demo_user',
         input_payload: {
           tenant_id: tenantId,
           user_input: userInput,
@@ -122,7 +130,10 @@ export const Toolbar: React.FC = () => {
       const caseId = caseResp.case_id;
       let done = false;
       let lastStage = '';
-      const loadFinal = async (caseId: string) => {
+      let lastProgressLine = '';
+      let lastLoadedVariantCount = 0;
+      let lastActionIndex = 0;
+      const loadFinal = async (caseId: string): Promise<LoadFinalResult> => {
         let roomPayload: any = null;
         try {
           const roomArtifact = await getPipelineArtifact(caseId, 'room_interpreter');
@@ -140,36 +151,70 @@ export const Toolbar: React.FC = () => {
         if (prepared.floorplan) {
           setFloorplan(prepared.floorplan);
         }
-        setStyledResult(prepared.styledResult);
+        if (
+          prepared.styledResult &&
+          typeof prepared.styledResult === 'object' &&
+          (Array.isArray((prepared.styledResult as any).objects) ||
+            (prepared.styledResult as any).room)
+        ) {
+          setStyledResult(prepared.styledResult);
+        }
         if (prepared.design) {
           setDesign(prepared.design);
         }
         if (prepared.variants.length > 0) {
           setLayoutVariants(prepared.variants, prepared.selectedVariantId);
           setVariantPickerOpen(true);
-          appendRunLog(`Loaded ${prepared.variants.length} layout variants`);
         } else {
           clearLayoutVariants();
           setVariantPickerOpen(false);
         }
         setViolations([]);
         setLastDesignMeta({ iteration: null, attempt: null });
+        return {
+          variantCount: prepared.variants.length,
+        };
       };
       const maxPollSeconds = PIPELINE_POLL_TIMEOUT_SECONDS;
       for (let i = 0; i < maxPollSeconds && !done; i += 1) {
         const status = await getPipelineStatus(caseId);
-        setRunStatus(status.stage ?? null, null);
-        if (status.stage && status.stage !== lastStage) {
-          appendRunLog(`Stage: ${status.stage}`);
+        const progressLabel = formatPipelineProgress(status);
+        setRunStatus(progressLabel, null);
+        if (status.stage) {
           setPipelineStage(status.stage);
-          lastStage = status.stage;
+        }
+        const statusActions = Array.isArray(status.actions) ? status.actions : [];
+        if (statusActions.length > lastActionIndex) {
+          for (const action of statusActions.slice(lastActionIndex)) {
+            const line = formatPipelineStatusAction(action);
+            if (line) {
+              appendRunLog(line);
+            }
+          }
+          lastActionIndex = statusActions.length;
+        } else if (statusActions.length === 0) {
+          if (status.stage && status.stage !== lastStage) {
+            appendRunLog(`Stage: ${status.stage}`);
+            lastStage = status.stage;
+          }
+          if (progressLabel && progressLabel !== lastProgressLine) {
+            appendRunLog(progressLabel);
+            lastProgressLine = progressLabel;
+          }
         }
         if (status.stage === 'error') {
           setError(status.error ?? 'Pipeline error');
           done = true;
           break;
         }
-        if (status.stage === 'cluster_composer' || status.stage === 'cluster_placer' || status.stage === 'absolute_layout' || status.stage === 'stylist' || status.stage === 'done') {
+        if (status.stage === 'done') {
+          const finalState = await loadFinal(caseId);
+          if (finalState.variantCount > lastLoadedVariantCount) {
+            appendRunLog(
+              `Loaded ${finalState.variantCount} final design option${finalState.variantCount === 1 ? '' : 's'}.`
+            );
+            lastLoadedVariantCount = finalState.variantCount;
+          }
           try {
             const list = await getClusterList(caseId);
             for (const clusterId of list.clusters ?? []) {
@@ -179,9 +224,6 @@ export const Toolbar: React.FC = () => {
           } catch {
             // ignore preview errors
           }
-        }
-        if (status.stage === 'done') {
-          await loadFinal(caseId);
           done = true;
           break;
         }
@@ -193,10 +235,23 @@ export const Toolbar: React.FC = () => {
         );
         const status = await getPipelineStatus(caseId);
         if (status.stage === 'done') {
-          setRunStatus(status.stage ?? null, null);
-          appendRunLog('Stage: done');
+          const progressLabel = formatPipelineProgress(status);
+          setRunStatus(progressLabel, null);
           setPipelineStage('done');
-          await loadFinal(caseId);
+          const statusActions = Array.isArray(status.actions) ? status.actions : [];
+          if (statusActions.length > lastActionIndex) {
+            for (const action of statusActions.slice(lastActionIndex)) {
+              const line = formatPipelineStatusAction(action);
+              if (line) {
+                appendRunLog(line);
+              }
+            }
+            lastActionIndex = statusActions.length;
+          }
+          const finalState = await loadFinal(caseId);
+          appendRunLog(
+            `Loaded ${finalState.variantCount} final design option${finalState.variantCount === 1 ? '' : 's'}.`
+          );
           done = true;
         }
       }
@@ -363,4 +418,51 @@ function collectManualPlacements(placements: Placement[]): Placement[] {
 
 function pointsEqual(a: Point, b: Point, tolerance = 1): boolean {
   return Math.abs(a.x - b.x) <= tolerance && Math.abs(a.y - b.y) <= tolerance;
+}
+
+function formatPipelineProgress(status: {
+  stage?: string | null;
+  message?: string | null;
+  progress_current?: number | null;
+  progress_total?: number | null;
+}): string | null {
+  const message = typeof status.message === 'string' ? status.message.trim() : '';
+  if (message) {
+    return message;
+  }
+  const stage = typeof status.stage === 'string' ? status.stage.trim() : '';
+  if (!stage) {
+    return null;
+  }
+  const current =
+    typeof status.progress_current === 'number' && Number.isFinite(status.progress_current)
+      ? status.progress_current
+      : null;
+  const total =
+    typeof status.progress_total === 'number' && Number.isFinite(status.progress_total)
+      ? status.progress_total
+      : null;
+  if (current !== null && total !== null && total > 0) {
+    return `${stage} ${current}/${total}`;
+  }
+  return stage;
+}
+
+function formatPipelineStatusAction(action: {
+  stage?: string | null;
+  message?: string | null;
+  updated_at_utc?: string | null;
+  error?: string | null;
+}): string | null {
+  const stage = typeof action.stage === 'string' ? action.stage.trim() : '';
+  const error = typeof action.error === 'string' ? action.error.trim() : '';
+  const message = typeof action.message === 'string' ? action.message.trim() : '';
+  const body = error || message || stage;
+  if (!body) {
+    return null;
+  }
+  if (!stage || body === stage) {
+    return body;
+  }
+  return `${stage}: ${body}`;
 }

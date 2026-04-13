@@ -1,0 +1,111 @@
+{
+  "status": "OK",
+  "total_dropped_items": 5,
+  "clusters": [
+    {
+      "cluster_id": "storage_zone",
+      "items": [
+        {
+          "cluster_id": "storage_zone",
+          "object_type": "laundry_basket",
+          "category": "laundry_basket",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.36,
+            "H": 0.58,
+            "A": 0.1404,
+            "R": 1.0833333333333335,
+            "source_id": "laundry_basket_002"
+          },
+          "rationale": "Deterministic policy marked laundry_basket as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        },
+        {
+          "cluster_id": "storage_zone",
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "size_tier": "S",
+          "priority": "primary",
+          "rep_dims_m": {
+            "L": 1.26,
+            "W": 0.38,
+            "H": 0.58,
+            "A": 0.4788,
+            "R": 3.3157894736842106,
+            "source_id": "tv_console_002"
+          },
+          "rationale": "Deterministic policy marked tv_console as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        },
+        {
+          "cluster_id": "storage_zone",
+          "object_type": "armchair",
+          "category": "armchair",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          },
+          "rationale": "Deterministic policy marked armchair as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        },
+        {
+          "cluster_id": "storage_zone",
+          "object_type": "chair",
+          "category": "chair",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 0.85,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "chair_008"
+          },
+          "rationale": "Deterministic policy marked chair as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_zone",
+      "items": [
+        {
+          "cluster_id": "work_zone",
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          },
+          "rationale": "Deterministic policy marked bookshelf as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

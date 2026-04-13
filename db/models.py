@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Literal, NewType, TypeAlias
 
 from pydantic import BaseModel, Field, field_validator
@@ -11,10 +12,15 @@ AssetId = NewType("AssetId", str)
 AssetFileId = NewType("AssetFileId", str)
 DesignKnowledgeId = NewType("DesignKnowledgeId", str)
 TenantId = NewType("TenantId", str)
+UserId = NewType("UserId", str)
+SessionId = NewType("SessionId", str)
+SavedLayoutId = NewType("SavedLayoutId", str)
+GeneratedRenderId = NewType("GeneratedRenderId", str)
 
 AssetType = Literal["FURNITURE", "TEMPLATE"]
-FileKind = Literal["IMAGE", "SVG", "JSON", "PREVIEW", "TEXTURE"]
-StorageProvider = Literal["s3", "minio", "gcs", "azure_blob"]
+FileKind = Literal["IMAGE", "SVG", "JSON", "PREVIEW", "TEXTURE", "MODEL"]
+StorageProvider = Literal["s3", "minio", "gcs", "azure_blob", "local"]
+RenderSource = Literal["snapshot_render", "object_prompt_reference", "object_image_upload"]
 
 
 class AssetDimensions(BaseModel):
@@ -123,3 +129,53 @@ class DesignKnowledgeFilter(BaseModel):
     category: str | None = None
     tags: list[str] = Field(default_factory=list)
     source: str | None = None
+
+
+class UserAccount(BaseModel):
+    id: UserId
+    email: str
+    display_name: str | None = None
+    tenant_id: TenantId
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class UserAuthRecord(BaseModel):
+    user: UserAccount
+    password_salt: str
+    password_hash: str
+
+
+class AuthSession(BaseModel):
+    id: SessionId
+    user_id: UserId
+    token_hash: str
+    created_at: datetime | None = None
+    expires_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class SavedLayout(BaseModel):
+    id: SavedLayoutId
+    user_id: UserId
+    name: str
+    floorplan_json: dict[str, JsonValue]
+    design_json: dict[str, JsonValue] | None = None
+    styled_result_json: dict[str, JsonValue] | None = None
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class GeneratedRender(BaseModel):
+    id: GeneratedRenderId
+    user_id: UserId
+    source: RenderSource
+    model_name: str
+    prompt: str
+    negative_prompt: str | None = None
+    storage_path: str
+    mime_type: str
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
+    created_at: datetime | None = None

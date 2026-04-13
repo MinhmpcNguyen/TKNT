@@ -1,8 +1,13 @@
 import React from 'react';
 import { LayoutVariant, Point } from '../types';
 import { useEditorStore } from '../store';
+import {
+  isCardinalPlanRotation,
+  normalizePlanRotationDeg,
+} from '../utils/planOrientation';
 
 type PreviewRect = {
+  kind: 'rect';
   id: string;
   color: string;
   x: number;
@@ -11,9 +16,20 @@ type PreviewRect = {
   height: number;
 };
 
+type PreviewLine = {
+  kind: 'line';
+  id: string;
+  color: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  strokeWidth: number;
+};
+
 type PreviewScene = {
   polygon: Point[];
-  rects: PreviewRect[];
+  shapes: Array<PreviewRect | PreviewLine>;
   viewBox: string;
 };
 
@@ -51,6 +67,9 @@ export const LayoutVariantsGallery: React.FC = () => {
         {layoutVariants.map((variant) => {
           const scene = buildPreviewScene(variant);
           const isSelected = variant.variant_id === selectedVariantId;
+          const isEligible = variant.gallery_eligible ?? variant.hard_valid;
+          const badgeLabel =
+            variant.complete === false ? 'Incomplete' : isEligible ? 'Valid' : 'Needs review';
           return (
             <button
               key={variant.variant_id}
@@ -64,8 +83,8 @@ export const LayoutVariantsGallery: React.FC = () => {
                   <div className="layout-variant-source">{variant.source}</div>
                 </div>
                 <div className="layout-variant-score">
-                  <span className={variant.hard_valid ? 'ok' : 'warn'}>
-                    {variant.hard_valid ? 'Valid' : 'Needs review'}
+                  <span className={isEligible ? 'ok' : 'warn'}>
+                    {badgeLabel}
                   </span>
                 </div>
               </div>
@@ -76,19 +95,32 @@ export const LayoutVariantsGallery: React.FC = () => {
                   stroke="#b8b0a2"
                   strokeWidth={60}
                 />
-                {scene.rects.map((rect) => (
-                  <rect
-                    key={rect.id}
-                    x={rect.x}
-                    y={rect.y}
-                    width={rect.width}
-                    height={rect.height}
-                    rx={40}
-                    fill={rect.color}
-                    stroke="#2f2f2f"
-                    strokeWidth={28}
-                  />
-                ))}
+                {scene.shapes.map((shape) =>
+                  shape.kind === 'rect' ? (
+                    <rect
+                      key={shape.id}
+                      x={shape.x}
+                      y={shape.y}
+                      width={shape.width}
+                      height={shape.height}
+                      rx={40}
+                      fill={shape.color}
+                      stroke="#2f2f2f"
+                      strokeWidth={28}
+                    />
+                  ) : (
+                    <line
+                      key={shape.id}
+                      x1={shape.x1}
+                      y1={shape.y1}
+                      x2={shape.x2}
+                      y2={shape.y2}
+                      stroke={shape.color}
+                      strokeWidth={shape.strokeWidth}
+                      strokeLinecap="round"
+                    />
+                  ),
+                )}
               </svg>
               <div className="layout-variant-card-body">
                 <p>{variant.reason || 'Alternative layout generated from the same room brief.'}</p>
@@ -126,38 +158,127 @@ function buildPreviewScene(variant: LayoutVariant): PreviewScene {
     }))
     .filter((point: Point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
-  const rects = Array.isArray(variant.styled_result?.objects)
-    ? variant.styled_result.objects
-        .map((objectRow: any, index: number) => {
-          const bbox = objectRow?.bbox ?? {};
-          const minX = Number(bbox.min_x ?? 0);
-          const minY = Number(bbox.min_y ?? 0);
-          const maxX = Number(bbox.max_x ?? minX);
-          const maxY = Number(bbox.max_y ?? minY);
-          return {
-            id: String(objectRow?.instance_id ?? `obj_${index}`),
-            color: String(objectRow?.color_hex ?? '#cfcac2'),
-            x: minX,
-            y: minY,
-            width: Math.max(1, maxX - minX),
-            height: Math.max(1, maxY - minY),
-          } satisfies PreviewRect;
-        })
-        .filter((rect: PreviewRect) => rect.width > 0 && rect.height > 0)
-    : [];
+  const windows = extractPreviewWindows(variant);
+  const windowShapes = windows.map((windowRow, index) => ({
+    kind: 'line' as const,
+    id: `window_${index + 1}`,
+    color: '#8eaad6',
+    x1: windowRow.start.x,
+    y1: windowRow.start.y,
+    x2: windowRow.end.x,
+    y2: windowRow.end.y,
+      strokeWidth: 54,
+  }));
+  const rawObjects = buildPreviewObjectRows(variant);
+  const objectShapes = rawObjects.flatMap((objectRow: any, index: number) =>
+    buildObjectPreviewShapes(objectRow, index, windows),
+  );
 
-  const bounds = computeSceneBounds(polygon, rects);
-  return {
+  const transformed = flipPreviewSceneY({
     polygon,
-    rects,
+    shapes: [...windowShapes, ...objectShapes],
+  });
+  const bounds = computeSceneBounds(transformed.polygon, transformed.shapes);
+  return {
+    polygon: transformed.polygon,
+    shapes: transformed.shapes,
     viewBox: `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`,
   };
 }
 
+function buildPreviewObjectRows(variant: LayoutVariant): any[] {
+  const absoluteObjects = Array.isArray(variant.absolute_layout?.objects)
+    ? variant.absolute_layout.objects
+    : [];
+  const styledObjects = Array.isArray(variant.styled_result?.objects)
+    ? variant.styled_result.objects
+    : [];
+  if (absoluteObjects.length === 0) {
+    return styledObjects;
+  }
+
+  const styledByKey = new Map<string, any>();
+  for (const objectRow of styledObjects) {
+    const key = getPreviewObjectKey(objectRow);
+    if (key) {
+      styledByKey.set(key, objectRow);
+    }
+  }
+
+  const merged = absoluteObjects.map((objectRow) => {
+    const key = getPreviewObjectKey(objectRow);
+    const styledRow = key ? styledByKey.get(key) : null;
+    if (!styledRow) {
+      return objectRow;
+    }
+    return {
+      ...styledRow,
+      ...objectRow,
+      instance_id:
+        objectRow?.instance_id ?? styledRow?.instance_id ?? objectRow?.object_id ?? null,
+      object_type:
+        objectRow?.object_type ??
+        styledRow?.object_type ??
+        styledRow?.category ??
+        objectRow?.category ??
+        null,
+      color_hex: objectRow?.color_hex ?? styledRow?.color_hex ?? null,
+      material: objectRow?.material ?? styledRow?.material ?? null,
+      place_on: objectRow?.place_on ?? styledRow?.place_on ?? null,
+      rotation_ccw:
+        objectRow?.rotation_ccw ?? objectRow?.rotation_deg ?? styledRow?.rotation_ccw ?? 0,
+      bbox: objectRow?.bbox ?? styledRow?.bbox ?? null,
+    };
+  });
+
+  const seenKeys = new Set(
+    merged
+      .map((objectRow) => getPreviewObjectKey(objectRow))
+      .filter((value): value is string => Boolean(value)),
+  );
+  for (const styledRow of styledObjects) {
+    const key = getPreviewObjectKey(styledRow);
+    if (key && !seenKeys.has(key)) {
+      merged.push(styledRow);
+    }
+  }
+  return merged;
+}
+
+function getPreviewObjectKey(objectRow: any): string | null {
+  const raw =
+    objectRow?.instance_id ??
+    objectRow?.object_id ??
+    objectRow?.id ??
+    null;
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const normalized = raw.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function computeSceneBounds(
   polygon: Point[],
-  rects: PreviewRect[],
+  shapes: Array<PreviewRect | PreviewLine>,
 ): { minX: number; minY: number; width: number; height: number } {
+  const extents = computeSceneExtents(polygon, shapes);
+  if (!extents) {
+    return { minX: 0, minY: 0, width: 1000, height: 1000 };
+  }
+  const padding = 120;
+  return {
+    minX: extents.minX - padding,
+    minY: extents.minY - padding,
+    width: Math.max(1, extents.maxX - extents.minX + padding * 2),
+    height: Math.max(1, extents.maxY - extents.minY + padding * 2),
+  };
+}
+
+function computeSceneExtents(
+  polygon: Point[],
+  shapes: Array<PreviewRect | PreviewLine>,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -169,22 +290,292 @@ function computeSceneBounds(
     maxX = Math.max(maxX, point.x);
     maxY = Math.max(maxY, point.y);
   }
-  for (const rect of rects) {
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.width);
-    maxY = Math.max(maxY, rect.y + rect.height);
+  for (const shape of shapes) {
+    if (shape.kind === 'rect') {
+      minX = Math.min(minX, shape.x);
+      minY = Math.min(minY, shape.y);
+      maxX = Math.max(maxX, shape.x + shape.width);
+      maxY = Math.max(maxY, shape.y + shape.height);
+      continue;
+    }
+    minX = Math.min(minX, shape.x1, shape.x2);
+    minY = Math.min(minY, shape.y1, shape.y2);
+    maxX = Math.max(maxX, shape.x1, shape.x2);
+    maxY = Math.max(maxY, shape.y1, shape.y2);
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
-    return { minX: 0, minY: 0, width: 1000, height: 1000 };
+    return null;
   }
 
-  const padding = 120;
+  return { minX, minY, maxX, maxY };
+}
+
+function buildObjectPreviewShapes(
+  objectRow: any,
+  index: number,
+  windows: PreviewWindow[],
+): Array<PreviewRect | PreviewLine> {
+  const bbox = objectRow?.bbox ?? {};
+  const minX = Number(bbox.min_x ?? 0);
+  const minY = Number(bbox.min_y ?? 0);
+  const maxX = Number(bbox.max_x ?? minX);
+  const maxY = Number(bbox.max_y ?? minY);
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const id = String(objectRow?.instance_id ?? `obj_${index}`);
+  const color = String(objectRow?.color_hex ?? '#cfcac2');
+  const category = String(objectRow?.object_type ?? objectRow?.category ?? '').trim();
+  const rotationDeg = Number(objectRow?.rotation_ccw ?? objectRow?.rotation_deg ?? 0);
+  if (isCurtainLike(category)) {
+    const matchedWindow = findNearestPreviewWindow(
+      {
+        x: minX + width / 2,
+        y: minY + height / 2,
+      },
+      windows,
+    );
+    if (matchedWindow) {
+      return [
+        {
+          kind: 'line',
+          id,
+          color,
+          x1: matchedWindow.start.x,
+          y1: matchedWindow.start.y,
+          x2: matchedWindow.end.x,
+          y2: matchedWindow.end.y,
+          strokeWidth: 92,
+        },
+      ];
+    }
+  }
+  if (isMirrorLike(category) && String(objectRow?.place_on?.method ?? '') === 'hang_on') {
+    if (width >= height) {
+      const midY = minY + height / 2;
+      return [
+        {
+          kind: 'line',
+          id,
+          color,
+          x1: minX,
+          y1: midY,
+          x2: maxX,
+          y2: midY,
+          strokeWidth: 42,
+        },
+      ];
+    }
+    const midX = minX + width / 2;
+    return [
+      {
+        kind: 'line',
+        id,
+        color,
+        x1: midX,
+        y1: minY,
+        x2: midX,
+        y2: maxY,
+        strokeWidth: 42,
+      },
+    ];
+  }
+  const shapes: Array<PreviewRect | PreviewLine> = [
+    {
+      kind: 'rect',
+      id,
+      color,
+      x: minX,
+      y: minY,
+      width,
+      height,
+    },
+  ];
+  const frontMarker = buildFrontMarkerShape({
+    id,
+    minX,
+    minY,
+    maxX,
+    maxY,
+    rotationDeg,
+  });
+  if (frontMarker) {
+    shapes.push(frontMarker);
+  }
+  return shapes;
+}
+
+function buildFrontMarkerShape(params: {
+  id: string;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  rotationDeg: number;
+}): PreviewLine | null {
+  const { id, minX, minY, maxX, maxY, rotationDeg } = params;
+  if (!isCardinalPlanRotation(rotationDeg)) {
+    return null;
+  }
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const insetX = Math.max(50, Math.min(width * 0.16, 120));
+  const insetY = Math.max(50, Math.min(height * 0.16, 120));
+  const normalized = normalizePlanRotationDeg(rotationDeg);
+  if (normalized === 0) {
+    const y = minY + insetY;
+    return {
+      kind: 'line',
+      id: `${id}__front`,
+      color: 'rgba(255,255,255,0.95)',
+      x1: minX + insetX,
+      y1: y,
+      x2: maxX - insetX,
+      y2: y,
+      strokeWidth: 52,
+    };
+  }
+  if (normalized === 90) {
+    const x = maxX - insetX;
+    return {
+      kind: 'line',
+      id: `${id}__front`,
+      color: 'rgba(255,255,255,0.95)',
+      x1: x,
+      y1: minY + insetY,
+      x2: x,
+      y2: maxY - insetY,
+      strokeWidth: 52,
+    };
+  }
+  if (normalized === 180) {
+    const y = maxY - insetY;
+    return {
+      kind: 'line',
+      id: `${id}__front`,
+      color: 'rgba(255,255,255,0.95)',
+      x1: minX + insetX,
+      y1: y,
+      x2: maxX - insetX,
+      y2: y,
+      strokeWidth: 52,
+    };
+  }
+  if (normalized === 270) {
+    const x = minX + insetX;
+    return {
+      kind: 'line',
+      id: `${id}__front`,
+      color: 'rgba(255,255,255,0.95)',
+      x1: x,
+      y1: minY + insetY,
+      x2: x,
+      y2: maxY - insetY,
+      strokeWidth: 52,
+    };
+  }
+  return null;
+}
+
+type PreviewWindow = {
+  start: Point;
+  end: Point;
+};
+
+function extractPreviewWindows(variant: LayoutVariant): PreviewWindow[] {
+  const floorplanWindows = variant.design?.floorplan_geometry?.openings?.windows;
+  if (Array.isArray(floorplanWindows) && floorplanWindows.length > 0) {
+    return floorplanWindows
+      .map((windowRow) => ({
+        start: {
+          x: Number(windowRow.start_mm?.x ?? 0),
+          y: Number(windowRow.start_mm?.y ?? 0),
+        },
+        end: {
+          x: Number(windowRow.end_mm?.x ?? 0),
+          y: Number(windowRow.end_mm?.y ?? 0),
+        },
+      }))
+      .filter((windowRow) => isFinite(windowRow.start.x) && isFinite(windowRow.end.x));
+  }
+  const roomWindows = variant.styled_result?.room?.openings?.windows;
+  if (!Array.isArray(roomWindows)) {
+    return [];
+  }
+  return roomWindows
+    .map((windowRow: any) => {
+      const segment = Array.isArray(windowRow?.segment_mm) ? windowRow.segment_mm : [];
+      return {
+        start: {
+          x: Number(segment[0]?.x ?? 0),
+          y: Number(segment[0]?.y ?? 0),
+        },
+        end: {
+          x: Number(segment[1]?.x ?? 0),
+          y: Number(segment[1]?.y ?? 0),
+        },
+      };
+    })
+    .filter((windowRow) => isFinite(windowRow.start.x) && isFinite(windowRow.end.x));
+}
+
+function findNearestPreviewWindow(
+  target: Point,
+  windows: PreviewWindow[],
+): PreviewWindow | null {
+  let best: { row: PreviewWindow; distance: number } | null = null;
+  for (const windowRow of windows) {
+    const center = {
+      x: (windowRow.start.x + windowRow.end.x) / 2,
+      y: (windowRow.start.y + windowRow.end.y) / 2,
+    };
+    const distance = Math.hypot(target.x - center.x, target.y - center.y);
+    if (!best || distance < best.distance) {
+      best = { row: windowRow, distance };
+    }
+  }
+  return best?.row ?? null;
+}
+
+function flipPreviewSceneY(input: {
+  polygon: Point[];
+  shapes: Array<PreviewRect | PreviewLine>;
+}): PreviewScene {
+  const worldBounds = computeSceneExtents(input.polygon, input.shapes);
+  const maxY = worldBounds ? worldBounds.maxY : 0;
+  const polygon = input.polygon.map((point) => ({
+    x: point.x,
+    y: maxY - point.y,
+  }));
+  const shapes = input.shapes.map((shape) => {
+    if (shape.kind === 'rect') {
+      return {
+        ...shape,
+        y: maxY - (shape.y + shape.height),
+      };
+    }
+    return {
+      ...shape,
+      y1: maxY - shape.y1,
+      y2: maxY - shape.y2,
+    };
+  });
   return {
-    minX: minX - padding,
-    minY: minY - padding,
-    width: Math.max(1, maxX - minX + padding * 2),
-    height: Math.max(1, maxY - minY + padding * 2),
+    polygon,
+    shapes,
+    viewBox: '0 0 1 1',
   };
+}
+
+function isCurtainLike(category: string): boolean {
+  const lowered = category.toLowerCase();
+  return (
+    lowered.includes('curtain') ||
+    lowered.includes('blind') ||
+    lowered.includes('drape')
+  );
+}
+
+function isMirrorLike(category: string): boolean {
+  return category.toLowerCase().includes('mirror');
 }

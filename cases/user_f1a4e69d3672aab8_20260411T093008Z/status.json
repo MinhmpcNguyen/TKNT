@@ -1,0 +1,40 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260411T093008Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-11T09:30:22.302645+00:00",
+  "error": "Deterministic tier-count seed is invalid: multiple decisions found for types: ['chair']",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-11T09:30:08.860600+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-11T09:30:09.031969+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-11T09:30:22.158642+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "Deterministic tier-count seed is invalid: multiple decisions found for types: ['chair']",
+      "updated_at_utc": "2026-04-11T09:30:22.302645+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "Deterministic tier-count seed is invalid: multiple decisions found for types: ['chair']"
+    }
+  ]
+}

@@ -1,0 +1,485 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "sleep_zone",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand",
+        "bench"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "bench"
+        },
+        {
+          "type": "anchor_side",
+          "a": "nightstand",
+          "b": "bed",
+          "side": "head_left",
+          "gap_min": 0,
+          "gap_max": 100
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "bench",
+          "b": "bed",
+          "b_edge": "back",
+          "span": "center",
+          "gap_min": 0,
+          "gap_max": 200
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bench": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "Foot of the bed"
+          },
+          "nightstand": {
+            "front": "top",
+            "notes": "Drawer face"
+          },
+          "bench": {
+            "front": "top",
+            "notes": "Seating side"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": [
+          {
+            "id": "nightstand",
+            "relative_to": "bed",
+            "kind": "anchor_side",
+            "selection": "best_fit",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          },
+          {
+            "id": "bench",
+            "relative_to": "bed",
+            "kind": "dock_to_edge",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 200,
+            "b_edge": "back",
+            "span": "center"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "bed",
+          "category": "bed",
+          "cluster_id": "sleep_zone",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked bed as anchor in sleep; kept at quantity 1 with size tier M for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.96,
+            "W": 1.69,
+            "H": 0.48,
+            "A": 3.3124,
+            "R": 1.1597633136094674,
+            "source_id": "bed_014"
+          }
+        },
+        {
+          "object_type": "nightstand",
+          "category": "nightstand",
+          "cluster_id": "sleep_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked nightstand as secondary in sleep; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.43,
+            "W": 0.35,
+            "H": 0.53,
+            "A": 0.1505,
+            "R": 1.2285714285714286,
+            "source_id": "nightstand_003"
+          }
+        },
+        {
+          "object_type": "bench",
+          "category": "bench",
+          "cluster_id": "sleep_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked bench as secondary in sleep; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.93,
+            "W": 0.4,
+            "H": 0.41,
+            "A": 0.37200000000000005,
+            "R": 2.325,
+            "source_id": "bench_004"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_zone",
+      "tag": "work",
+      "members": [
+        "desk",
+        "chair",
+        "office_chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "office_chair"
+        },
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "office_chair",
+          "b": "desk",
+          "b_edge": "front",
+          "span": "center",
+          "gap_min": 0,
+          "gap_max": 100
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_facing",
+          "a": "office_chair",
+          "b": "desk",
+          "mode": "face_each_other",
+          "weight": 8
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "office_chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "bottom",
+            "notes": "User side"
+          },
+          "office_chair": {
+            "front": "top",
+            "notes": "Front of seat"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "office_chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 0,
+            "gap_max": 100,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "b_edge": "front",
+            "span": "center",
+            "gap_min": 0,
+            "gap_max": 100,
+            "selection": "best_fit",
+            "orientation": "face_base"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "desk",
+          "category": "desk",
+          "cluster_id": "work_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked desk as anchor in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.98,
+            "W": 0.51,
+            "H": 0.78,
+            "A": 0.4998,
+            "R": 1.9215686274509802,
+            "source_id": "desk_004"
+          }
+        },
+        {
+          "object_type": "chair",
+          "category": "chair",
+          "cluster_id": "work_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked chair as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 0.85,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "chair_008"
+          }
+        },
+        {
+          "object_type": "office_chair",
+          "category": "office_chair",
+          "cluster_id": "work_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked office_chair as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.58,
+            "W": 0.55,
+            "H": 1.01,
+            "A": 0.319,
+            "R": 1.0545454545454545,
+            "source_id": "office_chair_001"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_zone",
+      "tag": "storage",
+      "members": [
+        "wardrobe",
+        "dresser",
+        "side_table",
+        "floor_lamp",
+        "chair"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "wardrobe",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dresser",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "wardrobe",
+          "b": "dresser",
+          "edge": "back",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dresser": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "bottom",
+            "notes": "Door side"
+          },
+          "dresser": {
+            "front": "bottom",
+            "notes": "Drawer side"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dresser",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "wardrobe",
+          "category": "wardrobe",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked wardrobe as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.81,
+            "W": 0.6,
+            "H": 2.4,
+            "A": 0.486,
+            "R": 1.35,
+            "source_id": "wardrobe_008"
+          }
+        },
+        {
+          "object_type": "dresser",
+          "category": "dresser",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked dresser as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.88,
+            "W": 0.48,
+            "H": 0.8,
+            "A": 0.4224,
+            "R": 1.8333333333333335,
+            "source_id": "dresser_009"
+          }
+        },
+        {
+          "object_type": "side_table",
+          "category": "side_table",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked side_table as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        },
+        {
+          "object_type": "chair",
+          "category": "chair",
+          "cluster_id": "storage_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked chair as secondary in work; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 0.85,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "chair_008"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Clusters partitioned by function: sleep, work, and storage/media."
+  ],
+  "missing": []
+}

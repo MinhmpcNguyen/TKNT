@@ -1,0 +1,203 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "sleep_zone",
+      "prefer": [
+        "wall",
+        "long_wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Bedroom function benefits from wall anchoring for privacy and stability."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_clearance",
+        "entry_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Storage benefits from wall adjacency, but can also fill secondary spaces."
+    },
+    {
+      "cluster_id": "work_zone",
+      "prefer": [
+        "wall"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Work zone benefits from wall adjacency for focus and organization."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "sleep_zone",
+      "intents": [
+        "back_to_wall",
+        "face_cluster"
+      ],
+      "target_cluster_id": "storage_zone",
+      "priority": "high",
+      "reason": "Bed typically benefits from being against a wall for stability and visual anchoring."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Wardrobe and dresser benefit from wall adjacency."
+    },
+    {
+      "cluster_id": "work_zone",
+      "intents": [
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Desk benefits from wall adjacency for organization and focus."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "sleep_zone",
+      "object_id": "bed",
+      "intents": [
+        "front_to_open_space"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensure clear access to the bed."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "wardrobe",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensure easy access to wardrobe contents."
+    },
+    {
+      "cluster_id": "storage_zone",
+      "object_id": "dresser",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensure easy access to dresser contents."
+    },
+    {
+      "cluster_id": "work_zone",
+      "object_id": "desk",
+      "intents": [
+        "front_to_open_space",
+        "preserve_front_access"
+      ],
+      "target_object_id": null,
+      "target_object_cluster_id": null,
+      "priority": "high",
+      "reason": "Ensure easy access to the desk surface."
+    }
+  ],
+  "cluster_relations": [
+    {
+      "a": "sleep_zone",
+      "b": "storage_zone",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Convenient access between sleeping and storage areas."
+    },
+    {
+      "a": "sleep_zone",
+      "b": "work_zone",
+      "relation": "separate",
+      "priority": "medium",
+      "reason": "Maintain separation between sleep and work areas for focus."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "sleep_zone",
+      "b": "storage_zone",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Primary pair should preserve a legible viewing or conversational relationship."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "sleep_zone",
+        "priority": "high",
+        "reason": "Primary access to the bed."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Maintain clear access path from the door."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "sleep_zone",
+    "secondary_cluster_id": "storage_zone",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "balanced",
+    "distribution_mode": "balanced"
+  },
+  "placement_guidelines": [
+    "Prioritize wall placement for sleep_zone, storage_zone, and work_zone.",
+    "Ensure clear access to the bed and storage furniture.",
+    "Avoid blocking the window with tall furniture.",
+    "Preserve front usability for dresser.",
+    "Preserve front usability for wardrobe.",
+    "Treat sleep_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Stay close to the current seed-side occupancy and avoid unnecessary macro relocation."
+  ],
+  "notes": [
+    "This plan prioritizes wall anchoring for all three clusters to create a sense of stability and organization.",
+    "The entry buffer is preserved to ensure easy access to the bed.",
+    "Seed variant policy seed_stable: distribution=balanced, center_open=medium, support_behavior=balanced.",
+    "Seed constraint fingerprint seed_stable: seed_region_preservation, primary_center_anchor, balanced_support."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_stable",
+    "constraint_tokens": [
+      "seed_region_preservation",
+      "primary_center_anchor",
+      "balanced_support"
+    ],
+    "structural_fingerprint": "focus=mixed,center=medium,support=balanced,distribution=balanced || entry_buffer:door_1 || sleep_zone|p=far_from_entry,long_wall,wall|a=entry_blocking,window_blocking,storage_zone|p=recess_or_edge,wall|a=entry_blocking,window_clearance,work_zone|p=wall|a=entry_blocking,window_blocking || sleep_zone|storage_zone|near,sleep_zone|work_zone|separate || sleep_zone|storage_zone|face_each_other || sleep_zone|back_to_wall,face_cluster|storage_zone,storage_zone|access_to_open_space,back_to_wall|,work_zone|back_to_wall|"
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "status": "OK",
+  "assumptions": [
+    "Deterministic tier-count policy applied from cluster membership, room area, and budget heuristics.",
+    "User notes suggest a clutter-light layout, so optional items start conservative.",
+    "Estimated available room area is 20.41 m2.",
+    "Room geometry is irregular enough that the primary seed starts sparser before later refill passes."
+  ],
+  "decisions": [
+    {
+      "object_type": "sectional_sofa",
+      "category": "sectional_sofa",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Deterministic policy marked sectional_sofa as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 2.54,
+        "W": 0.92,
+        "H": 0.85,
+        "A": 2.3368,
+        "R": 2.760869565217391,
+        "source_id": "sectional_sofa_004"
+      }
+    },
+    {
+      "object_type": "coffee_table",
+      "category": "coffee_table",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked coffee_table as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.9,
+        "W": 0.5,
+        "H": 0.44,
+        "A": 0.45,
+        "R": 1.8,
+        "source_id": "coffee_table_006"
+      }
+    },
+    {
+      "object_type": "ottoman",
+      "category": "ottoman",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked ottoman as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.54,
+        "W": 0.5,
+        "H": 0.38,
+        "A": 0.27,
+        "R": 1.08,
+        "source_id": "ottoman_001"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked armchair as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.84,
+        "W": 0.71,
+        "H": 0.85,
+        "A": 0.5963999999999999,
+        "R": 1.1830985915492958,
+        "source_id": "armchair_007"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.37,
+        "H": 0.58,
+        "A": 0.1443,
+        "R": 1.0540540540540542,
+        "source_id": "side_table_007"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "seating_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.35,
+        "W": 0.32,
+        "H": 1.51,
+        "A": 0.11199999999999999,
+        "R": 1.09375,
+        "source_id": "floor_lamp_004"
+      }
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "media_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Deterministic policy marked tv_console as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 1.26,
+        "W": 0.38,
+        "H": 0.58,
+        "A": 0.4788,
+        "R": 3.3157894736842106,
+        "source_id": "tv_console_002"
+      }
+    },
+    {
+      "object_type": "media_shelf",
+      "category": "media_shelf",
+      "cluster_id": "media_zone",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked media_shelf as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.87,
+        "W": 0.3,
+        "H": 1.36,
+        "A": 0.261,
+        "R": 2.9,
+        "source_id": "media_shelf_003"
+      }
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "bookshelf",
+      "cluster_id": "storage_misc",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Deterministic policy marked bookshelf as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.63,
+        "W": 0.25,
+        "H": 2.22,
+        "A": 0.1575,
+        "R": 2.52,
+        "source_id": "bookshelf_001"
+      }
+    },
+    {
+      "object_type": "storage_cabinet",
+      "category": "storage_cabinet",
+      "cluster_id": "storage_misc",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked storage_cabinet as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.61,
+        "W": 0.41,
+        "H": 1.78,
+        "A": 0.2501,
+        "R": 1.4878048780487805,
+        "source_id": "storage_cabinet_002"
+      }
+    },
+    {
+      "object_type": "console_table",
+      "category": "console_table",
+      "cluster_id": "storage_misc",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked console_table as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+      "rep_dims_m": {
+        "L": 1.06,
+        "W": 0.35,
+        "H": 0.76,
+        "A": 0.371,
+        "R": 3.028571428571429,
+        "source_id": "console_table_007"
+      }
+    },
+    {
+      "object_type": "recliner",
+      "category": "recliner",
+      "cluster_id": "storage_misc",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked recliner as primary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+      "rep_dims_m": {
+        "L": 0.88,
+        "W": 0.76,
+        "H": 1.07,
+        "A": 0.6688000000000001,
+        "R": 1.1578947368421053,
+        "source_id": "recliner_002"
+      }
+    },
+    {
+      "object_type": "bean_bag",
+      "category": "bean_bag",
+      "cluster_id": "storage_misc",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked bean_bag as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+      "rep_dims_m": {
+        "L": 0.78,
+        "W": 0.7,
+        "H": 0.63,
+        "A": 0.5459999999999999,
+        "R": 1.1142857142857143,
+        "source_id": "bean_bag_001"
+      }
+    },
+    {
+      "object_type": "pet_bed",
+      "category": "pet_bed",
+      "cluster_id": "storage_misc",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked pet_bed as secondary in storage; kept at quantity 1 with size tier S for a minimal furnishing plan. Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
+      "rep_dims_m": {
+        "L": 0.88,
+        "W": 0.15,
+        "H": 0.58,
+        "A": 0.132,
+        "R": 5.866666666666667,
+        "source_id": "pet_bed_002"
+      }
+    }
+  ],
+  "global_notes": [
+    "TierCountDirector used deterministic rules instead of an LLM.",
+    "Budget seeding considered the requested style: modern.",
+    "Initial furnishing mode: minimal."
+  ],
+  "budget_valid": true
+}

@@ -1,0 +1,51 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "lounge_zone",
+      "x": 5250,
+      "y": 1600,
+      "rot": 180
+    },
+    {
+      "cluster_id": "sleep_zone",
+      "x": 2500,
+      "y": 950,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_zone",
+      "x": 2200,
+      "y": 350,
+      "rot": 90
+    },
+    {
+      "cluster_id": "work_zone",
+      "x": 5300,
+      "y": 50,
+      "rot": 0
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "lounge_zone",
+      "variant_id": "lounge_zone::base"
+    },
+    {
+      "cluster_id": "sleep_zone",
+      "variant_id": "sleep_zone::base"
+    },
+    {
+      "cluster_id": "storage_zone",
+      "variant_id": "storage_zone::base"
+    },
+    {
+      "cluster_id": "work_zone",
+      "variant_id": "work_zone::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Controller forced macro translation for sleep_zone."
+  ]
+}

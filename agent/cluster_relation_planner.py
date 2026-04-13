@@ -110,6 +110,7 @@ class ClusterRelationPlanner:
         clusters_json: dict[str, Any],
         description: str | None = None,
         special_notes: str | None = None,
+        model_name: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> str:
@@ -128,13 +129,20 @@ class ClusterRelationPlanner:
 
         client = get_llm_client(provider="gemini")
         last_raw = ""
+        resolved_model_name = str(
+            model_name or GeminiConfig.AGENT_MODELS.get("planner") or ""
+        ).strip()
 
         for attempt in range(2):
-            logger.info("ClusterRelationPlanner attempt %s/2", attempt + 1)
+            logger.info(
+                "ClusterRelationPlanner attempt %s/2 model=%s",
+                attempt + 1,
+                resolved_model_name or "unspecified",
+            )
             response = client.chat_completion(
                 messages,
                 model_key="primary",
-                model_name=GeminiConfig.AGENT_MODELS.get("planner"),
+                model_name=resolved_model_name or None,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -178,6 +186,7 @@ class ClusterRelationPlanner:
         clusters_json: dict[str, Any],
         description: str | None = None,
         special_notes: str | None = None,
+        model_name: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
@@ -187,6 +196,7 @@ class ClusterRelationPlanner:
             clusters_json=clusters_json,
             description=description,
             special_notes=special_notes,
+            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -337,7 +347,47 @@ def _minify_clusters(clusters_json: dict[str, Any]) -> dict[str, Any]:
             else [],
         }
 
-    return out
+    seed_layout_state = clusters_json.get("seed_layout_state")
+    free_space_regions = clusters_json.get("free_space_regions")
+    if not isinstance(seed_layout_state, dict) and not isinstance(
+        free_space_regions, list
+    ):
+        return out
+
+    payload: dict[str, Any] = {"clusters": out}
+    if isinstance(seed_layout_state, dict):
+        payload["seed_layout_state"] = {
+            "notes": [
+                str(note).strip()
+                for note in (seed_layout_state.get("notes") or [])
+                if str(note).strip()
+            ][:8],
+            "clusters": [
+                {
+                    "cluster_id": str(row.get("cluster_id") or ""),
+                    "variant_id": row.get("variant_id"),
+                    "world_center": row.get("world_center"),
+                    "world_bbox": row.get("world_bbox"),
+                    "front_world": row.get("front_world"),
+                    "axis_world": row.get("axis_world"),
+                    "region_tags": row.get("region_tags"),
+                }
+                for row in (seed_layout_state.get("clusters") or [])
+                if isinstance(row, dict) and isinstance(row.get("cluster_id"), str)
+            ][:16],
+        }
+    if isinstance(free_space_regions, list):
+        payload["free_space_regions"] = [
+            {
+                "label": row.get("label"),
+                "area_mm2": row.get("area_mm2"),
+                "bbox": row.get("bbox"),
+                "center": row.get("center"),
+            }
+            for row in free_space_regions
+            if isinstance(row, dict)
+        ][:8]
+    return payload
 
 
 def _normalize_constraints(value: Any) -> list[dict[str, Any]]:
@@ -964,6 +1014,44 @@ def _normalize_relation_plan_payload(
         "walk_lane": "center_lane",
         "circulation_lane": "center_lane",
     }
+    focus_mode_allowed = {
+        "viewing",
+        "conversation",
+        "rest",
+        "work",
+        "dining",
+        "display",
+        "mixed",
+    }
+    focus_mode_map = {
+        "media": "viewing",
+        "tv": "viewing",
+        "sleep": "rest",
+        "restful": "rest",
+        "productive": "work",
+        "storage": "display",
+        "mixed_use": "mixed",
+        "mixed-use": "mixed",
+    }
+    support_cluster_behavior_allowed = {"recede", "balanced", "integrate"}
+    support_cluster_behavior_map = {
+        "balance": "balanced",
+        "integrated": "integrate",
+        "blended": "integrate",
+        "edge_recede": "recede",
+    }
+    distribution_mode_allowed = {
+        "balanced",
+        "edge_weighted",
+        "focal_grouped",
+        "zoned",
+    }
+    distribution_mode_map = {
+        "edge": "edge_weighted",
+        "edge-focused": "edge_weighted",
+        "grouped": "focal_grouped",
+        "focus_grouped": "focal_grouped",
+    }
 
     def valid_cluster_id(value: Any) -> str | None:
         cid = clean_str(value)
@@ -1300,6 +1388,61 @@ def _normalize_relation_plan_payload(
             "keep_open_regions": keep_open_regions,
         }
 
+    def normalize_layout_intent_profile(value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, dict):
+            return None
+
+        primary_cluster_id = valid_cluster_id(
+            value.get("primary_cluster_id") or value.get("primary_cluster")
+        )
+        if primary_cluster_id is None:
+            return None
+
+        secondary_cluster_id = valid_cluster_id(
+            value.get("secondary_cluster_id") or value.get("secondary_cluster")
+        )
+        if secondary_cluster_id == primary_cluster_id:
+            secondary_cluster_id = None
+
+        focus_mode_raw = clean_str(value.get("focus_mode")) or "mixed"
+        focus_mode = focus_mode_map.get(
+            normalize_token(focus_mode_raw), normalize_token(focus_mode_raw)
+        )
+        if focus_mode not in focus_mode_allowed:
+            focus_mode = "mixed"
+
+        support_behavior_raw = (
+            clean_str(value.get("support_cluster_behavior")) or "balanced"
+        )
+        support_cluster_behavior = support_cluster_behavior_map.get(
+            normalize_token(support_behavior_raw),
+            normalize_token(support_behavior_raw),
+        )
+        if support_cluster_behavior not in support_cluster_behavior_allowed:
+            support_cluster_behavior = "balanced"
+
+        distribution_mode_raw = clean_str(value.get("distribution_mode")) or "balanced"
+        distribution_mode = distribution_mode_map.get(
+            normalize_token(distribution_mode_raw),
+            normalize_token(distribution_mode_raw),
+        )
+        if distribution_mode not in distribution_mode_allowed:
+            distribution_mode = "balanced"
+
+        return {
+            "focus_mode": focus_mode,
+            "primary_cluster_id": primary_cluster_id,
+            "secondary_cluster_id": secondary_cluster_id,
+            "circulation_priority": normalize_priority(
+                value.get("circulation_priority")
+            ),
+            "center_open_preference": normalize_priority(
+                value.get("center_open_preference")
+            ),
+            "support_cluster_behavior": support_cluster_behavior,
+            "distribution_mode": distribution_mode,
+        }
+
     out: dict[str, Any] = dict(payload)
 
     out["status"] = normalize_status(out.get("status"))
@@ -1325,6 +1468,9 @@ def _normalize_relation_plan_payload(
         or out.get("cluster_direction_relations")
     )
     out["circulation_plan"] = normalize_circulation_plan(out.get("circulation_plan"))
+    out["layout_intent_profile"] = normalize_layout_intent_profile(
+        out.get("layout_intent_profile")
+    )
 
     out["placement_guidelines"] = _uniq_keep_order(
         ensure_str_list(out.get("placement_guidelines"))
@@ -1341,6 +1487,11 @@ def _normalize_relation_plan_payload(
         clusters_json=clusters_json or {},
     )
     _apply_generic_macro_relation_policy(
+        out,
+        room_model_json=room_model_json or {},
+        clusters_json=clusters_json or {},
+    )
+    _ensure_layout_intent_profile(
         out,
         room_model_json=room_model_json or {},
         clusters_json=clusters_json or {},
@@ -1492,6 +1643,76 @@ def _ensure_cluster_relation(
             "a": a,
             "b": b,
             "relation": relation,
+            "priority": priority,
+            "reason": reason,
+        }
+    )
+
+
+def _ensure_cluster_affinity(
+    plan: dict[str, Any],
+    *,
+    cluster_id: str,
+    prefer_add: list[str] | None = None,
+    avoid_add: list[str] | None = None,
+    prefer_remove: list[str] | None = None,
+    avoid_remove: list[str] | None = None,
+    priority: str,
+    reason: str,
+) -> None:
+    arr = plan.setdefault("cluster_affinities", [])
+    if not isinstance(arr, list):
+        arr = []
+        plan["cluster_affinities"] = arr
+
+    prefer_add = [item for item in (prefer_add or []) if isinstance(item, str)]
+    avoid_add = [item for item in (avoid_add or []) if isinstance(item, str)]
+    prefer_remove_set = {
+        item for item in (prefer_remove or []) if isinstance(item, str)
+    }
+    avoid_remove_set = {item for item in (avoid_remove or []) if isinstance(item, str)}
+
+    for entry in arr:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("cluster_id") != cluster_id:
+            continue
+
+        prefer = entry.get("prefer")
+        if not isinstance(prefer, list):
+            prefer = []
+        avoid = entry.get("avoid")
+        if not isinstance(avoid, list):
+            avoid = []
+
+        entry["prefer"] = [
+            item
+            for item in _uniq_keep_order(prefer + prefer_add)
+            if item not in prefer_remove_set
+        ]
+        entry["avoid"] = [
+            item
+            for item in _uniq_keep_order(avoid + avoid_add)
+            if item not in avoid_remove_set
+        ]
+        entry["priority"] = _max_priority(entry.get("priority"), priority)
+        if not _clean_text(entry.get("reason")):
+            entry["reason"] = reason
+        return
+
+    arr.append(
+        {
+            "cluster_id": cluster_id,
+            "prefer": [
+                item
+                for item in _uniq_keep_order(prefer_add)
+                if item not in prefer_remove_set
+            ],
+            "avoid": [
+                item
+                for item in _uniq_keep_order(avoid_add)
+                if item not in avoid_remove_set
+            ],
             "priority": priority,
             "reason": reason,
         }
@@ -1973,6 +2194,18 @@ def _apply_generic_macro_relation_policy(
         primary_cluster_id=primary_cluster_id,
         roles_by_cluster=roles_by_cluster,
     )
+    _rebalance_viewing_affinities(
+        plan,
+        viewing_pairs=viewing_pairs,
+        roles_by_cluster=roles_by_cluster,
+    )
+    _elevate_primary_macro_anchor(
+        plan,
+        primary_cluster_id=primary_cluster_id,
+        roles_by_cluster=roles_by_cluster,
+        footprint_area_by_cluster=footprint_area_by_cluster,
+        viewing_pairs=viewing_pairs,
+    )
 
 
 def _extract_room_type(room_model_json: dict[str, Any]) -> str:
@@ -2037,6 +2270,70 @@ def _pick_primary_cluster_id(
             best_score = score
             best_cluster_id = cid
     return best_cluster_id
+
+
+def _elevate_primary_macro_anchor(
+    plan: dict[str, Any],
+    *,
+    primary_cluster_id: str | None,
+    roles_by_cluster: dict[str, str],
+    footprint_area_by_cluster: dict[str, int],
+    viewing_pairs: set[tuple[str, str]],
+) -> None:
+    if primary_cluster_id is None:
+        return
+
+    primary_role = roles_by_cluster.get(primary_cluster_id, "mixed")
+    if primary_role == "island":
+        return
+
+    footprint_area_mm2 = int(footprint_area_by_cluster.get(primary_cluster_id, 0) or 0)
+    is_large_anchor = footprint_area_mm2 >= 3_000_000
+    part_of_viewing_pair = any(primary_cluster_id in pair for pair in viewing_pairs)
+
+    prefer_add: list[str] = []
+    avoid_add = ["entry_blocking"]
+    if primary_role in {"sleep", "lounge", "media", "work", "storage", "cooking_line"}:
+        prefer_add.append("wall")
+    if is_large_anchor:
+        prefer_add.append("long_wall")
+    if primary_role in {"media", "sleep"}:
+        prefer_add.append("far_from_entry")
+
+    if prefer_add:
+        _ensure_cluster_affinity(
+            plan,
+            cluster_id=primary_cluster_id,
+            prefer_add=_uniq_keep_order(prefer_add),
+            avoid_add=avoid_add,
+            priority="high"
+            if (is_large_anchor or primary_role != "mixed")
+            else "medium",
+            reason="Primary macro anchor should claim the most stable wall-backed territory before secondary clusters compete for it.",
+        )
+
+    cluster_intents: list[str] = []
+    if primary_role in {"media", "storage", "work", "sleep", "cooking_line"}:
+        cluster_intents.append("back_to_wall")
+    if primary_role in {"media", "storage", "work"}:
+        cluster_intents.append("access_to_open_space")
+    if primary_role == "lounge" and (part_of_viewing_pair or is_large_anchor):
+        cluster_intents.append("back_to_wall")
+
+    if cluster_intents:
+        _ensure_cluster_orientation(
+            plan,
+            cluster_id=primary_cluster_id,
+            intents=_uniq_keep_order(cluster_intents),
+            target_cluster_id=None,
+            priority="high",
+            reason="Primary macro anchor should establish a stable wall-backed frame before downstream solve/refine.",
+        )
+
+    _ensure_guideline(
+        plan,
+        f"Treat {primary_cluster_id} as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    )
 
 
 def _prune_directional_relations_without_focal_support(
@@ -2131,3 +2428,182 @@ def _cap_center_preference_to_primary_cluster(
             if roles_by_cluster.get(cid) in {"island"}:
                 continue
             entry["intents"] = [item for item in intents if item != "face_center"]
+
+
+def _rebalance_viewing_affinities(
+    plan: dict[str, Any],
+    *,
+    viewing_pairs: set[tuple[str, str]],
+    roles_by_cluster: dict[str, str],
+) -> None:
+    if not viewing_pairs:
+        return
+
+    for a, b in sorted(viewing_pairs):
+        a_role = roles_by_cluster.get(a, "mixed")
+        b_role = roles_by_cluster.get(b, "mixed")
+        if a_role == "media" and b_role != "media":
+            focal_cid = a
+            seating_cid = b
+        elif b_role == "media" and a_role != "media":
+            focal_cid = b
+            seating_cid = a
+        else:
+            seating_cid, focal_cid = a, b
+
+        _ensure_cluster_affinity(
+            plan,
+            cluster_id=seating_cid,
+            prefer_add=["wall", "far_from_entry"],
+            avoid_add=["door_swing", "window_blocking"],
+            priority="high",
+            reason="Primary seating needs wall backing and a clean viewing path.",
+        )
+        _ensure_cluster_affinity(
+            plan,
+            cluster_id=focal_cid,
+            prefer_add=["wall", "far_from_entry"],
+            avoid_add=["center", "window_blocking"],
+            prefer_remove=["window_side"],
+            priority="high",
+            reason="Focal/media clusters should preserve a strong viewing axis before chasing window-side placement.",
+        )
+        _ensure_guideline(
+            plan,
+            f"Do not let {focal_cid} chase the window side if it weakens the viewing axis with {seating_cid}.",
+        )
+
+
+def _ensure_layout_intent_profile(
+    plan: dict[str, Any],
+    *,
+    room_model_json: dict[str, Any],
+    clusters_json: dict[str, Any],
+) -> None:
+    if not isinstance(plan, dict):
+        return
+
+    existing = plan.get("layout_intent_profile")
+    clusters = _extract_clusters_map(clusters_json)
+    if not clusters:
+        plan["layout_intent_profile"] = None
+        return
+
+    roles_by_cluster: dict[str, str] = {}
+    footprint_area_by_cluster: dict[str, int] = {}
+    for cid, cluster in clusters.items():
+        object_ids = _extract_cluster_object_ids(cluster)
+        roles_by_cluster[cid] = _classify_cluster_role(object_ids, cid)
+        footprint = cluster.get("cluster_footprint")
+        rects = (footprint or {}).get("rects") if isinstance(footprint, dict) else None
+        footprint_area_by_cluster[cid] = _sum_rect_area_mm2(rects or [])
+
+    room_type = _extract_room_type(room_model_json)
+    primary_cluster_id = _pick_primary_cluster_id(
+        room_type=room_type,
+        roles_by_cluster=roles_by_cluster,
+        footprint_area_by_cluster=footprint_area_by_cluster,
+    )
+    if primary_cluster_id is None:
+        plan["layout_intent_profile"] = None
+        return
+
+    viewing_pairs = _infer_viewing_cluster_pairs(plan, clusters_json)
+    directional_pairs = {
+        tuple(sorted((str(row.get("a") or ""), str(row.get("b") or ""))))
+        for row in plan.get("cluster_directional_relations", [])
+        if isinstance(row, dict)
+        and isinstance(row.get("a"), str)
+        and isinstance(row.get("b"), str)
+    }
+    keep_open_regions = (plan.get("circulation_plan") or {}).get(
+        "keep_open_regions"
+    ) or []
+    keep_open_types = {
+        str(row.get("type") or "")
+        for row in keep_open_regions
+        if isinstance(row, dict) and isinstance(row.get("type"), str)
+    }
+
+    secondary_cluster_id: str | None = None
+    focus_mode = "mixed"
+    if viewing_pairs:
+        focus_mode = "viewing"
+        secondary_cluster_id = viewing_pairs[0][1]
+        if primary_cluster_id == secondary_cluster_id:
+            secondary_cluster_id = viewing_pairs[0][0]
+    elif roles_by_cluster.get(primary_cluster_id) == "sleep":
+        focus_mode = "rest"
+    elif roles_by_cluster.get(primary_cluster_id) == "work":
+        focus_mode = "work"
+    elif roles_by_cluster.get(primary_cluster_id) == "media":
+        focus_mode = "display"
+    elif any(role == "lounge" for role in roles_by_cluster.values()):
+        focus_mode = "conversation"
+
+    circulation_priority = "medium"
+    if keep_open_types & {"entry_buffer", "center_lane", "work_lane"}:
+        circulation_priority = "high"
+    elif (plan.get("circulation_plan") or {}).get("main_paths"):
+        circulation_priority = "medium"
+
+    center_open_preference = "medium"
+    if "center_lane" in keep_open_types:
+        center_open_preference = "high"
+    elif any(
+        isinstance(row, dict)
+        and isinstance(row.get("prefer"), list)
+        and "center" in row.get("prefer", [])
+        for row in plan.get("cluster_affinities", [])
+    ):
+        center_open_preference = "low"
+
+    support_cluster_behavior = "balanced"
+    if center_open_preference == "high" or any(
+        isinstance(row, dict)
+        and isinstance(row.get("prefer"), list)
+        and "recess_or_edge" in row.get("prefer", [])
+        for row in plan.get("cluster_affinities", [])
+    ):
+        support_cluster_behavior = "recede"
+
+    distribution_mode = "balanced"
+    if directional_pairs:
+        distribution_mode = "focal_grouped"
+    elif any(
+        isinstance(row, dict)
+        and str(row.get("relation") or "") in {"separate", "far_if_possible"}
+        for row in plan.get("cluster_relations", [])
+    ):
+        distribution_mode = "zoned"
+    elif all(
+        isinstance(row, dict)
+        and isinstance(row.get("prefer"), list)
+        and set(row.get("prefer") or []).issubset(
+            {"wall", "long_wall", "short_wall", "recess_or_edge", "far_from_entry"}
+        )
+        for row in plan.get("cluster_affinities", [])
+        if isinstance(row, dict) and row.get("cluster_id") != primary_cluster_id
+    ):
+        distribution_mode = "edge_weighted"
+
+    derived = {
+        "focus_mode": focus_mode,
+        "primary_cluster_id": primary_cluster_id,
+        "secondary_cluster_id": secondary_cluster_id,
+        "circulation_priority": circulation_priority,
+        "center_open_preference": center_open_preference,
+        "support_cluster_behavior": support_cluster_behavior,
+        "distribution_mode": distribution_mode,
+    }
+
+    if not isinstance(existing, dict):
+        plan["layout_intent_profile"] = derived
+        return
+
+    merged = dict(existing)
+    for key, value in derived.items():
+        current = merged.get(key)
+        if current is None or current == "" or current == []:
+            merged[key] = value
+    plan["layout_intent_profile"] = merged

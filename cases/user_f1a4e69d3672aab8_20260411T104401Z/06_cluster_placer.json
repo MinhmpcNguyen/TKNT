@@ -1,0 +1,51 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "lounge_zone",
+      "x": 100,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "cluster_id": "sleep_zone",
+      "x": 2300,
+      "y": 250,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_zone",
+      "x": 100,
+      "y": 2900,
+      "rot": 0
+    },
+    {
+      "cluster_id": "work_zone",
+      "x": 5450,
+      "y": 1400,
+      "rot": 0
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "lounge_zone",
+      "variant_id": "lounge_zone::base"
+    },
+    {
+      "cluster_id": "sleep_zone",
+      "variant_id": "sleep_zone::base"
+    },
+    {
+      "cluster_id": "storage_zone",
+      "variant_id": "storage_zone::base"
+    },
+    {
+      "cluster_id": "work_zone",
+      "variant_id": "work_zone::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Move sleep_zone away from the viewing partner"
+  ]
+}
