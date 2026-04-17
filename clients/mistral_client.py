@@ -67,10 +67,12 @@ class MistralClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
+        response_mime_type: str | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
         _ = thinking_level
+        _ = response_mime_type
         resolved_model_name = model_name or self.get_model_name(model_key)
         if tools is not None:
             return self._raw_tool_chat_completion(

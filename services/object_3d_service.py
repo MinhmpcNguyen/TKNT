@@ -795,13 +795,17 @@ def _build_prompt_generation_attempts(prompt: str) -> list[str]:
             f"{normalized_prompt}\n\n"
             "Framing requirements: use a close-up centered studio product shot. "
             "The single object must fill most of the image with only small white margins. "
-            "Avoid any zoomed-out composition."
+            "Avoid any zoomed-out composition. "
+            "Use a gentle three-quarter front camera angle so the object shows visible side depth. "
+            "Reveal natural material detail, tactile surface texture, and soft shape-defining shadows."
         ),
         (
             f"{normalized_prompt}\n\n"
             "Framing requirements: move the camera closer until the object fills about 85% "
             "of the frame while remaining fully visible. Keep a pure white background and "
-            "leave almost no empty white space around the subject."
+            "leave almost no empty white space around the subject. "
+            "Use a photorealistic catalog hero shot from a three-quarter view, not a flat head-on cutout. "
+            "Favor rich surface detail, believable local color, and clear depth cues across the full body."
         ),
     ][:PROMPT_IMAGE_MAX_GENERATION_ATTEMPTS]
 

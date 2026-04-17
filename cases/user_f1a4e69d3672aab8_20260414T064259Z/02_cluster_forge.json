@@ -1,0 +1,477 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "main_seating_area",
+      "tag": "living",
+      "members": [
+        "sofa",
+        "coffee_table",
+        "side_table",
+        "floor_lamp",
+        "armchair"
+      ],
+      "anchors": [
+        "sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sofa",
+          "b": "side_table"
+        },
+        {
+          "type": "dock_to_edge",
+          "a": "coffee_table",
+          "b": "sofa",
+          "b_edge": "front",
+          "span": "center",
+          "gap_min": 300,
+          "gap_max": 600
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "sofa",
+          "mode": "face_each_other",
+          "weight": 5
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sofa": {
+            "front": "bottom",
+            "notes": "Primary seating orientation"
+          },
+          "coffee_table": {
+            "front": "top",
+            "notes": "Faces sofa"
+          },
+          "armchair": {
+            "front": "right",
+            "notes": "Angled toward center"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sofa",
+            "kind": "dock_to_edge",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "side_table",
+            "relative_to": "sofa",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "first_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left"
+            ]
+          },
+          {
+            "id": "armchair",
+            "relative_to": "sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "first_fit",
+            "orientation": "face_base",
+            "gap_min": 400,
+            "gap_max": 800,
+            "side_options": [
+              "head_right"
+            ]
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "lounge_area",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "ottoman",
+        "bean_bag",
+        "recliner"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "ottoman"
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "ottoman": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bean_bag": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "recliner": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "bottom",
+            "notes": "Lounge orientation"
+          },
+          "recliner": {
+            "front": "bottom",
+            "notes": "Faces TV zone"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "recliner",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "ottoman",
+            "relative_to": "sectional_sofa",
+            "kind": "dock_to_edge",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 300,
+            "gap_max": 500,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "bean_bag",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "first_fit",
+            "orientation": "face_base",
+            "gap_min": 400,
+            "gap_max": 800,
+            "side_options": [
+              "head_left"
+            ]
+          },
+          {
+            "id": "recliner",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 350,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "media_shelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "anchor_side",
+          "a": "media_shelf",
+          "b": "tv_console",
+          "side": "right",
+          "gap_min": 0,
+          "gap_max": 200
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "media_shelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "top",
+            "notes": "Faces seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "media_shelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "first_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 200,
+            "side_options": [
+              "head_right"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "storage_display",
+      "tag": "storage",
+      "members": [
+        "storage_cabinet",
+        "bookshelf",
+        "console_table"
+      ],
+      "anchors": [
+        "storage_cabinet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "storage_cabinet",
+          "b": "bookshelf"
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "storage_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "console_table": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "storage_cabinet": {
+            "front": "bottom",
+            "notes": "Faces room"
+          },
+          "bookshelf": {
+            "front": "bottom",
+            "notes": "Faces room"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "storage_cabinet",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "bookshelf",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "bookshelf",
+            "relative_to": "storage_cabinet",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "first_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left"
+            ]
+          },
+          {
+            "id": "console_table",
+            "relative_to": "storage_cabinet",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "first_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_right"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "pet_zone",
+      "tag": "misc",
+      "members": [
+        "pet_bed"
+      ],
+      "anchors": [
+        "pet_bed"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "pet_bed": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "pet_bed": {
+            "front": "bottom",
+            "notes": "General orientation"
+          }
+        },
+        "access_requirements": [],
+        "semantic_placements": []
+      }
+    }
+  ],
+  "notes": [
+    "Modern living room split into functional seating, media, and storage clusters.",
+    "Tall storage and media units should be placed against solid walls to avoid blocking windows.",
+    "Seating is grouped to maintain open circulation paths."
+  ],
+  "missing": []
+}

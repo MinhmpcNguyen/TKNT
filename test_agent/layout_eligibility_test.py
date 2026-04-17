@@ -86,6 +86,44 @@ class LayoutEligibilityTest(unittest.TestCase):
             )
         )
 
+    def test_unacceptable_layout_is_not_gallery_eligible(self) -> None:
+        merged_output = {
+            "clusters": [
+                {
+                    "cluster_id": "seating_hub",
+                    "decisions": [{"object_type": "sofa", "quantity": 1}],
+                }
+            ]
+        }
+        absolute_layout = {
+            "status": "OK",
+            "objects": [{"cluster_id": "seating_hub"}],
+            "missing": [],
+        }
+
+        summary = summarize_layout_coverage(
+            absolute_layout=absolute_layout,
+            merged_output=merged_output,
+            relation_plan=None,
+            cluster_outlines=None,
+            hard_valid=True,
+            acceptable_valid=False,
+        )
+        payload = annotate_layout_coverage(
+            absolute_layout=absolute_layout,
+            merged_output=merged_output,
+            relation_plan=None,
+            cluster_outlines=None,
+            hard_valid=True,
+            acceptable_valid=False,
+        )
+
+        self.assertTrue(summary["complete"])
+        self.assertFalse(summary["acceptable_valid"])
+        self.assertFalse(summary["gallery_eligible"])
+        self.assertFalse(payload["acceptable_valid"])
+        self.assertFalse(payload["gallery_eligible"])
+
 
 if __name__ == "__main__":
     unittest.main()

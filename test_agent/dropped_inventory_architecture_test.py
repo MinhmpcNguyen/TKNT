@@ -337,6 +337,8 @@ class DroppedInventoryArchitectureTest(unittest.TestCase):
             ),
             120.0,
         )
+        self.assertIn(inserted.get("front_side_world"), {"top", "bottom", "left", "right"})
+        self.assertIsInstance(inserted.get("front_world"), dict)
 
     def test_reintroduced_object_is_skipped_when_only_center_gap_remains(self) -> None:
         absolute_layout, summary = dropped_inventory.reintroduce_dropped_inventory(
@@ -416,6 +418,8 @@ class DroppedInventoryArchitectureTest(unittest.TestCase):
             ),
             120.0,
         )
+        self.assertIn(inserted.get("front_side_world"), {"top", "bottom", "left", "right"})
+        self.assertIsInstance(inserted.get("front_world"), dict)
         self.assertFalse(dropped_inventory._overlaps_blockers(polygon, blockers))
 
 

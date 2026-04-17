@@ -32,6 +32,7 @@ class _VariantCandidate:
     reason: str
     layout_score: int
     hard_valid: bool
+    acceptable_valid: bool
     notes: list[str]
     promoted_payload: dict[str, Any]
     family: str
@@ -83,6 +84,11 @@ def build_layout_variants_artifact(
     )
     candidate_pool: list[_VariantCandidate] = []
     seen_signatures: set[str] = set()
+    selected_coverage_fields = _extract_candidate_coverage_fields(
+        absolute_layout=absolute_layout,
+        hard_valid=bool(selected_eval.get("hard_valid")),
+        acceptable_valid=bool(selected_eval.get("acceptable_valid")),
+    )
 
     selected_candidate = _VariantCandidate(
         absolute_layout=deepcopy(absolute_layout),
@@ -98,10 +104,7 @@ def build_layout_variants_artifact(
         ),
         promoted_payload=selected_promoted,
         family=_variant_family("phase2_selected", ""),
-        **_extract_candidate_coverage_fields(
-            absolute_layout=absolute_layout,
-            hard_valid=bool(selected_eval.get("hard_valid")),
-        ),
+        **selected_coverage_fields,
     )
     candidate_pool.append(selected_candidate)
     seen_signatures.add(_absolute_layout_signature(absolute_layout))
@@ -279,6 +282,7 @@ def build_layout_variants_artifact(
                 "reason": variant.reason,
                 "layout_score": variant.layout_score,
                 "hard_valid": variant.hard_valid,
+                "acceptable_valid": variant.acceptable_valid,
                 "complete": variant.complete,
                 "gallery_eligible": variant.gallery_eligible,
                 "coverage_ratio": variant.coverage_ratio,
@@ -537,6 +541,7 @@ def _extract_candidate_coverage_fields(
     *,
     absolute_layout: dict[str, Any],
     hard_valid: bool,
+    acceptable_valid: bool | None = None,
 ) -> dict[str, Any]:
     coverage = (
         absolute_layout.get("coverage")
@@ -549,12 +554,21 @@ def _extract_candidate_coverage_fields(
             coverage.get("complete", hard_valid),
         )
     )
+    acceptable = bool(
+        absolute_layout.get(
+            "acceptable_valid",
+            coverage.get(
+                "acceptable_valid",
+                hard_valid if acceptable_valid is None else acceptable_valid,
+            ),
+        )
+    )
     gallery_eligible = bool(
         absolute_layout.get(
             "gallery_eligible",
-            coverage.get("gallery_eligible", complete and hard_valid),
+            coverage.get("gallery_eligible", complete and hard_valid and acceptable),
         )
-    )
+    ) and acceptable
     coverage_ratio = float(
         absolute_layout.get(
             "coverage_ratio",
@@ -567,6 +581,7 @@ def _extract_candidate_coverage_fields(
         missing_cluster_ids = coverage.get("missing_cluster_ids")
     return {
         "complete": complete,
+        "acceptable_valid": acceptable,
         "gallery_eligible": gallery_eligible,
         "coverage_ratio": coverage_ratio,
         "missing_cluster_ids": [
@@ -609,6 +624,7 @@ def _build_variant_from_repair(
     coverage_fields = _extract_candidate_coverage_fields(
         absolute_layout=absolute_layout,
         hard_valid=bool(evaluation.get("hard_valid")),
+        acceptable_valid=bool(evaluation.get("acceptable_valid")),
     )
     return _VariantCandidate(
         absolute_layout=absolute_layout,
@@ -617,6 +633,7 @@ def _build_variant_from_repair(
         reason=reason,
         layout_score=_candidate_score(evaluation),
         hard_valid=bool(evaluation.get("hard_valid")),
+        acceptable_valid=bool(coverage_fields["acceptable_valid"]),
         notes=_collect_notes(repair.get("notes"), absolute_layout.get("notes")),
         promoted_payload=promoted_payload,
         family=_variant_family(source, reason),
@@ -641,6 +658,11 @@ def _candidate_from_external(external: dict[str, Any]) -> _VariantCandidate | No
     coverage_fields = _extract_candidate_coverage_fields(
         absolute_layout=absolute_layout,
         hard_valid=bool(external.get("hard_valid", True)),
+        acceptable_valid=(
+            bool(external.get("acceptable_valid"))
+            if "acceptable_valid" in external
+            else None
+        ),
     )
     return _VariantCandidate(
         absolute_layout=deepcopy(absolute_layout),
@@ -651,6 +673,7 @@ def _candidate_from_external(external: dict[str, Any]) -> _VariantCandidate | No
         reason=reason,
         layout_score=int(external.get("layout_score") or 0),
         hard_valid=bool(external.get("hard_valid", True)),
+        acceptable_valid=bool(coverage_fields["acceptable_valid"]),
         notes=notes,
         promoted_payload=deepcopy(external.get("promoted_payload"))
         if isinstance(external.get("promoted_payload"), dict)

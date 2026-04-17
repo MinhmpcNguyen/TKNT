@@ -359,6 +359,35 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertIn(result.verdict, {"REVISE", "ACCEPT"})
         self.assertIn(result.next_step_mode, {"macro_layout", "object_refine", "stop"})
 
+    def test_build_phase2_payload_preserves_explicit_not_ready_seed(self) -> None:
+        room = _load_json(CASE_ROOT / "01_room_interpreter.json")
+        merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
+        outlines = _load_json(CASE_ROOT / "05_cluster_outlines.json")
+        relation_plan = _load_json(CASE_ROOT / "05b_cluster_relation_plan.json")
+        solver = _load_json(CASE_ROOT / "06a_cluster_solver.json")
+        solver["placer_seed"] = {
+            "ready": False,
+            "needed": False,
+            "seed_kind": "hard_valid_complete",
+        }
+        solver["solver_debug"] = {
+            "best_verify": {
+                "hard_valid": True,
+                "complete": True,
+            }
+        }
+
+        payload = build_phase2_payload(
+            room_01=room,
+            clusters_04=merged,
+            outlines_05=outlines,
+            relation_05b=relation_plan,
+            placer_06=solver,
+            cluster_constraints=None,
+        )
+
+        self.assertFalse((payload.get("phase_control") or {}).get("ready"))
+
     def test_viewing_macro_moves_include_viewing_partner_repositioning(self) -> None:
         payload = _viewing_payload()
         moves = EnumeratePhase2RepairMoves(payload=payload, limit=24).get("moves") or []
@@ -809,6 +838,92 @@ class Phase2ArchitectureTest(unittest.TestCase):
             )
         )
 
+    def test_viewing_contract_moves_do_not_rotate_protected_clusters_or_anchors(
+        self,
+    ) -> None:
+        payload = _viewing_payload()
+        payload.setdefault("phase_control", {})["repair_phase"] = "macro_layout"
+        seed_rot_by_cluster = {
+            str(row.get("cluster_id") or ""): int(row.get("rot") or 0)
+            for row in (payload.get("seed_layout", {}).get("cluster_transforms") or [])
+            if isinstance(row, dict)
+        }
+
+        macro_moves = EnumeratePhase2RepairMoves(payload=payload, limit=80)["moves"]
+        protected_cluster_ids = {"seating_area_1", "tv_media_1"}
+        forbidden_macro_moves = [
+            move
+            for move in macro_moves
+            if move.get("cluster_id") in protected_cluster_ids
+            and any(
+                int(row.get("rot") or 0)
+                != seed_rot_by_cluster.get(str(row.get("cluster_id") or ""), 0)
+                for row in (
+                    (move.get("proposal") or {}).get("cluster_transforms") or []
+                )
+                if str(row.get("cluster_id") or "") == str(move.get("cluster_id") or "")
+            )
+        ]
+        self.assertFalse(forbidden_macro_moves)
+
+        payload["phase_control"]["repair_phase"] = "object_refine"
+        object_moves = EnumeratePhase2RepairMoves(payload=payload, limit=120)["moves"]
+        forbidden_object_moves = [
+            move
+            for move in object_moves
+            for repair in ((move.get("proposal") or {}).get("object_repairs") or [])
+            if str(repair.get("cluster_id") or "") in protected_cluster_ids
+            and str(repair.get("object_id") or "") in {"sofa", "tv_console"}
+            and str(repair.get("op") or "")
+            in {"rotate_object", "mirror_object", "set_front_override", "swap_objects"}
+        ]
+        self.assertFalse(forbidden_object_moves)
+
+    def test_evaluate_phase2_rejects_anchor_contract_breaking_repairs(self) -> None:
+        payload = _viewing_payload()
+        baseline = make_no_improvement_repair(payload)
+
+        rotated_cluster = deepcopy(baseline)
+        rotated_cluster["cluster_transforms"] = [
+            {
+                **deepcopy(row),
+                "rot": (
+                    90
+                    if str(row.get("cluster_id") or "") == "seating_area_1"
+                    else row.get("rot")
+                ),
+            }
+            for row in baseline["cluster_transforms"]
+        ]
+        rotated_cluster_eval = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=rotated_cluster,
+        )
+        self.assertFalse(rotated_cluster_eval["hard_valid"])
+        self.assertIn(
+            "ANCHOR_CONTRACT_CLUSTER_ROTATION",
+            [error.get("code") for error in rotated_cluster_eval["errors"]],
+        )
+
+        rotated_anchor = deepcopy(baseline)
+        rotated_anchor["object_repairs"] = [
+            {
+                "cluster_id": "seating_area_1",
+                "object_id": "sofa",
+                "op": "rotate_object",
+                "params": {"rot": 90},
+            }
+        ]
+        rotated_anchor_eval = EvaluatePhase2Proposal(
+            payload=payload,
+            repair=rotated_anchor,
+        )
+        self.assertFalse(rotated_anchor_eval["hard_valid"])
+        self.assertIn(
+            "ANCHOR_CONTRACT_OBJECT_ORIENTATION",
+            [error.get("code") for error in rotated_anchor_eval["errors"]],
+        )
+
     def test_object_refine_rejects_macro_edits_and_nonenumerated_moves(self) -> None:
         payload = _sample_payload()
         payload["phase_control"]["repair_phase"] = "object_refine"
@@ -1123,7 +1238,7 @@ class Phase2ArchitectureTest(unittest.TestCase):
         self.assertTrue(rows)
         self.assertEqual(rows[0].get("target_object_id"), "sectional_sofa")
 
-    def test_object_refine_enumeration_includes_relation_driven_tv_rotation(
+    def test_object_refine_enumeration_skips_relation_driven_tv_rotation_for_viewing_anchor(
         self,
     ) -> None:
         payload = _variant_preview_payload()
@@ -1143,7 +1258,7 @@ class Phase2ArchitectureTest(unittest.TestCase):
             )
         ]
 
-        self.assertTrue(tv_rotation_moves)
+        self.assertFalse(tv_rotation_moves)
 
     def test_phase2_scores_semantic_proximity_from_cluster_rules(self) -> None:
         payload, cluster_id, object_id = _payload_with_semantic_spacing_pressure()
@@ -1250,9 +1365,16 @@ class Phase2ArchitectureTest(unittest.TestCase):
             for row in compiled.get("objects") or []
             if isinstance(row, dict)
         }
+        front_side_by_object = {
+            str(row.get("object_id") or ""): str(row.get("front_side_world") or "")
+            for row in compiled.get("objects") or []
+            if isinstance(row, dict)
+        }
 
         self.assertEqual(rotation_by_object.get("tv_console"), 180)
         self.assertEqual(rotation_by_object.get("sectional_sofa"), 0)
+        self.assertEqual(front_side_by_object.get("tv_console"), "top")
+        self.assertEqual(front_side_by_object.get("sectional_sofa"), "bottom")
 
     def test_window_case_scores_front_to_window_and_affinity_preferences(self) -> None:
         payload = _window_payload()

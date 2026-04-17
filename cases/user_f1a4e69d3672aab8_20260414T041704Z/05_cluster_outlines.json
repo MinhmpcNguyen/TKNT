@@ -1,0 +1,464 @@
+{
+  "main_seating_lounge": {
+    "status": "OK",
+    "cluster_id": "main_seating_lounge",
+    "local_frame": {
+      "unit": "mm",
+      "grid_mm": 50,
+      "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+    },
+    "local_placements": [
+      {
+        "id": "armchair",
+        "x": 1950,
+        "y": 100,
+        "rot": 0
+      },
+      {
+        "id": "coffee_table",
+        "x": 4000,
+        "y": 350,
+        "rot": 0
+      },
+      {
+        "id": "floor_lamp",
+        "x": 5300,
+        "y": 500,
+        "rot": 270
+      },
+      {
+        "id": "recliner",
+        "x": 2950,
+        "y": 50,
+        "rot": 0
+      },
+      {
+        "id": "sectional_sofa",
+        "x": 150,
+        "y": 1500,
+        "rot": 0
+      },
+      {
+        "id": "side_table",
+        "x": 4900,
+        "y": 450,
+        "rot": 0
+      },
+      {
+        "id": "sofa",
+        "x": 150,
+        "y": 0,
+        "rot": 0
+      }
+    ],
+    "cluster_footprint": {
+      "type": "union_of_rects",
+      "rects": [
+        {
+          "id": "armchair",
+          "x": 1950,
+          "y": 100,
+          "w": 840,
+          "h": 710
+        },
+        {
+          "id": "coffee_table",
+          "x": 4000,
+          "y": 350,
+          "w": 900,
+          "h": 500
+        },
+        {
+          "id": "floor_lamp",
+          "x": 5300,
+          "y": 500,
+          "w": 320,
+          "h": 350
+        },
+        {
+          "id": "recliner",
+          "x": 2950,
+          "y": 50,
+          "w": 880,
+          "h": 760
+        },
+        {
+          "id": "sectional_sofa",
+          "x": 150,
+          "y": 1500,
+          "w": 2540,
+          "h": 920
+        },
+        {
+          "id": "side_table",
+          "x": 4900,
+          "y": 450,
+          "w": 390,
+          "h": 370
+        },
+        {
+          "id": "sofa",
+          "x": 150,
+          "y": 0,
+          "w": 1790,
+          "h": 810
+        }
+      ],
+      "local_bbox": {
+        "min_x": 150,
+        "min_y": 0,
+        "max_x": 5620,
+        "max_y": 2420
+      },
+      "outline_polygons_ccw": [
+        [
+          {
+            "x": 150,
+            "y": 0
+          },
+          {
+            "x": 5620,
+            "y": 0
+          },
+          {
+            "x": 5620,
+            "y": 850
+          },
+          {
+            "x": 2690,
+            "y": 850
+          },
+          {
+            "x": 2690,
+            "y": 2420
+          },
+          {
+            "x": 150,
+            "y": 2420
+          }
+        ]
+      ],
+      "outline_meta": {
+        "mode": "envelope",
+        "normalized_translation": {
+          "dx": 0,
+          "dy": 0
+        },
+        "gap_fill_mm": 0,
+        "used_shapely": false
+      }
+    },
+    "orientation_meta": {
+      "cluster_front_local": {
+        "dx": 0,
+        "dy": -1
+      },
+      "cluster_axis_local": {
+        "dx": 1,
+        "dy": 0
+      },
+      "important_objects": {
+        "sectional_sofa": {
+          "front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "sofa": {
+          "front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "armchair": {
+          "front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "recliner": {
+          "front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "coffee_table": {
+          "front_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "side_table": {
+          "front_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        "floor_lamp": {
+          "front_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "axis_local": {
+            "dx": 0,
+            "dy": -1
+          }
+        }
+      }
+    },
+    "notes": [
+      "ClusterComposer used deterministic search instead of an LLM."
+    ],
+    "missing": []
+  },
+  "media_zone": {
+    "status": "OK",
+    "cluster_id": "media_zone",
+    "local_frame": {
+      "unit": "mm",
+      "grid_mm": 50,
+      "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+    },
+    "local_placements": [
+      {
+        "id": "tv_console",
+        "x": 0,
+        "y": 0,
+        "rot": 0
+      }
+    ],
+    "cluster_footprint": {
+      "type": "union_of_rects",
+      "rects": [
+        {
+          "id": "tv_console",
+          "x": 0,
+          "y": 0,
+          "w": 1260,
+          "h": 380
+        }
+      ],
+      "local_bbox": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 1260,
+        "max_y": 380
+      },
+      "outline_polygons_ccw": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1260,
+            "y": 0
+          },
+          {
+            "x": 1260,
+            "y": 380
+          },
+          {
+            "x": 0,
+            "y": 380
+          }
+        ]
+      ],
+      "outline_meta": {
+        "mode": "envelope",
+        "normalized_translation": {
+          "dx": 0,
+          "dy": 0
+        },
+        "gap_fill_mm": 0,
+        "used_shapely": false
+      }
+    },
+    "orientation_meta": {
+      "cluster_front_local": {
+        "dx": 0,
+        "dy": -1
+      },
+      "cluster_axis_local": {
+        "dx": 1,
+        "dy": 0
+      },
+      "important_objects": {
+        "tv_console": {
+          "front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "axis_local": {
+            "dx": 1,
+            "dy": 0
+          }
+        }
+      }
+    },
+    "notes": [
+      "ClusterComposer used deterministic search instead of an LLM."
+    ],
+    "missing": []
+  },
+  "storage_display": {
+    "status": "OK",
+    "cluster_id": "storage_display",
+    "local_frame": {
+      "unit": "mm",
+      "grid_mm": 50,
+      "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+    },
+    "local_placements": [
+      {
+        "id": "bookshelf",
+        "x": 350,
+        "y": 100,
+        "rot": 90
+      },
+      {
+        "id": "console_table",
+        "x": 0,
+        "y": 0,
+        "rot": 270
+      },
+      {
+        "id": "storage_cabinet",
+        "x": 0,
+        "y": 1100,
+        "rot": 180
+      }
+    ],
+    "cluster_footprint": {
+      "type": "union_of_rects",
+      "rects": [
+        {
+          "id": "bookshelf",
+          "x": 350,
+          "y": 100,
+          "w": 250,
+          "h": 630
+        },
+        {
+          "id": "console_table",
+          "x": 0,
+          "y": 0,
+          "w": 350,
+          "h": 1060
+        },
+        {
+          "id": "storage_cabinet",
+          "x": 0,
+          "y": 1100,
+          "w": 610,
+          "h": 410
+        }
+      ],
+      "local_bbox": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 610,
+        "max_y": 1510
+      },
+      "outline_polygons_ccw": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 610,
+            "y": 0
+          },
+          {
+            "x": 610,
+            "y": 1510
+          },
+          {
+            "x": 0,
+            "y": 1510
+          }
+        ]
+      ],
+      "outline_meta": {
+        "mode": "envelope",
+        "normalized_translation": {
+          "dx": 0,
+          "dy": 0
+        },
+        "gap_fill_mm": 0,
+        "used_shapely": false
+      }
+    },
+    "orientation_meta": {
+      "cluster_front_local": {
+        "dx": 1,
+        "dy": 0
+      },
+      "cluster_axis_local": {
+        "dx": 0,
+        "dy": 1
+      },
+      "important_objects": {
+        "storage_cabinet": {
+          "front_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "axis_local": {
+            "dx": -1,
+            "dy": 0
+          }
+        },
+        "bookshelf": {
+          "front_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "axis_local": {
+            "dx": 0,
+            "dy": 1
+          }
+        },
+        "console_table": {
+          "front_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "axis_local": {
+            "dx": 0,
+            "dy": -1
+          }
+        }
+      }
+    },
+    "notes": [
+      "ClusterComposer used deterministic search instead of an LLM."
+    ],
+    "missing": []
+  }
+}

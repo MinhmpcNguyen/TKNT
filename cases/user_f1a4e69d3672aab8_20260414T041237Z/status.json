@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260414T041237Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-14T04:12:43.990396+00:00",
+  "error": "ClusterForge returned invalid JSON",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-14T04:12:37.789228+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-14T04:12:37.968797+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "ClusterForge returned invalid JSON",
+      "updated_at_utc": "2026-04-14T04:12:43.990396+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "ClusterForge returned invalid JSON"
+    }
+  ]
+}

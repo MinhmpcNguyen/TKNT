@@ -241,9 +241,10 @@ TOOL RULES
 
 PRIMARY OBJECTIVES
 1. Satisfy all hard constraints.
-2. Among VALID layouts, prefer the most compact one.
-3. Keep the arrangement simple, axis-aligned, and stable.
-4. Infer stable, semantically meaningful orientation_meta from the final VALID layout.
+2. Among VALID layouts, prefer the one that best preserves forge-defined semantic placements, facing, and access intent.
+3. Use compactness only as a secondary tie-breaker after semantic coherence is preserved.
+4. Keep the arrangement simple, axis-aligned, and stable.
+5. Infer stable, semantically meaningful orientation_meta from the final VALID layout.
 
 MEMBERSHIP RULES
 - Place every member exactly once.
@@ -272,11 +273,12 @@ PLACEMENT STRATEGY
 - Place anchors/base objects first.
 - Then place dependents relative to their base objects.
 - Then place unconstrained items into leftover compact pockets.
-- Prefer a compact initial layout; do not create a large loose layout and hope to shrink it later.
+- Prefer a forge-faithful initial layout first; optimize footprint only after semantic placements and facing remain coherent.
 - Prefer non-negative coordinates when possible for the initial attempt.
 
 COMPACTNESS PREFERENCE
 Among VALID layouts, prefer:
+- lower soft/internal penalty from semantic placements and facing
 - smaller compact_score
 - smaller bbox area
 - smaller max span

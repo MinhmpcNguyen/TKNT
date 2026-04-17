@@ -35,6 +35,7 @@ class ImportantObjectOrientationMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     front_local: CardinalAxisVector
+    effective_front_side: Literal["top", "bottom", "left", "right"] | None = None
     axis_local: CardinalAxisVector
 
 
@@ -42,6 +43,9 @@ class OrientationMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cluster_front_local: CardinalAxisVector
+    cluster_effective_front_side: Literal["top", "bottom", "left", "right"] | None = (
+        None
+    )
     cluster_axis_local: CardinalAxisVector
     important_objects: dict[str, ImportantObjectOrientationMeta] = Field(
         default_factory=dict

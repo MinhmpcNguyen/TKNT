@@ -286,7 +286,11 @@ def build_phase2_payload(
         solver_debug = (placer_06 or {}).get("solver_debug") or {}
         best_verify = solver_debug.get("best_verify") or {}
 
-        ready = bool(seed.get("ready"))
+        explicit_ready = seed.get("ready")
+        if isinstance(explicit_ready, bool):
+            ready = explicit_ready
+        else:
+            ready = bool(best_verify)
         needed = bool(seed.get("needed", True))
         seed_kind = str(seed.get("seed_kind") or "")
         if not seed_kind:
@@ -300,7 +304,7 @@ def build_phase2_payload(
         return {
             "phase": "phase2_repair",
             "repair_phase": "macro_layout",
-            "ready": ready or bool(best_verify),
+            "ready": ready,
             "needed": needed,
             "seed_kind": seed_kind,
             "solver_status": str((placer_06 or {}).get("status") or "UNKNOWN"),

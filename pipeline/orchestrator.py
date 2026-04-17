@@ -1243,6 +1243,14 @@ def _tool_hard_valid(tool_evaluation: Any) -> bool:
     return bool(tool_evaluation.get("hard_valid", True))
 
 
+def _tool_acceptable_valid(tool_evaluation: Any) -> bool:
+    if not isinstance(tool_evaluation, dict):
+        return False
+    if "acceptable_valid" in tool_evaluation:
+        return bool(tool_evaluation.get("acceptable_valid"))
+    return bool(tool_evaluation.get("hard_valid", False))
+
+
 def _layout_bundle_complete(bundle: dict[str, Any]) -> bool:
     return bool(bundle.get("complete", False))
 
@@ -3233,12 +3241,14 @@ def _run_canonical_screening_bundle(
     )
     evaluation = preview_result.get("evaluation")
     hard_valid = _tool_hard_valid(evaluation)
+    acceptable_valid = _tool_acceptable_valid(evaluation)
     absolute_layout = annotate_layout_coverage(
         absolute_layout=absolute_layout,
         merged_output=merged_output,
         relation_plan=relation_plan,
         cluster_outlines=cluster_outlines,
         hard_valid=hard_valid,
+        acceptable_valid=acceptable_valid,
     )
     if absolute_layout.get("missing_cluster_ids"):
         notes.append(
@@ -3361,12 +3371,14 @@ def _run_intent_branch_screening_bundle(
         )
         evaluation = preview_result.get("evaluation")
         hard_valid = _tool_hard_valid(evaluation)
+        acceptable_valid = _tool_acceptable_valid(evaluation)
         absolute_layout = annotate_layout_coverage(
             absolute_layout=absolute_layout,
             merged_output=merged_output,
             relation_plan=relation_plan,
             cluster_outlines=cluster_outlines,
             hard_valid=hard_valid,
+            acceptable_valid=acceptable_valid,
         )
         if absolute_layout.get("missing_cluster_ids"):
             notes.append(
@@ -3457,12 +3469,14 @@ def _judge_solved_variant_bundle(
 
         evaluation = phase2_result.get("tool_evaluation")
         hard_valid = _tool_hard_valid(evaluation)
+        acceptable_valid = _tool_acceptable_valid(evaluation)
         absolute_layout = annotate_layout_coverage(
             absolute_layout=absolute_layout,
             merged_output=merged_output,
             relation_plan=relation_plan,
             cluster_outlines=cluster_outlines,
             hard_valid=hard_valid,
+            acceptable_valid=acceptable_valid,
         )
         final_notes = _collect_unique_notes(
             bundle.get("notes"),
@@ -3645,12 +3659,14 @@ def _finalize_feasible_variant_bundle(
 
         evaluation = phase2_result.get("tool_evaluation")
         hard_valid = _tool_hard_valid(evaluation)
+        acceptable_valid = _tool_acceptable_valid(evaluation)
         absolute_layout = annotate_layout_coverage(
             absolute_layout=absolute_layout,
             merged_output=merged_output,
             relation_plan=relation_plan,
             cluster_outlines=cluster_outlines,
             hard_valid=hard_valid,
+            acceptable_valid=acceptable_valid,
         )
         final_notes = _collect_unique_notes(
             bundle.get("notes"),

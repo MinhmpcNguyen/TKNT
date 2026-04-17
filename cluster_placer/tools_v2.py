@@ -26,6 +26,7 @@ from cluster_composer.constraint_score import (
     score_cluster_constraints,
 )
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_layout_grid_mm
+from layout.orientation_contract import rotation_from_front_world, vec_to_side
 
 
 class ClusterPreferenceProfile(TypedDict):
@@ -758,6 +759,11 @@ def materialize_phase2_state(
                         ),
                     },
                     "anchor_override": cluster_meta.get("anchor_override"),
+                    "anchors": [
+                        str(anchor).strip()
+                        for anchor in (card.get("anchors") or [])
+                        if isinstance(anchor, str) and str(anchor).strip()
+                    ],
                     "poly": cluster_poly,
                     "area_mm2": float(cluster_poly.area),
                     "local_placements": sorted(
@@ -774,6 +780,66 @@ def materialize_phase2_state(
                     "decisions": deepcopy(card.get("decisions") or []),
                 }
             )
+
+    protected_cluster_ids = _anchor_contract_cluster_ids(payload)
+    cluster_by_id = {
+        str(cluster.get("cluster_id") or ""): cluster for cluster in clusters if cluster
+    }
+    seed_tmap = _seed_transform_map(seed_layout)
+    for cluster_id in sorted(protected_cluster_ids):
+        cluster = cluster_by_id.get(cluster_id)
+        if not isinstance(cluster, dict):
+            continue
+        seed_rot = int((seed_tmap.get(cluster_id) or {}).get("rot") or 0) % 360
+        current_rot = int((tmap.get(cluster_id) or {}).get("rot") or 0) % 360
+        if current_rot != seed_rot:
+            hard_violations.append(
+                {
+                    "code": "ANCHOR_CONTRACT_CLUSTER_ROTATION",
+                    "cluster_id": cluster_id,
+                    "seed_rot": seed_rot,
+                    "candidate_rot": current_rot,
+                }
+            )
+
+        anchor_ids = _cluster_anchor_ids_from_state_cluster(cluster)
+        for rep in repairs_by_cluster.get(cluster_id, []):
+            if not isinstance(rep, dict):
+                continue
+            op = str(rep.get("op") or "").strip()
+            object_id = str(rep.get("object_id") or "").strip()
+            if op == "set_anchor":
+                hard_violations.append(
+                    {
+                        "code": "ANCHOR_CONTRACT_ANCHOR_OVERRIDE",
+                        "cluster_id": cluster_id,
+                    }
+                )
+                continue
+            if op in {"rotate_object", "mirror_object", "set_front_override"}:
+                if object_id and object_id in anchor_ids:
+                    hard_violations.append(
+                        {
+                            "code": "ANCHOR_CONTRACT_OBJECT_ORIENTATION",
+                            "cluster_id": cluster_id,
+                            "object_id": object_id,
+                            "op": op,
+                        }
+                    )
+                continue
+            if op == "swap_objects":
+                other_object_id = str(
+                    (rep.get("params") or {}).get("other_object_id") or ""
+                ).strip()
+                if object_id in anchor_ids or other_object_id in anchor_ids:
+                    hard_violations.append(
+                        {
+                            "code": "ANCHOR_CONTRACT_OBJECT_SWAP",
+                            "cluster_id": cluster_id,
+                            "object_id": object_id or None,
+                            "other_object_id": other_object_id or None,
+                        }
+                    )
 
     for i in range(len(objects)):
         for j in range(i + 1, len(objects)):
@@ -1041,6 +1107,40 @@ def _nearest_wall_inward_dir(
     return _vec_from_to(boundary_point, point)
 
 
+def _back_to_wall_penalty(
+    *,
+    point: Tuple[float, float],
+    front: Tuple[float, float] | None,
+    room_poly: Any,
+    blockers: List[Any],
+    desired_back_clear_mm: float,
+    desired_front_advantage_mm: float,
+    weight_scale: float,
+) -> tuple[float, float | None, dict[str, int]]:
+    if front is None:
+        return 0.0, None, {}
+    max_distance = max(1800.0, room_poly.length)
+    front_clear = _directional_clearance_mm(
+        point, front, room_poly, blockers, max_distance
+    )
+    back = (-front[0], -front[1])
+    back_clear = _directional_clearance_mm(
+        point, back, room_poly, blockers, max_distance
+    )
+    front_advantage = front_clear - back_clear
+    penalty = (
+        max(0.0, back_clear - desired_back_clear_mm) * 0.55
+        + max(0.0, desired_front_advantage_mm - front_advantage) * 0.85
+        + max(0.0, back_clear - front_clear) * 0.35
+    ) * weight_scale
+    debug = {
+        "front_clear_mm": int(round(front_clear)),
+        "back_clear_mm": int(round(back_clear)),
+        "front_advantage_mm": int(round(front_advantage)),
+    }
+    return penalty, front_advantage, debug
+
+
 def _room_wall_segments(room_poly: Any) -> list[dict[str, Any]]:
     try:
         coords = list(room_poly.exterior.coords)
@@ -1124,6 +1224,31 @@ def _classify_cluster_zone(
     ):
         return "entry_side"
     return "interior"
+
+
+def _cluster_anchor_ids_from_state_cluster(cluster: Dict[str, Any]) -> set[str]:
+    anchors = {
+        str(anchor).strip()
+        for anchor in (cluster.get("anchors") or [])
+        if isinstance(anchor, str) and str(anchor).strip()
+    }
+    if anchors:
+        return anchors
+
+    anchor_override = cluster.get("anchor_override")
+    if isinstance(anchor_override, str) and anchor_override.strip():
+        return {anchor_override.strip()}
+
+    for row in cluster.get("decisions") or []:
+        if not isinstance(row, dict):
+            continue
+        priority = str(row.get("priority") or "").strip().lower()
+        if priority != "anchor":
+            continue
+        object_id = str(row.get("object_type") or row.get("category") or "").strip()
+        if object_id:
+            anchors.add(object_id)
+    return anchors
 
 
 def _cluster_intents_by_id(payload: Dict[str, Any]) -> Dict[str, set[str]]:
@@ -1318,6 +1443,34 @@ def _viewing_cluster_pairs(payload: Dict[str, Any]) -> list[tuple[str, str]]:
         _append_pair(a, b)
 
     return pairs
+
+
+def _anchor_contract_cluster_ids(payload: Dict[str, Any]) -> set[str]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    protected_cluster_ids: set[str] = set()
+
+    for left, right in _viewing_cluster_pairs(payload):
+        protected_cluster_ids.add(left)
+        protected_cluster_ids.add(right)
+
+    for row in relation_plan.get("cluster_orientations") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        target_cluster_id = str(row.get("target_cluster_id") or "").strip()
+        intents = {
+            str(intent).strip().lower()
+            for intent in (row.get("intents") or [])
+            if str(intent).strip()
+        }
+        if "face_cluster" not in intents:
+            continue
+        if cluster_id:
+            protected_cluster_ids.add(cluster_id)
+        if target_cluster_id:
+            protected_cluster_ids.add(target_cluster_id)
+
+    return protected_cluster_ids
 
 
 def _preferred_zone_for_cluster(intents: set[str]) -> str | None:
@@ -3050,6 +3203,12 @@ def score_phase2_state(
     global_layout_debug: List[Dict[str, Any]] = []
     cluster_penalty: Dict[str, float] = {}
     object_penalty: Dict[Tuple[str, str], float] = {}
+    macro_penalty = 0.0
+    micro_penalty = 0.0
+
+    cluster_state_by_id = {
+        str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
+    }
 
     # object-level generic access/open-space score
     for idx, row in enumerate(state.get("objects") or []):
@@ -3070,6 +3229,7 @@ def score_phase2_state(
         pen = shortage * 2.2 + misalign * 600.0
         object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + pen
         cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
+        micro_penalty += pen
         orientation_debug.append(
             {
                 "kind": "object_orientation",
@@ -3133,6 +3293,9 @@ def score_phase2_state(
                 break
         if target is None:
             continue
+        anchor_ids = _cluster_anchor_ids_from_state_cluster(
+            cluster_state_by_id.get(cid) or {}
+        )
         center = (
             float(target["world_center"]["x"]),
             float(target["world_center"]["y"]),
@@ -3144,6 +3307,8 @@ def score_phase2_state(
             intent = str(intent).lower()
             pen = 0.0
             dot = None
+            back_dbg: dict[str, int] | None = None
+            resolved_target_cluster_id = None
             if intent in {"face_window", "front_to_window"}:
                 mid = _nearest_midpoint(center, openings.get("windows") or [])
                 if mid is not None:
@@ -3156,9 +3321,23 @@ def score_phase2_state(
                     dot = _dot(front_world, _vec_from_to(center, mid))
                     pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * 520.0
             elif intent == "back_to_wall":
-                target_vec = _nearest_wall_inward_dir(center, room_poly)
-                dot = _dot(front_world, target_vec)
-                pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * 720.0
+                blockers = [ob["poly"] for ob in state.get("obstacles") or []]
+                for other in state_objects:
+                    if (
+                        str(other.get("cluster_id") or "") == cid
+                        and str(other.get("object_id") or "") == oid
+                    ):
+                        continue
+                    blockers.append(other["poly"])
+                pen, dot, back_dbg = _back_to_wall_penalty(
+                    point=center,
+                    front=front_world,
+                    room_poly=room_poly,
+                    blockers=blockers,
+                    desired_back_clear_mm=260.0,
+                    desired_front_advantage_mm=220.0,
+                    weight_scale=1.0,
+                )
             elif intent == "preserve_front_access":
                 front_clear = next(
                     (
@@ -3182,6 +3361,15 @@ def score_phase2_state(
                     else None,
                 )
                 if target_object is not None:
+                    resolved_target_cluster_id = str(
+                        target_object.get("cluster_id") or ""
+                    ).strip()
+                    is_cross_cluster = (
+                        bool(resolved_target_cluster_id)
+                        and resolved_target_cluster_id != cid
+                    )
+                    if is_cross_cluster and oid not in anchor_ids:
+                        continue
                     target_center = (
                         float(target_object["world_center"]["x"]),
                         float(target_object["world_center"]["y"]),
@@ -3195,6 +3383,16 @@ def score_phase2_state(
             if pen > 0:
                 object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + pen
                 cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
+                if (
+                    intent in {"face_object", "face_away_from_object"}
+                    and isinstance(resolved_target_cluster_id, str)
+                    and resolved_target_cluster_id
+                    and resolved_target_cluster_id != cid
+                    and oid in anchor_ids
+                ):
+                    macro_penalty += pen
+                else:
+                    micro_penalty += pen
                 orientation_debug.append(
                     {
                         "kind": "object_orientation",
@@ -3203,6 +3401,7 @@ def score_phase2_state(
                         "intent": intent,
                         "penalty_mm": int(round(pen)),
                         "dot": None if dot is None else round(dot, 3),
+                        **(back_dbg or {}),
                         "target_object_id": target_object_id or None,
                         "target_object_cluster_id": (
                             target_object_cluster_id
@@ -3236,6 +3435,7 @@ def score_phase2_state(
             intent = str(intent).lower()
             pen = 0.0
             dot = None
+            back_dbg: dict[str, int] | None = None
             if intent == "access_to_open_space":
                 blockers = [ob["poly"] for ob in state.get("obstacles") or []]
                 for row in state.get("objects") or []:
@@ -3250,10 +3450,19 @@ def score_phase2_state(
                     dot = _dot(front, _vec_from_to(center, mid))
                     pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * 760.0
             elif intent == "back_to_wall":
-                target_vec = _nearest_wall_inward_dir(center, room_poly)
-                if front is not None and target_vec is not None:
-                    dot = _dot(front, target_vec)
-                    pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * 900.0
+                blockers = [ob["poly"] for ob in state.get("obstacles") or []]
+                for row in state.get("objects") or []:
+                    if row["cluster_id"] != cid:
+                        blockers.append(row["poly"])
+                pen, dot, back_dbg = _back_to_wall_penalty(
+                    point=center,
+                    front=front,
+                    room_poly=room_poly,
+                    blockers=blockers,
+                    desired_back_clear_mm=320.0,
+                    desired_front_advantage_mm=260.0,
+                    weight_scale=1.0,
+                )
             elif intent == "axis_parallel_window":
                 window_dir = _nearest_opening_line_direction(
                     center, openings.get("windows") or []
@@ -3264,6 +3473,7 @@ def score_phase2_state(
                     pen = max(0.0, 1.0 - parallel) * 620.0
             if pen > 0:
                 cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
+                macro_penalty += pen
                 orientation_debug.append(
                     {
                         "kind": "cluster_orientation",
@@ -3271,12 +3481,10 @@ def score_phase2_state(
                         "intent": intent,
                         "penalty_mm": int(round(pen)),
                         "dot": None if dot is None else round(dot, 3),
+                        **(back_dbg or {}),
                     }
                 )
 
-    cluster_state_by_id = {
-        str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
-    }
     cluster_preferences = _cluster_preference_profile(payload)
     for cluster_a_id, cluster_b_id in _viewing_cluster_pairs(payload):
         cluster_a = cluster_state_by_id.get(cluster_a_id)
@@ -3350,6 +3558,7 @@ def score_phase2_state(
             if penalty <= 0.0:
                 continue
             cluster_penalty[cluster_id] = cluster_penalty.get(cluster_id, 0.0) + penalty
+            macro_penalty += penalty
             orientation_debug.append(
                 {
                     "kind": "cluster_directional_relation",
@@ -3383,9 +3592,11 @@ def score_phase2_state(
     )
     for cid, penalty in internal_cluster_penalty.items():
         cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + penalty
+        micro_penalty += penalty
     for key, penalty in internal_object_penalty.items():
         object_penalty[key] = object_penalty.get(key, 0.0) + penalty
         cluster_penalty[key[0]] = cluster_penalty.get(key[0], 0.0) + penalty * 0.2
+        micro_penalty += penalty * 0.2
     global_layout_debug.extend(internal_debug)
 
     global_layout_metrics = _score_global_layout_metrics(
@@ -3393,6 +3604,7 @@ def score_phase2_state(
     )
     for cid, penalty in (global_layout_metrics.get("cluster_penalty") or {}).items():
         cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + float(penalty or 0.0)
+        macro_penalty += float(penalty or 0.0)
     for row in (global_layout_metrics.get("main_path_clearance") or {}).get(
         "blocking_objects"
     ) or []:
@@ -3403,6 +3615,7 @@ def score_phase2_state(
         penalty = float(row.get("penalty_mm") or 0.0)
         if isinstance(cid, str) and isinstance(oid, str) and penalty > 0.0:
             object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + penalty
+            macro_penalty += penalty
     for key in (
         "cluster_affinity_to_preferred_zone",
         "opening_band_blocking",
@@ -3436,6 +3649,10 @@ def score_phase2_state(
         pen = float(item.get("penalty_mm") or 0.0) * 0.10
         if isinstance(cid, str):
             cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
+            if isinstance(oid, str):
+                micro_penalty += pen
+            else:
+                macro_penalty += pen
         if isinstance(cid, str) and isinstance(oid, str):
             object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + pen
 
@@ -3466,6 +3683,8 @@ def score_phase2_state(
         "prioritized_objects": prioritized_objects[:16],
         "penalties": {
             "hard_penalty": int(round(hard_penalty)),
+            "macro_penalty": int(round(macro_penalty)),
+            "micro_penalty": int(round(micro_penalty)),
             "soft_penalty": int(round(soft_penalty)),
             "total_penalty": int(round(total_penalty)),
         },
@@ -3568,6 +3787,12 @@ def EnumeratePhase2RepairMoves(
     cluster_preferences = _cluster_preference_profile(payload)
     cluster_state_by_id = {
         str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
+    }
+    protected_cluster_ids = _anchor_contract_cluster_ids(payload)
+    protected_anchor_ids_by_cluster = {
+        cluster_id: _cluster_anchor_ids_from_state_cluster(cluster)
+        for cluster_id, cluster in cluster_state_by_id.items()
+        if cluster_id in protected_cluster_ids and isinstance(cluster, dict)
     }
     room_poly = state["room_polygon"]
     room_center = state["room_center"]
@@ -3935,21 +4160,22 @@ def EnumeratePhase2RepairMoves(
                 }
             )
 
-        for rot in (0, 90, 180, 270):
-            if rot == int(tf.get("rot") or 0):
-                continue
-            macro_moves.append(
-                {
-                    "kind": "cluster_pose",
-                    "cluster_id": cid,
-                    "proposal": {
-                        "cluster_transforms": [{**deepcopy(tf), "rot": rot}],
-                        "selected_variants": [],
-                        "object_repairs": [],
-                    },
-                    "reason": f"Try cluster rotation for failing cluster {cid}",
-                }
-            )
+        if cid not in protected_cluster_ids:
+            for rot in (0, 90, 180, 270):
+                if rot == int(tf.get("rot") or 0):
+                    continue
+                macro_moves.append(
+                    {
+                        "kind": "cluster_pose",
+                        "cluster_id": cid,
+                        "proposal": {
+                            "cluster_transforms": [{**deepcopy(tf), "rot": rot}],
+                            "selected_variants": [],
+                            "object_repairs": [],
+                        },
+                        "reason": f"Try cluster rotation for failing cluster {cid}",
+                    }
+                )
         for (dx, dy), move_reason in _targeted_macro_offsets(cid):
             macro_moves.append(
                 {
@@ -4233,66 +4459,68 @@ def EnumeratePhase2RepairMoves(
             (cid, oid), set()
         )
         planner_priority = bool(relation_object_intents.get((cid, oid)))
+        protected_anchor_object = oid in protected_anchor_ids_by_cluster.get(cid, set())
         if viewing_orientation_pressure and not (
             effective_intents & (front_access_intents | facing_intents) or spacing_rows
         ):
             continue
 
         if effective_intents & (front_access_intents | facing_intents):
-            for rot in (90, 180, 270):
-                _append_object_move(
-                    cluster_id=cid,
-                    object_id=oid,
-                    proposal={
-                        "object_repairs": [
-                            {
-                                "cluster_id": cid,
-                                "object_id": oid,
-                                "op": "rotate_object",
-                                "params": {"rot": rot},
-                            }
-                        ]
-                    },
-                    reason=f"Try rotating {cid}.{oid}",
-                    planner_priority=planner_priority,
-                    priority_index=priority_index,
-                )
-            for axis in ("x", "y"):
-                _append_object_move(
-                    cluster_id=cid,
-                    object_id=oid,
-                    proposal={
-                        "object_repairs": [
-                            {
-                                "cluster_id": cid,
-                                "object_id": oid,
-                                "op": "mirror_object",
-                                "params": {"axis": axis},
-                            }
-                        ]
-                    },
-                    reason=f"Try mirroring {cid}.{oid} across the local {axis} axis",
-                    planner_priority=planner_priority,
-                    priority_index=priority_index,
-                )
-            for local_dir in _front_override_dirs(cid, oid, effective_intents):
-                _append_object_move(
-                    cluster_id=cid,
-                    object_id=oid,
-                    proposal={
-                        "object_repairs": [
-                            {
-                                "cluster_id": cid,
-                                "object_id": oid,
-                                "op": "set_front_override",
-                                "params": {"dx": local_dir[0], "dy": local_dir[1]},
-                            }
-                        ]
-                    },
-                    reason=f"Try a planner-driven front override for {cid}.{oid}",
-                    planner_priority=True,
-                    priority_index=priority_index,
-                )
+            if not protected_anchor_object:
+                for rot in (90, 180, 270):
+                    _append_object_move(
+                        cluster_id=cid,
+                        object_id=oid,
+                        proposal={
+                            "object_repairs": [
+                                {
+                                    "cluster_id": cid,
+                                    "object_id": oid,
+                                    "op": "rotate_object",
+                                    "params": {"rot": rot},
+                                }
+                            ]
+                        },
+                        reason=f"Try rotating {cid}.{oid}",
+                        planner_priority=planner_priority,
+                        priority_index=priority_index,
+                    )
+                for axis in ("x", "y"):
+                    _append_object_move(
+                        cluster_id=cid,
+                        object_id=oid,
+                        proposal={
+                            "object_repairs": [
+                                {
+                                    "cluster_id": cid,
+                                    "object_id": oid,
+                                    "op": "mirror_object",
+                                    "params": {"axis": axis},
+                                }
+                            ]
+                        },
+                        reason=f"Try mirroring {cid}.{oid} across the local {axis} axis",
+                        planner_priority=planner_priority,
+                        priority_index=priority_index,
+                    )
+                for local_dir in _front_override_dirs(cid, oid, effective_intents):
+                    _append_object_move(
+                        cluster_id=cid,
+                        object_id=oid,
+                        proposal={
+                            "object_repairs": [
+                                {
+                                    "cluster_id": cid,
+                                    "object_id": oid,
+                                    "op": "set_front_override",
+                                    "params": {"dx": local_dir[0], "dy": local_dir[1]},
+                                }
+                            ]
+                        },
+                        reason=f"Try a planner-driven front override for {cid}.{oid}",
+                        planner_priority=True,
+                        priority_index=priority_index,
+                    )
         for spacing_row in spacing_rows[:2]:
             proximity = str(spacing_row.get("proximity") or "balanced")
             mapped_side = str(spacing_row.get("mapped_side") or "")
@@ -4361,6 +4589,10 @@ def EnumeratePhase2RepairMoves(
             break
 
     for priority_index, (cid, oid, other_oid) in enumerate(same_cluster_swap_pairs[:4]):
+        if oid in protected_anchor_ids_by_cluster.get(
+            cid, set()
+        ) or other_oid in protected_anchor_ids_by_cluster.get(cid, set()):
+            continue
         planner_priority = bool(relation_object_intents.get((cid, oid))) or bool(
             relation_object_intents.get((cid, other_oid))
         )
@@ -4736,18 +4968,6 @@ def _is_directional_object_id(object_id: str) -> bool:
     return any(keyword in text for keyword in _DIRECTIONAL_OBJECT_KEYWORDS)
 
 
-def _rotation_from_front_world(front_world: Any) -> int | None:
-    vec = parse_vec2(front_world)
-    if vec is None:
-        return None
-    dx, dy = float(vec[0]), float(vec[1])
-    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
-        return None
-    deg = math.degrees(math.atan2(dx, -dy))
-    snapped = int(round(deg / 90.0)) * 90
-    return snapped % 360
-
-
 def CompileAcceptedPhase2Proposal(
     *, payload: Dict[str, Any], repair: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -4764,9 +4984,21 @@ def CompileAcceptedPhase2Proposal(
         object_id = str(row.get("object_id") or "")
         rotation_ccw = int(row.get("rotation_ccw") or 0)
         if _is_directional_object_id(object_id):
-            semantic_rotation = _rotation_from_front_world(row.get("front_world"))
+            semantic_rotation = rotation_from_front_world(row.get("front_world"))
             if semantic_rotation is not None:
                 rotation_ccw = semantic_rotation
+        front_world = deepcopy(row.get("front_world"))
+        axis_world = deepcopy(row.get("axis_world"))
+        front_side_world = None
+        if front_world is not None:
+            front_side_world = vec_to_side(
+                (
+                    float(front_world.get("dx", 0)),
+                    float(front_world.get("dy", 0)),
+                )
+                if isinstance(front_world, dict)
+                else None
+            )
         objects.append(
             {
                 "object_id": object_id,
@@ -4775,6 +5007,9 @@ def CompileAcceptedPhase2Proposal(
                 "bbox": deepcopy(row["bbox"]),
                 "rotation_ccw": rotation_ccw,
                 "source_rect": deepcopy(row.get("local_rect") or {}),
+                "front_world": front_world,
+                "front_side_world": front_side_world,
+                "axis_world": axis_world,
             }
         )
     return {

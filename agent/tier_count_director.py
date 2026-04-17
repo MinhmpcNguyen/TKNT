@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -1081,7 +1082,8 @@ def _shift_tier(tier: str, delta: int) -> str:
 
 def _profile_category_for_member(member: str) -> str:
     normalized = _norm_key(member)
-    return PROFILE_CATEGORY_ALIASES.get(normalized, member)
+    canonical = re.sub(r"(?:_\d+)+$", "", normalized)
+    return PROFILE_CATEGORY_ALIASES.get(canonical, canonical)
 
 
 def _enrich_profiles_for_required_types(

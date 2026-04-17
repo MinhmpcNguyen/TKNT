@@ -11,6 +11,7 @@ def summarize_layout_coverage(
     relation_plan: dict[str, Any] | None = None,
     cluster_outlines: dict[str, Any] | None = None,
     hard_valid: bool,
+    acceptable_valid: bool | None = None,
 ) -> dict[str, Any]:
     expected_cluster_ids = _extract_expected_cluster_ids(
         merged_output=merged_output,
@@ -30,7 +31,13 @@ def summarize_layout_coverage(
         primary_cluster_id in present_cluster_ids if primary_cluster_id else True
     )
     complete = len(missing_cluster_ids) == 0
-    gallery_eligible = bool(hard_valid) and complete and primary_cluster_present
+    acceptable = bool(hard_valid if acceptable_valid is None else acceptable_valid)
+    gallery_eligible = (
+        bool(hard_valid)
+        and acceptable
+        and complete
+        and primary_cluster_present
+    )
 
     return {
         "expected_cluster_ids": expected_cluster_ids,
@@ -39,6 +46,7 @@ def summarize_layout_coverage(
         "unexpected_cluster_ids": unexpected_cluster_ids,
         "primary_cluster_id": primary_cluster_id,
         "primary_cluster_present": primary_cluster_present,
+        "acceptable_valid": acceptable,
         "coverage_ratio": round(float(coverage_ratio), 4),
         "complete": complete,
         "gallery_eligible": gallery_eligible,
@@ -52,6 +60,7 @@ def annotate_layout_coverage(
     relation_plan: dict[str, Any] | None = None,
     cluster_outlines: dict[str, Any] | None = None,
     hard_valid: bool,
+    acceptable_valid: bool | None = None,
 ) -> dict[str, Any]:
     coverage = summarize_layout_coverage(
         absolute_layout=absolute_layout,
@@ -59,9 +68,11 @@ def annotate_layout_coverage(
         relation_plan=relation_plan,
         cluster_outlines=cluster_outlines,
         hard_valid=hard_valid,
+        acceptable_valid=acceptable_valid,
     )
     payload = deepcopy(absolute_layout)
     payload["coverage"] = deepcopy(coverage)
+    payload["acceptable_valid"] = bool(coverage["acceptable_valid"])
     payload["complete"] = bool(coverage["complete"])
     payload["gallery_eligible"] = bool(coverage["gallery_eligible"])
     payload["coverage_ratio"] = float(coverage["coverage_ratio"])

@@ -1,0 +1,130 @@
+{
+  "status": "OK",
+  "cluster_id": "main_seating_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "armchair",
+      "x": 500,
+      "y": 1850,
+      "rot": 0
+    },
+    {
+      "id": "coffee_table",
+      "x": 450,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "floor_lamp",
+      "x": 0,
+      "y": 2200,
+      "rot": 0
+    },
+    {
+      "id": "sofa",
+      "x": 0,
+      "y": 800,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "armchair",
+        "x": 500,
+        "y": 1850,
+        "w": 840,
+        "h": 710
+      },
+      {
+        "id": "coffee_table",
+        "x": 450,
+        "y": 0,
+        "w": 900,
+        "h": 500
+      },
+      {
+        "id": "floor_lamp",
+        "x": 0,
+        "y": 2200,
+        "w": 350,
+        "h": 320
+      },
+      {
+        "id": "sofa",
+        "x": 0,
+        "y": 800,
+        "w": 1790,
+        "h": 810
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 1790,
+      "max_y": 2560
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": -1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "sofa": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "coffee_table": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "floor_lamp": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "armchair": {
+        "front_local": {
+          "dx": 1,
+          "dy": 0
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

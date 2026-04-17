@@ -1,0 +1,180 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "main_seating",
+      "prefer": [
+        "wall",
+        "far_from_entry",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking",
+        "door_swing",
+        "center",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Primary seating area should be central and accessible."
+    },
+    {
+      "cluster_id": "media",
+      "prefer": [
+        "wall",
+        "far_from_entry",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking",
+        "center",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Media console benefits from wall mounting and should not obstruct entry or windows."
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "center",
+        "entry_blocking",
+        "main_path",
+        "bottleneck"
+      ],
+      "priority": "high",
+      "reason": "Support cluster benefits from wall placement or being tucked away."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "main_seating",
+      "intents": [
+        "face_cluster",
+        "inward_to_room",
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "media",
+      "priority": "high",
+      "reason": "Seating should face the media console for viewing."
+    },
+    {
+      "cluster_id": "media",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "main_seating",
+      "priority": "high",
+      "reason": "Media console benefits from being against a wall."
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "intents": [
+        "access_to_open_space",
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "access-sensitive cluster should expose usable front toward open space"
+    }
+  ],
+  "object_orientations": [],
+  "cluster_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Seating and media should be in close proximity for viewing."
+    },
+    {
+      "a": "storage_display_support",
+      "b": "media",
+      "relation": "far_if_possible",
+      "priority": "high",
+      "reason": "Support clusters should stay off the primary field in the edge-weighted variant."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Seating should face the media console."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "main_seating",
+        "priority": "high",
+        "reason": "Main path from entry to seating area."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Keep space near the entry clear for easy access."
+      },
+      {
+        "type": "center_lane",
+        "near": "room_center",
+        "priority": "high",
+        "reason": "Edge-weighted variant should keep the premium center field relatively free."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "media",
+    "secondary_cluster_id": "main_seating",
+    "circulation_priority": "high",
+    "center_open_preference": "high",
+    "support_cluster_behavior": "recede",
+    "distribution_mode": "edge_weighted"
+  },
+  "placement_guidelines": [
+    "Prioritize clear sightlines between seating and media.",
+    "Avoid blocking the window with tall furniture.",
+    "Maintain a clear path from the entry to the seating area.",
+    "Preserve a clear viewing relationship between armchair_1 and tv_console_1.",
+    "Do not orient armchair_1 away from tv_console_1.",
+    "Keep media readable from main_seating.",
+    "Preserve front usability for tv_console_1.",
+    "Preserve front usability for console_table_1.",
+    "Do not let media chase the window side if it weakens the viewing axis with main_seating.",
+    "Treat media as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Make perimeter pressure stronger than the open-center variant so the main zone reads clearly edge-weighted."
+  ],
+  "notes": [
+    "The media cluster is positioned against a wall to maximize space and viewing angle.",
+    "The seating cluster is oriented towards the media cluster for optimal viewing.",
+    "Seed variant policy seed_edge_weighted: distribution=edge_weighted, center_open=high, support_behavior=recede.",
+    "Seed constraint fingerprint seed_edge_weighted: perimeter_bias_lock, all_clusters_avoid_center, wall_backed_primary_pair."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_edge_weighted",
+    "constraint_tokens": [
+      "perimeter_bias_lock",
+      "all_clusters_avoid_center",
+      "wall_backed_primary_pair"
+    ],
+    "structural_fingerprint": "focus=mixed,center=high,support=recede,distribution=edge_weighted || center_lane:room_center,entry_buffer:door_1 || main_seating|p=far_from_entry,recess_or_edge,wall|a=center,door_swing,entry_blocking,main_path,window_blocking,media|p=far_from_entry,recess_or_edge,wall|a=center,entry_blocking,main_path,window_blocking,storage_display_support|p=recess_or_edge,wall|a=bottleneck,center,entry_blocking,main_path || main_seating|media|near,media|storage_display_support|far_if_possible || main_seating|media|face_each_other || main_seating|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|media,media|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|main_seating,storage_display_support|access_to_open_space,axis_parallel_wall,back_to_wall|"
+  }
+}

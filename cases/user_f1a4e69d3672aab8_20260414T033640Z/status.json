@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260414T033640Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-14T03:41:40.416423+00:00",
+  "error": "The read operation timed out",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-14T03:36:40.079181+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-14T03:36:40.266902+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "The read operation timed out",
+      "updated_at_utc": "2026-04-14T03:41:40.416423+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "The read operation timed out"
+    }
+  ]
+}

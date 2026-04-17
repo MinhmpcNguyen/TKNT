@@ -1,0 +1,76 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "c_seating_area",
+      "prefer": [
+        "center",
+        "wall"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking"
+      ],
+      "priority": "high",
+      "reason": "Seating area benefits from central location and clear access."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "c_seating_area",
+      "intents": [
+        "inward_to_room"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Encourage a cohesive seating arrangement facing inward."
+    }
+  ],
+  "object_orientations": [],
+  "cluster_relations": [],
+  "cluster_directional_relations": [],
+  "circulation_plan": {
+    "main_paths": [],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Maintain clear access from the entry."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "c_seating_area",
+    "secondary_cluster_id": null,
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "balanced",
+    "distribution_mode": "balanced"
+  },
+  "placement_guidelines": [
+    "Prioritize clear circulation from the entry to the seating area.",
+    "Avoid blocking the window with tall furniture.",
+    "Treat c_seating_area as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Stay close to the current seed-side occupancy and avoid unnecessary macro relocation."
+  ],
+  "notes": [
+    "The seed layout provides a reasonable starting point. This plan reinforces the central placement and open circulation.",
+    "No focal cluster exists to establish a viewing relationship.",
+    "Seed variant policy seed_stable: distribution=balanced, center_open=medium, support_behavior=balanced.",
+    "Seed constraint fingerprint seed_stable: seed_region_preservation, primary_center_anchor, balanced_support."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_stable",
+    "constraint_tokens": [
+      "seed_region_preservation",
+      "primary_center_anchor",
+      "balanced_support"
+    ],
+    "structural_fingerprint": "focus=mixed,center=medium,support=balanced,distribution=balanced || entry_buffer:door_1 || c_seating_area|p=center,wall|a=entry_blocking,window_blocking || c_seating_area|inward_to_room|"
+  }
+}

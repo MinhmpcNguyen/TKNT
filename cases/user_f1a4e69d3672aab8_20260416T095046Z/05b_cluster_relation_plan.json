@@ -1,0 +1,148 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "media_zone",
+      "prefer": [
+        "long_wall",
+        "wall",
+        "far_from_entry",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "window_blocking",
+        "door_swing",
+        "center",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Storage cluster benefits from wall placement, avoid blocking window."
+    },
+    {
+      "cluster_id": "seating_zone",
+      "prefer": [
+        "wall",
+        "far_from_entry",
+        "long_wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "entry_blocking",
+        "window_blocking",
+        "center",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Seating should be central and accessible, avoid blocking entry or window."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "seating_zone",
+      "intents": [
+        "face_cluster",
+        "inward_to_room",
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "media_zone",
+      "priority": "high",
+      "reason": "Seating should face the media zone for viewing."
+    },
+    {
+      "cluster_id": "media_zone",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "seating_zone",
+      "priority": "high",
+      "reason": "Media zone benefits from being anchored to a wall."
+    }
+  ],
+  "object_orientations": [],
+  "cluster_relations": [
+    {
+      "a": "seating_zone",
+      "b": "media_zone",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Seating and media zones should be near for viewing."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "seating_zone",
+      "b": "media_zone",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Seating should face the media zone."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "seating_zone",
+        "priority": "high",
+        "reason": "Main path from entry to seating area."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Keep space near the entry clear."
+      },
+      {
+        "type": "center_lane",
+        "near": "room_center",
+        "priority": "high",
+        "reason": "Edge-weighted variant should keep the premium center field relatively free."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "seating_zone",
+    "secondary_cluster_id": "media_zone",
+    "circulation_priority": "high",
+    "center_open_preference": "high",
+    "support_cluster_behavior": "recede",
+    "distribution_mode": "edge_weighted"
+  },
+  "placement_guidelines": [
+    "Prioritize seating facing the TV console.",
+    "Keep the area around the door clear for circulation.",
+    "Preserve a clear viewing relationship between sectional_sofa and tv_console.",
+    "Do not orient sectional_sofa away from tv_console.",
+    "Keep media_zone readable from seating_zone.",
+    "Preserve front usability for bookshelf.",
+    "Preserve front usability for tv_console.",
+    "Do not let seating_zone chase the window side if it weakens the viewing axis with media_zone.",
+    "Treat seating_zone as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Make perimeter pressure stronger than the open-center variant so the main zone reads clearly edge-weighted."
+  ],
+  "notes": [
+    "The seating zone is the primary focal point. The media zone is positioned to support viewing.",
+    "The media zone is encouraged to be placed against a wall to maximize open space.",
+    "Planner removed overlapping cluster affinity tags from prefer when the same tag also appeared in avoid: seating_zone: center",
+    "Seed variant policy seed_edge_weighted: distribution=edge_weighted, center_open=high, support_behavior=recede.",
+    "Seed constraint fingerprint seed_edge_weighted: perimeter_bias_lock, all_clusters_avoid_center, wall_backed_primary_pair."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_edge_weighted",
+    "constraint_tokens": [
+      "perimeter_bias_lock",
+      "all_clusters_avoid_center",
+      "wall_backed_primary_pair"
+    ],
+    "structural_fingerprint": "focus=mixed,center=high,support=recede,distribution=edge_weighted || center_lane:room_center,entry_buffer:door_1 || media_zone|p=far_from_entry,long_wall,recess_or_edge,wall|a=center,door_swing,main_path,window_blocking,seating_zone|p=far_from_entry,long_wall,recess_or_edge,wall|a=center,entry_blocking,main_path,window_blocking || media_zone|seating_zone|near || media_zone|seating_zone|face_each_other || media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|seating_zone,seating_zone|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|media_zone"
+  }
+}

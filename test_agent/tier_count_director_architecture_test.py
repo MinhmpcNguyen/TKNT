@@ -165,6 +165,83 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
         self.assertIn("rep_dims_m", decisions_by_type["desk_chair"])
         self.assertEqual(decisions_by_type["bed"]["quantity"], 1)
 
+    def test_generate_uses_canonical_profiles_for_instance_member_ids(self) -> None:
+        requested_categories: list[str] = []
+
+        clusters_json = {
+            "clusters": [
+                {
+                    "cluster_id": "main_seating",
+                    "tag": "living",
+                    "members": [
+                        "sofa_1",
+                        "coffee_table_1",
+                        "armchair_1",
+                        "armchair_2",
+                    ],
+                    "anchors": ["sofa_1"],
+                    "cluster_rules": {"access_requirements": []},
+                }
+            ]
+        }
+
+        def fake_get_size_profiles(
+            *, categories: list[str], tenant_id: str | None = None
+        ) -> dict[str, Any]:
+            _ = tenant_id
+            requested_categories.extend(categories)
+            profiles = {category: _make_profile(category) for category in categories}
+            profiles["__generic__"] = _make_profile("generic")
+            return {"size_profiles_by_category": profiles, "missing_categories": []}
+
+        def fake_estimate_budget(**kwargs: Any) -> dict[str, Any]:
+            profiles = kwargs["size_profiles_by_category"]
+            self.assertIn("sofa_1", profiles)
+            self.assertIn("coffee_table_1", profiles)
+            self.assertIn("armchair_1", profiles)
+            self.assertIn("armchair_2", profiles)
+            return {
+                "input_decisions_fit": True,
+                "recommended_decisions_fit": True,
+                "recommended_decisions": kwargs["decisions"],
+                "decision_footprint_details": [],
+                "cluster_budget_limits_m2": {"main_seating": 6.0},
+            }
+
+        _tier_count_director._get_tool_registry = lambda: {
+            "get_size_profiles": fake_get_size_profiles,
+            "estimate_budget": fake_estimate_budget,
+        }
+
+        result = TierCountDirector().generate(
+            description="Design a practical living room.",
+            special_notes="",
+            room_model_json=_sample_room(),
+            user_intent_json={"user_input": {"style": "modern"}},
+            clusters_json=clusters_json,
+        )
+
+        self.assertEqual(requested_categories, ["sofa", "coffee_table", "armchair"])
+        decisions_by_type = {
+            row["object_type"]: row
+            for row in result["decisions"]
+            if isinstance(row, dict) and isinstance(row.get("object_type"), str)
+        }
+        self.assertEqual(decisions_by_type["sofa_1"]["category"], "sofa_1")
+        self.assertTrue(
+            decisions_by_type["sofa_1"]["rep_dims_m"]["source_id"].startswith("sofa_")
+        )
+        self.assertTrue(
+            decisions_by_type["coffee_table_1"]["rep_dims_m"][
+                "source_id"
+            ].startswith("coffee_table_")
+        )
+        self.assertTrue(
+            decisions_by_type["armchair_1"]["rep_dims_m"]["source_id"].startswith(
+                "armchair_"
+            )
+        )
+
     def test_generate_applies_budget_recommendations_without_llm_loop(self) -> None:
         budget_calls: list[list[dict[str, Any]]] = []
 

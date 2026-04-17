@@ -24,6 +24,7 @@ class LLMClientProtocol(Protocol):
         temperature: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
+        response_mime_type: str | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object: ...

@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
+from PIL import Image, ImageEnhance
+
 
 @dataclass(frozen=True)
 class TripoSRRunConfig:
@@ -117,6 +120,7 @@ def run_triposr(
                 raise RuntimeError(
                     f"TripoSR texture bake finished without producing {texture_image_path}."
                 )
+            _postprocess_baked_texture(texture_image_path)
             _ensure_textured_obj_material_bindings(
                 obj_path=textured_mesh_source_path,
                 texture_path=texture_image_path,
@@ -327,3 +331,31 @@ def _convert_textured_obj_to_glb(*, obj_path: Path, output_glb_path: Path) -> No
         raise RuntimeError("Trimesh did not return GLB bytes for the textured mesh.")
     output_glb_path.parent.mkdir(parents=True, exist_ok=True)
     output_glb_path.write_bytes(bytes(exported))
+
+
+def _postprocess_baked_texture(texture_path: Path) -> None:
+    texture_image = Image.open(texture_path).convert("RGBA")
+    texture_array = np.array(texture_image, copy=True)
+    rgb = texture_array[:, :, :3].astype(np.float32)
+
+    occupancy_mask = rgb.max(axis=2) > 18
+    if not bool(occupancy_mask.any()):
+        texture_image.save(texture_path)
+        return
+
+    enhanced_rgb_image = Image.fromarray(rgb.astype(np.uint8), mode="RGB")
+    enhanced_rgb_image = ImageEnhance.Color(enhanced_rgb_image).enhance(1.35)
+    enhanced_rgb_image = ImageEnhance.Contrast(enhanced_rgb_image).enhance(1.15)
+    enhanced_rgb_image = ImageEnhance.Brightness(enhanced_rgb_image).enhance(1.12)
+    enhanced_rgb_image = ImageEnhance.Sharpness(enhanced_rgb_image).enhance(1.08)
+
+    enhanced_rgb = np.array(enhanced_rgb_image, copy=False).astype(np.float32) / 255.0
+    enhanced_rgb[occupancy_mask] = np.power(enhanced_rgb[occupancy_mask], 0.9)
+    final_rgb = np.clip(enhanced_rgb * 255.0, 0, 255).astype(np.uint8)
+
+    texture_array[:, :, :3] = np.where(
+        occupancy_mask[:, :, None],
+        final_rgb,
+        texture_array[:, :, :3],
+    )
+    Image.fromarray(texture_array, mode="RGBA").save(texture_path)

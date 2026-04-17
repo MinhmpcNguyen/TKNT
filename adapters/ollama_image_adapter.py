@@ -20,7 +20,23 @@ DEFAULT_NEGATIVE_PROMPT = (
     "clutter, busy scene, colored background, gradient background, dark background, "
     "patterned background, text, watermark, logo, border, cropped object, cut off, "
     "partial object, person, hand, reflection, tiny object, distant object, far away, "
-    "zoomed out, wide shot, excessive white margin, empty frame"
+    "zoomed out, wide shot, excessive white margin, empty frame, flat front elevation, "
+    "orthographic front view, paper cutout look, relief sculpture look, muddy texture, "
+    "desaturated surface, monochrome object, silhouette lighting"
+)
+
+FLAT_OBJECT_PROMPT_TOKENS = (
+    "poster",
+    "painting",
+    "wall art",
+    "wall_art",
+    "canvas",
+    "frame",
+    "mirror",
+    "screen",
+    "monitor",
+    "tv",
+    "display panel",
 )
 
 
@@ -116,6 +132,8 @@ def normalize_ollama_endpoint(base_url: str | None) -> str | None:
 
 
 def _build_white_background_prompt(prompt: str) -> str:
+    normalized_prompt = prompt.strip()
+    camera_guidance = _build_camera_guidance(normalized_prompt)
     return (
         "Create exactly one isolated object that matches the description below.\n"
         "Treat it as a clean studio product image prepared for single-image 3D reconstruction.\n"
@@ -123,10 +141,13 @@ def _build_white_background_prompt(prompt: str) -> str:
         "Use a close camera framing so the object fills roughly 75% to 85% of the canvas.\n"
         "Leave only a small white margin around the object on all sides.\n"
         "Do not make the subject tiny, distant, zoomed out, or surrounded by large empty space.\n"
+        f"{camera_guidance}\n"
+        "Use soft studio lighting that reveals volume, depth cues, and surface texture clearly.\n"
+        "Keep material colors natural, moderately vivid, and well separated from shadow areas.\n"
         "Use a pure solid white background only.\n"
         "Do not add any environment, room context, floor plane, props, hands, people, text, or watermark.\n"
         "Keep the silhouette clean and the object readable for 3D reconstruction.\n\n"
-        f"Object description:\n{prompt.strip()}"
+        f"Object description:\n{normalized_prompt}"
     )
 
 
@@ -134,6 +155,20 @@ def _build_negative_prompt(negative_prompt: str | None) -> str:
     if negative_prompt is None or not negative_prompt.strip():
         return DEFAULT_NEGATIVE_PROMPT
     return f"{DEFAULT_NEGATIVE_PROMPT}, {negative_prompt.strip()}"
+
+
+def _build_camera_guidance(prompt: str) -> str:
+    lowered_prompt = prompt.lower()
+    is_flat_subject = any(token in lowered_prompt for token in FLAT_OBJECT_PROMPT_TOKENS)
+    if is_flat_subject:
+        return (
+            "Use a straight, readable product view that preserves the true proportions of the flat object "
+            "without dramatic perspective distortion."
+        )
+    return (
+        "Show the object from a gentle three-quarter front view so both the front and one side are visible, "
+        "making the object read as volumetric rather than flat."
+    )
 
 
 def _parse_response_payload(response: httpx.Response) -> dict[str, JSONValue]:

@@ -1,0 +1,107 @@
+{
+  "status": "OK",
+  "cluster_id": "lounge_area",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "ottoman",
+      "x": 50,
+      "y": 2100,
+      "rot": 0
+    },
+    {
+      "id": "recliner",
+      "x": 700,
+      "y": 2100,
+      "rot": 0
+    },
+    {
+      "id": "sectional_sofa",
+      "x": -400,
+      "y": 900,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "ottoman",
+        "x": 50,
+        "y": 2100,
+        "w": 540,
+        "h": 500
+      },
+      {
+        "id": "recliner",
+        "x": 700,
+        "y": 2100,
+        "w": 880,
+        "h": 760
+      },
+      {
+        "id": "sectional_sofa",
+        "x": -400,
+        "y": 900,
+        "w": 2540,
+        "h": 920
+      }
+    ],
+    "local_bbox": {
+      "min_x": -400,
+      "min_y": 900,
+      "max_x": 2140,
+      "max_y": 2860
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": -1
+    },
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "sectional_sofa": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "ottoman": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "recliner": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

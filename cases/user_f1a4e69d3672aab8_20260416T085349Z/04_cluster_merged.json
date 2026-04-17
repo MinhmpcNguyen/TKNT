@@ -1,0 +1,232 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "c_seating_area",
+      "tag": "living",
+      "members": [
+        "coffee_table",
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "armchair"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "coffee_table",
+          "b": "armchair"
+        },
+        {
+          "type": "no_overlap",
+          "a": "side_table",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "requires_access",
+          "id": "armchair",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "armchair": {
+            "front": "bottom",
+            "notes": "secondary seating direction"
+          },
+          "coffee_table": {
+            "front": "bottom",
+            "notes": "symmetrical"
+          },
+          "side_table": {
+            "front": "bottom",
+            "notes": "symmetrical"
+          },
+          "floor_lamp": {
+            "front": "bottom",
+            "notes": "directional light"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "head",
+              "left",
+              "right"
+            ],
+            "gap_min": 100,
+            "gap_max": 350,
+            "proximity": "compact",
+            "selection": "best_fit"
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit"
+          },
+          {
+            "id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "coffee_table",
+          "category": "coffee_table",
+          "cluster_id": "c_seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked coffee_table as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.9,
+            "W": 0.5,
+            "H": 0.44,
+            "A": 0.45,
+            "R": 1.8,
+            "source_id": "coffee_table_006"
+          }
+        },
+        {
+          "object_type": "armchair",
+          "category": "armchair",
+          "cluster_id": "c_seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked armchair as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          }
+        },
+        {
+          "object_type": "side_table",
+          "category": "side_table",
+          "cluster_id": "c_seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "c_seating_area",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Modern living room layout for 3-5 people.",
+    "Removed redundant seating (sofa, recliner, bean_bag) and tall storage (bookshelf, storage_cabinet) to ensure window clearance and openness.",
+    "Seating is centered around a sectional sofa and coffee table for comfort and interaction.",
+    "Cluster c_seating_area: dropped anchors not present in members: ['sectional_sofa'].",
+    "Cluster c_seating_area: defaulted anchors to 'armchair' because the original anchors were invalid for this cluster.",
+    "Cluster c_seating_area: dropped facing rule for unknown object 'sectional_sofa'.",
+    "Cluster c_seating_area: dropped access requirement for unknown object 'sectional_sofa'.",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'no_overlap', 'a': 'sectional_sofa', 'b': 'coffee_table'}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'no_overlap', 'a': 'sectional_sofa', 'b': 'armchair'}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'no_overlap', 'a': 'sectional_sofa', 'b': 'side_table'}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'no_overlap', 'a': 'sectional_sofa', 'b': 'floor_lamp'}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'dock_to_edge', 'a': 'coffee_table', 'b': 'sectional_sofa', 'b_edge': 'front', 'span': 'any', 'gap_min': 300, 'gap_max': 600}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'anchor_side', 'a': 'armchair', 'b': 'sectional_sofa', 'side': 'right', 'gap_min': 400, 'gap_max': 1000}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'anchor_side', 'a': 'side_table', 'b': 'sectional_sofa', 'side': 'left', 'gap_min': 0, 'gap_max': 200}",
+    "Cluster c_seating_area: dropped hard constraint with unknown subjects: {'type': 'requires_access', 'id': 'sectional_sofa', 'mode': 'front_clearance'}",
+    "Cluster c_seating_area: dropped soft constraint with unknown subjects: {'type': 'prefer_facing', 'a': 'armchair', 'b': 'sectional_sofa', 'mode': 'face_each_other', 'weight': 10}",
+    "Cluster c_seating_area: dropped soft constraint with unknown subjects: {'type': 'prefer_near', 'a': 'side_table', 'b': 'sectional_sofa', 'weight': 5}",
+    "Cluster c_media_zone: dropped anchors not present in members: ['tv_console'].",
+    "Cluster c_media_zone: dropped facing rule for unknown object 'tv_console'.",
+    "Cluster c_media_zone: dropped access requirement for unknown object 'tv_console'.",
+    "Cluster c_media_zone: dropped hard constraint with unknown subjects: {'type': 'requires_access', 'id': 'tv_console', 'mode': 'front_clearance'}"
+  ],
+  "missing": []
+}

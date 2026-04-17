@@ -161,14 +161,14 @@ def score_cluster_constraints(
     # 1) fewer hard violations
     # 2) lower total hard weighted violation
     # 3) lower max hard violation
-    # 4) lower compact score
-    # 5) lower soft weighted penalty
+    # 4) lower soft weighted penalty from forge semantics
+    # 5) lower compact score
     lexicographic_key = [
         hard_summary["num_violations"],
         hard_summary["total_weighted_violation"],
         hard_summary["max_weighted_violation"],
-        layout_quality["compact_score"],
         soft_summary["total_weighted_penalty"],
+        layout_quality["compact_score"],
     ]
 
     return {

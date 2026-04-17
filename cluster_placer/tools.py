@@ -719,6 +719,14 @@ def GlobalClusterVerifier(
             quality.get("orientation_debug"),
             only_focal=True,
         )
+        per_cluster_macro = _orientation_debug_cluster_penalties(
+            quality.get("orientation_debug"),
+            layer="macro",
+        )
+        per_cluster_micro = _orientation_debug_cluster_penalties(
+            quality.get("orientation_debug"),
+            layer="micro",
+        )
 
         for cid in placed_cluster_ids:
             if cid not in violations_by_cluster:
@@ -731,6 +739,12 @@ def GlobalClusterVerifier(
             )
             violations_by_cluster[cid]["focal_orientation_penalty_mm"] = int(
                 per_cluster_focal.get(cid, 0) or 0
+            )
+            violations_by_cluster[cid]["macro_orientation_penalty_mm"] = int(
+                per_cluster_macro.get(cid, 0) or 0
+            )
+            violations_by_cluster[cid]["micro_orientation_penalty_mm"] = int(
+                per_cluster_micro.get(cid, 0) or 0
             )
 
     # -----------------------------------------------------
@@ -763,6 +777,8 @@ def GlobalClusterVerifier(
             "critical_orientation_penalty_mm"
         ),
         "focal_pair_penalty_mm": quality.get("focal_pair_penalty_mm"),
+        "macro_penalty_mm": quality.get("macro_penalty_mm"),
+        "micro_penalty_mm": quality.get("micro_penalty_mm"),
         "cluster_orientation_count": orientation_counts["cluster_orientation_count"],
         "cluster_directional_relation_count": orientation_counts[
             "cluster_directional_relation_count"
@@ -1472,6 +1488,24 @@ def _normalize_relation_plan(
         ):
             target_cluster_id = target_object_cluster_id
 
+        anchor_ids = _cluster_anchor_ids(cinfo_by_id.get(cid) or {})
+        cross_cluster_target = (
+            isinstance(target_object_cluster_id, str)
+            and target_object_cluster_id
+            and target_object_cluster_id != cid
+        )
+        if cross_cluster_target and oid not in anchor_ids:
+            intents = [
+                text
+                for text in intents
+                if text not in {"face_object", "face_away_from_object"}
+            ]
+            target_object_id = None
+            target_object_cluster_id = None
+            target_cluster_id = None
+            if not intents:
+                continue
+
         out["object_orientations"].append(
             {
                 "cluster_id": cid,
@@ -1588,6 +1622,27 @@ def _normalize_relation_plan(
     )
 
     return out
+
+
+def _cluster_anchor_ids(cinfo: Dict[str, Any]) -> set[str]:
+    anchors = {
+        str(anchor).strip()
+        for anchor in (cinfo.get("anchors") or [])
+        if isinstance(anchor, str) and str(anchor).strip()
+    }
+    if anchors:
+        return anchors
+
+    for row in cinfo.get("decisions") or []:
+        if not isinstance(row, dict):
+            continue
+        priority = str(row.get("priority") or "").strip().lower()
+        if priority != "anchor":
+            continue
+        object_id = str(row.get("object_type") or row.get("category") or "").strip()
+        if object_id:
+            anchors.add(object_id)
+    return anchors
 
 
 def _normalize_string_list(value: Any) -> List[str]:
@@ -2586,6 +2641,48 @@ def _penalty_avoid_front_to_wall(
     return penalty, toward_wall_dot, debug
 
 
+def _penalty_back_to_wall(
+    *,
+    point: Tuple[float, float],
+    front: Tuple[float, float] | None,
+    room_poly: Any,
+    blocker_geoms: List[Any] | None,
+    weight: float,
+    desired_back_clear_mm: float = 320.0,
+    desired_front_advantage_mm: float = 260.0,
+) -> Tuple[float, float | None, Dict[str, Any]]:
+    if front is None:
+        return 0.0, None, {}
+
+    max_distance = max(_geom_diag_mm(room_poly) * 0.9, 1600.0)
+    front_clear = float(
+        _directional_clearance_mm(point, front, room_poly, blocker_geoms, max_distance)
+        or 0.0
+    )
+    back = (-front[0], -front[1])
+    back_clear = float(
+        _directional_clearance_mm(point, back, room_poly, blocker_geoms, max_distance)
+        or 0.0
+    )
+
+    front_advantage = front_clear - back_clear
+    back_distance_penalty = max(0.0, back_clear - desired_back_clear_mm) * 0.55
+    front_advantage_penalty = max(
+        0.0, desired_front_advantage_mm - front_advantage
+    ) * 0.85
+    reverse_penalty = max(0.0, back_clear - front_clear) * 0.35
+
+    penalty = (
+        back_distance_penalty + front_advantage_penalty + reverse_penalty
+    ) * weight
+    debug = {
+        "front_clear_mm": int(round(front_clear)),
+        "back_clear_mm": int(round(back_clear)),
+        "front_advantage_mm": int(round(front_advantage)),
+    }
+    return penalty, front_advantage, debug
+
+
 # =========================================================
 # Orientation meta aggregation
 # =========================================================
@@ -2594,6 +2691,7 @@ def _orientation_debug_cluster_penalties(
     *,
     only_critical: bool = False,
     only_focal: bool = False,
+    layer: str | None = None,
 ) -> Dict[str, int]:
     out: Dict[str, int] = {}
     if not isinstance(orientation_debug, list):
@@ -2606,6 +2704,8 @@ def _orientation_debug_cluster_penalties(
         if only_critical and not bool(item.get("critical", False)):
             continue
         if only_focal and not bool(item.get("focal", False)):
+            continue
+        if layer is not None and str(item.get("layer") or "") != str(layer):
             continue
 
         pen = int(item.get("penalty_mm", 0) or 0)
@@ -2765,6 +2865,8 @@ def _evaluate_layout_quality(
         critical_orientation_penalty_mm,
         focal_pair_penalty_mm,
         critical_orientation_meta,
+        macro_orientation_penalty_mm,
+        micro_orientation_penalty_mm,
     ) = _compute_orientation_penalty(
         cluster_geoms=cluster_geoms,
         cluster_transforms_by_id=cluster_transforms_by_id,
@@ -2813,6 +2915,16 @@ def _evaluate_layout_quality(
         )
     )
 
+    macro_penalty_mm = (
+        float(tight_gap_penalty)
+        + float(spread_penalty_mm)
+        + float(affinity_penalty_mm)
+        + float(relation_penalty_mm)
+        + float(circulation_penalty_mm)
+        + float(macro_orientation_penalty_mm)
+    )
+    micro_penalty_mm = float(micro_orientation_penalty_mm)
+
     return {
         "density_ratio": _round3(density_ratio),
         "adaptive_base_preferred_gap_mm": int(round(adaptive_base_gap_mm)),
@@ -2827,6 +2939,10 @@ def _evaluate_layout_quality(
         "orientation_penalty_mm": int(round(orientation_penalty_mm)),
         "critical_orientation_penalty_mm": int(round(critical_orientation_penalty_mm)),
         "focal_pair_penalty_mm": int(round(focal_pair_penalty_mm)),
+        "macro_orientation_penalty_mm": int(round(macro_orientation_penalty_mm)),
+        "micro_orientation_penalty_mm": int(round(micro_orientation_penalty_mm)),
+        "macro_penalty_mm": int(round(macro_penalty_mm)),
+        "micro_penalty_mm": int(round(micro_penalty_mm)),
         "total_soft_penalty_mm": int(round(total_soft_penalty_mm)),
         "spread": spread_meta,
         "affinity_debug": affinity_meta[:8],
@@ -3236,13 +3352,17 @@ def _compute_orientation_penalty(
     obstacle_geoms: List[Any] | None,
     relation_plan: Dict[str, Any] | None,
     evaluation_mode: str = "complete",
-) -> tuple[float, List[Dict[str, Any]], float, float, List[Dict[str, Any]]]:
+) -> tuple[
+    float, List[Dict[str, Any]], float, float, List[Dict[str, Any]], float, float
+]:
     if not isinstance(relation_plan, dict):
-        return 0.0, [], 0.0, 0.0, []
+        return 0.0, [], 0.0, 0.0, [], 0.0, 0.0
 
     total = 0.0
     critical_total = 0.0
     focal_total = 0.0
+    macro_total = 0.0
+    micro_total = 0.0
     meta: List[Dict[str, Any]] = []
     critical_meta: List[Dict[str, Any]] = []
     orientation_mode_scale = (
@@ -3262,9 +3382,9 @@ def _compute_orientation_penalty(
         object_orientations = []
 
     def _push(
-        item: Dict[str, Any], local: float, *, critical: bool, focal: bool
+        item: Dict[str, Any], local: float, *, critical: bool, focal: bool, layer: str
     ) -> None:
-        nonlocal total, critical_total, focal_total
+        nonlocal total, critical_total, focal_total, macro_total, micro_total
         local = float(local) * orientation_mode_scale
         if local <= 0.0:
             return
@@ -3273,6 +3393,7 @@ def _compute_orientation_penalty(
         payload["penalty_mm"] = int(round(local))
         payload["critical"] = bool(critical)
         payload["focal"] = bool(focal)
+        payload["layer"] = layer
 
         total += local
         if critical:
@@ -3280,6 +3401,10 @@ def _compute_orientation_penalty(
             critical_meta.append(payload)
         if focal:
             focal_total += local
+        if layer == "macro":
+            macro_total += local
+        else:
+            micro_total += local
 
         meta.append(payload)
 
@@ -3378,11 +3503,18 @@ def _compute_orientation_penalty(
                 )
 
             elif intent == "back_to_wall" and front is not None:
-                wall = _nearest_wall_info(room_poly, centroid)
-                if wall is not None:
-                    local, dot = _penalty_face(
-                        front, _vec_from_to(wall["midpoint"], centroid), 560.0, weight
-                    )
+                cluster_blockers = [
+                    other_geom
+                    for other_id, other_geom in cluster_geoms.items()
+                    if other_id != cid
+                ] + static_blockers
+                local, dot, open_dbg = _penalty_back_to_wall(
+                    point=centroid,
+                    front=front,
+                    room_poly=room_poly,
+                    blocker_geoms=cluster_blockers,
+                    weight=weight,
+                )
 
             elif intent == "outward_to_wall" and front is not None:
                 wall = _nearest_wall_info(room_poly, centroid)
@@ -3431,6 +3563,7 @@ def _compute_orientation_penalty(
                 local,
                 critical=intent in CRITICAL_CLUSTER_INTENTS,
                 focal=intent in FOCAL_CLUSTER_INTENTS,
+                layer="macro",
             )
             if "open_dbg" in locals():
                 del open_dbg
@@ -3517,6 +3650,7 @@ def _compute_orientation_penalty(
             local,
             critical=rel in CRITICAL_CLUSTER_DIRECTIONAL_RELATIONS,
             focal=rel in FOCAL_CLUSTER_DIRECTIONAL_RELATIONS,
+            layer="macro",
         )
 
     # -----------------------------------------------------
@@ -3549,6 +3683,7 @@ def _compute_orientation_penalty(
         front = _object_front_vector(cinfo, oid, rot)
         axis = _object_axis_vector(cinfo, oid, rot)
         cluster_axis = _cluster_axis_vector(cinfo, rot)
+        anchor_ids = _cluster_anchor_ids(cinfo)
         weight = _priority_weight(item.get("priority"))
 
         intents = item.get("intents")
@@ -3578,6 +3713,7 @@ def _compute_orientation_penalty(
                 generic_pen,
                 critical=True,
                 focal=False,
+                layer="micro",
             )
 
         for intent in intents:
@@ -3638,11 +3774,20 @@ def _compute_orientation_penalty(
                     )
 
             elif intent == "back_to_wall" and front is not None:
-                wall = _nearest_wall_info(room_poly, obj_center)
-                if wall is not None:
-                    local, dot = _penalty_face(
-                        front, _vec_from_to(wall["midpoint"], obj_center), 360.0, weight
-                    )
+                object_blockers = [
+                    other_geom
+                    for other_id, other_geom in object_geoms.items()
+                    if other_id != oid
+                ] + static_blockers
+                local, dot, open_dbg = _penalty_back_to_wall(
+                    point=obj_center,
+                    front=front,
+                    room_poly=room_poly,
+                    blocker_geoms=object_blockers,
+                    weight=weight,
+                    desired_back_clear_mm=260.0,
+                    desired_front_advantage_mm=220.0,
+                )
 
             elif intent == "long_axis_parallel_wall" and axis is not None:
                 wall = _nearest_wall_info(room_poly, obj_center)
@@ -3676,6 +3821,9 @@ def _compute_orientation_penalty(
                 )
                 if resolved is not None:
                     target_center, resolved_target_cluster_id = resolved
+                    is_cross_cluster = resolved_target_cluster_id != cid
+                    if is_cross_cluster and oid not in anchor_ids:
+                        continue
                     if (
                         not (
                             resolved_target_cluster_id == cid
@@ -3703,6 +3851,9 @@ def _compute_orientation_penalty(
                 )
                 if resolved is not None:
                     target_center, resolved_target_cluster_id = resolved
+                    is_cross_cluster = resolved_target_cluster_id != cid
+                    if is_cross_cluster and oid not in anchor_ids:
+                        continue
                     if (
                         not (
                             resolved_target_cluster_id == cid
@@ -3735,6 +3886,14 @@ def _compute_orientation_penalty(
                 local,
                 critical=intent in CRITICAL_OBJECT_INTENTS,
                 focal=intent in FOCAL_OBJECT_INTENTS,
+                layer=(
+                    "macro"
+                    if intent in {"face_object", "face_away_from_object"}
+                    and isinstance(resolved_target_cluster_id, str)
+                    and resolved_target_cluster_id != cid
+                    and oid in anchor_ids
+                    else "micro"
+                ),
             )
             if "open_dbg" in locals():
                 del open_dbg
@@ -3754,7 +3913,15 @@ def _compute_orientation_penalty(
         )
     )
 
-    return total, meta, critical_total, focal_total, critical_meta
+    return (
+        total,
+        meta,
+        critical_total,
+        focal_total,
+        critical_meta,
+        macro_total,
+        micro_total,
+    )
 
 
 def _priority_weight(value: Any) -> float:
@@ -4018,6 +4185,8 @@ def _build_repair_guidance(
                 "critical_orientation_penalty_mm": 0,
                 "focal_orientation_penalty_mm": 0,
                 "orientation_penalty_mm": 0,
+                "macro_orientation_penalty_mm": 0,
+                "micro_orientation_penalty_mm": 0,
                 "score": 0.0,
             }
         return issue_by_cluster[cid]
@@ -4045,13 +4214,21 @@ def _build_repair_guidance(
             rec0.get("focal_orientation_penalty_mm") or 0
         )
         rec["orientation_penalty_mm"] = int(rec0.get("orientation_penalty_mm") or 0)
+        rec["macro_orientation_penalty_mm"] = int(
+            rec0.get("macro_orientation_penalty_mm") or 0
+        )
+        rec["micro_orientation_penalty_mm"] = int(
+            rec0.get("micro_orientation_penalty_mm") or 0
+        )
 
     for cid, rec in issue_by_cluster.items():
         rec["score"] = round(
             (5000.0 * rec["hard_error_count"])
             + (3.0 * rec["critical_orientation_penalty_mm"])
             + (2.0 * rec["focal_orientation_penalty_mm"])
-            + (1.0 * rec["orientation_penalty_mm"]),
+            + (2.5 * rec["macro_orientation_penalty_mm"])
+            + (0.7 * rec["micro_orientation_penalty_mm"])
+            + (0.2 * rec["orientation_penalty_mm"]),
             2,
         )
 
@@ -4907,16 +5084,33 @@ def _rank_variants_for_search(
     return ranked
 
 
+def _anchor_cardinal_side(anchor_kind: str) -> str | None:
+    tokens = [token for token in str(anchor_kind or "").lower().split("_") if token]
+    for side in ("top", "bottom", "left", "right"):
+        if side in tokens:
+            return side
+    return None
+
+
 def _anchor_inward_vector(anchor_kind: str) -> Tuple[float, float] | None:
-    k = str(anchor_kind or "").lower()
-    if "wall_top" in k or "top" == k:
+    side = _anchor_cardinal_side(anchor_kind)
+    if side == "top":
         return (0.0, 1.0)
-    if "wall_bottom" in k or "bottom" == k:
+    if side == "bottom":
         return (0.0, -1.0)
-    if "wall_left" in k or "left" == k:
+    if side == "left":
         return (1.0, 0.0)
-    if "wall_right" in k or "right" == k:
+    if side == "right":
         return (-1.0, 0.0)
+    return None
+
+
+def _anchor_wall_tangent_vector(anchor_kind: str) -> Tuple[float, float] | None:
+    side = _anchor_cardinal_side(anchor_kind)
+    if side in {"top", "bottom"}:
+        return (1.0, 0.0)
+    if side in {"left", "right"}:
+        return (0.0, 1.0)
     return None
 
 
@@ -4933,13 +5127,22 @@ def _rotation_anchor_viability(
         return 0.0
     score = 0.0
     inward = _anchor_inward_vector(anchor_kind)
+    tangent = _anchor_wall_tangent_vector(anchor_kind)
     if inward is not None and front is not None:
         dot = _dot_unit(front, inward)
         if dot is not None:
             if hints.get("need_open_front") or hints.get("prefer_wall"):
-                score += 1.0 * dot
+                score += 1.1 * dot
+                if dot < 0.35:
+                    score -= 0.35 * (0.35 - dot)
             else:
                 score += 0.35 * dot
+    if tangent is not None and axis is not None:
+        axis_alignment = abs(_dot_unit(axis, tangent) or 0.0)
+        if hints.get("prefer_long_wall") or hints.get("prefer_short_wall"):
+            score += 0.6 * ((2.0 * axis_alignment) - 1.0)
+        elif hints.get("prefer_wall"):
+            score += 0.18 * ((2.0 * axis_alignment) - 1.0)
     k = str(anchor_kind or "").lower()
     if hints.get("avoid_entry") and "near_entry" in k:
         score -= 0.45
@@ -5207,6 +5410,8 @@ def _candidate_record_from_verify(
         "hard_valid": bool(verify.get("hard_valid")),
         "acceptable_valid": acceptable_local,
         "rough_score": int(quality.get("layout_score") or 0),
+        "macro_penalty_mm": int(quality.get("macro_penalty_mm") or 0),
+        "micro_penalty_mm": int(quality.get("micro_penalty_mm") or 0),
         "orientation_penalty_mm": int(vrec.get("orientation_penalty_mm") or 0),
         "critical_orientation_penalty_mm": int(
             vrec.get("critical_orientation_penalty_mm") or 0

@@ -94,6 +94,76 @@ class ClusterRelationPlannerArchitectureTest(unittest.TestCase):
         self.assertEqual(captured["model_name"], "gemma-4-31b-it")
         self.assertEqual(result["status"], "OK")
 
+    def test_generate_falls_back_when_llm_returns_invalid_json(self) -> None:
+        calls: list[object] = []
+
+        class _InvalidJsonClient:
+            def chat_completion(
+                self,
+                _messages,
+                *,
+                model_key=None,
+                model_name=None,
+                temperature=None,
+                max_tokens=None,
+            ):
+                calls.append(
+                    {
+                        "model_key": model_key,
+                        "model_name": model_name,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    }
+                )
+                return types.SimpleNamespace(
+                    choices=[
+                        types.SimpleNamespace(
+                            message=types.SimpleNamespace(
+                                content="not valid json even after retry"
+                            )
+                        )
+                    ]
+                )
+
+        original_get_llm_client = planner_mod.get_llm_client
+        try:
+            planner_mod.get_llm_client = lambda provider="gemini": _InvalidJsonClient()
+            planner = planner_mod.ClusterRelationPlanner()
+            result = planner.generate(
+                room_model_json={
+                    "room": {"room_id": "r0"},
+                    "meta": {"room_type": "living_room"},
+                },
+                clusters_json={
+                    "clusters": [
+                        {"cluster_id": "living", "members": ["sofa", "coffee_table"]},
+                        {"cluster_id": "media", "members": ["tv_console"]},
+                    ]
+                },
+                model_name="gemma-4-31b-it",
+            )
+        finally:
+            planner_mod.get_llm_client = original_get_llm_client
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(result["room_id"], "r0")
+        self.assertEqual(result["object_orientations"], [])
+        self.assertTrue(
+            any(
+                "deterministic macro fallback" in note
+                for note in result.get("notes") or []
+            )
+        )
+        self.assertTrue(
+            any(
+                row.get("a") == "living"
+                and row.get("b") == "media"
+                and row.get("relation") == "face_each_other"
+                for row in result.get("cluster_directional_relations") or []
+            )
+        )
+
     def test_merges_existing_intent_profile_without_unhashable_list_error(self) -> None:
         payload = {
             "status": "OK",
@@ -177,6 +247,63 @@ class ClusterRelationPlannerArchitectureTest(unittest.TestCase):
             normalized["layout_intent_profile"]["center_open_preference"], "high"
         )
 
+    def test_normalize_clears_missing_when_status_is_ok(self) -> None:
+        normalized = planner_mod._normalize_relation_plan_payload(
+            {
+                "status": "OK",
+                "missing": ["seed_variant_notes", "something_else"],
+                "cluster_relations": [],
+            },
+            room_model_json={"room": {"room_id": "r0"}},
+            clusters_json={"clusters": []},
+        )
+
+        self.assertEqual(normalized["status"], "OK")
+        self.assertEqual(normalized["missing"], [])
+
+    def test_normalization_drops_planner_object_orientations(self) -> None:
+        payload = {
+            "status": "OK",
+            "cluster_orientations": [
+                {
+                    "cluster_id": "living",
+                    "intents": ["face_cluster"],
+                    "target_cluster_id": "media",
+                }
+            ],
+            "object_orientations": [
+                {
+                    "cluster_id": "living",
+                    "object_id": "armchair",
+                    "intents": ["face_object"],
+                    "target_object_id": "tv_console",
+                }
+            ],
+        }
+        room_model = {"room": {"room_id": "r0"}, "meta": {"room_type": "living_room"}}
+        clusters = {
+            "clusters": [
+                {
+                    "cluster_id": "living",
+                    "members": ["sectional_sofa", "armchair"],
+                    "anchors": ["sectional_sofa"],
+                },
+                {
+                    "cluster_id": "media",
+                    "members": ["tv_console"],
+                    "anchors": ["tv_console"],
+                },
+            ]
+        }
+
+        normalized = planner_mod._normalize_relation_plan_payload(
+            payload,
+            room_model_json=room_model,
+            clusters_json=clusters,
+        )
+
+        self.assertEqual(normalized["object_orientations"], [])
+
     def test_rebalances_viewing_media_affinity_away_from_window_side(self) -> None:
         payload = {
             "status": "OK",
@@ -223,6 +350,43 @@ class ClusterRelationPlannerArchitectureTest(unittest.TestCase):
         self.assertIn("far_from_entry", media_affinity["prefer"])
         self.assertNotIn("window_side", media_affinity["prefer"])
         self.assertIn("center", media_affinity["avoid"])
+
+    def test_affinity_conflict_prefers_avoid_over_prefer(self) -> None:
+        payload = {
+            "status": "OK",
+            "cluster_affinities": [
+                {
+                    "cluster_id": "seating",
+                    "prefer": ["center", "wall", "far_from_entry"],
+                    "avoid": ["center", "window_blocking"],
+                    "priority": "high",
+                }
+            ],
+        }
+
+        normalized = planner_mod._normalize_relation_plan_payload(
+            payload,
+            room_model_json={"room": {"room_id": "r0"}},
+            clusters_json={
+                "clusters": [
+                    {
+                        "cluster_id": "seating",
+                        "members": ["sectional_sofa", "coffee_table"],
+                    }
+                ]
+            },
+        )
+
+        seating_affinity = normalized["cluster_affinities"][0]
+        self.assertEqual(seating_affinity["cluster_id"], "seating")
+        self.assertNotIn("center", seating_affinity["prefer"])
+        self.assertIn("center", seating_affinity["avoid"])
+        self.assertTrue(
+            any(
+                "overlapping cluster affinity tags" in note
+                for note in normalized.get("notes") or []
+            )
+        )
 
     def test_elevates_large_primary_lounge_cluster_to_wall_anchor(self) -> None:
         payload = {"status": "OK"}

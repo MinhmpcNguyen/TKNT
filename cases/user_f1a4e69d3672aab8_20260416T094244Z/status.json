@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260416T094244Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-16T09:46:37.935190+00:00",
+  "error": "ClusterForge response must be a JSON object",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-16T09:42:44.596700+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-16T09:42:44.613838+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "ClusterForge response must be a JSON object",
+      "updated_at_utc": "2026-04-16T09:46:37.935190+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "ClusterForge response must be a JSON object"
+    }
+  ]
+}

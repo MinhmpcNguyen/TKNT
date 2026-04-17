@@ -1,0 +1,236 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_area",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "armchair",
+        "coffee_table",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "coffee_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "armchair"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "side_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "coffee_table"
+        },
+        {
+          "type": "anchor_side",
+          "a": "floor_lamp",
+          "b": "sectional_sofa",
+          "side": "foot",
+          "gap_min": 0,
+          "gap_max": 200
+        },
+        {
+          "type": "requires_access",
+          "id": "sectional_sofa",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "armchair",
+          "b": "coffee_table",
+          "weight": 5
+        },
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "sectional_sofa",
+          "mode": "face_each_other",
+          "weight": 10
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "bottom",
+            "notes": "Primary seating facing the TV zone"
+          },
+          "armchair": {
+            "front": "bottom",
+            "notes": "Secondary seating facing the coffee table"
+          },
+          "coffee_table": {
+            "front": "top",
+            "notes": "Central surface"
+          },
+          "side_table": {
+            "front": "bottom",
+            "notes": "Surface for sofa"
+          },
+          "floor_lamp": {
+            "front": "bottom",
+            "notes": "Ambient lighting"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sectional_sofa",
+            "kind": "dock_to_edge",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "armchair",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 400,
+            "gap_max": 800,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          },
+          {
+            "id": "side_table",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "first_fit",
+            "orientation": "same_direction",
+            "gap_min": 0,
+            "gap_max": 100,
+            "side_options": [
+              "head_left",
+              "head_right"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "bottom",
+            "notes": "Faces the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      }
+    }
+  ],
+  "notes": [
+    "Selected a sectional sofa and armchair to accommodate 3-5 people comfortably.",
+    "Removed redundant storage and secondary seating to maintain an open, modern feel.",
+    "Tall furniture like bookshelves were excluded to avoid blocking window clearance as requested."
+  ],
+  "missing": []
+}

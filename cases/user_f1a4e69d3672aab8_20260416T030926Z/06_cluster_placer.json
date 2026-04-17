@@ -1,0 +1,31 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "main_seating_area",
+      "x": 1450,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "cluster_id": "media_zone",
+      "x": 5150,
+      "y": 2700,
+      "rot": 270
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "main_seating_area",
+      "variant_id": "main_seating_area::base"
+    },
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Adjust main_seating_area.floor_lamp compact spacing on the bottom side (current gap -1950mm, target 0mm)"
+  ]
+}

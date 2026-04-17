@@ -1,4 +1,6 @@
 export type Point = { x: number; y: number };
+export type DirectionVector = { dx: number; dy: number };
+export type CardinalSide = 'top' | 'bottom' | 'left' | 'right';
 
 export type Room = {
   room_id: string;
@@ -61,6 +63,9 @@ export type Placement = {
   category: string;
   position_mm: Point;
   rotation_deg: number;
+  front_world?: DirectionVector | null;
+  front_side_world?: CardinalSide | null;
+  front_side_local?: CardinalSide | null;
   footprint_mm: Footprint;
   height_mm: number;
   color_hex: string;

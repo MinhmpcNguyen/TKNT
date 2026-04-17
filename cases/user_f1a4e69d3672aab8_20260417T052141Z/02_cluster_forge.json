@@ -1,0 +1,262 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "main_seating",
+      "tag": "living",
+      "members": [
+        "sofa_1",
+        "coffee_table_1",
+        "armchair_1",
+        "armchair_2",
+        "side_table_1",
+        "floor_lamp_1"
+      ],
+      "anchors": [
+        "sofa_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sofa_1",
+          "b": "coffee_table_1"
+        },
+        {
+          "type": "requires_access",
+          "id": "sofa_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "side_table_1",
+          "b": "sofa_1",
+          "edge": "back",
+          "weight": 5
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sofa_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair_2": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sofa_1": {
+            "front": "bottom",
+            "notes": "primary seating direction"
+          },
+          "armchair_1": {
+            "front": "bottom",
+            "notes": "faces coffee table"
+          },
+          "armchair_2": {
+            "front": "bottom",
+            "notes": "faces coffee table"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sofa_1",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair_1",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair_2",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table_1",
+            "relative_to": "sofa_1",
+            "kind": "dock_to_edge",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 400,
+            "gap_max": 600,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "armchair_1",
+            "relative_to": "coffee_table_1",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "armchair_2",
+            "relative_to": "coffee_table_1",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "side_table_1",
+            "relative_to": "sofa_1",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 50,
+            "gap_max": 150
+          },
+          {
+            "id": "floor_lamp_1",
+            "relative_to": "sofa_1",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 50,
+            "gap_max": 200
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media",
+      "tag": "living",
+      "members": [
+        "tv_console_1"
+      ],
+      "anchors": [
+        "tv_console_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console_1": {
+            "front": "bottom",
+            "notes": "faces the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console_1",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      }
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "tag": "storage",
+      "members": [
+        "console_table_1"
+      ],
+      "anchors": [
+        "console_table_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "console_table_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "console_table_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "console_table_1": {
+            "front": "bottom",
+            "notes": "faces the room"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "console_table_1",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      }
+    }
+  ],
+  "notes": [
+    "Modern living room designed for 5 people with a focus on open circulation and centered seating.",
+    "Avoided tall furniture and media shelves to maintain a clean, uncluttered look.",
+    "Seating includes a sofa and two armchairs to meet the capacity requirement."
+  ],
+  "missing": []
+}

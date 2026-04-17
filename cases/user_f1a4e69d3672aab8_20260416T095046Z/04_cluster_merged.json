@@ -1,0 +1,220 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "coffee_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "coffee_table"
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "top",
+            "notes": "facing TV zone"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 400,
+            "gap_max": 600
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "sectional_sofa",
+          "category": "sectional_sofa",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked sectional_sofa as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 2.54,
+            "W": 0.92,
+            "H": 0.85,
+            "A": 2.3368,
+            "R": 2.760869565217391,
+            "source_id": "sectional_sofa_004"
+          }
+        },
+        {
+          "object_type": "coffee_table",
+          "category": "coffee_table",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked coffee_table as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.9,
+            "W": 0.5,
+            "H": 0.44,
+            "A": 0.45,
+            "R": 1.8,
+            "source_id": "coffee_table_006"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "seating_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "bookshelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            180
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "bottom",
+            "notes": "facing seating zone"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "bookshelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 200,
+            "gap_max": 500
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console",
+          "category": "tv_console",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked tv_console as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 1.26,
+            "W": 0.38,
+            "H": 0.58,
+            "A": 0.4788,
+            "R": 3.3157894736842106,
+            "source_id": "tv_console_002"
+          }
+        },
+        {
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "cluster_id": "media_zone",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked bookshelf as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Selected sectional_sofa, coffee_table, armchair, floor_lamp, tv_console, and bookshelf for a balanced modern living room.",
+    "Excluded redundant items like recliner, ottoman, and multiple storage cabinets to maintain open circulation."
+  ],
+  "missing": []
+}

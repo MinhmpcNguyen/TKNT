@@ -1,0 +1,153 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "main_seating_area",
+      "prefer": [
+        "center",
+        "far_from_entry",
+        "wall",
+        "long_wall"
+      ],
+      "avoid": [
+        "door_swing",
+        "window_clearance",
+        "window_blocking",
+        "entry_blocking",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Primary social hub should be centrally located but clear of the entry path and window access."
+    },
+    {
+      "cluster_id": "media_zone",
+      "prefer": [
+        "wall",
+        "long_wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "door_swing",
+        "center"
+      ],
+      "priority": "high",
+      "reason": "TV console requires a stable wall anchor and should not block the window or entry."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "main_seating_area",
+      "intents": [
+        "face_cluster",
+        "inward_to_room",
+        "back_to_wall",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": "media_zone",
+      "priority": "high",
+      "reason": "Seating must be oriented toward the focal media point."
+    },
+    {
+      "cluster_id": "media_zone",
+      "intents": [
+        "back_to_wall",
+        "face_cluster",
+        "access_to_open_space",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": "main_seating_area",
+      "priority": "high",
+      "reason": "Media console should be flush to wall and face the seating area."
+    }
+  ],
+  "object_orientations": [],
+  "cluster_relations": [
+    {
+      "a": "main_seating_area",
+      "b": "media_zone",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Functional viewing distance is required between seating and TV."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "main_seating_area",
+      "b": "media_zone",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Establish a clear viewing axis between the lounge seating and the TV."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "main_seating_area",
+        "priority": "high",
+        "reason": "Clear path from entrance to the primary living zone."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Prevent clutter immediately inside the entrance."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Maintain light and access to the east window."
+      },
+      {
+        "type": "center_lane",
+        "near": "main_seating_area",
+        "priority": "medium",
+        "reason": "Ensure the room feels open and uncluttered."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "main_seating_area",
+    "secondary_cluster_id": "media_zone",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "recede",
+    "distribution_mode": "zoned"
+  },
+  "placement_guidelines": [
+    "Place media_zone against the longest available wall (likely South or North) away from the window.",
+    "Position main_seating_area in the center-right of the room, facing the media_zone.",
+    "Ensure a clear walking corridor from the West door to the seating area.",
+    "Keep the area around the East window clear of bulky furniture.",
+    "Preserve a clear viewing relationship between sectional_sofa and tv_console.",
+    "Do not orient sectional_sofa away from tv_console.",
+    "Keep media_zone readable from main_seating_area.",
+    "Preserve front usability for tv_console.",
+    "Do not let media_zone chase the window side if it weakens the viewing axis with main_seating_area.",
+    "Treat main_seating_area as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Create the clearest support-versus-primary zoning split of the post-seed variants."
+  ],
+  "notes": [
+    "The plan creates a distinct 'Viewing Zone' and 'Lounge Zone' to satisfy the user's request for separate macro territories.",
+    "The seed layout was overlapping; this plan pushes them into a functional relationship.",
+    "Seed variant policy seed_zoned: distribution=zoned, center_open=medium, support_behavior=recede.",
+    "Seed constraint fingerprint seed_zoned: primary_zone_claim, support_zone_split, support_separate_from_secondary."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_zoned",
+    "constraint_tokens": [
+      "primary_zone_claim",
+      "support_zone_split",
+      "support_separate_from_secondary"
+    ],
+    "structural_fingerprint": "focus=mixed,center=medium,support=recede,distribution=zoned || center_lane:main_seating_area,entry_buffer:door_1,window_buffer:window_1 || main_seating_area|p=center,far_from_entry,long_wall,wall|a=door_swing,entry_blocking,main_path,window_blocking,window_clearance,media_zone|p=far_from_entry,long_wall,wall|a=center,door_swing,window_blocking || main_seating_area|media_zone|near || main_seating_area|media_zone|face_each_other || main_seating_area|access_to_open_space,back_to_wall,face_cluster,inward_to_room|media_zone,media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|main_seating_area"
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "status": "OK",
+  "total_dropped_items": 4,
+  "clusters": [
+    {
+      "cluster_id": "lounge_area",
+      "items": [
+        {
+          "cluster_id": "lounge_area",
+          "object_type": "bean_bag",
+          "category": "bean_bag",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.78,
+            "W": 0.7,
+            "H": 0.63,
+            "A": 0.5459999999999999,
+            "R": 1.1142857142857143,
+            "source_id": "bean_bag_001"
+          },
+          "rationale": "Deterministic policy marked bean_bag as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "main_seating_area",
+      "items": [
+        {
+          "cluster_id": "main_seating_area",
+          "object_type": "side_table",
+          "category": "side_table",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          },
+          "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "media_zone",
+      "items": [
+        {
+          "cluster_id": "media_zone",
+          "object_type": "media_shelf",
+          "category": "media_shelf",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.87,
+            "W": 0.3,
+            "H": 1.36,
+            "A": 0.261,
+            "R": 2.9,
+            "source_id": "media_shelf_003"
+          },
+          "rationale": "Deterministic policy marked media_shelf as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "pet_zone",
+      "items": [
+        {
+          "cluster_id": "pet_zone",
+          "object_type": "pet_bed",
+          "category": "pet_bed",
+          "size_tier": "S",
+          "priority": "anchor",
+          "rep_dims_m": {
+            "L": 0.88,
+            "W": 0.15,
+            "H": 0.58,
+            "A": 0.132,
+            "R": 5.866666666666667,
+            "source_id": "pet_bed_002"
+          },
+          "rationale": "Deterministic policy marked pet_bed as anchor in misc; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

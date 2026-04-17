@@ -10,6 +10,11 @@ from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from agent_schema.cluster_composer_schema import ClusterComposerOutput
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from layout.grid_policy import normalize_layout_grid_mm
+from layout.orientation_contract import (
+    rotate_side_ccw_90s as _rotate_side_ccw_90s_contract,
+    side_to_vec as _side_to_vec_contract,
+    vec_to_side as _vec_to_side_contract,
+)
 from prompt.cluster_composer import CLUSTER_COMPOSER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -381,7 +386,8 @@ def _run_with_tools(
                         "content": (
                             "A deterministic seeded VALID layout is available. "
                             "Use these verified local_placements as your current best state. "
-                            "Only continue if you can find a strictly better VALID compact layout with a single-object change.\n\n"
+                            "Only continue if you can find a strictly better VALID forge-faithful layout with a single-object change. "
+                            "Treat compactness as secondary to preserving semantic placements and facing.\n\n"
                             f"verified_local_placements={json.dumps(current_seed, ensure_ascii=True)}\n"
                             f"seed_eval_preview={json.dumps(_verifier_preview(current_eval), ensure_ascii=True)}"
                         ),
@@ -1777,13 +1783,7 @@ def _seed_pick_grid_in_interval(
 
 
 def _seed_rotate_side(side: str, rot: int) -> str:
-    mapping = {
-        0: {"top": "top", "right": "right", "bottom": "bottom", "left": "left"},
-        90: {"top": "left", "right": "top", "bottom": "right", "left": "bottom"},
-        180: {"top": "bottom", "right": "left", "bottom": "top", "left": "right"},
-        270: {"top": "right", "right": "bottom", "bottom": "left", "left": "top"},
-    }
-    return mapping.get(rot % 360, mapping[0]).get(side, side)
+    return _rotate_side_ccw_90s_contract(side, rot) or side
 
 
 def _seed_get_front_base(
@@ -3285,6 +3285,7 @@ def _infer_orientation_meta(
 
         important_objects[oid] = {
             "front_local": _vec_to_dict(front),
+            "effective_front_side": _vec_to_side(front),
             "axis_local": _vec_to_dict(axis),
         }
 
@@ -3306,6 +3307,7 @@ def _infer_orientation_meta(
 
     return {
         "cluster_front_local": _vec_to_dict(cluster_front),
+        "cluster_effective_front_side": _vec_to_side(cluster_front),
         "cluster_axis_local": _vec_to_dict(cluster_axis),
         "important_objects": important_objects,
     }
@@ -3388,6 +3390,7 @@ def _infer_orientation_meta_from_verifier_eval(
 
         important_objects[oid] = {
             "front_local": _vec_to_dict(front),
+            "effective_front_side": _vec_to_side(front),
             "axis_local": _vec_to_dict(axis),
         }
 
@@ -3416,6 +3419,7 @@ def _infer_orientation_meta_from_verifier_eval(
 
     return {
         "cluster_front_local": _vec_to_dict(cluster_front),
+        "cluster_effective_front_side": _vec_to_side(cluster_front),
         "cluster_axis_local": _vec_to_dict(cluster_axis),
         "important_objects": important_objects,
     }
@@ -3639,17 +3643,15 @@ def _infer_object_axis_local_fallback(
 
 
 def _side_to_vec(side: str) -> tuple[int, int] | None:
-    mapping = {
-        "top": (0, 1),
-        "bottom": (0, -1),
-        "left": (-1, 0),
-        "right": (1, 0),
-    }
-    return mapping.get(side)
+    return _side_to_vec_contract(side)
 
 
 def _vec_to_dict(vec: tuple[int, int]) -> dict[str, int]:
     return {"dx": int(vec[0]), "dy": int(vec[1])}
+
+
+def _vec_to_side(vec: tuple[int, int]) -> str | None:
+    return _vec_to_side_contract(vec)
 
 
 def _canonical_axis(vec: tuple[int, int]) -> tuple[int, int]:

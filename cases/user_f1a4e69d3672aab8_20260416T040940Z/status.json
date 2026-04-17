@@ -1,0 +1,88 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260416T040940Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-16T04:15:32.988979+00:00",
+  "error": "The read operation timed out",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-16T04:09:40.012075+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-16T04:09:40.214328+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-16T04:10:10.335599+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-16T04:10:10.510570+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 1/1",
+      "updated_at_utc": "2026-04-16T04:10:11.469921+00:00",
+      "progress_current": 1,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-04-16T04:10:11.470154+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable.",
+      "updated_at_utc": "2026-04-16T04:10:11.470645+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable ready.",
+      "updated_at_utc": "2026-04-16T04:10:29.611735+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: seed_focal_axis.",
+      "updated_at_utc": "2026-04-16T04:10:29.612143+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "The read operation timed out",
+      "updated_at_utc": "2026-04-16T04:15:32.988979+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": "The read operation timed out"
+    }
+  ]
+}

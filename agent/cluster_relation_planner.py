@@ -174,10 +174,18 @@ class ClusterRelationPlanner:
                 )
 
         logger.warning(
-            "ClusterRelationPlanner returning unparsed output after %.2fs",
+            "ClusterRelationPlanner using deterministic fallback after invalid JSON in %.2fs",
             perf_counter() - t0,
         )
-        return last_raw
+        fallback = _build_deterministic_fallback_relation_plan(
+            room_model_json=room_model_json,
+            clusters_json=clusters_json,
+            reason=(
+                "ClusterRelationPlanner LLM response was not valid JSON after retry; "
+                "using deterministic macro fallback."
+            ),
+        )
+        return json.dumps(fallback, ensure_ascii=True)
 
     def generate(
         self,
@@ -787,6 +795,46 @@ def _extract_json_object(text: str) -> str:
     return text[start : end + 1]
 
 
+def _build_deterministic_fallback_relation_plan(
+    *,
+    room_model_json: dict[str, Any],
+    clusters_json: dict[str, Any],
+    reason: str,
+) -> dict[str, Any]:
+    plan: dict[str, Any] = {
+        "status": "OK",
+        "room_id": _extract_room_id(room_model_json),
+        "notes": [reason],
+        "layout_intent_profile": None,
+        "cluster_affinities": [],
+        "cluster_relations": [],
+        "cluster_directional_relations": [],
+        "cluster_orientations": [],
+        "object_orientations": [],
+        "circulation_plan": {
+            "keep_open_regions": [
+                {
+                    "type": "center_lane",
+                    "near": "room_center",
+                    "priority": "medium",
+                    "reason": "Fallback macro plan preserves a usable central circulation field.",
+                }
+            ],
+            "main_paths": [],
+        },
+        "placement_guidelines": [
+            "Preserve the current seed geometry unless a macro constraint clearly improves usability.",
+            "Keep support clusters from blocking the main circulation field.",
+        ],
+        "missing": [],
+    }
+    return _normalize_relation_plan_payload(
+        plan,
+        room_model_json=room_model_json,
+        clusters_json=clusters_json,
+    )
+
+
 def _normalize_relation_plan_payload(
     payload: dict[str, Any],
     *,
@@ -904,21 +952,6 @@ def _normalize_relation_plan_payload(
         "inward_to_room",
         "outward_to_wall",
     }
-    object_orientation_allowed = {
-        "front_to_open_space",
-        "front_to_cluster_center",
-        "front_to_room_center",
-        "front_to_window",
-        "front_to_entry",
-        "back_to_wall",
-        "side_to_wall",
-        "long_axis_parallel_wall",
-        "long_axis_perpendicular_wall",
-        "align_with_cluster_axis",
-        "face_object",
-        "face_away_from_object",
-        "preserve_front_access",
-    }
     relation_allowed = {
         "near",
         "separate",
@@ -975,18 +1008,6 @@ def _normalize_relation_plan_payload(
         "perpendicular_to_window": "axis_perpendicular_window",
         "toward_room": "inward_to_room",
         "toward_wall": "outward_to_wall",
-    }
-    object_orientation_map = {
-        "face_open_space": "front_to_open_space",
-        "front_to_space": "front_to_open_space",
-        "face_cluster_center": "front_to_cluster_center",
-        "face_room_center": "front_to_room_center",
-        "face_window": "front_to_window",
-        "face_entry": "front_to_entry",
-        "parallel_to_wall": "long_axis_parallel_wall",
-        "perpendicular_to_wall": "long_axis_perpendicular_wall",
-        "aligned_with_cluster_axis": "align_with_cluster_axis",
-        "access_front_clear": "preserve_front_access",
     }
     relation_map = {
         "close": "near",
@@ -1163,65 +1184,10 @@ def _normalize_relation_plan_payload(
         return out
 
     def normalize_object_orientations(values: Any) -> list[dict[str, Any]]:
-        if not isinstance(values, list):
-            return []
-
-        out: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
-
-        for entry in values:
-            if not isinstance(entry, dict):
-                continue
-
-            cid = valid_cluster_id(entry.get("cluster_id"))
-            if cid is None:
-                continue
-
-            oid = valid_object_id(cid, entry.get("object_id"))
-            if oid is None:
-                continue
-
-            key = (cid, oid)
-            if key in seen:
-                continue
-
-            intents = normalize_list(
-                entry.get("intents"),
-                allowed=object_orientation_allowed,
-                mapping=object_orientation_map,
-            )
-
-            target_object_id = valid_target_object_id(entry.get("target_object_id"))
-
-            needs_target = any(
-                x in intents for x in ("face_object", "face_away_from_object")
-            )
-            if needs_target and target_object_id is None:
-                intents = [
-                    x
-                    for x in intents
-                    if x not in {"face_object", "face_away_from_object"}
-                ]
-
-            if not any(x in intents for x in ("face_object", "face_away_from_object")):
-                target_object_id = None
-
-            if not intents:
-                continue
-
-            out.append(
-                {
-                    "cluster_id": cid,
-                    "object_id": oid,
-                    "intents": intents,
-                    "target_object_id": target_object_id,
-                    "priority": normalize_priority(entry.get("priority")),
-                    "reason": clean_str(entry.get("reason")) or "object orientation",
-                }
-            )
-            seen.add(key)
-
-        return out
+        # Planner now owns only macro cluster-to-cluster / cluster-to-room intent.
+        # Object-level orientation is left to forge/composer and solver augmentation.
+        _ = values
+        return []
 
     def normalize_cluster_relations(values: Any) -> list[dict[str, Any]]:
         if not isinstance(values, list):
@@ -1477,6 +1443,8 @@ def _normalize_relation_plan_payload(
     )
     out["notes"] = _uniq_keep_order(ensure_str_list(out.get("notes")))
     out["missing"] = _uniq_keep_order(ensure_str_list(out.get("missing")))
+    if out["status"] != "NEED_INFO":
+        out["missing"] = []
 
     _enforce_viewing_orientation_requirements(
         out,
@@ -1491,6 +1459,7 @@ def _normalize_relation_plan_payload(
         room_model_json=room_model_json or {},
         clusters_json=clusters_json or {},
     )
+    _resolve_affinity_conflicts(out)
     _ensure_layout_intent_profile(
         out,
         room_model_json=room_model_json or {},
@@ -2056,27 +2025,6 @@ def _enforce_viewing_orientation_requirements(
             reason="focal/media cluster should orient toward seating with open viewing side",
         )
 
-        for oid in seating_anchors[:3]:
-            _ensure_object_orientation(
-                plan,
-                cluster_id=seating_cid,
-                object_id=oid,
-                intents=["face_object"],
-                target_object_id=focal_anchor,
-                priority="high",
-                reason="important seating anchor should face focal/media anchor",
-            )
-
-        _ensure_object_orientation(
-            plan,
-            cluster_id=focal_cid,
-            object_id=focal_anchor,
-            intents=["front_to_open_space", "face_object"],
-            target_object_id=primary_seat,
-            priority="high",
-            reason="focal/media anchor should present its usable front toward seating",
-        )
-
         _ensure_guideline(
             plan,
             f"Preserve a clear viewing relationship between {primary_seat} and {focal_anchor}.",
@@ -2130,20 +2078,6 @@ def _enforce_access_orientation_requirements(
             )
 
         for oid in access_ids[:4]:
-            intents = ["preserve_front_access"]
-            if _matches_any_pattern(oid, ACCESS_SENSITIVE_PATTERNS):
-                intents.append("front_to_open_space")
-
-            _ensure_object_orientation(
-                plan,
-                cluster_id=cid,
-                object_id=oid,
-                intents=intents,
-                target_object_id=None,
-                priority="high",
-                reason="object has meaningful front usability and should preserve access",
-            )
-
             _ensure_guideline(
                 plan,
                 f"Preserve front usability for {oid}.",
@@ -2206,6 +2140,50 @@ def _apply_generic_macro_relation_policy(
         footprint_area_by_cluster=footprint_area_by_cluster,
         viewing_pairs=viewing_pairs,
     )
+
+
+def _resolve_affinity_conflicts(plan: dict[str, Any]) -> None:
+    affinities = plan.get("cluster_affinities")
+    if not isinstance(affinities, list):
+        return
+
+    cleaned_conflicts: list[str] = []
+    for entry in affinities:
+        if not isinstance(entry, dict):
+            continue
+        cluster_id = entry.get("cluster_id")
+        prefer = entry.get("prefer")
+        avoid = entry.get("avoid")
+        if (
+            not isinstance(cluster_id, str)
+            or not isinstance(prefer, list)
+            or not isinstance(avoid, list)
+        ):
+            continue
+
+        prefer_values = [value for value in prefer if isinstance(value, str)]
+        avoid_values = [value for value in avoid if isinstance(value, str)]
+        overlap = set(prefer_values) & set(avoid_values)
+        if not overlap:
+            entry["prefer"] = _uniq_keep_order(prefer_values)
+            entry["avoid"] = _uniq_keep_order(avoid_values)
+            continue
+
+        entry["prefer"] = [
+            value for value in _uniq_keep_order(prefer_values) if value not in overlap
+        ]
+        entry["avoid"] = _uniq_keep_order(avoid_values)
+        cleaned_conflicts.append(
+            f"{cluster_id}: {', '.join(sorted(overlap))}"
+        )
+
+    if cleaned_conflicts:
+        notes = plan.setdefault("notes", [])
+        if isinstance(notes, list):
+            notes.append(
+                "Planner removed overlapping cluster affinity tags from prefer when the "
+                "same tag also appeared in avoid: " + "; ".join(cleaned_conflicts)
+            )
 
 
 def _extract_room_type(room_model_json: dict[str, Any]) -> str:

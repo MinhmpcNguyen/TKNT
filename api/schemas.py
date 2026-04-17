@@ -68,12 +68,20 @@ class Position(BaseModel):
     y: float
 
 
+class DirectionVector(BaseModel):
+    dx: float
+    dy: float
+
+
 class Placement(BaseModel):
     placement_id: str
     asset_id: str
     category: str
     position_mm: Position
     rotation_deg: float = 0.0
+    front_world: DirectionVector | None = None
+    front_side_world: Literal["top", "bottom", "left", "right"] | None = None
+    front_side_local: Literal["top", "bottom", "left", "right"] | None = None
     footprint_mm: Footprint
     height_mm: float = 0.0
     color_hex: str = "#CFCAC2"

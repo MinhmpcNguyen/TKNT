@@ -1,0 +1,136 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260416T062630Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-16T06:34:46.881829+00:00",
+  "error": "1 validation error for ClusterRelationPlannerOutput\n  Value error, missing must be empty unless status=NEED_INFO [type=value_error, input_value={'status': 'OK', 'room_id...mode': 'edge_weighted'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-16T06:26:30.791641+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-16T06:26:31.080715+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-16T06:30:26.738118+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-16T06:30:26.914083+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 1/1",
+      "updated_at_utc": "2026-04-16T06:30:28.640272+00:00",
+      "progress_current": 1,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-04-16T06:30:28.640482+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable.",
+      "updated_at_utc": "2026-04-16T06:30:28.641221+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: seed_stable ready.",
+      "updated_at_utc": "2026-04-16T06:30:39.042853+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: seed_focal_axis.",
+      "updated_at_utc": "2026-04-16T06:30:39.043995+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: seed_focal_axis ready.",
+      "updated_at_utc": "2026-04-16T06:30:42.557831+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: seed_open_center.",
+      "updated_at_utc": "2026-04-16T06:30:42.558340+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: seed_open_center ready.",
+      "updated_at_utc": "2026-04-16T06:32:48.935496+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: seed_edge_weighted.",
+      "updated_at_utc": "2026-04-16T06:32:48.935853+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: seed_edge_weighted ready.",
+      "updated_at_utc": "2026-04-16T06:33:01.181660+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 5/5: seed_zoned.",
+      "updated_at_utc": "2026-04-16T06:33:01.182032+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "1 validation error for ClusterRelationPlannerOutput\n  Value error, missing must be empty unless status=NEED_INFO [type=value_error, input_value={'status': 'OK', 'room_id...mode': 'edge_weighted'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error",
+      "updated_at_utc": "2026-04-16T06:34:46.881829+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": "1 validation error for ClusterRelationPlannerOutput\n  Value error, missing must be empty unless status=NEED_INFO [type=value_error, input_value={'status': 'OK', 'room_id...mode': 'edge_weighted'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error"
+    }
+  ]
+}

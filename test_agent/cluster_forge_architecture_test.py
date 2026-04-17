@@ -6,6 +6,7 @@ import types
 import unittest
 from pathlib import Path
 from typing import TypedDict
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -31,6 +32,7 @@ fake_llm_module.get_llm_client = lambda *args, **kwargs: None
 sys.modules["clients.llm_client"] = fake_llm_module
 
 _cluster_forge = importlib.import_module("agent.cluster_forge")
+_room_selection_rules = importlib.import_module("stylist.room_selection_rules")
 ClusterForgeOutput = importlib.import_module(
     "agent_schema.clusterF_schema"
 ).ClusterForgeOutput
@@ -40,6 +42,58 @@ GLOBAL_LAYOUT_GRID_MM = importlib.import_module(
 
 
 class ClusterForgeArchitectureTest(unittest.TestCase):
+    def test_build_input_json_uses_room_rule_for_room_type(self) -> None:
+        agent = _cluster_forge.ClusterForge()
+
+        payload = agent.build_input_json("bedroom")
+
+        self.assertEqual(payload[0]["room_type"], "bedroom")
+        self.assertIn("selection_guidance", payload[0])
+        self.assertNotIn("no_stack", payload[0])
+        guidance = payload[0]["selection_guidance"]
+        self.assertIsInstance(guidance, dict)
+        templates = guidance["cluster_templates"]
+        self.assertIsInstance(templates, list)
+        self.assertEqual(templates[0]["cluster_id"], "sleep_core")
+
+    def test_room_rule_loader_finds_nested_room_entries(self) -> None:
+        rule = _room_selection_rules.get_room_selection_rule("guest_room")
+
+        self.assertIsNotNone(rule)
+        assert rule is not None
+        self.assertEqual(rule["room_type"], "guest_room")
+        self.assertIn("selection_guidance", rule)
+
+    def test_generate_raw_requests_json_mode_without_token_cap(self) -> None:
+        captured: dict[str, object] = {}
+
+        class _FakeClient:
+            def chat_completion(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+                captured["messages"] = messages
+                captured["kwargs"] = kwargs
+                return types.SimpleNamespace(
+                    choices=[
+                        types.SimpleNamespace(
+                            message=types.SimpleNamespace(content='{"status":"OK"}')
+                        )
+                    ]
+                )
+
+        with mock.patch.object(
+            _cluster_forge,
+            "get_llm_client",
+            return_value=_FakeClient(),
+        ):
+            agent = _cluster_forge.ClusterForge()
+            raw = agent.generate_raw("living_room", description="hello")
+
+        self.assertEqual(raw, '{"status":"OK"}')
+        self.assertEqual(
+            captured["kwargs"]["response_mime_type"],
+            "application/json",
+        )
+        self.assertIsNone(captured["kwargs"]["max_tokens"])
+
     def test_normalize_coerces_string_notes_and_missing_to_lists(self) -> None:
         payload = {
             "status": "OK",

@@ -1,0 +1,51 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "lounge_area",
+      "x": 1100,
+      "y": 2000,
+      "rot": 0
+    },
+    {
+      "cluster_id": "main_seating_area",
+      "x": 4000,
+      "y": 350,
+      "rot": 0
+    },
+    {
+      "cluster_id": "media_zone",
+      "x": 200,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_display",
+      "x": 1700,
+      "y": 0,
+      "rot": 0
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "lounge_area",
+      "variant_id": "lounge_area::mirror_x"
+    },
+    {
+      "cluster_id": "main_seating_area",
+      "variant_id": "main_seating_area::base"
+    },
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "storage_display",
+      "variant_id": "storage_display::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Try a small grid translation for failing cluster storage_display"
+  ]
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -20,7 +21,10 @@ from layout.semantic_roles import (
 )
 from prompt.cluster_forge import CLUSTER_FORGE_PROMPT
 from prompt.system import SYSTEM_PROMPT
-from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
+from stylist.room_selection_rules import get_room_selection_rule
+
+logger = logging.getLogger(__name__)
+_FORGE_RESPONSE_MIME_TYPE = "application/json"
 
 
 @dataclass(frozen=True)
@@ -31,30 +35,26 @@ class ClusterForge:
     def build_input_json(
         self,
         room_type: str,
-        room_surface_groups: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
+        room_rules: Mapping[str, Mapping[str, object]] | None = None,
     ) -> list[dict[str, object]]:
-        groups = (
-            ROOM_SURFACE_GROUPS if room_surface_groups is None else room_surface_groups
+        room_rule = (
+            get_room_selection_rule(room_type)
+            if room_rules is None
+            else dict(room_rules.get(room_type, {}))
         )
-        room_group = groups.get(room_type, {})
-        no_stack = list(room_group.get("no_stack", []))
-        objects = [{"object_id": name, "name": name} for name in no_stack]
-        return [
-            {
-                "room_type": room_type,
-                "no_stack": no_stack,
-                "objects": objects,
-            }
-        ]
+        if not room_rule:
+            return [{"room_type": room_type}]
+        room_rule["room_type"] = room_type
+        return [room_rule]
 
     def build_messages(
         self,
         room_type: str,
-        room_surface_groups: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
+        room_rules: Mapping[str, Mapping[str, object]] | None = None,
         description: str | None = None,
         special_notes: str | None = None,
     ) -> list[ChatMessage]:
-        input_json = self.build_input_json(room_type, room_surface_groups)
+        input_json = self.build_input_json(room_type, room_rules)
         payload = json.dumps(input_json, ensure_ascii=True)
         description_block = ""
         if description:
@@ -79,7 +79,7 @@ class ClusterForge:
     def generate_raw(
         self,
         room_type: str,
-        room_surface_groups: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
+        room_rules: Mapping[str, Mapping[str, object]] | None = None,
         description: str | None = None,
         special_notes: str | None = None,
         *,
@@ -88,7 +88,7 @@ class ClusterForge:
     ) -> str:
         messages = self.build_messages(
             room_type,
-            room_surface_groups,
+            room_rules,
             description=description,
             special_notes=special_notes,
         )
@@ -98,28 +98,35 @@ class ClusterForge:
             model_name=GeminiConfig.AGENT_MODELS.get("forge"),
             temperature=temperature,
             max_tokens=max_tokens,
+            response_mime_type=_FORGE_RESPONSE_MIME_TYPE,
         )
         return _extract_content(response)
 
     def generate(
         self,
         room_type: str,
-        room_surface_groups: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
+        room_rules: Mapping[str, Mapping[str, object]] | None = None,
         description: str | None = None,
         special_notes: str | None = None,
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> ClusterForgeOutput:
-        raw = self.generate_raw(
-            room_type,
-            room_surface_groups,
-            description=description,
-            special_notes=special_notes,
+        response = get_llm_client(provider="gemini").chat_completion(
+            self.build_messages(
+                room_type,
+                room_rules,
+                description=description,
+                special_notes=special_notes,
+            ),
+            model_key="primary",
+            model_name=GeminiConfig.AGENT_MODELS.get("forge"),
             temperature=temperature,
             max_tokens=max_tokens,
+            response_mime_type=_FORGE_RESPONSE_MIME_TYPE,
         )
-        payload = _parse_json(raw)
+        raw = _extract_content(response)
+        payload = _parse_json(raw, finish_reason=_extract_finish_reason(response))
         payload = _normalize_cluster_forge_payload(payload)
         return ClusterForgeOutput.model_validate(payload)
 
@@ -134,17 +141,31 @@ def _extract_content(response: object) -> str:
     raise ValueError("OpenAI response missing message content")
 
 
-def _parse_json(raw: str) -> dict[str, object]:
+def _parse_json(raw: str, *, finish_reason: str | None = None) -> dict[str, object]:
     text = _coerce_json_text(raw)
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
+        logger.warning(
+            "ClusterForge JSON parse failed on initial payload finish_reason=%s preview=%s",
+            finish_reason,
+            _truncate_text(text),
+        )
         text = _extract_json_object(text)
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
+            logger.warning(
+                "ClusterForge JSON parse failed after object extraction finish_reason=%s preview=%s",
+                finish_reason,
+                _truncate_text(text),
+            )
             raise ValueError("ClusterForge returned invalid JSON") from exc
     if not isinstance(payload, dict):
+        logger.warning(
+            "ClusterForge response parsed but was not an object: %s",
+            type(payload).__name__,
+        )
         raise ValueError("ClusterForge response must be a JSON object")
     return payload
 
@@ -169,6 +190,21 @@ def _extract_json_object(text: str) -> str:
     if start == -1 or end == -1 or end <= start:
         return text
     return text[start : end + 1]
+
+
+def _extract_finish_reason(response: object) -> str | None:
+    choices = getattr(response, "choices", None)
+    if not isinstance(choices, Sequence) or not choices:
+        return None
+    finish_reason = getattr(choices[0], "finish_reason", None)
+    return finish_reason if isinstance(finish_reason, str) else None
+
+
+def _truncate_text(text: str, limit: int = 600) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3]}..."
 
 
 def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, object]:

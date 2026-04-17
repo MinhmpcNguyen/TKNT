@@ -1,5 +1,17 @@
-import { DesignPlanV1, FloorplanGeometry, LayoutVariant, Point, Wall } from '../types';
+import {
+  DesignPlanV1,
+  DirectionVector,
+  FloorplanGeometry,
+  LayoutVariant,
+  Point,
+  Wall,
+} from '../types';
 import { normalizePoints } from './geometry';
+import {
+  frontWorldToLocalSide,
+  normalizeCardinalSide,
+  vecToSide,
+} from './planOrientation';
 import {
   getBboxCenter,
   getLocalFootprintFromWorldBbox,
@@ -400,6 +412,10 @@ function buildDesignFromStyledLayout(
       objectRow?.manual_input && typeof objectRow.manual_input === 'object'
         ? objectRow.manual_input
         : null;
+    const frontWorld = normalizeFrontWorld(objectRow?.front_world);
+    const frontSideWorld =
+      normalizeCardinalSide(objectRow?.front_side_world) ??
+      vecToSide(frontWorld);
     const normalizedAssetId =
       normalizeLayoutAssetId(
         manualInput?.asset_id ??
@@ -422,6 +438,12 @@ function buildDesignFromStyledLayout(
         },
         rotation_deg: Number(
           manualInput.rotation_deg ?? objectRow?.rotation_ccw ?? 0,
+        ),
+        front_world: frontWorld,
+        front_side_world: frontSideWorld,
+        front_side_local: frontWorldToLocalSide(
+          frontWorld,
+          Number(manualInput.rotation_deg ?? objectRow?.rotation_ccw ?? 0),
         ),
         footprint_mm: {
           w: Number(manualInput.footprint_mm?.w ?? 0),
@@ -456,6 +478,9 @@ function buildDesignFromStyledLayout(
       category,
       position_mm: center,
       rotation_deg: rotationDeg,
+      front_world: frontWorld,
+      front_side_world: frontSideWorld,
+      front_side_local: frontWorldToLocalSide(frontWorld, rotationDeg),
       footprint_mm: footprint,
       height_mm: 0,
       color_hex: String(objectRow?.color_hex ?? '#cfcac2'),
@@ -611,8 +636,8 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
   const absoluteObjects = Array.isArray(absoluteLayoutPayload.objects)
     ? absoluteLayoutPayload.objects
     : [];
-  const byId = new Map<string, number>();
-  const byBbox = new Map<string, number>();
+  const byId = new Map<string, Record<string, unknown>>();
+  const byBbox = new Map<string, Record<string, unknown>>();
 
   for (const objectRow of absoluteObjects) {
     if (!objectRow || typeof objectRow !== 'object') {
@@ -624,12 +649,23 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
     if (!Number.isFinite(rotation)) {
       continue;
     }
+    const orientationPayload = {
+      rotation_ccw: ((rotation % 360) + 360) % 360,
+      front_world: normalizeFrontWorld(objectRow.front_world),
+      front_side_world:
+        normalizeCardinalSide(objectRow.front_side_world) ??
+        vecToSide(normalizeFrontWorld(objectRow.front_world)),
+      axis_world:
+        objectRow.axis_world && typeof objectRow.axis_world === 'object'
+          ? objectRow.axis_world
+          : null,
+    };
     if (objectId) {
-      byId.set(objectId, ((rotation % 360) + 360) % 360);
+      byId.set(objectId, orientationPayload);
     }
     const key = bboxKey(bbox);
     if (key) {
-      byBbox.set(key, ((rotation % 360) + 360) % 360);
+      byBbox.set(key, orientationPayload);
     }
   }
 
@@ -644,16 +680,41 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
         objectRow.instance_id ?? objectRow.id ?? '',
       ).trim();
       const bbox = objectRow.bbox;
-      const nextRotation =
+      const orientationPayload =
         (instanceId && byId.get(instanceId)) ??
         byBbox.get(bboxKey(bbox) ?? '') ??
-        Number(objectRow.rotation_ccw ?? 0);
+        null;
+      const nextRotation = Number(
+        orientationPayload?.rotation_ccw ?? objectRow.rotation_ccw ?? 0,
+      );
       return {
         ...objectRow,
         rotation_ccw: Number.isFinite(nextRotation) ? nextRotation : 0,
+        front_world:
+          normalizeFrontWorld(orientationPayload?.front_world) ??
+          normalizeFrontWorld(objectRow.front_world),
+        front_side_world:
+          normalizeCardinalSide(orientationPayload?.front_side_world) ??
+          normalizeCardinalSide(objectRow.front_side_world),
+        axis_world:
+          orientationPayload?.axis_world && typeof orientationPayload.axis_world === 'object'
+            ? orientationPayload.axis_world
+            : objectRow.axis_world,
       };
     }),
   };
+}
+
+function normalizeFrontWorld(value: unknown): DirectionVector | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const dx = Number((value as { dx?: unknown }).dx ?? NaN);
+  const dy = Number((value as { dy?: unknown }).dy ?? NaN);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return null;
+  }
+  return { dx, dy };
 }
 
 function bboxKey(bbox: any): string | null {

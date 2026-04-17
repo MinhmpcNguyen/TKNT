@@ -482,6 +482,70 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
             "MOVE_TARGET_CLOSER",
         )
 
+    def test_rank_key_prioritizes_semantic_soft_score_before_compactness(self) -> None:
+        hard_constraints = [
+            {"type": "no_overlap", "a": "anchor", "b": "target"},
+            {"type": "no_overlap", "a": "anchor", "b": "guard"},
+            {"type": "no_overlap", "a": "target", "b": "guard"},
+        ]
+        soft_constraints = [
+            {"type": "prefer_near", "a": "target", "b": "anchor", "weight": 10}
+        ]
+        objects = {
+            "anchor": {"id": "anchor", "w": 100, "h": 100, "allowed_rotations": [0]},
+            "target": {"id": "target", "w": 100, "h": 100, "allowed_rotations": [0]},
+            "guard": {"id": "guard", "w": 100, "h": 100, "allowed_rotations": [0]},
+        }
+
+        semantically_better_but_larger = [
+            {"id": "anchor", "x": 0, "y": 0, "rot": 0},
+            {"id": "target", "x": 150, "y": 0, "rot": 0},
+            {"id": "guard", "x": 1000, "y": 0, "rot": 0},
+        ]
+        more_compact_but_semantically_worse = [
+            {"id": "anchor", "x": 0, "y": 0, "rot": 0},
+            {"id": "target", "x": 400, "y": 0, "rot": 0},
+            {"id": "guard", "x": 550, "y": 0, "rot": 0},
+        ]
+
+        better_scoring = score_cluster_constraints(
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints,
+            objects=objects,
+            local_placements=semantically_better_but_larger,
+            grid_mm=50,
+            cluster_rules=None,
+            use_clearance=True,
+        )
+        compact_scoring = score_cluster_constraints(
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints,
+            objects=objects,
+            local_placements=more_compact_but_semantically_worse,
+            grid_mm=50,
+            cluster_rules=None,
+            use_clearance=True,
+        )
+
+        better_rank = _tool_rank_key_from_scoring(
+            grid_violations=[],
+            rot_violations=[],
+            scoring=better_scoring,
+            shape_quality=better_scoring.get("layout_quality") or {},
+        )
+        compact_rank = _tool_rank_key_from_scoring(
+            grid_violations=[],
+            rot_violations=[],
+            scoring=compact_scoring,
+            shape_quality=compact_scoring.get("layout_quality") or {},
+        )
+
+        self.assertLess(
+            better_rank,
+            compact_rank,
+            "Forge semantics should outrank compactness when both layouts are valid.",
+        )
+
     def test_verifier_suggests_soft_prefer_near_move(self) -> None:
         verifier = local_cluster_verifier(
             hard_constraints=[
@@ -574,6 +638,24 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
         row_span = int(row_bbox["max_x"]) - int(row_bbox["min_x"])
         compact_span = int(compact_bbox["max_x"]) - int(compact_bbox["min_x"])
         self.assertLess(compact_span, row_span)
+
+    def test_cluster_output_records_effective_front_side(self) -> None:
+        cluster = _build_work_cluster_with_semantic_intent()
+
+        output = _cluster_composer._build_cluster_output_from_placements(
+            cluster=cluster,
+            placements=[
+                {"id": "desk", "x": 0, "y": 0, "rot": 180},
+                {"id": "office_chair", "x": 300, "y": 600, "rot": 180},
+            ],
+        )
+
+        orientation_meta = output["orientation_meta"]
+        important = orientation_meta["important_objects"]
+
+        self.assertEqual(orientation_meta["cluster_effective_front_side"], "bottom")
+        self.assertEqual(important["desk"]["effective_front_side"], "bottom")
+        self.assertEqual(important["office_chair"]["effective_front_side"], "bottom")
 
     def test_build_search_seed_states_include_non_linear_topology(self) -> None:
         cluster = _build_dense_living_cluster()

@@ -1,0 +1,41 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "main_seating",
+      "x": 3650,
+      "y": 100,
+      "rot": 90
+    },
+    {
+      "cluster_id": "media",
+      "x": 5000,
+      "y": 2650,
+      "rot": 270
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "x": 5500,
+      "y": 1650,
+      "rot": 270
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "main_seating",
+      "variant_id": "main_seating::base"
+    },
+    {
+      "cluster_id": "media",
+      "variant_id": "media::base"
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "variant_id": "storage_display_support::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Try mirroring main_seating.armchair_2 across the local y axis"
+  ]
+}

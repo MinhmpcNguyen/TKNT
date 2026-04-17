@@ -7,6 +7,33 @@ import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
 
+function frontMarkerPoints(
+  width: number,
+  depth: number,
+  frontSide: 'top' | 'bottom' | 'left' | 'right',
+): number[] {
+  const lineHalf =
+    frontSide === 'top' || frontSide === 'bottom'
+      ? Math.max(12, Math.min(width * 0.24, 64))
+      : Math.max(12, Math.min(depth * 0.24, 64));
+  const inset =
+    frontSide === 'top' || frontSide === 'bottom'
+      ? Math.max(8, Math.min(depth * 0.12, 18))
+      : Math.max(8, Math.min(width * 0.12, 18));
+
+  switch (frontSide) {
+    case 'bottom':
+      return [-lineHalf, depth / 2 - inset, lineHalf, depth / 2 - inset];
+    case 'left':
+      return [-width / 2 + inset, -lineHalf, -width / 2 + inset, lineHalf];
+    case 'right':
+      return [width / 2 - inset, -lineHalf, width / 2 - inset, lineHalf];
+    case 'top':
+    default:
+      return [-lineHalf, -depth / 2 + inset, lineHalf, -depth / 2 + inset];
+  }
+}
+
 export const Canvas2D: React.FC = () => {
   const stageRef = useRef<any>(null);
   const dropZoneRef = useRef<HTMLDivElement | null>(null);
@@ -551,6 +578,8 @@ export const Canvas2D: React.FC = () => {
       const showInlineLabel = true;
       const showHoverTag = false;
       const tagText = labelText;
+      const frontSide = placement.front_side_local ?? 'top';
+      const frontPoints = frontMarkerPoints(w, d, frontSide);
       const baseSize = Math.max(0, Math.min(w, d));
       const maxLabelWidth = Math.max(0, w - 10);
       const maxLabelHeight = Math.max(0, d - 10);
@@ -857,12 +886,7 @@ export const Canvas2D: React.FC = () => {
             shadowOpacity={0.2}
           />
           <Line
-            points={[
-              -Math.max(12, Math.min(w * 0.24, 64)),
-              -d / 2 + Math.max(8, Math.min(d * 0.12, 18)),
-              Math.max(12, Math.min(w * 0.24, 64)),
-              -d / 2 + Math.max(8, Math.min(d * 0.12, 18)),
-            ]}
+            points={frontPoints}
             stroke="rgba(255,255,255,0.96)"
             strokeWidth={Math.max(3, Math.min(Math.min(w, d) * 0.06, 8))}
             lineCap="round"

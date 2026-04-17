@@ -1,0 +1,357 @@
+{
+  "status": "OK",
+  "room": {
+    "unit": "mm",
+    "room_id": "room_1",
+    "name": "Main",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 6000,
+        "y": 0
+      },
+      {
+        "x": 5983,
+        "y": 3017
+      },
+      {
+        "x": 3515,
+        "y": 3007
+      },
+      {
+        "x": 3506,
+        "y": 3992
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "swing_radius_mm": 900,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 5999,
+              "y": 234
+            },
+            {
+              "x": 5988,
+              "y": 2234
+            }
+          ],
+          "clearance_mm": 100
+        }
+      ]
+    },
+    "obstacles": [
+      {
+        "id": "door_1_swing",
+        "type": "door_swing",
+        "polygon_ccw": [
+          {
+            "x": 900,
+            "y": 1600
+          },
+          {
+            "x": 900,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 1600
+          }
+        ],
+        "hard": true
+      },
+      {
+        "id": "window_1_clearance",
+        "type": "window_clearance",
+        "polygon_ccw": [
+          {
+            "x": 5999,
+            "y": 234
+          },
+          {
+            "x": 5988,
+            "y": 2234
+          },
+          {
+            "x": 5888,
+            "y": 2233
+          },
+          {
+            "x": 5899,
+            "y": 233
+          }
+        ],
+        "hard": true
+      }
+    ],
+    "room_type": "living_room"
+  },
+  "objects": [
+    {
+      "object_id": "armchair",
+      "cluster_id": "main_seating_area",
+      "polygon_ccw": [
+        {
+          "x": 2350,
+          "y": 1600
+        },
+        {
+          "x": 3190,
+          "y": 1600
+        },
+        {
+          "x": 3190,
+          "y": 2310
+        },
+        {
+          "x": 2350,
+          "y": 2310
+        }
+      ],
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 1600,
+        "max_x": 3190,
+        "max_y": 2310
+      },
+      "rotation_ccw": 180,
+      "source_rect": {
+        "x": 900,
+        "y": 1600,
+        "w": 840,
+        "h": 710
+      }
+    },
+    {
+      "object_id": "coffee_table",
+      "cluster_id": "main_seating_area",
+      "polygon_ccw": [
+        {
+          "x": 1650,
+          "y": 1300
+        },
+        {
+          "x": 2150,
+          "y": 1300
+        },
+        {
+          "x": 2150,
+          "y": 2200
+        },
+        {
+          "x": 1650,
+          "y": 2200
+        }
+      ],
+      "bbox": {
+        "min_x": 1650,
+        "min_y": 1300,
+        "max_x": 2150,
+        "max_y": 2200
+      },
+      "rotation_ccw": 90,
+      "source_rect": {
+        "x": 200,
+        "y": 1300,
+        "w": 500,
+        "h": 900
+      }
+    },
+    {
+      "object_id": "floor_lamp",
+      "cluster_id": "main_seating_area",
+      "polygon_ccw": [
+        {
+          "x": 3500,
+          "y": 1500
+        },
+        {
+          "x": 3820,
+          "y": 1500
+        },
+        {
+          "x": 3820,
+          "y": 1850
+        },
+        {
+          "x": 3500,
+          "y": 1850
+        }
+      ],
+      "bbox": {
+        "min_x": 3500,
+        "min_y": 1500,
+        "max_x": 3820,
+        "max_y": 1850
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 2050,
+        "y": 1500,
+        "w": 320,
+        "h": 350
+      }
+    },
+    {
+      "object_id": "sectional_sofa",
+      "cluster_id": "main_seating_area",
+      "polygon_ccw": [
+        {
+          "x": 1450,
+          "y": 0
+        },
+        {
+          "x": 3990,
+          "y": 0
+        },
+        {
+          "x": 3990,
+          "y": 920
+        },
+        {
+          "x": 1450,
+          "y": 920
+        }
+      ],
+      "bbox": {
+        "min_x": 1450,
+        "min_y": 0,
+        "max_x": 3990,
+        "max_y": 920
+      },
+      "rotation_ccw": 180,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 2540,
+        "h": 920
+      }
+    },
+    {
+      "object_id": "side_table",
+      "cluster_id": "main_seating_area",
+      "polygon_ccw": [
+        {
+          "x": 3900,
+          "y": 1600
+        },
+        {
+          "x": 4290,
+          "y": 1600
+        },
+        {
+          "x": 4290,
+          "y": 1970
+        },
+        {
+          "x": 3900,
+          "y": 1970
+        }
+      ],
+      "bbox": {
+        "min_x": 3900,
+        "min_y": 1600,
+        "max_x": 4290,
+        "max_y": 1970
+      },
+      "rotation_ccw": 0,
+      "source_rect": {
+        "x": 2450,
+        "y": 1600,
+        "w": 390,
+        "h": 370
+      }
+    },
+    {
+      "object_id": "tv_console",
+      "cluster_id": "media_zone",
+      "polygon_ccw": [
+        {
+          "x": 5150,
+          "y": 2700
+        },
+        {
+          "x": 5150,
+          "y": 1440
+        },
+        {
+          "x": 5530,
+          "y": 1440
+        },
+        {
+          "x": 5530,
+          "y": 2700
+        }
+      ],
+      "bbox": {
+        "min_x": 5150,
+        "min_y": 1440,
+        "max_x": 5530,
+        "max_y": 2700
+      },
+      "rotation_ccw": 270,
+      "source_rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1260,
+        "h": 380
+      }
+    }
+  ],
+  "notes": [
+    "Deterministic placer: Adjust main_seating_area.floor_lamp compact spacing on the bottom side (current gap -1950mm, target 0mm)"
+  ],
+  "missing": [],
+  "coverage": {
+    "expected_cluster_ids": [
+      "main_seating_area",
+      "media_zone"
+    ],
+    "present_cluster_ids": [
+      "main_seating_area",
+      "media_zone"
+    ],
+    "missing_cluster_ids": [],
+    "unexpected_cluster_ids": [],
+    "primary_cluster_id": "main_seating_area",
+    "primary_cluster_present": true,
+    "coverage_ratio": 1.0,
+    "complete": true,
+    "gallery_eligible": true
+  },
+  "complete": true,
+  "gallery_eligible": true,
+  "coverage_ratio": 1.0,
+  "missing_cluster_ids": [],
+  "primary_cluster_id": "main_seating_area",
+  "primary_cluster_present": true
+}

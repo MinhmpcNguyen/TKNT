@@ -1,0 +1,31 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "media_zone",
+      "x": 1900,
+      "y": 0,
+      "rot": 90
+    },
+    {
+      "cluster_id": "seating_area",
+      "x": 3400,
+      "y": 0,
+      "rot": 90
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "seating_area",
+      "variant_id": "seating_area::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Deterministic placer: Try a planner-driven front override for seating_area.sectional_sofa"
+  ]
+}

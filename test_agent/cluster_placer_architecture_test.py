@@ -5,6 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from shapely.geometry import Polygon
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -13,6 +15,63 @@ tools = importlib.import_module("cluster_placer.tools")
 
 
 class ClusterPlacerArchitectureTest(unittest.TestCase):
+    def test_normalize_relation_plan_drops_cross_cluster_non_anchor_object_pressure(
+        self,
+    ) -> None:
+        cinfo_by_id = {
+            "seating": {
+                "cluster_id": "seating",
+                "anchors": ["sectional_sofa"],
+                "decisions": [
+                    {"object_type": "sectional_sofa", "priority": "anchor"},
+                    {"object_type": "armchair", "priority": "primary"},
+                ],
+            },
+            "media": {
+                "cluster_id": "media",
+                "anchors": ["tv_console"],
+                "decisions": [
+                    {"object_type": "tv_console", "priority": "anchor"},
+                ],
+            },
+        }
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "seating",
+                    "object_id": "armchair",
+                    "intents": ["face_object"],
+                    "target_object_id": "tv_console",
+                    "target_object_cluster_id": "media",
+                },
+                {
+                    "cluster_id": "seating",
+                    "object_id": "sectional_sofa",
+                    "intents": ["face_object"],
+                    "target_object_id": "tv_console",
+                    "target_object_cluster_id": "media",
+                },
+            ]
+        }
+
+        normalized = tools._normalize_relation_plan(relation_plan, cinfo_by_id)
+
+        self.assertEqual(
+            normalized["object_orientations"],
+            [
+                {
+                    "cluster_id": "seating",
+                    "object_id": "sectional_sofa",
+                    "intents": ["face_object"],
+                    "target_object_id": "tv_console",
+                    "target_object_cluster_id": "media",
+                    "target_cluster_id": "media",
+                    "priority": "medium",
+                    "reason": "",
+                }
+            ],
+        )
+
     def test_select_diverse_candidates_keeps_multiple_macro_regions(self) -> None:
         candidates = []
         for idx in range(6):
@@ -87,6 +146,71 @@ class ClusterPlacerArchitectureTest(unittest.TestCase):
         self.assertIn("rescue_right", kinds)
         self.assertIn("rescue_center_col_top", kinds)
         self.assertIn("rescue_window_bottom", kinds)
+
+    def test_rotation_anchor_viability_prefers_wall_backed_long_wall_alignment(
+        self,
+    ) -> None:
+        cinfo = {
+            "orientation_meta": {
+                "cluster_front_local": {"dx": 0, "dy": -1},
+                "cluster_axis_local": {"dx": 1, "dy": 0},
+            }
+        }
+        hints = {
+            "prefer_wall": True,
+            "prefer_long_wall": True,
+            "prefer_short_wall": False,
+            "need_open_front": True,
+        }
+
+        wall_backed_score = tools._rotation_anchor_viability(
+            cinfo=cinfo,
+            rot=180,
+            anchor_kind="refine_wall_top",
+            hints=hints,
+        )
+        sideways_score = tools._rotation_anchor_viability(
+            cinfo=cinfo,
+            rot=90,
+            anchor_kind="refine_wall_top",
+            hints=hints,
+        )
+        open_front_wall_backed_score = tools._rotation_anchor_viability(
+            cinfo=cinfo,
+            rot=180,
+            anchor_kind="open_front_top",
+            hints=hints,
+        )
+
+        self.assertGreater(wall_backed_score, sideways_score)
+        self.assertGreater(open_front_wall_backed_score, sideways_score)
+
+    def test_back_to_wall_penalty_uses_back_clearance_not_nearest_centroid_wall(self) -> None:
+        room_poly = Polygon([(0.0, 0.0), (6000.0, 0.0), (6000.0, 4000.0), (0.0, 4000.0)])
+        wall_backed_penalty, _dot, wall_backed_debug = tools._penalty_back_to_wall(
+            point=(300.0, 2000.0),
+            front=(1.0, 0.0),
+            room_poly=room_poly,
+            blocker_geoms=[],
+            weight=1.0,
+        )
+        sideways_penalty, _dot, sideways_debug = tools._penalty_back_to_wall(
+            point=(300.0, 2000.0),
+            front=(0.0, 1.0),
+            room_poly=room_poly,
+            blocker_geoms=[],
+            weight=1.0,
+        )
+
+        self.assertLess(wall_backed_penalty, sideways_penalty)
+        self.assertLess(
+            wall_backed_debug["back_clear_mm"],
+            wall_backed_debug["front_clear_mm"],
+        )
+        self.assertEqual(
+            sideways_debug["front_advantage_mm"],
+            0,
+        )
 
 
 if __name__ == "__main__":

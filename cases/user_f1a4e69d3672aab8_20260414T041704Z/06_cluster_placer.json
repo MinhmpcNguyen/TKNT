@@ -1,0 +1,41 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "main_seating_lounge",
+      "x": 200,
+      "y": 50,
+      "rot": 0
+    },
+    {
+      "cluster_id": "media_zone",
+      "x": 1750,
+      "y": 3600,
+      "rot": 0
+    },
+    {
+      "cluster_id": "storage_display",
+      "x": 1550,
+      "y": 3250,
+      "rot": 270
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "main_seating_lounge",
+      "variant_id": "main_seating_lounge::front_flip"
+    },
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "storage_display",
+      "variant_id": "storage_display::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Controller forced macro translation for media_zone."
+  ]
+}

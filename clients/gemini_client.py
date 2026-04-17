@@ -73,6 +73,7 @@ class GeminiClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
+        response_mime_type: str | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
@@ -84,6 +85,7 @@ class GeminiClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking_level=thinking_level,
+                response_mime_type=response_mime_type,
                 tools=tools,
                 tool_choice=tool_choice,
             )
@@ -94,6 +96,7 @@ class GeminiClient:
             temperature=temperature,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
+            response_mime_type=response_mime_type,
         )
         return self._to_openai_style_response(data)
 
@@ -200,6 +203,7 @@ class GeminiClient:
         temperature: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
+        response_mime_type: str | None,
     ) -> dict[str, object]:
         contents = self._to_gemini_contents(messages)
         payload: dict[str, object] = {"contents": contents}
@@ -208,6 +212,8 @@ class GeminiClient:
             generation_config["temperature"] = temperature
         if max_tokens is not None:
             generation_config["maxOutputTokens"] = max_tokens
+        if response_mime_type is not None:
+            generation_config["responseMimeType"] = response_mime_type
         if thinking_level is not None:
             generation_config["thinkingConfig"] = {
                 "thinkingLevel": thinking_level,
@@ -224,6 +230,7 @@ class GeminiClient:
         temperature: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
+        response_mime_type: str | None,
     ) -> dict[str, object]:
         applied_thinking_level = self._thinking_level_for_model(
             model_name,
@@ -234,6 +241,7 @@ class GeminiClient:
             temperature=temperature,
             max_tokens=max_tokens,
             thinking_level=applied_thinking_level,
+            response_mime_type=response_mime_type,
         )
         url = self._build_model_url(model_name, "generateContent")
 
@@ -251,6 +259,7 @@ class GeminiClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking_level=None,
+                response_mime_type=response_mime_type,
             )
             return self._post_json(url, retry_payload)
 
@@ -262,6 +271,7 @@ class GeminiClient:
         temperature: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
+        response_mime_type: str | None,
     ) -> dict[str, object]:
         candidate_models = self._fallback_model_sequence(model_name)
         last_retryable_error: httpx.HTTPStatusError | None = None
@@ -274,6 +284,7 @@ class GeminiClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     thinking_level=thinking_level,
+                    response_mime_type=response_mime_type,
                 )
             except httpx.HTTPStatusError as exc:
                 if not self._is_retryable_model_unavailable_error(exc):
@@ -444,6 +455,7 @@ class GeminiClient:
         temperature: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
+        response_mime_type: str | None,
         tools: Sequence[dict[str, object]],
         tool_choice: dict[str, object] | str | None,
     ) -> object:
@@ -458,6 +470,7 @@ class GeminiClient:
             temperature=temperature,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
+            response_mime_type=response_mime_type,
         )
         return self._to_openai_style_raw_response(data)
 
@@ -652,13 +665,14 @@ class GeminiClient:
 
     def _to_openai_style_response(self, data: Mapping[str, object]) -> object:
         content = self._extract_response_text(data)
+        finish_reason = self._extract_finish_reason(data)
         message = SimpleNamespace(
             role="assistant",
             content=content,
             thinking="",
             tool_calls=[],
         )
-        choice = SimpleNamespace(message=message)
+        choice = SimpleNamespace(message=message, finish_reason=finish_reason)
         return SimpleNamespace(
             choices=[choice],
             model=data.get("modelVersion"),
@@ -669,6 +683,7 @@ class GeminiClient:
         response_text = self._extract_response_text(data)
         parsed_tool_calls = self._parse_raw_tool_calls(response_text)
         content = "" if parsed_tool_calls else response_text.strip()
+        finish_reason = self._extract_finish_reason(data)
 
         message = SimpleNamespace(
             role="assistant",
@@ -676,7 +691,7 @@ class GeminiClient:
             thinking="",
             tool_calls=self._to_openai_style_tool_calls_from_raw(parsed_tool_calls),
         )
-        choice = SimpleNamespace(message=message)
+        choice = SimpleNamespace(message=message, finish_reason=finish_reason)
         return SimpleNamespace(
             choices=[choice],
             model=data.get("modelVersion"),
@@ -710,6 +725,13 @@ class GeminiClient:
             return None
         first = candidates[0]
         return first if isinstance(first, Mapping) else None
+
+    def _extract_finish_reason(self, data: Mapping[str, object]) -> str | None:
+        candidate = self._first_candidate(data)
+        if candidate is None:
+            return None
+        finish_reason = candidate.get("finishReason")
+        return finish_reason if isinstance(finish_reason, str) else None
 
     def _parse_raw_tool_calls(self, text: str) -> list[dict[str, object]]:
         stripped = text.strip()

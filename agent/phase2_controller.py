@@ -1561,6 +1561,103 @@ def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
     return pairs
 
 
+def _anchor_contract_cluster_ids(payload: dict[str, Any]) -> set[str]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    protected_cluster_ids: set[str] = set()
+    for left_cluster_id, right_cluster_id in _viewing_cluster_pairs(payload):
+        protected_cluster_ids.add(left_cluster_id)
+        protected_cluster_ids.add(right_cluster_id)
+    for row in relation_plan.get("cluster_orientations") or []:
+        if not isinstance(row, dict):
+            continue
+        intents = {
+            str(intent).strip().lower()
+            for intent in (row.get("intents") or [])
+            if str(intent).strip()
+        }
+        if "face_cluster" not in intents:
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        target_cluster_id = str(row.get("target_cluster_id") or "").strip()
+        if cluster_id:
+            protected_cluster_ids.add(cluster_id)
+        if target_cluster_id:
+            protected_cluster_ids.add(target_cluster_id)
+    return protected_cluster_ids
+
+
+def _anchor_ids_by_cluster(payload: dict[str, Any]) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for card in payload.get("cluster_cards") or []:
+        if not isinstance(card, dict):
+            continue
+        cluster_id = str(card.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        anchors = {
+            str(anchor).strip()
+            for anchor in (card.get("anchors") or [])
+            if isinstance(anchor, str) and str(anchor).strip()
+        }
+        anchor_override = str(card.get("anchor_override") or "").strip()
+        if not anchors and anchor_override:
+            anchors.add(anchor_override)
+        for row in card.get("decisions") or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("priority") or "").strip().lower() != "anchor":
+                continue
+            object_id = str(row.get("object_type") or row.get("category") or "").strip()
+            if object_id:
+                anchors.add(object_id)
+        out[cluster_id] = anchors
+    return out
+
+
+def _proposal_breaks_anchor_contract(
+    payload: dict[str, Any],
+    proposal: dict[str, Any],
+) -> bool:
+    protected_cluster_ids = _anchor_contract_cluster_ids(payload)
+    if not protected_cluster_ids:
+        return False
+
+    seed_map = _seed_transform_map(payload.get("seed_layout") or {})
+    for row in proposal.get("cluster_transforms") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if cluster_id not in protected_cluster_ids:
+            continue
+        seed_rot = int((seed_map.get(cluster_id) or {}).get("rot") or 0) % 360
+        proposal_rot = int(row.get("rot") or 0) % 360
+        if proposal_rot != seed_rot:
+            return True
+
+    anchor_ids_by_cluster = _anchor_ids_by_cluster(payload)
+    for repair in proposal.get("object_repairs") or []:
+        if not isinstance(repair, dict):
+            continue
+        cluster_id = str(repair.get("cluster_id") or "").strip()
+        if cluster_id not in protected_cluster_ids:
+            continue
+        op = str(repair.get("op") or "").strip()
+        object_id = str(repair.get("object_id") or "").strip()
+        anchor_ids = anchor_ids_by_cluster.get(cluster_id, set())
+        if op == "set_anchor":
+            return True
+        if op in {"rotate_object", "mirror_object", "set_front_override"}:
+            if object_id and object_id in anchor_ids:
+                return True
+        if op == "swap_objects":
+            other_object_id = str(
+                (repair.get("params") or {}).get("other_object_id") or ""
+            ).strip()
+            if object_id in anchor_ids or other_object_id in anchor_ids:
+                return True
+    return False
+
+
 def _postsolve_orientation_snap(
     *,
     payload: dict[str, Any],
@@ -1621,6 +1718,8 @@ def _postsolve_orientation_snap(
             signature = _proposal_signature(proposal)
             if signature in seen_signatures:
                 continue
+            if _proposal_breaks_anchor_contract(current_payload, proposal):
+                continue
             seen_signatures.add(signature)
             evaluation = EvaluatePhase2Proposal(
                 payload=current_payload,
@@ -1648,6 +1747,8 @@ def _postsolve_orientation_snap(
             )
             signature = _proposal_signature(proposal)
             if signature in seen_signatures:
+                continue
+            if _proposal_breaks_anchor_contract(current_payload, proposal):
                 continue
             seen_signatures.add(signature)
             evaluation = EvaluatePhase2Proposal(
@@ -1712,6 +1813,8 @@ def _postsolve_orientation_snap(
                     )
                     signature = _proposal_signature(proposal)
                     if signature in seen_signatures:
+                        continue
+                    if _proposal_breaks_anchor_contract(current_payload, proposal):
                         continue
                     seen_signatures.add(signature)
                     evaluation = EvaluatePhase2Proposal(

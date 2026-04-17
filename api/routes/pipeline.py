@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -101,9 +102,9 @@ def _enrich_rotation_ccw(
     absolute_layout_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """
-    UI needs `rotation_ccw` per object for correct 3D orientation.
-    Stylist output intentionally omits it; we stitch it from absolute_layout
-    (which contains the macro rotation used for placement).
+    UI needs normalized orientation metadata per object.
+    Stylist output intentionally omits it; we stitch it from absolute_layout,
+    which contains the final semantic rotation and front-facing direction.
     """
     if not isinstance(stylist_payload, dict):
         return stylist_payload
@@ -114,8 +115,8 @@ def _enrich_rotation_ccw(
     if not isinstance(abs_objects, list) or not abs_objects:
         return stylist_payload
 
-    by_id: dict[str, int] = {}
-    by_bbox: dict[tuple[int, int, int, int], int] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    by_bbox: dict[tuple[int, int, int, int], dict[str, Any]] = {}
     for ao in abs_objects:
         if not isinstance(ao, dict):
             continue
@@ -126,7 +127,22 @@ def _enrich_rotation_ccw(
             continue
         if not isinstance(rot, int):
             continue
-        by_id[oid] = int(rot) % 360
+        orientation_payload = {
+            "rotation_ccw": int(rot) % 360,
+            "front_world": deepcopy(ao.get("front_world"))
+            if isinstance(ao.get("front_world"), dict)
+            else None,
+            "front_side_world": (
+                str(ao.get("front_side_world")).strip().lower()
+                if isinstance(ao.get("front_side_world"), str)
+                and str(ao.get("front_side_world")).strip()
+                else None
+            ),
+            "axis_world": deepcopy(ao.get("axis_world"))
+            if isinstance(ao.get("axis_world"), dict)
+            else None,
+        }
+        by_id[oid] = orientation_payload
         # Best-effort fallback matching: bbox equality.
         # This helps if stylist instance ids don't exactly match absolute layout ids.
         try:
@@ -136,7 +152,7 @@ def _enrich_rotation_ccw(
                 int(bbox.get("max_x", 0)),
                 int(bbox.get("max_y", 0)),
             )
-            by_bbox[key] = int(rot) % 360
+            by_bbox[key] = orientation_payload
         except Exception:
             pass
 
@@ -152,9 +168,9 @@ def _enrich_rotation_ccw(
         inst = obj.get("instance_id") or obj.get("id")
         bbox = obj.get("bbox") or {}
 
-        rot: int | None = None
+        orientation_payload: dict[str, Any] | None = None
         if isinstance(inst, str) and inst in by_id:
-            rot = by_id[inst]
+            orientation_payload = by_id[inst]
         else:
             # bbox match (best-effort)
             try:
@@ -165,15 +181,21 @@ def _enrich_rotation_ccw(
                     int(bbox.get("max_y", 0)),
                 )
                 if key in by_bbox:
-                    rot = by_bbox[key]
+                    orientation_payload = by_bbox[key]
             except Exception:
-                rot = None
-
-        if rot is None:
-            rot = 0
+                orientation_payload = None
 
         next_obj = dict(obj)
-        next_obj["rotation_ccw"] = int(rot) % 360
+        next_obj["rotation_ccw"] = int(
+            (orientation_payload or {}).get("rotation_ccw") or 0
+        ) % 360
+        next_obj["front_world"] = deepcopy(
+            (orientation_payload or {}).get("front_world")
+        )
+        next_obj["front_side_world"] = (orientation_payload or {}).get(
+            "front_side_world"
+        )
+        next_obj["axis_world"] = deepcopy((orientation_payload or {}).get("axis_world"))
         enriched.append(next_obj)
 
     out["objects"] = enriched

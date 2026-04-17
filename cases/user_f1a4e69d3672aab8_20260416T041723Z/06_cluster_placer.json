@@ -1,0 +1,31 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "media_zone",
+      "x": 4950,
+      "y": 2600,
+      "rot": 270
+    },
+    {
+      "cluster_id": "seating_area",
+      "x": 3300,
+      "y": 0,
+      "rot": 90
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "seating_area",
+      "variant_id": "seating_area::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Controller forced object rotation for media_zone.tv_console."
+  ]
+}

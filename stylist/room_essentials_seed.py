@@ -205,6 +205,7 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
             "floor_lamp",
             "bean_bag",
             "pet_bed",
+            "shoe_rack",
         ],
         "can_stack_or_be_stacked_or_hang_or_soft": {
             "sofa": [

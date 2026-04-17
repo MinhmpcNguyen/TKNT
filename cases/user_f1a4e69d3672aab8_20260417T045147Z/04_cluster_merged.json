@@ -1,0 +1,404 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "main_seating",
+      "tag": "living",
+      "members": [
+        "sofa_1",
+        "coffee_table_1",
+        "armchair_1",
+        "armchair_2",
+        "side_table_1",
+        "floor_lamp_1"
+      ],
+      "anchors": [
+        "sofa_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sofa_1",
+          "b": "coffee_table_1"
+        },
+        {
+          "type": "requires_access",
+          "id": "sofa_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_align_edge",
+          "a": "side_table_1",
+          "b": "sofa_1",
+          "edge": "back",
+          "weight": 5
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sofa_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair_2": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table_1": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sofa_1": {
+            "front": "bottom",
+            "notes": "primary seating direction"
+          },
+          "armchair_1": {
+            "front": "bottom",
+            "notes": "faces coffee table"
+          },
+          "armchair_2": {
+            "front": "bottom",
+            "notes": "faces coffee table"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sofa_1",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair_1",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "armchair_2",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table_1",
+            "relative_to": "sofa_1",
+            "kind": "dock_to_edge",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 400,
+            "gap_max": 600,
+            "b_edge": "front",
+            "span": "center"
+          },
+          {
+            "id": "armchair_1",
+            "relative_to": "coffee_table_1",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "armchair_2",
+            "relative_to": "coffee_table_1",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 300,
+            "gap_max": 500
+          },
+          {
+            "id": "side_table_1",
+            "relative_to": "sofa_1",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 50,
+            "gap_max": 150
+          },
+          {
+            "id": "floor_lamp_1",
+            "relative_to": "sofa_1",
+            "kind": "anchor_side",
+            "proximity": "compact",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 50,
+            "gap_max": 200
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "object_type": "sofa_1",
+          "category": "sofa_1",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked sofa_1 as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        },
+        {
+          "object_type": "coffee_table_1",
+          "category": "coffee_table_1",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked coffee_table_1 as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        },
+        {
+          "object_type": "armchair_1",
+          "category": "armchair_1",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked armchair_1 as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        },
+        {
+          "object_type": "armchair_2",
+          "category": "armchair_2",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "rationale": "Deterministic policy marked armchair_2 as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        },
+        {
+          "object_type": "side_table_1",
+          "category": "side_table_1",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked side_table_1 as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        },
+        {
+          "object_type": "floor_lamp_1",
+          "category": "floor_lamp_1",
+          "cluster_id": "main_seating",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "rationale": "Deterministic policy marked floor_lamp_1 as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "media",
+      "tag": "living",
+      "members": [
+        "tv_console_1"
+      ],
+      "anchors": [
+        "tv_console_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "tv_console_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console_1": {
+            "front": "bottom",
+            "notes": "faces the seating area"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console_1",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "tv_console_1",
+          "category": "tv_console_1",
+          "cluster_id": "media",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked tv_console_1 as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "tag": "storage",
+      "members": [
+        "console_table_1"
+      ],
+      "anchors": [
+        "console_table_1"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "console_table_1",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "console_table_1": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "console_table_1": {
+            "front": "bottom",
+            "notes": "faces the room"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "console_table_1",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": []
+      },
+      "decisions": [
+        {
+          "object_type": "console_table_1",
+          "category": "console_table_1",
+          "cluster_id": "storage_display_support",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "rationale": "Deterministic policy marked console_table_1 as anchor in storage; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.12,
+            "H": 0.42,
+            "A": 0.0468,
+            "R": 3.2500000000000004,
+            "source_id": "cushion_013"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Modern living room designed for 5 people with a focus on open circulation and centered seating.",
+    "Avoided tall furniture and media shelves to maintain a clean, uncluttered look.",
+    "Seating includes a sofa and two armchairs to meet the capacity requirement."
+  ],
+  "missing": []
+}

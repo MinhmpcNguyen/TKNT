@@ -1,0 +1,3159 @@
+{
+  "status": "UNSAT",
+  "grid_mm": 50,
+  "cluster_transforms": [],
+  "selected_variants": [],
+  "notes": [
+    "No acceptable-valid solution found within the finite candidate space.",
+    "quality_gate_reasons=[\"critical_orientation_penalty_too_high\", \"focal_pair_penalty_too_high\", \"critical_item_penalty_too_high\"]",
+    "state_signature=3efc678def3e3f4f",
+    "best_layout_score=-145109"
+  ],
+  "skipped_clusters": [],
+  "placer_seed": {
+    "phase": "micro_repair",
+    "ready": true,
+    "needed": true,
+    "seed_kind": "hard_valid_complete",
+    "solver_status": "UNSAT",
+    "grid_mm": 50,
+    "seed_layout": {
+      "cluster_transforms": [
+        {
+          "cluster_id": "lounge_area",
+          "x": 1100,
+          "y": 2000,
+          "rot": 0
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "x": 4000,
+          "y": 150,
+          "rot": 0
+        },
+        {
+          "cluster_id": "media_zone",
+          "x": 200,
+          "y": 0,
+          "rot": 0
+        },
+        {
+          "cluster_id": "storage_display",
+          "x": 1700,
+          "y": 50,
+          "rot": 0
+        }
+      ],
+      "selected_variants": [
+        {
+          "cluster_id": "lounge_area",
+          "variant_id": "lounge_area::base"
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "variant_id": "main_seating_area::base"
+        },
+        {
+          "cluster_id": "media_zone",
+          "variant_id": "media_zone::base"
+        },
+        {
+          "cluster_id": "storage_display",
+          "variant_id": "storage_display::base"
+        }
+      ]
+    },
+    "seed_metrics": {
+      "layout_score": -145109,
+      "state_signature": "3efc678def3e3f4f",
+      "hard_valid": true,
+      "acceptable_valid": false,
+      "quality_gate_reasons": [
+        "critical_orientation_penalty_too_high",
+        "focal_pair_penalty_too_high",
+        "critical_item_penalty_too_high"
+      ]
+    },
+    "repair_targets": {
+      "prioritized_clusters": [
+        {
+          "cluster_id": "main_seating_area",
+          "hard_error_codes": [],
+          "hard_error_count": 0,
+          "critical_orientation_penalty_mm": 11666,
+          "focal_orientation_penalty_mm": 9152,
+          "orientation_penalty_mm": 12501,
+          "score": 65803.0
+        },
+        {
+          "cluster_id": "media_zone",
+          "hard_error_codes": [],
+          "hard_error_count": 0,
+          "critical_orientation_penalty_mm": 3038,
+          "focal_orientation_penalty_mm": 3038,
+          "orientation_penalty_mm": 3038,
+          "score": 18228.0
+        },
+        {
+          "cluster_id": "storage_display",
+          "hard_error_codes": [],
+          "hard_error_count": 0,
+          "critical_orientation_penalty_mm": 2456,
+          "focal_orientation_penalty_mm": 1228,
+          "orientation_penalty_mm": 2456,
+          "score": 12280.0
+        },
+        {
+          "cluster_id": "lounge_area",
+          "hard_error_codes": [],
+          "hard_error_count": 0,
+          "critical_orientation_penalty_mm": 0,
+          "focal_orientation_penalty_mm": 0,
+          "orientation_penalty_mm": 0,
+          "score": 0.0
+        }
+      ],
+      "conflict_sets": [],
+      "top_critical_orientation_issues": [
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "face_object",
+          "target_object_id": "tv_console",
+          "resolved_target_cluster_id": "media_zone",
+          "dot": -0.884,
+          "penalty_mm": 2600,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_directional_relation",
+          "a": "main_seating_area",
+          "b": "media_zone",
+          "relation": "face_each_other",
+          "dot": 0.302,
+          "penalty_mm": 2095,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.707,
+          "front_clear_mm": 1067,
+          "back_clear_mm": 1280,
+          "best_clear_mm": 3330,
+          "penalty_mm": 1697,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.707,
+          "front_clear_mm": 1067,
+          "back_clear_mm": 1280,
+          "best_clear_mm": 3330,
+          "penalty_mm": 1697,
+          "critical": true,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "storage_display",
+          "object_id": "storage_cabinet",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": 0.0,
+          "front_clear_mm": 645,
+          "back_clear_mm": 1355,
+          "best_clear_mm": 1995,
+          "penalty_mm": 1228,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "storage_display",
+          "object_id": "storage_cabinet",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": 0.0,
+          "front_clear_mm": 645,
+          "back_clear_mm": 1355,
+          "best_clear_mm": 1995,
+          "penalty_mm": 1228,
+          "critical": true,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "face_object",
+          "target_object_id": "tv_console",
+          "resolved_target_cluster_id": "media_zone",
+          "dot": 0.276,
+          "penalty_mm": 1000,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "main_seating_area",
+          "intent": "face_cluster",
+          "target_cluster_id": "media_zone",
+          "dot": 0.302,
+          "penalty_mm": 943,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "media_zone",
+          "intent": "face_cluster",
+          "target_cluster_id": "main_seating_area",
+          "dot": 0.302,
+          "penalty_mm": 943,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.0,
+          "front_clear_mm": 1355,
+          "back_clear_mm": 1645,
+          "best_clear_mm": 2585,
+          "penalty_mm": 817,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.0,
+          "front_clear_mm": 1355,
+          "back_clear_mm": 1645,
+          "best_clear_mm": 2585,
+          "penalty_mm": 817,
+          "critical": true,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "media_zone",
+          "object_id": "tv_console",
+          "intent": "face_object",
+          "target_object_id": "armchair",
+          "resolved_target_cluster_id": "main_seating_area",
+          "dot": 0.468,
+          "penalty_mm": 734,
+          "critical": true,
+          "focal": true
+        }
+      ],
+      "top_orientation_issues": [
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "face_object",
+          "target_object_id": "tv_console",
+          "resolved_target_cluster_id": "media_zone",
+          "dot": -0.884,
+          "penalty_mm": 2600,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_directional_relation",
+          "a": "main_seating_area",
+          "b": "media_zone",
+          "relation": "face_each_other",
+          "dot": 0.302,
+          "penalty_mm": 2095,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.707,
+          "front_clear_mm": 1067,
+          "back_clear_mm": 1280,
+          "best_clear_mm": 3330,
+          "penalty_mm": 1697,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.707,
+          "front_clear_mm": 1067,
+          "back_clear_mm": 1280,
+          "best_clear_mm": 3330,
+          "penalty_mm": 1697,
+          "critical": true,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "storage_display",
+          "object_id": "storage_cabinet",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": 0.0,
+          "front_clear_mm": 645,
+          "back_clear_mm": 1355,
+          "best_clear_mm": 1995,
+          "penalty_mm": 1228,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "storage_display",
+          "object_id": "storage_cabinet",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": 0.0,
+          "front_clear_mm": 645,
+          "back_clear_mm": 1355,
+          "best_clear_mm": 1995,
+          "penalty_mm": 1228,
+          "critical": true,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "face_object",
+          "target_object_id": "tv_console",
+          "resolved_target_cluster_id": "media_zone",
+          "dot": 0.276,
+          "penalty_mm": 1000,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "main_seating_area",
+          "intent": "face_cluster",
+          "target_cluster_id": "media_zone",
+          "dot": 0.302,
+          "penalty_mm": 943,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "media_zone",
+          "intent": "face_cluster",
+          "target_cluster_id": "main_seating_area",
+          "dot": 0.302,
+          "penalty_mm": 943,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "main_seating_area",
+          "intent": "back_to_wall",
+          "target_cluster_id": "media_zone",
+          "dot": 0.006,
+          "penalty_mm": 835,
+          "critical": false,
+          "focal": false
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "preserve_front_access",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.0,
+          "front_clear_mm": 1355,
+          "back_clear_mm": 1645,
+          "best_clear_mm": 2585,
+          "penalty_mm": 817,
+          "critical": true,
+          "focal": true
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intent": "front_to_open_space",
+          "target_object_id": null,
+          "resolved_target_cluster_id": null,
+          "dot": -0.0,
+          "front_clear_mm": 1355,
+          "back_clear_mm": 1645,
+          "best_clear_mm": 2585,
+          "penalty_mm": 817,
+          "critical": true,
+          "focal": false
+        }
+      ]
+    },
+    "edit_contract": {
+      "must_preserve_hard_valid": true,
+      "hard_constraints_must_hold": [
+        "inside_room",
+        "no_cluster_overlap",
+        "no_hard_obstacle_intersection",
+        "door_swing_clear"
+      ],
+      "primary_soft_targets": [
+        "front_to_open_space",
+        "preserve_front_access",
+        "face_window",
+        "critical_orientation_penalty",
+        "focal_pair_penalty"
+      ],
+      "allowed_edit_levels": [
+        "cluster_variant",
+        "cluster_pose",
+        "object_pose",
+        "object_swap",
+        "object_nudge"
+      ]
+    },
+    "materialized_clusters_outlines": {
+      "main_seating_area": {
+        "status": "OK",
+        "cluster_id": "main_seating_area",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "armchair",
+            "x": 500,
+            "y": 1850,
+            "rot": 0
+          },
+          {
+            "id": "coffee_table",
+            "x": 450,
+            "y": 0,
+            "rot": 0
+          },
+          {
+            "id": "floor_lamp",
+            "x": 0,
+            "y": 2200,
+            "rot": 0
+          },
+          {
+            "id": "sofa",
+            "x": 0,
+            "y": 800,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "armchair",
+              "x": 500,
+              "y": 1850,
+              "w": 840,
+              "h": 710
+            },
+            {
+              "id": "coffee_table",
+              "x": 450,
+              "y": 0,
+              "w": 900,
+              "h": 500
+            },
+            {
+              "id": "floor_lamp",
+              "x": 0,
+              "y": 2200,
+              "w": 350,
+              "h": 320
+            },
+            {
+              "id": "sofa",
+              "x": 0,
+              "y": 800,
+              "w": 1790,
+              "h": 810
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1790,
+            "max_y": 2560
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1790,
+                "y": 0
+              },
+              {
+                "x": 1790,
+                "y": 1610
+              },
+              {
+                "x": 1340,
+                "y": 1610
+              },
+              {
+                "x": 1340,
+                "y": 2560
+              },
+              {
+                "x": 500,
+                "y": 2560
+              },
+              {
+                "x": 500,
+                "y": 2520
+              },
+              {
+                "x": 0,
+                "y": 2520
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "sofa": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "coffee_table": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "floor_lamp": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "armchair": {
+              "front_local": {
+                "dx": 1,
+                "dy": 0
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "canonical_local_origin_offset": {
+          "dx": 0,
+          "dy": 0
+        },
+        "canonical_local_origin_normalized": true
+      },
+      "lounge_area": {
+        "status": "OK",
+        "cluster_id": "lounge_area",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "ottoman",
+            "x": 450,
+            "y": 1200,
+            "rot": 0
+          },
+          {
+            "id": "recliner",
+            "x": 1100,
+            "y": 1200,
+            "rot": 0
+          },
+          {
+            "id": "sectional_sofa",
+            "x": 0,
+            "y": 0,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "ottoman",
+              "x": 450,
+              "y": 1200,
+              "w": 540,
+              "h": 500
+            },
+            {
+              "id": "recliner",
+              "x": 1100,
+              "y": 1200,
+              "w": 880,
+              "h": 760
+            },
+            {
+              "id": "sectional_sofa",
+              "x": 0,
+              "y": 0,
+              "w": 2540,
+              "h": 920
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 2540,
+            "max_y": 1960
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 2540,
+                "y": 0
+              },
+              {
+                "x": 2540,
+                "y": 920
+              },
+              {
+                "x": 1980,
+                "y": 920
+              },
+              {
+                "x": 1980,
+                "y": 1960
+              },
+              {
+                "x": 1100,
+                "y": 1960
+              },
+              {
+                "x": 1100,
+                "y": 1700
+              },
+              {
+                "x": 450,
+                "y": 1700
+              },
+              {
+                "x": 450,
+                "y": 920
+              },
+              {
+                "x": 0,
+                "y": 920
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 400,
+              "dy": -900
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": -1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "sectional_sofa": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "ottoman": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            },
+            "recliner": {
+              "front_local": {
+                "dx": 0,
+                "dy": -1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "canonical_local_origin_offset": {
+          "dx": 0,
+          "dy": 900
+        },
+        "canonical_local_origin_normalized": true
+      },
+      "media_zone": {
+        "status": "OK",
+        "cluster_id": "media_zone",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "tv_console",
+            "x": 0,
+            "y": 0,
+            "rot": 0
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "tv_console",
+              "x": 0,
+              "y": 0,
+              "w": 1260,
+              "h": 380
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1260,
+            "max_y": 380
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1260,
+                "y": 0
+              },
+              {
+                "x": 1260,
+                "y": 380
+              },
+              {
+                "x": 0,
+                "y": 380
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "cluster_axis_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "important_objects": {
+            "tv_console": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": 1,
+                "dy": 0
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "canonical_local_origin_offset": {
+          "dx": 0,
+          "dy": 0
+        },
+        "canonical_local_origin_normalized": true
+      },
+      "storage_display": {
+        "status": "OK",
+        "cluster_id": "storage_display",
+        "local_frame": {
+          "unit": "mm",
+          "grid_mm": 50,
+          "origin_note": "(0,0) is the canonical top-left of the occupied local bbox for this cluster"
+        },
+        "local_placements": [
+          {
+            "id": "bookshelf",
+            "x": 350,
+            "y": 100,
+            "rot": 90
+          },
+          {
+            "id": "console_table",
+            "x": 0,
+            "y": 0,
+            "rot": 270
+          },
+          {
+            "id": "storage_cabinet",
+            "x": 0,
+            "y": 1100,
+            "rot": 180
+          }
+        ],
+        "cluster_footprint": {
+          "type": "union_of_rects",
+          "rects": [
+            {
+              "id": "bookshelf",
+              "x": 350,
+              "y": 100,
+              "w": 250,
+              "h": 630
+            },
+            {
+              "id": "console_table",
+              "x": 0,
+              "y": 0,
+              "w": 350,
+              "h": 1060
+            },
+            {
+              "id": "storage_cabinet",
+              "x": 0,
+              "y": 1100,
+              "w": 610,
+              "h": 410
+            }
+          ],
+          "local_bbox": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 610,
+            "max_y": 1510
+          },
+          "outline_polygons_ccw": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 610,
+                "y": 0
+              },
+              {
+                "x": 610,
+                "y": 1510
+              },
+              {
+                "x": 0,
+                "y": 1510
+              }
+            ]
+          ],
+          "outline_meta": {
+            "mode": "envelope",
+            "normalized_translation": {
+              "dx": 0,
+              "dy": 0
+            },
+            "gap_fill_mm": 0,
+            "used_shapely": false
+          }
+        },
+        "orientation_meta": {
+          "cluster_front_local": {
+            "dx": 1,
+            "dy": 0
+          },
+          "cluster_axis_local": {
+            "dx": 0,
+            "dy": 1
+          },
+          "important_objects": {
+            "storage_cabinet": {
+              "front_local": {
+                "dx": 0,
+                "dy": 1
+              },
+              "axis_local": {
+                "dx": -1,
+                "dy": 0
+              }
+            },
+            "bookshelf": {
+              "front_local": {
+                "dx": 1,
+                "dy": 0
+              },
+              "axis_local": {
+                "dx": 0,
+                "dy": 1
+              }
+            },
+            "console_table": {
+              "front_local": {
+                "dx": 1,
+                "dy": 0
+              },
+              "axis_local": {
+                "dx": 0,
+                "dy": -1
+              }
+            }
+          }
+        },
+        "notes": [
+          "ClusterComposer used deterministic search instead of an LLM."
+        ],
+        "missing": [],
+        "canonical_local_origin_offset": {
+          "dx": 0,
+          "dy": 0
+        },
+        "canonical_local_origin_normalized": true
+      }
+    },
+    "relation_plan_used": {
+      "status": "OK",
+      "room_id": "room_1",
+      "cluster_affinities": [
+        {
+          "cluster_id": "lounge_area",
+          "prefer": [
+            "recess_or_edge",
+            "wall",
+            "far_from_entry"
+          ],
+          "avoid": [
+            "center",
+            "door_swing",
+            "window_blocking",
+            "main_path",
+            "bottleneck"
+          ],
+          "priority": "high",
+          "reason": "Push support clusters away from center to preserve openness."
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "prefer": [
+            "center",
+            "wall",
+            "far_from_entry",
+            "recess_or_edge"
+          ],
+          "avoid": [
+            "window_blocking",
+            "entry_blocking",
+            "door_swing",
+            "center",
+            "main_path"
+          ],
+          "priority": "high",
+          "reason": "Primary seating should be central and accessible."
+        },
+        {
+          "cluster_id": "media_zone",
+          "prefer": [
+            "wall",
+            "far_from_entry",
+            "recess_or_edge"
+          ],
+          "avoid": [
+            "window_blocking",
+            "center",
+            "main_path"
+          ],
+          "priority": "high",
+          "reason": "Media zone benefits from wall placement, avoid blocking window."
+        },
+        {
+          "cluster_id": "storage_display",
+          "prefer": [
+            "wall",
+            "recess_or_edge"
+          ],
+          "avoid": [
+            "center",
+            "entry_blocking",
+            "main_path",
+            "bottleneck"
+          ],
+          "priority": "high",
+          "reason": "Storage benefits from wall placement, avoid blocking entry."
+        }
+      ],
+      "cluster_orientations": [
+        {
+          "cluster_id": "main_seating_area",
+          "intents": [
+            "face_cluster",
+            "inward_to_room",
+            "back_to_wall",
+            "axis_parallel_wall"
+          ],
+          "target_cluster_id": "media_zone",
+          "priority": "high",
+          "reason": "Seating should face the media zone."
+        },
+        {
+          "cluster_id": "media_zone",
+          "intents": [
+            "back_to_wall",
+            "access_to_open_space",
+            "face_cluster",
+            "axis_parallel_wall"
+          ],
+          "target_cluster_id": "main_seating_area",
+          "priority": "high",
+          "reason": "Media zone benefits from being against a wall."
+        },
+        {
+          "cluster_id": "lounge_area",
+          "intents": [
+            "inward_to_room",
+            "face_cluster",
+            "back_to_wall",
+            "axis_parallel_wall"
+          ],
+          "target_cluster_id": "media_zone",
+          "priority": "high",
+          "reason": "primary seating cluster should orient toward focal/media cluster"
+        },
+        {
+          "cluster_id": "storage_display",
+          "intents": [
+            "access_to_open_space",
+            "back_to_wall",
+            "axis_parallel_wall"
+          ],
+          "target_cluster_id": null,
+          "priority": "medium",
+          "reason": "access-sensitive cluster should expose usable front toward open space"
+        }
+      ],
+      "object_orientations": [
+        {
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intents": [
+            "face_object"
+          ],
+          "target_object_id": "tv_console",
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "Sofa should face the TV console."
+        },
+        {
+          "cluster_id": "media_zone",
+          "object_id": "tv_console",
+          "intents": [
+            "front_to_open_space",
+            "face_object",
+            "preserve_front_access"
+          ],
+          "target_object_id": "armchair",
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "Ensure TV console is accessible."
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intents": [
+            "face_object"
+          ],
+          "target_object_id": "tv_console",
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "important seating anchor should face focal/media anchor"
+        },
+        {
+          "cluster_id": "lounge_area",
+          "object_id": "sectional_sofa",
+          "intents": [
+            "face_object"
+          ],
+          "target_object_id": "tv_console",
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "important seating anchor should face focal/media anchor"
+        },
+        {
+          "cluster_id": "lounge_area",
+          "object_id": "recliner",
+          "intents": [
+            "face_object"
+          ],
+          "target_object_id": "tv_console",
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "important seating anchor should face focal/media anchor"
+        },
+        {
+          "cluster_id": "storage_display",
+          "object_id": "bookshelf",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "target_object_id": null,
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "object has meaningful front usability and should preserve access"
+        },
+        {
+          "cluster_id": "storage_display",
+          "object_id": "console_table",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "target_object_id": null,
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "object has meaningful front usability and should preserve access"
+        },
+        {
+          "cluster_id": "storage_display",
+          "object_id": "storage_cabinet",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "target_object_id": null,
+          "target_object_cluster_id": null,
+          "priority": "high",
+          "reason": "object has meaningful front usability and should preserve access"
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "object_id": "armchair",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "high",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "object_id": "coffee_table",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "medium",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "main_seating_area",
+          "object_id": "sofa",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "high",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "lounge_area",
+          "object_id": "recliner",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "high",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "lounge_area",
+          "object_id": "sectional_sofa",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "high",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "media_zone",
+          "object_id": "tv_console",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "high",
+          "reason": "augmented from cluster_constraints"
+        },
+        {
+          "cluster_id": "pet_zone",
+          "object_id": "pet_bed",
+          "intents": [
+            "preserve_front_access",
+            "front_to_open_space"
+          ],
+          "priority": "medium",
+          "reason": "augmented from cluster_constraints"
+        }
+      ],
+      "cluster_relations": [
+        {
+          "a": "main_seating_area",
+          "b": "media_zone",
+          "relation": "near",
+          "priority": "high",
+          "reason": "Seating and media should be close for viewing."
+        },
+        {
+          "a": "lounge_area",
+          "b": "main_seating_area",
+          "relation": "separate",
+          "priority": "high",
+          "reason": "Avoid clustering seating areas."
+        },
+        {
+          "a": "storage_display",
+          "b": "main_seating_area",
+          "relation": "far_if_possible",
+          "priority": "high",
+          "reason": "Keep storage from dominating the seating area."
+        },
+        {
+          "a": "lounge_area",
+          "b": "media_zone",
+          "relation": "near",
+          "priority": "high",
+          "reason": "viewing relationship benefits from practical proximity"
+        }
+      ],
+      "cluster_directional_relations": [
+        {
+          "a": "main_seating_area",
+          "b": "media_zone",
+          "relation": "face_each_other",
+          "priority": "high",
+          "reason": "Seating should face the media zone for viewing."
+        },
+        {
+          "a": "lounge_area",
+          "b": "media_zone",
+          "relation": "face_each_other",
+          "priority": "high",
+          "reason": "viewing relationship between seating and focal/media clusters"
+        }
+      ],
+      "circulation_plan": {
+        "main_paths": [
+          {
+            "from": "door_1",
+            "to_cluster": "main_seating_area",
+            "priority": "high",
+            "reason": "Main path from entry to seating."
+          }
+        ],
+        "keep_open_regions": [
+          {
+            "type": "entry_buffer",
+            "near": "door_1",
+            "priority": "high",
+            "reason": "Keep entry clear."
+          },
+          {
+            "type": "center_lane",
+            "near": "main_seating_area",
+            "priority": "medium",
+            "reason": "Preserve open space around seating."
+          },
+          {
+            "type": "center_lane",
+            "near": "room_center",
+            "priority": "high",
+            "reason": "Edge-weighted variant should keep the premium center field relatively free."
+          }
+        ]
+      },
+      "layout_intent_profile": {
+        "focus_mode": "mixed",
+        "primary_cluster_id": "main_seating_area",
+        "secondary_cluster_id": "media_zone",
+        "circulation_priority": "high",
+        "center_open_preference": "high",
+        "support_cluster_behavior": "recede",
+        "distribution_mode": "edge_weighted"
+      },
+      "placement_guidelines": [
+        "Prioritize clear access from the entry to the main seating area.",
+        "Avoid blocking the window with tall furniture.",
+        "Keep the area around the sofa open for circulation.",
+        "Preserve a clear viewing relationship between armchair and tv_console.",
+        "Do not orient armchair away from tv_console.",
+        "Keep media_zone readable from main_seating_area.",
+        "Preserve a clear viewing relationship between sectional_sofa and tv_console.",
+        "Do not orient sectional_sofa away from tv_console.",
+        "Keep media_zone readable from lounge_area.",
+        "Preserve front usability for tv_console.",
+        "Preserve front usability for bookshelf.",
+        "Preserve front usability for console_table.",
+        "Preserve front usability for storage_cabinet.",
+        "Do not let media_zone chase the window side if it weakens the viewing axis with lounge_area.",
+        "Do not let media_zone chase the window side if it weakens the viewing axis with main_seating_area.",
+        "Treat main_seating_area as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+        "Preserve a materially distinct macro geometry from the other post-seed variants.",
+        "Make perimeter pressure stronger than the open-center variant so the main zone reads clearly edge-weighted."
+      ],
+      "notes": [
+        "Prioritized seating facing the media zone for a clear viewing experience.",
+        "Pushed support clusters (lounge, storage) toward the perimeter to maximize center openness.",
+        "Seed variant policy seed_edge_weighted: distribution=edge_weighted, center_open=high, support_behavior=recede.",
+        "Seed constraint fingerprint seed_edge_weighted: perimeter_bias_lock, all_clusters_avoid_center, wall_backed_primary_pair.",
+        "augmented_object_orientations_from_cluster_constraints=7"
+      ],
+      "missing": [],
+      "seed_variant_policy": {
+        "source": "seed_edge_weighted",
+        "constraint_tokens": [
+          "perimeter_bias_lock",
+          "all_clusters_avoid_center",
+          "wall_backed_primary_pair"
+        ],
+        "structural_fingerprint": "focus=mixed,center=high,support=recede,distribution=edge_weighted || center_lane:main_seating_area,center_lane:room_center,entry_buffer:door_1 || lounge_area|p=far_from_entry,recess_or_edge,wall|a=bottleneck,center,door_swing,main_path,window_blocking,main_seating_area|p=center,far_from_entry,recess_or_edge,wall|a=center,door_swing,entry_blocking,main_path,window_blocking,media_zone|p=far_from_entry,recess_or_edge,wall|a=center,main_path,window_blocking,storage_display|p=recess_or_edge,wall|a=bottleneck,center,entry_blocking,main_path || lounge_area|main_seating_area|separate,lounge_area|media_zone|near,main_seating_area|media_zone|near,main_seating_area|storage_display|far_if_possible || lounge_area|media_zone|face_each_other,main_seating_area|media_zone|face_each_other || lounge_area|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|media_zone,main_seating_area|axis_parallel_wall,back_to_wall,face_cluster,inward_to_room|media_zone,media_zone|access_to_open_space,axis_parallel_wall,back_to_wall,face_cluster|main_seating_area,storage_display|access_to_open_space,axis_parallel_wall,back_to_wall|"
+      }
+    },
+    "cluster_constraints_used": {
+      "status": "OK",
+      "clusters": [
+        {
+          "cluster_id": "main_seating_area",
+          "tag": "living",
+          "members": [
+            "sofa",
+            "coffee_table",
+            "side_table",
+            "floor_lamp",
+            "armchair"
+          ],
+          "anchors": [
+            "sofa"
+          ],
+          "hard_constraints": [
+            {
+              "type": "no_overlap",
+              "a": "sofa",
+              "b": "coffee_table"
+            },
+            {
+              "type": "no_overlap",
+              "a": "sofa",
+              "b": "side_table"
+            },
+            {
+              "type": "dock_to_edge",
+              "a": "coffee_table",
+              "b": "sofa",
+              "b_edge": "front",
+              "span": "center",
+              "gap_min": 300,
+              "gap_max": 600
+            }
+          ],
+          "soft_constraints": [
+            {
+              "type": "prefer_facing",
+              "a": "armchair",
+              "b": "sofa",
+              "mode": "face_each_other",
+              "weight": 5
+            }
+          ],
+          "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+              "sofa": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "coffee_table": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "side_table": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "floor_lamp": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "armchair": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "facing": {
+              "sofa": {
+                "front": "bottom",
+                "notes": "Primary seating orientation"
+              },
+              "coffee_table": {
+                "front": "top",
+                "notes": "Faces sofa"
+              },
+              "armchair": {
+                "front": "right",
+                "notes": "Angled toward center"
+              }
+            },
+            "access_requirements": [
+              {
+                "id": "sofa",
+                "type": "front_clearance",
+                "required": true
+              },
+              {
+                "id": "armchair",
+                "type": "front_clearance",
+                "required": true
+              }
+            ],
+            "semantic_placements": [
+              {
+                "id": "coffee_table",
+                "relative_to": "sofa",
+                "kind": "dock_to_edge",
+                "proximity": "balanced",
+                "selection": "best_fit",
+                "orientation": "face_base",
+                "gap_min": 300,
+                "gap_max": 500,
+                "b_edge": "front",
+                "span": "center"
+              },
+              {
+                "id": "side_table",
+                "relative_to": "sofa",
+                "kind": "anchor_side",
+                "proximity": "compact",
+                "selection": "first_fit",
+                "orientation": "same_direction",
+                "gap_min": 0,
+                "gap_max": 100,
+                "side_options": [
+                  "head_left"
+                ]
+              },
+              {
+                "id": "armchair",
+                "relative_to": "sofa",
+                "kind": "anchor_side",
+                "proximity": "balanced",
+                "selection": "first_fit",
+                "orientation": "face_base",
+                "gap_min": 400,
+                "gap_max": 800,
+                "side_options": [
+                  "head_right"
+                ]
+              },
+              {
+                "id": "floor_lamp",
+                "relative_to": "armchair",
+                "kind": "anchor_side",
+                "side_options": [
+                  "left",
+                  "right",
+                  "head_left",
+                  "head_right"
+                ],
+                "gap_min": 50,
+                "gap_max": 200,
+                "proximity": "balanced",
+                "selection": "best_fit"
+              }
+            ]
+          }
+        },
+        {
+          "cluster_id": "lounge_area",
+          "tag": "living",
+          "members": [
+            "sectional_sofa",
+            "ottoman",
+            "bean_bag",
+            "recliner"
+          ],
+          "anchors": [
+            "sectional_sofa"
+          ],
+          "hard_constraints": [
+            {
+              "type": "no_overlap",
+              "a": "sectional_sofa",
+              "b": "ottoman"
+            }
+          ],
+          "soft_constraints": [],
+          "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+              "sectional_sofa": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "ottoman": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "bean_bag": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "recliner": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "facing": {
+              "sectional_sofa": {
+                "front": "bottom",
+                "notes": "Lounge orientation"
+              },
+              "recliner": {
+                "front": "bottom",
+                "notes": "Faces TV zone"
+              }
+            },
+            "access_requirements": [
+              {
+                "id": "sectional_sofa",
+                "type": "front_clearance",
+                "required": true
+              },
+              {
+                "id": "recliner",
+                "type": "front_clearance",
+                "required": true
+              }
+            ],
+            "semantic_placements": [
+              {
+                "id": "ottoman",
+                "relative_to": "sectional_sofa",
+                "kind": "dock_to_edge",
+                "proximity": "compact",
+                "selection": "best_fit",
+                "orientation": "same_direction",
+                "gap_min": 300,
+                "gap_max": 500,
+                "b_edge": "front",
+                "span": "center"
+              },
+              {
+                "id": "bean_bag",
+                "relative_to": "sectional_sofa",
+                "kind": "anchor_side",
+                "proximity": "balanced",
+                "selection": "first_fit",
+                "orientation": "face_base",
+                "gap_min": 400,
+                "gap_max": 800,
+                "side_options": [
+                  "head_left"
+                ]
+              },
+              {
+                "id": "recliner",
+                "relative_to": "sectional_sofa",
+                "kind": "anchor_side",
+                "side_options": [
+                  "left",
+                  "right",
+                  "head_left",
+                  "head_right"
+                ],
+                "gap_min": 100,
+                "gap_max": 350,
+                "proximity": "loose",
+                "selection": "best_fit",
+                "orientation": "same_direction"
+              }
+            ]
+          }
+        },
+        {
+          "cluster_id": "media_zone",
+          "tag": "living",
+          "members": [
+            "tv_console",
+            "media_shelf"
+          ],
+          "anchors": [
+            "tv_console"
+          ],
+          "hard_constraints": [
+            {
+              "type": "anchor_side",
+              "a": "media_shelf",
+              "b": "tv_console",
+              "side": "right",
+              "gap_min": 0,
+              "gap_max": 200
+            }
+          ],
+          "soft_constraints": [],
+          "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+              "tv_console": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "media_shelf": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "facing": {
+              "tv_console": {
+                "front": "top",
+                "notes": "Faces seating area"
+              }
+            },
+            "access_requirements": [
+              {
+                "id": "tv_console",
+                "type": "front_clearance",
+                "required": true
+              }
+            ],
+            "semantic_placements": [
+              {
+                "id": "media_shelf",
+                "relative_to": "tv_console",
+                "kind": "anchor_side",
+                "proximity": "compact",
+                "selection": "first_fit",
+                "orientation": "same_direction",
+                "gap_min": 0,
+                "gap_max": 200,
+                "side_options": [
+                  "head_right"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "cluster_id": "storage_display",
+          "tag": "storage",
+          "members": [
+            "storage_cabinet",
+            "bookshelf",
+            "console_table"
+          ],
+          "anchors": [
+            "storage_cabinet"
+          ],
+          "hard_constraints": [
+            {
+              "type": "no_overlap",
+              "a": "storage_cabinet",
+              "b": "bookshelf"
+            }
+          ],
+          "soft_constraints": [],
+          "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+              "storage_cabinet": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "bookshelf": [
+                0,
+                90,
+                180,
+                270
+              ],
+              "console_table": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "facing": {
+              "storage_cabinet": {
+                "front": "bottom",
+                "notes": "Faces room"
+              },
+              "bookshelf": {
+                "front": "bottom",
+                "notes": "Faces room"
+              }
+            },
+            "access_requirements": [
+              {
+                "id": "storage_cabinet",
+                "type": "front_clearance",
+                "required": true
+              },
+              {
+                "id": "bookshelf",
+                "type": "front_clearance",
+                "required": true
+              }
+            ],
+            "semantic_placements": [
+              {
+                "id": "bookshelf",
+                "relative_to": "storage_cabinet",
+                "kind": "anchor_side",
+                "proximity": "compact",
+                "selection": "first_fit",
+                "orientation": "same_direction",
+                "gap_min": 0,
+                "gap_max": 100,
+                "side_options": [
+                  "head_left"
+                ]
+              },
+              {
+                "id": "console_table",
+                "relative_to": "storage_cabinet",
+                "kind": "anchor_side",
+                "proximity": "compact",
+                "selection": "first_fit",
+                "orientation": "same_direction",
+                "gap_min": 0,
+                "gap_max": 100,
+                "side_options": [
+                  "head_right"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "cluster_id": "pet_zone",
+          "tag": "misc",
+          "members": [
+            "pet_bed"
+          ],
+          "anchors": [
+            "pet_bed"
+          ],
+          "hard_constraints": [],
+          "soft_constraints": [],
+          "cluster_rules": {
+            "grid_mm": 50,
+            "allowed_rotations": {
+              "pet_bed": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "facing": {
+              "pet_bed": {
+                "front": "bottom",
+                "notes": "General orientation"
+              }
+            },
+            "access_requirements": [],
+            "semantic_placements": []
+          }
+        }
+      ]
+    },
+    "seed_verify": {
+      "result": "VALID",
+      "mode": "complete",
+      "hard_valid": true,
+      "acceptable_valid": false,
+      "complete": true,
+      "state_signature": "3efc678def3e3f4f",
+      "errors": [],
+      "violations_by_cluster": {
+        "lounge_area": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 0,
+          "critical_orientation_penalty_mm": 0,
+          "focal_orientation_penalty_mm": 0
+        },
+        "main_seating_area": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 12501,
+          "critical_orientation_penalty_mm": 11666,
+          "focal_orientation_penalty_mm": 9152
+        },
+        "media_zone": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 3038,
+          "critical_orientation_penalty_mm": 3038,
+          "focal_orientation_penalty_mm": 3038
+        },
+        "storage_display": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 2456,
+          "critical_orientation_penalty_mm": 2456,
+          "focal_orientation_penalty_mm": 1228
+        }
+      },
+      "summary": {
+        "placed_count": 4,
+        "expected_count": 4,
+        "missing_cluster_ids": [],
+        "extra_transform_cluster_ids": [],
+        "failing_cluster_ids": [],
+        "occupied_area_mm2": 7141300.0,
+        "free_room_area_mm2": 20354571.68,
+        "density_ratio": 0.351,
+        "min_cluster_gap_mm": 240,
+        "avg_cluster_gap_mm": 1159,
+        "critical_orientation_penalty_mm": 17865,
+        "focal_pair_penalty_mm": 13220,
+        "cluster_orientation_count": 3,
+        "cluster_directional_relation_count": 1,
+        "object_orientation_count": 8,
+        "critical_orientation_count": 11,
+        "focal_orientation_count": 8
+      },
+      "quality_gate": {
+        "pass": false,
+        "reasons": [
+          "critical_orientation_penalty_too_high",
+          "focal_pair_penalty_too_high",
+          "critical_item_penalty_too_high"
+        ],
+        "thresholds": {
+          "acceptable_critical_orientation_threshold_mm": 260,
+          "acceptable_focal_pair_threshold_mm": 260,
+          "acceptable_max_item_penalty_mm": 220
+        },
+        "metrics": {
+          "critical_orientation_penalty_mm": 17865,
+          "focal_pair_penalty_mm": 13220,
+          "max_critical_item_penalty_mm": 2600
+        }
+      },
+      "repair_guidance": {
+        "prioritized_clusters": [
+          {
+            "cluster_id": "main_seating_area",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 11666,
+            "focal_orientation_penalty_mm": 9152,
+            "orientation_penalty_mm": 12501,
+            "score": 65803.0
+          },
+          {
+            "cluster_id": "media_zone",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 3038,
+            "focal_orientation_penalty_mm": 3038,
+            "orientation_penalty_mm": 3038,
+            "score": 18228.0
+          },
+          {
+            "cluster_id": "storage_display",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 2456,
+            "focal_orientation_penalty_mm": 1228,
+            "orientation_penalty_mm": 2456,
+            "score": 12280.0
+          },
+          {
+            "cluster_id": "lounge_area",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 0,
+            "focal_orientation_penalty_mm": 0,
+            "orientation_penalty_mm": 0,
+            "score": 0.0
+          }
+        ],
+        "conflict_sets": []
+      },
+      "quality": {
+        "density_ratio": 0.351,
+        "adaptive_base_preferred_gap_mm": 288,
+        "min_cluster_gap_mm": 240,
+        "avg_cluster_gap_mm": 1159,
+        "tight_gap_penalty_mm": 174,
+        "tight_gap_pairs": [
+          {
+            "a": "media_zone",
+            "b": "storage_display",
+            "gap_mm": 240,
+            "preferred_gap_mm": 367,
+            "deficit_mm": 127
+          },
+          {
+            "a": "lounge_area",
+            "b": "main_seating_area",
+            "gap_mm": 360,
+            "preferred_gap_mm": 408,
+            "deficit_mm": 48
+          }
+        ],
+        "spread_penalty_mm": 0,
+        "affinity_penalty_mm": 4694,
+        "relation_penalty_mm": 2767,
+        "circulation_penalty_mm": 3546,
+        "orientation_penalty_mm": 20772,
+        "critical_orientation_penalty_mm": 17865,
+        "focal_pair_penalty_mm": 13220,
+        "total_soft_penalty_mm": 31954,
+        "spread": {
+          "span_x_ratio": 0.673,
+          "span_y_ratio": 0.645,
+          "centroid_bbox_area_ratio": 0.434
+        },
+        "affinity_debug": [
+          {
+            "cluster_id": "lounge_area",
+            "penalty_mm": 2427,
+            "wall_dist_mm": 27,
+            "center_dist_mm": 1033,
+            "door_dist_mm": 1100,
+            "window_dist_mm": 2348
+          },
+          {
+            "cluster_id": "media_zone",
+            "penalty_mm": 1449,
+            "wall_dist_mm": 0,
+            "center_dist_mm": 2554,
+            "door_dist_mm": 1236,
+            "window_dist_mm": 4538
+          },
+          {
+            "cluster_id": "main_seating_area",
+            "penalty_mm": 818,
+            "wall_dist_mm": 150,
+            "center_dist_mm": 2108,
+            "door_dist_mm": 4000,
+            "window_dist_mm": 201
+          },
+          {
+            "cluster_id": "storage_display",
+            "penalty_mm": 0,
+            "wall_dist_mm": 50,
+            "center_dist_mm": 1304,
+            "door_dist_mm": 1700,
+            "window_dist_mm": 3682
+          }
+        ],
+        "relation_debug": [
+          {
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "near",
+            "distance_mm": 4238,
+            "penalty_mm": 1208
+          },
+          {
+            "a": "lounge_area",
+            "b": "main_seating_area",
+            "relation": "separate",
+            "distance_mm": 2811,
+            "penalty_mm": 729
+          },
+          {
+            "a": "lounge_area",
+            "b": "media_zone",
+            "relation": "near",
+            "distance_mm": 3010,
+            "penalty_mm": 642
+          },
+          {
+            "a": "storage_display",
+            "b": "main_seating_area",
+            "relation": "far_if_possible",
+            "distance_mm": 2968,
+            "penalty_mm": 188
+          }
+        ],
+        "circulation_debug": [
+          {
+            "kind": "center_lane",
+            "near": "room_center",
+            "blocker": "lounge_area",
+            "penalty_mm": 975
+          },
+          {
+            "kind": "center_lane",
+            "near": "room_center",
+            "blocker": "main_seating_area",
+            "penalty_mm": 975
+          },
+          {
+            "kind": "center_lane",
+            "near": "main_seating_area",
+            "blocker": "lounge_area",
+            "penalty_mm": 650
+          },
+          {
+            "kind": "center_lane",
+            "near": "main_seating_area",
+            "blocker": "main_seating_area",
+            "penalty_mm": 650
+          },
+          {
+            "kind": "main_path",
+            "path_from": "door_1",
+            "path_to": "main_seating_area",
+            "blocker": "lounge_area",
+            "penalty_mm": 296
+          }
+        ],
+        "orientation_debug": [
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": -0.884,
+            "penalty_mm": 2600,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_directional_relation",
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "dot": 0.302,
+            "penalty_mm": 2095,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": 0.276,
+            "penalty_mm": 1000,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "face_cluster",
+            "target_cluster_id": "media_zone",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "media_zone",
+            "intent": "face_cluster",
+            "target_cluster_id": "main_seating_area",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "back_to_wall",
+            "target_cluster_id": "media_zone",
+            "dot": 0.006,
+            "penalty_mm": 835,
+            "critical": false,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": false
+          }
+        ],
+        "critical_orientation_debug": [
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": -0.884,
+            "penalty_mm": 2600,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_directional_relation",
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "dot": 0.302,
+            "penalty_mm": 2095,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": 0.276,
+            "penalty_mm": 1000,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "face_cluster",
+            "target_cluster_id": "media_zone",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "media_zone",
+            "intent": "face_cluster",
+            "target_cluster_id": "main_seating_area",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intent": "face_object",
+            "target_object_id": "armchair",
+            "resolved_target_cluster_id": "main_seating_area",
+            "dot": 0.468,
+            "penalty_mm": 734,
+            "critical": true,
+            "focal": true
+          }
+        ],
+        "layout_score": -145109
+      },
+      "debug": {}
+    },
+    "candidate_counts": {
+      "lounge_area": 24,
+      "main_seating_area": 32,
+      "storage_display": 24,
+      "media_zone": 32
+    }
+  },
+  "solver_debug": {
+    "best_verify": {
+      "result": "VALID",
+      "mode": "complete",
+      "hard_valid": true,
+      "acceptable_valid": false,
+      "complete": true,
+      "state_signature": "3efc678def3e3f4f",
+      "errors": [],
+      "violations_by_cluster": {
+        "lounge_area": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 0,
+          "critical_orientation_penalty_mm": 0,
+          "focal_orientation_penalty_mm": 0
+        },
+        "main_seating_area": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 12501,
+          "critical_orientation_penalty_mm": 11666,
+          "focal_orientation_penalty_mm": 9152
+        },
+        "media_zone": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 3038,
+          "critical_orientation_penalty_mm": 3038,
+          "focal_orientation_penalty_mm": 3038
+        },
+        "storage_display": {
+          "missing_transform": false,
+          "grid_violation": false,
+          "rotation_invalid": false,
+          "outline_invalid": false,
+          "geom_invalid": false,
+          "out_of_bounds": false,
+          "hit_obstacles": [],
+          "overlaps": [],
+          "orientation_penalty_mm": 2456,
+          "critical_orientation_penalty_mm": 2456,
+          "focal_orientation_penalty_mm": 1228
+        }
+      },
+      "summary": {
+        "placed_count": 4,
+        "expected_count": 4,
+        "missing_cluster_ids": [],
+        "extra_transform_cluster_ids": [],
+        "failing_cluster_ids": [],
+        "occupied_area_mm2": 7141300.0,
+        "free_room_area_mm2": 20354571.68,
+        "density_ratio": 0.351,
+        "min_cluster_gap_mm": 240,
+        "avg_cluster_gap_mm": 1159,
+        "critical_orientation_penalty_mm": 17865,
+        "focal_pair_penalty_mm": 13220,
+        "cluster_orientation_count": 3,
+        "cluster_directional_relation_count": 1,
+        "object_orientation_count": 8,
+        "critical_orientation_count": 11,
+        "focal_orientation_count": 8
+      },
+      "quality_gate": {
+        "pass": false,
+        "reasons": [
+          "critical_orientation_penalty_too_high",
+          "focal_pair_penalty_too_high",
+          "critical_item_penalty_too_high"
+        ],
+        "thresholds": {
+          "acceptable_critical_orientation_threshold_mm": 260,
+          "acceptable_focal_pair_threshold_mm": 260,
+          "acceptable_max_item_penalty_mm": 220
+        },
+        "metrics": {
+          "critical_orientation_penalty_mm": 17865,
+          "focal_pair_penalty_mm": 13220,
+          "max_critical_item_penalty_mm": 2600
+        }
+      },
+      "repair_guidance": {
+        "prioritized_clusters": [
+          {
+            "cluster_id": "main_seating_area",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 11666,
+            "focal_orientation_penalty_mm": 9152,
+            "orientation_penalty_mm": 12501,
+            "score": 65803.0
+          },
+          {
+            "cluster_id": "media_zone",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 3038,
+            "focal_orientation_penalty_mm": 3038,
+            "orientation_penalty_mm": 3038,
+            "score": 18228.0
+          },
+          {
+            "cluster_id": "storage_display",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 2456,
+            "focal_orientation_penalty_mm": 1228,
+            "orientation_penalty_mm": 2456,
+            "score": 12280.0
+          },
+          {
+            "cluster_id": "lounge_area",
+            "hard_error_codes": [],
+            "hard_error_count": 0,
+            "critical_orientation_penalty_mm": 0,
+            "focal_orientation_penalty_mm": 0,
+            "orientation_penalty_mm": 0,
+            "score": 0.0
+          }
+        ],
+        "conflict_sets": []
+      },
+      "quality": {
+        "density_ratio": 0.351,
+        "adaptive_base_preferred_gap_mm": 288,
+        "min_cluster_gap_mm": 240,
+        "avg_cluster_gap_mm": 1159,
+        "tight_gap_penalty_mm": 174,
+        "tight_gap_pairs": [
+          {
+            "a": "media_zone",
+            "b": "storage_display",
+            "gap_mm": 240,
+            "preferred_gap_mm": 367,
+            "deficit_mm": 127
+          },
+          {
+            "a": "lounge_area",
+            "b": "main_seating_area",
+            "gap_mm": 360,
+            "preferred_gap_mm": 408,
+            "deficit_mm": 48
+          }
+        ],
+        "spread_penalty_mm": 0,
+        "affinity_penalty_mm": 4694,
+        "relation_penalty_mm": 2767,
+        "circulation_penalty_mm": 3546,
+        "orientation_penalty_mm": 20772,
+        "critical_orientation_penalty_mm": 17865,
+        "focal_pair_penalty_mm": 13220,
+        "total_soft_penalty_mm": 31954,
+        "spread": {
+          "span_x_ratio": 0.673,
+          "span_y_ratio": 0.645,
+          "centroid_bbox_area_ratio": 0.434
+        },
+        "affinity_debug": [
+          {
+            "cluster_id": "lounge_area",
+            "penalty_mm": 2427,
+            "wall_dist_mm": 27,
+            "center_dist_mm": 1033,
+            "door_dist_mm": 1100,
+            "window_dist_mm": 2348
+          },
+          {
+            "cluster_id": "media_zone",
+            "penalty_mm": 1449,
+            "wall_dist_mm": 0,
+            "center_dist_mm": 2554,
+            "door_dist_mm": 1236,
+            "window_dist_mm": 4538
+          },
+          {
+            "cluster_id": "main_seating_area",
+            "penalty_mm": 818,
+            "wall_dist_mm": 150,
+            "center_dist_mm": 2108,
+            "door_dist_mm": 4000,
+            "window_dist_mm": 201
+          },
+          {
+            "cluster_id": "storage_display",
+            "penalty_mm": 0,
+            "wall_dist_mm": 50,
+            "center_dist_mm": 1304,
+            "door_dist_mm": 1700,
+            "window_dist_mm": 3682
+          }
+        ],
+        "relation_debug": [
+          {
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "near",
+            "distance_mm": 4238,
+            "penalty_mm": 1208
+          },
+          {
+            "a": "lounge_area",
+            "b": "main_seating_area",
+            "relation": "separate",
+            "distance_mm": 2811,
+            "penalty_mm": 729
+          },
+          {
+            "a": "lounge_area",
+            "b": "media_zone",
+            "relation": "near",
+            "distance_mm": 3010,
+            "penalty_mm": 642
+          },
+          {
+            "a": "storage_display",
+            "b": "main_seating_area",
+            "relation": "far_if_possible",
+            "distance_mm": 2968,
+            "penalty_mm": 188
+          }
+        ],
+        "circulation_debug": [
+          {
+            "kind": "center_lane",
+            "near": "room_center",
+            "blocker": "lounge_area",
+            "penalty_mm": 975
+          },
+          {
+            "kind": "center_lane",
+            "near": "room_center",
+            "blocker": "main_seating_area",
+            "penalty_mm": 975
+          },
+          {
+            "kind": "center_lane",
+            "near": "main_seating_area",
+            "blocker": "lounge_area",
+            "penalty_mm": 650
+          },
+          {
+            "kind": "center_lane",
+            "near": "main_seating_area",
+            "blocker": "main_seating_area",
+            "penalty_mm": 650
+          },
+          {
+            "kind": "main_path",
+            "path_from": "door_1",
+            "path_to": "main_seating_area",
+            "blocker": "lounge_area",
+            "penalty_mm": 296
+          }
+        ],
+        "orientation_debug": [
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": -0.884,
+            "penalty_mm": 2600,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_directional_relation",
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "dot": 0.302,
+            "penalty_mm": 2095,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": 0.276,
+            "penalty_mm": 1000,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "face_cluster",
+            "target_cluster_id": "media_zone",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "media_zone",
+            "intent": "face_cluster",
+            "target_cluster_id": "main_seating_area",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "back_to_wall",
+            "target_cluster_id": "media_zone",
+            "dot": 0.006,
+            "penalty_mm": 835,
+            "critical": false,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": false
+          }
+        ],
+        "critical_orientation_debug": [
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": -0.884,
+            "penalty_mm": 2600,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_directional_relation",
+            "a": "main_seating_area",
+            "b": "media_zone",
+            "relation": "face_each_other",
+            "dot": 0.302,
+            "penalty_mm": 2095,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "armchair",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.707,
+            "front_clear_mm": 1067,
+            "back_clear_mm": 1280,
+            "best_clear_mm": 3330,
+            "penalty_mm": 1697,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "storage_display",
+            "object_id": "storage_cabinet",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": 0.0,
+            "front_clear_mm": 645,
+            "back_clear_mm": 1355,
+            "best_clear_mm": 1995,
+            "penalty_mm": 1228,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "face_object",
+            "target_object_id": "tv_console",
+            "resolved_target_cluster_id": "media_zone",
+            "dot": 0.276,
+            "penalty_mm": 1000,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "main_seating_area",
+            "intent": "face_cluster",
+            "target_cluster_id": "media_zone",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "cluster_orientation",
+            "cluster_id": "media_zone",
+            "intent": "face_cluster",
+            "target_cluster_id": "main_seating_area",
+            "dot": 0.302,
+            "penalty_mm": 943,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "preserve_front_access",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": true
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "main_seating_area",
+            "object_id": "sofa",
+            "intent": "front_to_open_space",
+            "target_object_id": null,
+            "resolved_target_cluster_id": null,
+            "dot": -0.0,
+            "front_clear_mm": 1355,
+            "back_clear_mm": 1645,
+            "best_clear_mm": 2585,
+            "penalty_mm": 817,
+            "critical": true,
+            "focal": false
+          },
+          {
+            "kind": "object_orientation",
+            "cluster_id": "media_zone",
+            "object_id": "tv_console",
+            "intent": "face_object",
+            "target_object_id": "armchair",
+            "resolved_target_cluster_id": "main_seating_area",
+            "dot": 0.468,
+            "penalty_mm": 734,
+            "critical": true,
+            "focal": true
+          }
+        ],
+        "layout_score": -145109
+      },
+      "debug": {}
+    },
+    "best_transforms": [
+      {
+        "cluster_id": "lounge_area",
+        "x": 1100,
+        "y": 2000,
+        "rot": 0
+      },
+      {
+        "cluster_id": "main_seating_area",
+        "x": 4000,
+        "y": 150,
+        "rot": 0
+      },
+      {
+        "cluster_id": "media_zone",
+        "x": 200,
+        "y": 0,
+        "rot": 0
+      },
+      {
+        "cluster_id": "storage_display",
+        "x": 1700,
+        "y": 50,
+        "rot": 0
+      }
+    ],
+    "best_selected_variants": [
+      {
+        "cluster_id": "lounge_area",
+        "variant_id": "lounge_area::base"
+      },
+      {
+        "cluster_id": "main_seating_area",
+        "variant_id": "main_seating_area::base"
+      },
+      {
+        "cluster_id": "media_zone",
+        "variant_id": "media_zone::base"
+      },
+      {
+        "cluster_id": "storage_display",
+        "variant_id": "storage_display::base"
+      }
+    ],
+    "candidate_counts": {
+      "lounge_area": 24,
+      "main_seating_area": 32,
+      "storage_display": 24,
+      "media_zone": 32
+    },
+    "cluster_constraints_summary": {
+      "cluster_count": 5,
+      "access_object_count": 7
+    }
+  }
+}

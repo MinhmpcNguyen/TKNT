@@ -82,6 +82,7 @@ def _candidate(
     reason: str,
     score: int,
     layout: dict[str, object],
+    acceptable_valid: bool = True,
 ) -> object:
     return layout_variants._VariantCandidate(
         absolute_layout=layout,
@@ -90,6 +91,7 @@ def _candidate(
         reason=reason,
         layout_score=score,
         hard_valid=True,
+        acceptable_valid=acceptable_valid,
         notes=[],
         promoted_payload={},
         family=layout_variants._variant_family(source, reason),
@@ -97,6 +99,25 @@ def _candidate(
 
 
 class LayoutVariantsArchitectureTest(unittest.TestCase):
+    def test_extract_candidate_coverage_fields_blocks_gallery_when_unacceptable(
+        self,
+    ) -> None:
+        layout = _layout({"living": (0, 0), "media": (900, 0)})
+        layout["complete"] = True
+        layout["gallery_eligible"] = True
+        layout["coverage_ratio"] = 1.0
+        layout["missing_cluster_ids"] = []
+
+        fields = layout_variants._extract_candidate_coverage_fields(
+            absolute_layout=layout,
+            hard_valid=True,
+            acceptable_valid=False,
+        )
+
+        self.assertTrue(fields["complete"])
+        self.assertFalse(fields["acceptable_valid"])
+        self.assertFalse(fields["gallery_eligible"])
+
     def test_select_top_variant_candidates_prefers_complete_gallery_eligible_layouts(
         self,
     ) -> None:

@@ -215,6 +215,7 @@ class GeminiClientArchitectureTest(unittest.TestCase):
             temperature=0.2,
             max_tokens=256,
             thinking_level="medium",
+            response_mime_type=None,
         )
 
         self.assertEqual(
@@ -223,6 +224,38 @@ class GeminiClientArchitectureTest(unittest.TestCase):
             ),
             "medium",
         )
+
+    def test_build_chat_payload_includes_response_mime_type(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        payload = client._build_chat_payload(
+            [{"role": "user", "content": "Hello"}],
+            temperature=0.0,
+            max_tokens=128,
+            thinking_level=None,
+            response_mime_type="application/json",
+        )
+
+        self.assertEqual(
+            ((payload.get("generationConfig") or {}).get("responseMimeType")),
+            "application/json",
+        )
+
+    def test_openai_style_response_carries_finish_reason(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        response = GeminiClient._to_openai_style_response(
+            client,
+            {
+                "modelVersion": "gemini-3-flash-preview",
+                "candidates": [
+                    {
+                        "finishReason": "MAX_TOKENS",
+                        "content": {"parts": [{"text": '{"status":"OK"}'}]},
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.choices[0].finish_reason, "MAX_TOKENS")
 
     def test_chat_completion_skips_thinking_for_known_unsupported_model(self) -> None:
         client = GeminiClient.__new__(GeminiClient)

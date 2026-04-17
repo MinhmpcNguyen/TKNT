@@ -1,0 +1,31 @@
+{
+  "status": "REPAIRED",
+  "cluster_transforms": [
+    {
+      "cluster_id": "media_zone",
+      "x": 5050,
+      "y": 2600,
+      "rot": 270
+    },
+    {
+      "cluster_id": "seating_area",
+      "x": 1050,
+      "y": 200,
+      "rot": 0
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "media_zone",
+      "variant_id": "media_zone::base"
+    },
+    {
+      "cluster_id": "seating_area",
+      "variant_id": "seating_area::base"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Controller forced object nudge for media_zone.tv_console."
+  ]
+}

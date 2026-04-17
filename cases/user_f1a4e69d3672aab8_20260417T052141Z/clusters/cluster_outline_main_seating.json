@@ -1,0 +1,228 @@
+{
+  "status": "OK",
+  "cluster_id": "main_seating",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "armchair_1",
+      "x": 1050,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "armchair_2",
+      "x": 2050,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "coffee_table_1",
+      "x": 50,
+      "y": 200,
+      "rot": 0
+    },
+    {
+      "id": "floor_lamp_1",
+      "x": 3600,
+      "y": 400,
+      "rot": 0
+    },
+    {
+      "id": "side_table_1",
+      "x": 3050,
+      "y": 350,
+      "rot": 270
+    },
+    {
+      "id": "sofa_1",
+      "x": 50,
+      "y": 750,
+      "rot": 180
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "armchair_1",
+        "x": 1050,
+        "y": 0,
+        "w": 840,
+        "h": 710
+      },
+      {
+        "id": "armchair_2",
+        "x": 2050,
+        "y": 0,
+        "w": 840,
+        "h": 710
+      },
+      {
+        "id": "coffee_table_1",
+        "x": 50,
+        "y": 200,
+        "w": 900,
+        "h": 500
+      },
+      {
+        "id": "floor_lamp_1",
+        "x": 3600,
+        "y": 400,
+        "w": 350,
+        "h": 320
+      },
+      {
+        "id": "side_table_1",
+        "x": 3050,
+        "y": 350,
+        "w": 370,
+        "h": 390
+      },
+      {
+        "id": "sofa_1",
+        "x": 50,
+        "y": 750,
+        "w": 1790,
+        "h": 810
+      }
+    ],
+    "local_bbox": {
+      "min_x": 50,
+      "min_y": 0,
+      "max_x": 3950,
+      "max_y": 1560
+    },
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 50,
+          "y": 0
+        },
+        {
+          "x": 3950,
+          "y": 0
+        },
+        {
+          "x": 3950,
+          "y": 720
+        },
+        {
+          "x": 3420,
+          "y": 720
+        },
+        {
+          "x": 3420,
+          "y": 740
+        },
+        {
+          "x": 1840,
+          "y": 740
+        },
+        {
+          "x": 1840,
+          "y": 1560
+        },
+        {
+          "x": 50,
+          "y": 1560
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "envelope",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": false
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "cluster_effective_front_side": "top",
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "sofa_1": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": -1,
+          "dy": 0
+        }
+      },
+      "coffee_table_1": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "armchair_1": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "effective_front_side": "bottom",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "armchair_2": {
+        "front_local": {
+          "dx": 0,
+          "dy": -1
+        },
+        "effective_front_side": "bottom",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "side_table_1": {
+        "front_local": {
+          "dx": 1,
+          "dy": 0
+        },
+        "effective_front_side": "right",
+        "axis_local": {
+          "dx": 0,
+          "dy": -1
+        }
+      },
+      "floor_lamp_1": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "ClusterComposer used deterministic search instead of an LLM."
+  ],
+  "missing": []
+}

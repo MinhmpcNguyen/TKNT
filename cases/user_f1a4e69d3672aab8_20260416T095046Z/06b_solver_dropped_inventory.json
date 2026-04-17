@@ -1,0 +1,29 @@
+{
+  "status": "OK",
+  "total_dropped_items": 1,
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "items": [
+        {
+          "cluster_id": "seating_zone",
+          "object_type": "armchair",
+          "category": "armchair",
+          "size_tier": "S",
+          "priority": "secondary",
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          },
+          "rationale": "Deterministic policy marked armchair as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+          "drop_attempt": 1,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

@@ -67,9 +67,8 @@ In particular:
 1) If one cluster contains seating-like anchors and another cluster contains media / focal / display-like anchors, you MUST infer a viewing relationship.
 2) In that case, you MUST emit:
    - at least one cluster_directional_relations entry,
-   - cluster_orientations for the seating cluster and/or focal cluster,
-   - object_orientations for relevant seating anchors and focal/media anchors whenever those object ids exist.
-3) If an object has meaningful front usability (storage/appliance/front-access), you SHOULD emit object_orientations with preserve_front_access and/or front_to_open_space when useful.
+   - cluster_orientations for the seating cluster and/or focal cluster.
+3) Do not encode inter-cluster viewing with object_orientations. Internal object-facing is handled by forge/composer.
 
 Directional relations are expensive signals.
 Reserve cluster_directional_relations for true focal/viewing/access relationships.
@@ -339,16 +338,12 @@ You must infer directional intent at three levels:
 2) object-level orientation within a cluster,
 3) directional relations between clusters.
 
-These three levels are complementary, not interchangeable.
-
-If an orientation is functionally important, do NOT stop at only one level when the other levels are also inferable.
+These levels are complementary, but viewing intent should be expressed at cluster level first.
 
 Rule:
 - cluster-level orientation gives broad macro intent,
 - cluster_directional_relations gives relational directional intent between clusters,
-- object_orientations gives the most actionable facing intent for downstream placement and verification.
-
-If a focal/viewing/use-direction relationship exists and relevant object ids are present, object_orientations is REQUIRED.
+- object_orientations is reserved for local object usability, not inter-cluster viewing.
 
 A. CLUSTER-LEVEL ORIENTATION
 
@@ -395,7 +390,7 @@ Allowed object orientation intents:
 Rules:
 - Only emit object orientations that help resolve layout ambiguity.
 - Prioritize anchors, seating, work surfaces, storage with front access, appliances, and focal objects.
-- For seating in a media/focal setup, face_object is usually required if the target object id is available.
+- Do not use object_orientations to force non-anchor objects to face across clusters.
 - For seating in a social/conversation setup without a single focal object, front_to_cluster_center may be appropriate.
 - For storage/appliances, preserve_front_access is often more important than aesthetic facing.
 - For wall-line objects, long_axis_parallel_wall is usually preferred unless function suggests otherwise.
@@ -403,12 +398,11 @@ Rules:
 - Do not emit object orientation hints for trivial objects unless they affect usability.
 
 Mandatory viewing rule:
-- If a cluster contains seating anchors and another related cluster contains a focal/media anchor, and both object ids are available, emit object_orientations for the seating anchor(s) and focal/media anchor.
-- In such cases, object_orientations must not be empty.
+- If a cluster contains seating anchors and another related cluster contains a focal/media anchor, express the viewing setup with cluster_orientations and cluster_directional_relations.
 - The planner should prefer:
-  - seating anchor -> face_object focal/media anchor
-  - focal/media anchor -> front_to_open_space and/or face_object primary seating anchor
-- Do not leave a viewing pair specified only at vague cluster level when object ids are available.
+  - seating cluster -> face_cluster focal/media cluster
+  - focal/media cluster -> face_cluster seating cluster and/or back_to_wall / access_to_open_space
+- Do not force support seating to face across clusters at planner level.
 
 Mandatory access rule:
 - If an object requires front usability / front clearance / user approach, emit preserve_front_access when that materially helps downstream placement.
@@ -493,8 +487,7 @@ Prefer high-signal planning constraints over many weak ones.
 
 Discipline rules:
 - Do not emit object_orientations for every object by default.
-- However, do emit object_orientations for important anchors whenever a viewing, facing, access, or focal relationship would otherwise remain ambiguous.
-- In seating + media/focal setups, object_orientations for the seating anchor(s) and focal/media anchor are expected and should not be omitted when object ids are available.
+- Keep inter-cluster intent at cluster level; leave intra-cluster object facing to forge/composer.
 - Do not emit cluster_relations for every pair.
 - Do not emit cluster_orientations for every cluster by default.
 - Do not emit cluster_directional_relations for every pair.
@@ -513,10 +506,10 @@ SELF-CHECK BEFORE OUTPUT
 
 Before producing the JSON, verify internally:
 - Did I emit at least one directional relation for any clear viewing/focal pair?
-- If seating anchors and focal/media anchors are present by object id, did I emit object_orientations for them?
+- If seating anchors and focal/media anchors are present, did I express the viewing setup clearly at cluster level?
 - Did I avoid leaving a viewing relationship underspecified?
 - Did I emit preserve_front_access for obvious front-access objects when that matters?
-- Did I avoid using only vague cluster-level facing when object-level intent is inferable?
+- Did I avoid pushing inter-cluster viewing down onto non-anchor objects?
 
 {
   "status": "OK|NEED_INFO|UNSAT",
@@ -611,6 +604,5 @@ L. OUTPUT RULES
 - placement_guidelines should be concise execution rules for a downstream placer
 - notes should contain only important planning caveats or uncertainty summaries
 - missing should list only genuinely missing information that weakens confidence
-- If a viewing/focal relationship is inferable and the relevant object ids are present, object_orientations must not be empty for that pair.
-- If cluster_directional_relations contains face_each_other for two clusters and relevant seating/media anchor object ids are present, the planner should also emit supporting object_orientations unless genuinely impossible.
+- If a viewing/focal relationship is inferable, cluster_orientations and/or cluster_directional_relations should make it explicit.
 """

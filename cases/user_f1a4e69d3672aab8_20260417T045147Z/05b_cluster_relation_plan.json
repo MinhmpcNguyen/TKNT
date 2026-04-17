@@ -1,0 +1,155 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "cluster_affinities": [
+    {
+      "cluster_id": "main_seating",
+      "prefer": [
+        "wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking",
+        "door_swing"
+      ],
+      "priority": "high",
+      "reason": "Primary seating area should be central and accessible."
+    },
+    {
+      "cluster_id": "media",
+      "prefer": [
+        "wall",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "window_blocking",
+        "entry_blocking",
+        "center"
+      ],
+      "priority": "high",
+      "reason": "Media console benefits from wall mounting and should not obstruct entry or windows."
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "prefer": [
+        "wall",
+        "recess_or_edge"
+      ],
+      "avoid": [
+        "center",
+        "entry_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Support cluster benefits from wall placement or fitting into recesses."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "main_seating",
+      "intents": [
+        "face_cluster",
+        "inward_to_room"
+      ],
+      "target_cluster_id": "media",
+      "priority": "high",
+      "reason": "Seating should face the media console for viewing."
+    },
+    {
+      "cluster_id": "media",
+      "intents": [
+        "back_to_wall",
+        "access_to_open_space",
+        "face_cluster"
+      ],
+      "target_cluster_id": "main_seating",
+      "priority": "high",
+      "reason": "Media console benefits from being against a wall."
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "intents": [
+        "access_to_open_space",
+        "back_to_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "access-sensitive cluster should expose usable front toward open space"
+    }
+  ],
+  "object_orientations": [],
+  "cluster_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Seating and media should be in close proximity for viewing."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "face_each_other",
+      "priority": "high",
+      "reason": "Seating should face the media console."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "main_seating",
+        "priority": "high",
+        "reason": "Main path from entry to seating area."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1",
+        "priority": "high",
+        "reason": "Keep space near the entry clear."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "main_seating",
+    "secondary_cluster_id": "media",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "balanced",
+    "distribution_mode": "balanced"
+  },
+  "placement_guidelines": [
+    "Prioritize clear sightlines between seating and media.",
+    "Avoid blocking the window with tall furniture.",
+    "Preserve a clear viewing relationship between armchair_1 and tv_console_1.",
+    "Do not orient armchair_1 away from tv_console_1.",
+    "Keep media readable from main_seating.",
+    "Preserve front usability for tv_console_1.",
+    "Preserve front usability for console_table_1.",
+    "Do not let media chase the window side if it weakens the viewing axis with main_seating.",
+    "Treat media as the dominant macro anchor and solve it against the room shell before weaker support clusters.",
+    "Preserve a materially distinct macro geometry from the other post-seed variants.",
+    "Stay close to the current seed-side occupancy and avoid unnecessary macro relocation."
+  ],
+  "notes": [
+    "The layout aims for a comfortable viewing experience with a clear path from the entry.",
+    "The media console is placed against a wall to maximize space.",
+    "Seed variant policy seed_stable: distribution=balanced, center_open=medium, support_behavior=balanced.",
+    "Seed constraint fingerprint seed_stable: seed_region_preservation, primary_center_anchor, balanced_support."
+  ],
+  "missing": [],
+  "seed_variant_policy": {
+    "source": "seed_stable",
+    "constraint_tokens": [
+      "seed_region_preservation",
+      "primary_center_anchor",
+      "balanced_support"
+    ],
+    "structural_fingerprint": "focus=mixed,center=medium,support=balanced,distribution=balanced || entry_buffer:door_1 || main_seating|p=far_from_entry,wall|a=door_swing,entry_blocking,window_blocking,media|p=far_from_entry,wall|a=center,entry_blocking,window_blocking,storage_display_support|p=recess_or_edge,wall|a=center,entry_blocking || main_seating|media|near || main_seating|media|face_each_other || main_seating|face_cluster,inward_to_room|media,media|access_to_open_space,back_to_wall,face_cluster|main_seating,storage_display_support|access_to_open_space,back_to_wall|"
+  }
+}

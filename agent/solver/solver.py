@@ -33,7 +33,7 @@ import importlib.util
 import json
 import logging
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -48,6 +48,20 @@ except Exception as exc:  # pragma: no cover - import guard only
     ) from exc
 
 logger = logging.getLogger(__name__)
+
+_CLUSTER_WALL_PREFER_TAGS = frozenset(
+    {"wall", "long_wall", "short_wall", "recess_or_edge"}
+)
+_CLUSTER_CENTER_PREFER_TAGS = frozenset({"center", "near_center"})
+_CLUSTER_CENTER_AVOID_TAGS = frozenset({"center"})
+_CLUSTER_WINDOW_AVOID_TAGS = frozenset({"window_blocking", "window_clearance"})
+_CLUSTER_ENTRY_AVOID_TAGS = frozenset({"entry_blocking", "door_swing", "main_path"})
+_CLUSTER_WINDOW_PREFER_TAGS = frozenset({"window_side"})
+_CLUSTER_ENTRY_PREFER_TAGS = frozenset({"entry_side", "near_entry"})
+_WALL_ANCHOR_TOKENS = ("wall", "top", "bottom", "left", "right", "edge", "recess")
+_CENTER_ANCHOR_TOKENS = ("center", "quadrant")
+_WINDOW_ANCHOR_TOKENS = ("window",)
+_ENTRY_ANCHOR_TOKENS = ("entry", "door")
 
 
 @dataclass(frozen=True)
@@ -65,6 +79,8 @@ class Candidate:
     hard_valid: bool
     acceptable_valid: bool
     rough_score: int
+    macro_penalty_mm: int
+    micro_penalty_mm: int
     orientation_penalty_mm: int
     critical_orientation_penalty_mm: int
     focal_orientation_penalty_mm: int
@@ -151,6 +167,8 @@ def _candidate_from_dict(item: dict[str, Any]) -> Candidate:
         hard_valid=bool(item.get("hard_valid", False)),
         acceptable_valid=bool(item.get("acceptable_valid", False)),
         rough_score=int(item.get("rough_score") or 0),
+        macro_penalty_mm=int(item.get("macro_penalty_mm") or 0),
+        micro_penalty_mm=int(item.get("micro_penalty_mm") or 0),
         orientation_penalty_mm=int(item.get("orientation_penalty_mm") or 0),
         critical_orientation_penalty_mm=int(
             item.get("critical_orientation_penalty_mm") or 0
@@ -193,12 +211,808 @@ def _candidate_score(c: Candidate) -> int:
     score = int(c.rough_score)
     score += int(round(2200.0 * c.anchor_priority))
     score += int(round(1600.0 * c.variant_priority))
+    if c.hard_valid:
+        score += 3200
     if c.acceptable_valid:
-        score += 4000
-    score -= 3 * c.critical_orientation_penalty_mm
-    score -= 2 * c.focal_orientation_penalty_mm
+        score += 5200
+    score -= 16 * c.macro_penalty_mm
+    score -= 3 * c.micro_penalty_mm
+    score -= 8 * c.critical_orientation_penalty_mm
+    score -= 6 * c.focal_orientation_penalty_mm
     score -= 1 * c.orientation_penalty_mm
     return score
+
+
+def _candidate_effective_score(
+    c: Candidate,
+    candidate_bonus_by_key: Mapping[tuple[str, str, int, int, int], int] | None = None,
+) -> int:
+    bonus = 0
+    if candidate_bonus_by_key is not None:
+        bonus = int(candidate_bonus_by_key.get(c.key, 0))
+    return _candidate_score(c) + bonus
+
+
+def _verify_quality_metrics(verify: Mapping[str, Any] | None) -> dict[str, int]:
+    if not isinstance(verify, Mapping):
+        return {
+            "layout_score": 0,
+            "macro_penalty_mm": 0,
+            "micro_penalty_mm": 0,
+            "critical_orientation_penalty_mm": 0,
+            "focal_pair_penalty_mm": 0,
+        }
+    quality = verify.get("quality")
+    summary = verify.get("summary")
+    quality_dict = quality if isinstance(quality, Mapping) else {}
+    summary_dict = summary if isinstance(summary, Mapping) else {}
+    return {
+        "layout_score": int(quality_dict.get("layout_score") or 0),
+        "macro_penalty_mm": int(
+            quality_dict.get("macro_penalty_mm")
+            or summary_dict.get("macro_penalty_mm")
+            or 0
+        ),
+        "micro_penalty_mm": int(
+            quality_dict.get("micro_penalty_mm")
+            or summary_dict.get("micro_penalty_mm")
+            or 0
+        ),
+        "critical_orientation_penalty_mm": int(
+            quality_dict.get("critical_orientation_penalty_mm")
+            or summary_dict.get("critical_orientation_penalty_mm")
+            or 0
+        ),
+        "focal_pair_penalty_mm": int(
+            quality_dict.get("focal_pair_penalty_mm")
+            or summary_dict.get("focal_pair_penalty_mm")
+            or 0
+        ),
+    }
+
+
+def _verify_search_score(verify: Mapping[str, Any] | None) -> int:
+    metrics = _verify_quality_metrics(verify)
+    score = int(metrics["layout_score"])
+    if isinstance(verify, Mapping) and bool(verify.get("hard_valid")):
+        score += 3200
+    if isinstance(verify, Mapping) and bool(verify.get("acceptable_valid")):
+        score += 5200
+    score -= 16 * metrics["macro_penalty_mm"]
+    score -= 3 * metrics["micro_penalty_mm"]
+    score -= 8 * metrics["critical_orientation_penalty_mm"]
+    score -= 6 * metrics["focal_pair_penalty_mm"]
+    return score
+
+
+def _verify_rank_key(verify: Mapping[str, Any] | None) -> tuple[int, ...]:
+    metrics = _verify_quality_metrics(verify)
+    hard_valid = (
+        1 if isinstance(verify, Mapping) and bool(verify.get("hard_valid")) else 0
+    )
+    acceptable_valid = (
+        1 if isinstance(verify, Mapping) and bool(verify.get("acceptable_valid")) else 0
+    )
+    complete = 1 if isinstance(verify, Mapping) and bool(verify.get("complete")) else 0
+    return (
+        acceptable_valid,
+        hard_valid,
+        complete,
+        -metrics["critical_orientation_penalty_mm"],
+        -metrics["focal_pair_penalty_mm"],
+        -metrics["macro_penalty_mm"],
+        -metrics["micro_penalty_mm"],
+        metrics["layout_score"],
+    )
+
+
+def _verify_macro_ready(verify: Mapping[str, Any] | None) -> bool:
+    if not isinstance(verify, Mapping):
+        return False
+    if not bool(verify.get("hard_valid")) or not bool(verify.get("complete")):
+        return False
+    quality_gate = verify.get("quality_gate")
+    reasons = []
+    if isinstance(quality_gate, Mapping):
+        reasons = [str(item or "") for item in (quality_gate.get("reasons") or [])]
+    blocking = {
+        "hard_constraints_failed",
+        "layout_incomplete",
+        "critical_orientation_penalty_too_high",
+        "focal_pair_penalty_too_high",
+    }
+    return not any(reason in blocking for reason in reasons)
+
+
+def _normalized_text_set(values: Any) -> set[str]:
+    out: set[str] = set()
+    if not isinstance(values, list):
+        return out
+    for item in values:
+        text = str(item or "").strip().lower()
+        if text:
+            out.add(text)
+    return out
+
+
+def _relation_priority_weight(value: Any) -> float:
+    text = str(value or "").strip().lower()
+    if text == "critical":
+        return 1.4
+    if text == "high":
+        return 1.0
+    if text == "medium":
+        return 0.7
+    if text == "low":
+        return 0.4
+    return 0.8
+
+
+def _cluster_relation_weight(relation: str) -> float:
+    lowered = relation.strip().lower()
+    if lowered == "near":
+        return 4.0
+    if lowered in {"adjacent", "next_to"}:
+        return 3.4
+    if lowered in {"aligned", "parallel"}:
+        return 3.0
+    return 2.6
+
+
+def _cluster_directional_weight(relation: str) -> float:
+    lowered = relation.strip().lower()
+    if lowered == "face_each_other":
+        return 8.0
+    if lowered in {"face_same_direction", "axis_parallel"}:
+        return 5.5
+    if lowered in {"perpendicular", "orthogonal"}:
+        return 2.4
+    return 4.0
+
+
+def _extract_layout_primary_cluster_id(
+    relation_plan: dict[str, Any] | None,
+) -> str | None:
+    if not isinstance(relation_plan, dict):
+        return None
+    layout_intent = relation_plan.get("layout_intent_profile")
+    if not isinstance(layout_intent, dict):
+        return None
+    cluster_id = str(layout_intent.get("primary_cluster_id") or "").strip()
+    return cluster_id or None
+
+
+def _extract_layout_secondary_cluster_id(
+    relation_plan: dict[str, Any] | None,
+) -> str | None:
+    if not isinstance(relation_plan, dict):
+        return None
+    layout_intent = relation_plan.get("layout_intent_profile")
+    if not isinstance(layout_intent, dict):
+        return None
+    cluster_id = str(layout_intent.get("secondary_cluster_id") or "").strip()
+    return cluster_id or None
+
+
+def _normalized_cluster_pair(a: str, b: str) -> tuple[str, str] | None:
+    left = str(a or "").strip()
+    right = str(b or "").strip()
+    if not left or not right or left == right:
+        return None
+    return tuple(sorted((left, right)))
+
+
+def _viewing_contract_pairs(
+    relation_plan: dict[str, Any] | None,
+) -> set[tuple[str, str]]:
+    if not isinstance(relation_plan, dict):
+        return set()
+
+    pairs: set[tuple[str, str]] = set()
+    primary_cluster_id = _extract_layout_primary_cluster_id(relation_plan)
+    secondary_cluster_id = _extract_layout_secondary_cluster_id(relation_plan)
+    layout_intent = relation_plan.get("layout_intent_profile") or {}
+    focus_mode = str(layout_intent.get("focus_mode") or "").strip().lower()
+    if focus_mode == "viewing":
+        pair = _normalized_cluster_pair(
+            primary_cluster_id or "",
+            secondary_cluster_id or "",
+        )
+        if pair is not None:
+            pairs.add(pair)
+
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        relation = str(row.get("relation") or "").strip().lower()
+        if relation != "face_each_other":
+            continue
+        pair = _normalized_cluster_pair(
+            str(row.get("a") or ""),
+            str(row.get("b") or ""),
+        )
+        if pair is not None:
+            pairs.add(pair)
+
+    return pairs
+
+
+def _viewing_contract_cluster_ids(
+    relation_plan: dict[str, Any] | None,
+) -> set[str]:
+    cluster_ids: set[str] = set()
+    for left, right in _viewing_contract_pairs(relation_plan):
+        cluster_ids.add(left)
+        cluster_ids.add(right)
+    return cluster_ids
+
+
+def _cluster_face_target_id(
+    relation_plan: dict[str, Any] | None,
+    cluster_id: str,
+) -> str | None:
+    if not isinstance(relation_plan, dict):
+        return None
+    target: str | None = None
+    for row in relation_plan.get("cluster_orientations") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("cluster_id") or "").strip() != cluster_id:
+            continue
+        intents = _normalized_text_set(row.get("intents"))
+        if "face_cluster" not in intents:
+            continue
+        target = str(row.get("target_cluster_id") or "").strip() or None
+        if target is not None:
+            return target
+    return None
+
+
+def _build_cluster_macro_profiles(
+    relation_plan: dict[str, Any] | None,
+    *,
+    cluster_ids: Sequence[str],
+) -> tuple[dict[str, dict[str, set[str]]], dict[str, dict[str, float]]]:
+    clean_cluster_ids = [str(cluster_id or "").strip() for cluster_id in cluster_ids]
+    clean_cluster_ids = [cluster_id for cluster_id in clean_cluster_ids if cluster_id]
+    profiles = {
+        cluster_id: {"prefer": set(), "avoid": set(), "intents": set()}
+        for cluster_id in clean_cluster_ids
+    }
+    adjacency: dict[str, dict[str, float]] = {
+        cluster_id: {} for cluster_id in clean_cluster_ids
+    }
+    if not isinstance(relation_plan, dict):
+        return profiles, adjacency
+
+    def ensure(cluster_id: str) -> dict[str, set[str]] | None:
+        if cluster_id not in profiles:
+            return None
+        return profiles[cluster_id]
+
+    def add_edge(a: str, b: str, weight: float) -> None:
+        if a == b or a not in adjacency or b not in adjacency or weight <= 0.0:
+            return
+        adjacency[a][b] = adjacency[a].get(b, 0.0) + float(weight)
+        adjacency[b][a] = adjacency[b].get(a, 0.0) + float(weight)
+
+    for row in relation_plan.get("cluster_affinities") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        slot = ensure(cluster_id)
+        if slot is None:
+            continue
+        slot["prefer"].update(_normalized_text_set(row.get("prefer")))
+        slot["avoid"].update(_normalized_text_set(row.get("avoid")))
+
+    for row in relation_plan.get("cluster_orientations") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        slot = ensure(cluster_id)
+        if slot is None:
+            continue
+        intents = _normalized_text_set(row.get("intents"))
+        slot["intents"].update(intents)
+        target_cluster_id = str(row.get("target_cluster_id") or "").strip()
+        if target_cluster_id and "face_cluster" in intents:
+            add_edge(
+                cluster_id,
+                target_cluster_id,
+                5.5 * _relation_priority_weight(row.get("priority")),
+            )
+
+    for row in relation_plan.get("cluster_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        a = str(row.get("a") or "").strip()
+        b = str(row.get("b") or "").strip()
+        if not a or not b:
+            continue
+        add_edge(
+            a,
+            b,
+            _cluster_relation_weight(str(row.get("relation") or ""))
+            * _relation_priority_weight(row.get("priority")),
+        )
+
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, dict):
+            continue
+        a = str(row.get("a") or "").strip()
+        b = str(row.get("b") or "").strip()
+        if not a or not b:
+            continue
+        add_edge(
+            a,
+            b,
+            _cluster_directional_weight(str(row.get("relation") or ""))
+            * _relation_priority_weight(row.get("priority")),
+        )
+    return profiles, adjacency
+
+
+def _cluster_prefers_wall(profile: Mapping[str, set[str]]) -> bool:
+    prefer = set(profile.get("prefer") or set())
+    intents = set(profile.get("intents") or set())
+    return bool((prefer & _CLUSTER_WALL_PREFER_TAGS) or {"back_to_wall"} & intents)
+
+
+def _cluster_prefers_center(profile: Mapping[str, set[str]]) -> bool:
+    prefer = set(profile.get("prefer") or set())
+    return bool(prefer & _CLUSTER_CENTER_PREFER_TAGS)
+
+
+def _cluster_avoids_center(profile: Mapping[str, set[str]]) -> bool:
+    avoid = set(profile.get("avoid") or set())
+    return bool(avoid & _CLUSTER_CENTER_AVOID_TAGS)
+
+
+def _cluster_avoids_window(profile: Mapping[str, set[str]]) -> bool:
+    avoid = set(profile.get("avoid") or set())
+    return bool(avoid & _CLUSTER_WINDOW_AVOID_TAGS)
+
+
+def _cluster_avoids_entry(profile: Mapping[str, set[str]]) -> bool:
+    avoid = set(profile.get("avoid") or set())
+    prefer = set(profile.get("prefer") or set())
+    return bool(avoid & _CLUSTER_ENTRY_AVOID_TAGS) or ("far_from_entry" in prefer)
+
+
+def _cluster_prefers_window(profile: Mapping[str, set[str]]) -> bool:
+    prefer = set(profile.get("prefer") or set())
+    intents = set(profile.get("intents") or set())
+    return bool(prefer & _CLUSTER_WINDOW_PREFER_TAGS) or ("face_window" in intents)
+
+
+def _cluster_prefers_entry(profile: Mapping[str, set[str]]) -> bool:
+    prefer = set(profile.get("prefer") or set())
+    intents = set(profile.get("intents") or set())
+    return bool(prefer & _CLUSTER_ENTRY_PREFER_TAGS) or ("face_entry" in intents)
+
+
+def _anchor_kind_contains(anchor_kind: str, tokens: Sequence[str]) -> bool:
+    lowered = anchor_kind.strip().lower()
+    return any(token in lowered for token in tokens)
+
+
+def _anchor_kind_is_wall_pinned(anchor_kind: str) -> bool:
+    return _anchor_kind_contains(anchor_kind, _WALL_ANCHOR_TOKENS)
+
+
+def _anchor_kind_is_center(anchor_kind: str) -> bool:
+    return _anchor_kind_contains(anchor_kind, _CENTER_ANCHOR_TOKENS)
+
+
+def _anchor_kind_is_window(anchor_kind: str) -> bool:
+    return _anchor_kind_contains(anchor_kind, _WINDOW_ANCHOR_TOKENS)
+
+
+def _anchor_kind_is_entry(anchor_kind: str) -> bool:
+    return _anchor_kind_contains(anchor_kind, _ENTRY_ANCHOR_TOKENS)
+
+
+def _cluster_root_score(
+    *,
+    cluster_id: str,
+    profile: Mapping[str, set[str]],
+    adjacency: Mapping[str, Mapping[str, float]],
+    candidate_count: int,
+    original_index: int,
+    primary_cluster_id: str | None,
+    secondary_cluster_id: str | None,
+) -> float:
+    prefer = set(profile.get("prefer") or set())
+    avoid = set(profile.get("avoid") or set())
+    intents = set(profile.get("intents") or set())
+    score = 0.0
+    if cluster_id == primary_cluster_id:
+        score += 120.0
+    if cluster_id == secondary_cluster_id:
+        score += 26.0
+    if "back_to_wall" in intents:
+        score += 22.0
+    if "wall" in prefer:
+        score += 16.0
+    if "long_wall" in prefer:
+        score += 12.0
+    if "short_wall" in prefer:
+        score += 6.0
+    if "recess_or_edge" in prefer:
+        score += 6.0
+    if "access_to_open_space" in intents:
+        score += 5.0
+    if "inward_to_room" in intents:
+        score += 4.0
+    if "far_from_entry" in prefer:
+        score += 4.0
+    score += min(18.0, 3.0 * float(len(avoid)))
+    score += min(34.0, float(sum(adjacency.get(cluster_id, {}).values())))
+    score += min(14.0, 32.0 / max(2.0, float(candidate_count)))
+    score += max(0.0, 3.0 - (0.18 * float(original_index)))
+    return score
+
+
+def _select_root_cluster_id(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    *,
+    relation_plan: dict[str, Any] | None,
+    cluster_order: Sequence[str] | None = None,
+) -> str | None:
+    ordered_ids = _ordered_cluster_ids(
+        candidates_by_cluster, cluster_order=cluster_order
+    )
+    if not ordered_ids:
+        return None
+    primary_cluster_id = _extract_layout_primary_cluster_id(relation_plan)
+    if primary_cluster_id in candidates_by_cluster:
+        return primary_cluster_id
+
+    secondary_cluster_id = _extract_layout_secondary_cluster_id(relation_plan)
+    profiles, adjacency = _build_cluster_macro_profiles(
+        relation_plan,
+        cluster_ids=ordered_ids,
+    )
+    original_index = {cluster_id: idx for idx, cluster_id in enumerate(ordered_ids)}
+    return max(
+        ordered_ids,
+        key=lambda cluster_id: (
+            _cluster_root_score(
+                cluster_id=cluster_id,
+                profile=profiles.get(cluster_id, {}),
+                adjacency=adjacency,
+                candidate_count=len(candidates_by_cluster.get(cluster_id, ())),
+                original_index=original_index.get(cluster_id, 0),
+                primary_cluster_id=primary_cluster_id,
+                secondary_cluster_id=secondary_cluster_id,
+            ),
+            -original_index.get(cluster_id, 0),
+        ),
+    )
+
+
+def _root_cluster_first_order(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    *,
+    relation_plan: dict[str, Any] | None,
+    cluster_order: Sequence[str] | None = None,
+) -> list[str]:
+    ordered_ids = _ordered_cluster_ids(
+        candidates_by_cluster, cluster_order=cluster_order
+    )
+    if not ordered_ids:
+        return []
+    root_cluster_id = _select_root_cluster_id(
+        candidates_by_cluster,
+        relation_plan=relation_plan,
+        cluster_order=cluster_order,
+    )
+    if root_cluster_id is None:
+        return ordered_ids
+
+    profiles, adjacency = _build_cluster_macro_profiles(
+        relation_plan,
+        cluster_ids=ordered_ids,
+    )
+    primary_cluster_id = _extract_layout_primary_cluster_id(relation_plan)
+    secondary_cluster_id = _extract_layout_secondary_cluster_id(relation_plan)
+    original_index = {cluster_id: idx for idx, cluster_id in enumerate(ordered_ids)}
+    root_scores = {
+        cluster_id: _cluster_root_score(
+            cluster_id=cluster_id,
+            profile=profiles.get(cluster_id, {}),
+            adjacency=adjacency,
+            candidate_count=len(candidates_by_cluster.get(cluster_id, ())),
+            original_index=original_index.get(cluster_id, 0),
+            primary_cluster_id=primary_cluster_id,
+            secondary_cluster_id=secondary_cluster_id,
+        )
+        for cluster_id in ordered_ids
+    }
+
+    placed = [root_cluster_id]
+    placed_set = {root_cluster_id}
+    remaining = {
+        cluster_id for cluster_id in ordered_ids if cluster_id != root_cluster_id
+    }
+    while remaining:
+        connected: list[tuple[float, float, int, str]] = []
+        for cluster_id in remaining:
+            edge_strength = max(
+                (
+                    float(adjacency.get(cluster_id, {}).get(parent_id, 0.0))
+                    for parent_id in placed_set
+                ),
+                default=0.0,
+            )
+            if edge_strength <= 0.0:
+                continue
+            connected.append(
+                (
+                    edge_strength,
+                    root_scores.get(cluster_id, 0.0),
+                    -original_index.get(cluster_id, 0),
+                    cluster_id,
+                )
+            )
+        if connected:
+            next_cluster_id = max(connected)[3]
+        else:
+            next_cluster_id = max(
+                remaining,
+                key=lambda cluster_id: (
+                    root_scores.get(cluster_id, 0.0),
+                    -original_index.get(cluster_id, 0),
+                ),
+            )
+        placed.append(next_cluster_id)
+        placed_set.add(next_cluster_id)
+        remaining.remove(next_cluster_id)
+    return placed
+
+
+def _candidate_macro_bonus(
+    candidate: Candidate,
+    *,
+    profile: Mapping[str, set[str]],
+    is_root_cluster: bool,
+) -> int:
+    scale = 2 if is_root_cluster else 1
+    bonus = 0
+    anchor_kind = str(candidate.anchor_kind or "")
+    if _cluster_prefers_wall(profile):
+        wall_weight = 1600 * scale
+        if _anchor_kind_is_wall_pinned(anchor_kind):
+            bonus += wall_weight
+            if "long_wall" in set(profile.get("prefer") or set()):
+                bonus += 400 * scale
+        else:
+            bonus -= wall_weight // 2
+    if _cluster_avoids_center(profile) and _anchor_kind_is_center(anchor_kind):
+        bonus -= 800 * scale
+    if _cluster_prefers_center(profile) and _anchor_kind_is_center(anchor_kind):
+        bonus += 500 * scale
+    if _cluster_avoids_window(profile) and _anchor_kind_is_window(anchor_kind):
+        bonus -= 700 * scale
+    if _cluster_prefers_window(profile) and _anchor_kind_is_window(anchor_kind):
+        bonus += 500 * scale
+    if _cluster_avoids_entry(profile) and _anchor_kind_is_entry(anchor_kind):
+        bonus -= 750 * scale
+    if _cluster_prefers_entry(profile) and _anchor_kind_is_entry(anchor_kind):
+        bonus += 450 * scale
+    return bonus
+
+
+def _has_orientation_sensitive_wall_contract(profile: Mapping[str, set[str]]) -> bool:
+    intents = set(profile.get("intents") or set())
+    return bool(
+        intents
+        & {"back_to_wall", "face_cluster", "access_to_open_space", "inward_to_room"}
+    )
+
+
+def _has_hard_root_wall_contract(
+    *,
+    relation_plan: dict[str, Any] | None,
+    root_cluster_id: str | None,
+    profile: Mapping[str, set[str]],
+) -> bool:
+    if not root_cluster_id or not _cluster_prefers_wall(profile):
+        return False
+    intents = set(profile.get("intents") or set())
+    target_cluster_id = _cluster_face_target_id(relation_plan, root_cluster_id)
+    if "back_to_wall" not in intents or not target_cluster_id:
+        return False
+    if "face_cluster" not in intents:
+        return False
+    protected_cluster_ids = _viewing_contract_cluster_ids(relation_plan)
+    return (
+        root_cluster_id in protected_cluster_ids
+        or target_cluster_id in protected_cluster_ids
+        or target_cluster_id == _extract_layout_secondary_cluster_id(relation_plan)
+    )
+
+
+def _orientation_focus_candidates(
+    candidates: Sequence[Candidate],
+) -> list[Candidate]:
+    if not candidates:
+        return []
+    best_critical = min(
+        int(candidate.critical_orientation_penalty_mm) for candidate in candidates
+    )
+    best_focal = min(
+        int(candidate.focal_orientation_penalty_mm) for candidate in candidates
+    )
+    best_orientation = min(
+        int(candidate.orientation_penalty_mm) for candidate in candidates
+    )
+    focused = [
+        candidate
+        for candidate in candidates
+        if candidate.acceptable_valid
+        or (
+            int(candidate.critical_orientation_penalty_mm) <= best_critical + 120
+            and int(candidate.focal_orientation_penalty_mm) <= best_focal + 160
+            and int(candidate.orientation_penalty_mm) <= best_orientation + 240
+        )
+    ]
+    return focused or list(candidates)
+
+
+def _hard_contract_focus_candidates(
+    candidates: Sequence[Candidate],
+) -> list[Candidate]:
+    if not candidates:
+        return []
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            0 if candidate.acceptable_valid else 1,
+            int(candidate.critical_orientation_penalty_mm),
+            int(candidate.focal_orientation_penalty_mm),
+            int(candidate.orientation_penalty_mm),
+            -int(candidate.rough_score),
+            candidate.variant_id,
+            candidate.rot,
+            candidate.x,
+            candidate.y,
+        ),
+    )
+    best_critical = int(ranked[0].critical_orientation_penalty_mm)
+    best_focal = int(ranked[0].focal_orientation_penalty_mm)
+    best_orientation = int(ranked[0].orientation_penalty_mm)
+    acceptable = [
+        candidate
+        for candidate in ranked
+        if candidate.acceptable_valid
+        and int(candidate.critical_orientation_penalty_mm) <= best_critical + 40
+        and int(candidate.focal_orientation_penalty_mm) <= best_focal + 80
+        and int(candidate.orientation_penalty_mm) <= best_orientation + 120
+    ]
+    if acceptable:
+        return acceptable[:12]
+    focused = [
+        candidate
+        for candidate in ranked
+        if int(candidate.critical_orientation_penalty_mm) <= best_critical + 20
+        and int(candidate.focal_orientation_penalty_mm) <= best_focal + 40
+        and int(candidate.orientation_penalty_mm) <= best_orientation + 60
+    ]
+    return (focused or ranked)[:8]
+
+
+def _wall_pin_focus_next_action(
+    *,
+    round_strategy: Mapping[str, Any] | None,
+) -> str:
+    if not isinstance(round_strategy, Mapping):
+        return "none"
+    if not bool(round_strategy.get("used_wall_pin_focus")):
+        return "none"
+    return "refine_with_focus"
+
+
+def _prepare_round_candidates(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    *,
+    relation_plan: dict[str, Any] | None,
+    cluster_order: Sequence[str] | None = None,
+    wall_pin_focus: bool,
+) -> tuple[
+    dict[str, list[Candidate]],
+    list[str],
+    dict[tuple[str, str, int, int, int], int],
+    dict[str, Any],
+]:
+    ordered_cluster_ids = _root_cluster_first_order(
+        candidates_by_cluster,
+        relation_plan=relation_plan,
+        cluster_order=cluster_order,
+    )
+    root_cluster_id = _select_root_cluster_id(
+        candidates_by_cluster,
+        relation_plan=relation_plan,
+        cluster_order=ordered_cluster_ids,
+    )
+    profiles, _adjacency = _build_cluster_macro_profiles(
+        relation_plan,
+        cluster_ids=ordered_cluster_ids,
+    )
+    candidate_bonus_by_key: dict[tuple[str, str, int, int, int], int] = {}
+    for cluster_id in ordered_cluster_ids:
+        profile = profiles.get(cluster_id, {})
+        is_root_cluster = cluster_id == root_cluster_id
+        for candidate in candidates_by_cluster.get(cluster_id, ()):
+            candidate_bonus_by_key[candidate.key] = _candidate_macro_bonus(
+                candidate,
+                profile=profile,
+                is_root_cluster=is_root_cluster,
+            )
+
+    prioritized: dict[str, list[Candidate]] = {}
+    used_wall_pin_focus = False
+    used_hard_wall_contract = False
+    for cluster_id in ordered_cluster_ids:
+        sorted_candidates = sorted(
+            list(candidates_by_cluster.get(cluster_id, ())),
+            key=lambda candidate: (
+                -_candidate_effective_score(candidate, candidate_bonus_by_key),
+                candidate.variant_id,
+                candidate.rot,
+                candidate.x,
+                candidate.y,
+            ),
+        )
+        profile = profiles.get(cluster_id, {})
+        if (
+            wall_pin_focus
+            and cluster_id == root_cluster_id
+            and _cluster_prefers_wall(profile)
+        ):
+            wall_candidates = [
+                candidate
+                for candidate in sorted_candidates
+                if _anchor_kind_is_wall_pinned(candidate.anchor_kind)
+            ]
+            if len(wall_candidates) >= min(4, len(sorted_candidates)):
+                if _has_hard_root_wall_contract(
+                    relation_plan=relation_plan,
+                    root_cluster_id=root_cluster_id,
+                    profile=profile,
+                ):
+                    wall_candidates = _hard_contract_focus_candidates(wall_candidates)
+                    used_hard_wall_contract = True
+                elif _has_orientation_sensitive_wall_contract(profile):
+                    wall_candidates = sorted(
+                        _orientation_focus_candidates(wall_candidates),
+                        key=lambda candidate: (
+                            0 if candidate.acceptable_valid else 1,
+                            int(candidate.critical_orientation_penalty_mm),
+                            int(candidate.focal_orientation_penalty_mm),
+                            int(candidate.orientation_penalty_mm),
+                            -_candidate_effective_score(
+                                candidate, candidate_bonus_by_key
+                            ),
+                            candidate.variant_id,
+                            candidate.rot,
+                            candidate.x,
+                            candidate.y,
+                        ),
+                    )
+                sorted_candidates = wall_candidates[: min(len(wall_candidates), 20)]
+                used_wall_pin_focus = True
+        prioritized[cluster_id] = sorted_candidates
+
+    debug = {
+        "root_cluster_id": root_cluster_id,
+        "cluster_order": ordered_cluster_ids,
+        "used_wall_pin_focus": used_wall_pin_focus,
+        "used_hard_wall_contract": used_hard_wall_contract,
+        "wall_pin_focus_requested": bool(wall_pin_focus),
+    }
+    return prioritized, ordered_cluster_ids, candidate_bonus_by_key, debug
 
 
 def _canonicalize_inputs(
@@ -308,7 +1122,6 @@ def _augment_relation_plan_from_cluster_constraints(
             continue
 
         access_ids: set[str] = set()
-        facing_ids: set[str] = set()
 
         for item in row.get("hard_constraints") or []:
             if not isinstance(item, dict):
@@ -330,16 +1143,10 @@ def _augment_relation_plan_from_cluster_constraints(
             if isinstance(oid, str) and oid and typ in {"front_clearance", ""}:
                 access_ids.add(oid)
 
-        facing = rules.get("facing") or {}
-        if isinstance(facing, dict):
-            for oid, meta in facing.items():
-                if not isinstance(oid, str) or not oid:
-                    continue
-                if isinstance(meta, dict) and isinstance(meta.get("front"), str):
-                    facing_ids.add(oid)
-
-        # Access-bearing or explicitly fronted objects should expose their front to open space.
-        for oid in sorted(access_ids | facing_ids):
+        # Only explicit front-access requirements should become global object orientation intents.
+        # A forge-facing declaration describes the asset's local front; it is not, by itself,
+        # a requirement that the object front must point to room open space.
+        for oid in sorted(access_ids):
             intents = tuple(sorted({"preserve_front_access", "front_to_open_space"}))
             sig = (cid, oid, intents)
             if sig in existing:
@@ -349,7 +1156,7 @@ def _augment_relation_plan_from_cluster_constraints(
                     "cluster_id": cid,
                     "object_id": oid,
                     "intents": ["preserve_front_access", "front_to_open_space"],
-                    "priority": "high" if oid in access_ids else "medium",
+                    "priority": "high",
                     "reason": "augmented from cluster_constraints",
                 }
             )
@@ -502,12 +1309,36 @@ def _relax_relation_plan_for_candidate_search(
         return relation_plan
 
     out = dict(relation_plan)
-    out["cluster_relations"] = []
-    out["cluster_directional_relations"] = []
+    protected_pairs = _viewing_contract_pairs(relation_plan)
+    protected_cluster_ids = _viewing_contract_cluster_ids(relation_plan)
+    out["cluster_relations"] = [
+        dict(row)
+        for row in relation_plan.get("cluster_relations") or []
+        if isinstance(row, dict)
+        and _normalized_cluster_pair(
+            str(row.get("a") or ""),
+            str(row.get("b") or ""),
+        )
+        in protected_pairs
+    ]
+    out["cluster_directional_relations"] = [
+        dict(row)
+        for row in relation_plan.get("cluster_directional_relations") or []
+        if isinstance(row, dict)
+        and _normalized_cluster_pair(
+            str(row.get("a") or ""),
+            str(row.get("b") or ""),
+        )
+        in protected_pairs
+    ]
 
     cluster_orientations: list[dict[str, Any]] = []
     for entry in relation_plan.get("cluster_orientations") or []:
         if not isinstance(entry, dict):
+            continue
+        cluster_id = str(entry.get("cluster_id") or "").strip()
+        if cluster_id in protected_cluster_ids:
+            cluster_orientations.append(dict(entry))
             continue
         new_entry = dict(entry)
         intents = [
@@ -526,6 +1357,14 @@ def _relax_relation_plan_for_candidate_search(
     object_orientations: list[dict[str, Any]] = []
     for entry in relation_plan.get("object_orientations") or []:
         if not isinstance(entry, dict):
+            continue
+        cluster_id = str(entry.get("cluster_id") or "").strip()
+        target_cluster_id = str(entry.get("target_object_cluster_id") or "").strip()
+        if (
+            cluster_id in protected_cluster_ids
+            and target_cluster_id in protected_cluster_ids
+        ):
+            object_orientations.append(dict(entry))
             continue
         new_entry = dict(entry)
         intents = [
@@ -742,9 +1581,7 @@ def _build_pair_terms(
                     if not bool(pair_res.get("hard_valid")):
                         incompatible.add(key)
                         continue
-                    pair_layout_score = int(
-                        ((pair_res.get("quality") or {}).get("layout_score") or 0)
-                    )
+                    pair_layout_score = _verify_search_score(pair_res)
                     bonus = (
                         pair_layout_score - _candidate_score(ca) - _candidate_score(cb)
                     )
@@ -882,6 +1719,8 @@ def _expand_problem_clusters(
                         hard_valid=False,
                         acceptable_valid=False,
                         rough_score=-(10**9),
+                        macro_penalty_mm=0,
+                        micro_penalty_mm=0,
                         orientation_penalty_mm=0,
                         critical_orientation_penalty_mm=0,
                         focal_orientation_penalty_mm=0,
@@ -925,6 +1764,8 @@ def _expand_problem_clusters(
                         hard_valid=True,
                         acceptable_valid=True,
                         rough_score=int(q.get("layout_score") or 0),
+                        macro_penalty_mm=int(q.get("macro_penalty_mm") or 0),
+                        micro_penalty_mm=int(q.get("micro_penalty_mm") or 0),
                         orientation_penalty_mm=int(
                             vrec.get("orientation_penalty_mm") or 0
                         ),
@@ -965,6 +1806,7 @@ def _solve_one_round(
     variant_payload_lookup: dict[str, dict[str, dict[str, Any]]],
     time_limit_s: float,
     num_workers: int,
+    candidate_bonus_by_key: Mapping[tuple[str, str, int, int, int], int] | None = None,
 ) -> tuple[
     list[dict[str, Any]], list[dict[str, str]], dict[str, Candidate], dict[str, Any]
 ]:
@@ -1004,7 +1846,10 @@ def _solve_one_round(
     for cid in _ordered_cluster_ids(candidates_by_cluster, cluster_order=cluster_order):
         cands = candidates_by_cluster[cid]
         for i, cand in enumerate(cands):
-            objective_terms.append(_candidate_score(cand) * xvars[(cid, i)])
+            objective_terms.append(
+                _candidate_effective_score(cand, candidate_bonus_by_key)
+                * xvars[(cid, i)]
+            )
 
     for (a_key, b_key), bonus in pair_bonus.items():
         za = xvars[a_key]
@@ -1369,12 +2214,20 @@ def _build_placer_seed(
     quality_gate = verify.get("quality_gate") or {}
     repair_guidance = verify.get("repair_guidance") or {}
     acceptable = bool(verify.get("acceptable_valid"))
+    macro_ready = _verify_macro_ready(verify)
+    micro_ready = acceptable
 
     return {
-        "phase": "micro_repair",
-        "ready": True,
-        "needed": not acceptable,
-        "seed_kind": "acceptable_valid" if acceptable else "hard_valid_complete",
+        "phase": "micro_repair" if macro_ready else "macro_blocked",
+        "ready": macro_ready,
+        "needed": bool(macro_ready and not acceptable),
+        "seed_kind": (
+            "acceptable_valid"
+            if acceptable
+            else "macro_ready_complete"
+            if macro_ready
+            else "hard_valid_complete"
+        ),
         "solver_status": solver_status,
         "grid_mm": int(grid_mm),
         "seed_layout": {
@@ -1386,6 +2239,10 @@ def _build_placer_seed(
             "state_signature": str(verify.get("state_signature") or ""),
             "hard_valid": bool(verify.get("hard_valid")),
             "acceptable_valid": acceptable,
+            "macro_ready": macro_ready,
+            "micro_ready": micro_ready,
+            "macro_penalty_mm": int(quality.get("macro_penalty_mm") or 0),
+            "micro_penalty_mm": int(quality.get("micro_penalty_mm") or 0),
             "quality_gate_reasons": list(quality_gate.get("reasons") or []),
         },
         "repair_targets": {
@@ -1539,8 +2396,20 @@ def solve_layout(
     best_transforms: list[dict[str, Any]] = []
     best_variants: list[dict[str, str]] = []
     best_score = -(10**18)
+    best_rank_key: tuple[int, ...] | None = None
     used_relaxed_candidate_expansion = False
     infeasible_candidate_set = False
+    wall_pin_focus = True
+    root_strategy_debug: dict[str, Any] = {
+        "root_cluster_id": _select_root_cluster_id(
+            candidates_by_cluster,
+            relation_plan=relation_plan_aug,
+            cluster_order=cluster_ids,
+        ),
+        "cluster_order": list(cluster_ids),
+        "used_wall_pin_focus": True,
+        "wall_pin_focus_requested": True,
+    }
 
     current_candidates = {
         cid: list(vals) for cid, vals in candidates_by_cluster.items()
@@ -1553,6 +2422,15 @@ def solve_layout(
             max_rounds,
             {cid: len(vals) for cid, vals in current_candidates.items()},
         )
+        round_candidates, round_cluster_ids, candidate_bonus_by_key, round_strategy = (
+            _prepare_round_candidates(
+                current_candidates,
+                relation_plan=relation_plan_aug,
+                cluster_order=cluster_ids,
+                wall_pin_focus=wall_pin_focus,
+            )
+        )
+        root_strategy_debug = round_strategy
         try:
             transforms, selected_variants, chosen, verify = _solve_one_round(
                 tools=tools,
@@ -1560,13 +2438,42 @@ def solve_layout(
                 clusters_outlines=clusters_c,
                 relation_plan=relation_plan_aug,
                 grid_mm=grid_mm,
-                candidates_by_cluster=current_candidates,
-                cluster_order=cluster_ids,
+                candidates_by_cluster=round_candidates,
+                cluster_order=round_cluster_ids,
                 variant_payload_lookup=variant_payload_lookup,
                 time_limit_s=time_limit_s,
                 num_workers=num_workers,
+                candidate_bonus_by_key=candidate_bonus_by_key,
             )
         except RuntimeError as exc:
+            if bool(round_strategy.get("used_wall_pin_focus")):
+                if not used_relaxed_candidate_expansion:
+                    logger.info(
+                        "Solver root wall-pin focus was infeasible at round %s/%s; "
+                        "expanding candidates while preserving planner wall focus.",
+                        round_idx + 1,
+                        max_rounds,
+                    )
+                    current_candidates = _augment_with_relaxed_candidates(
+                        tools,
+                        room_model=room_model_c,
+                        clusters_outlines=clusters_c,
+                        relation_plan=relation_plan_aug,
+                        grid_mm=grid_mm,
+                        current_candidates=current_candidates,
+                        cluster_allowed_rotations=cluster_allowed_rots,
+                        max_variants_per_cluster=max_variants_per_cluster,
+                        base_candidate_limit=initial_candidates_per_cluster,
+                        cluster_order=cluster_ids,
+                    )
+                    used_relaxed_candidate_expansion = True
+                    continue
+                logger.warning(
+                    "Solver exact solve remained infeasible under mandatory wall-pin focus: %s",
+                    exc,
+                )
+                infeasible_candidate_set = True
+                break
             if not used_relaxed_candidate_expansion:
                 logger.info(
                     "Solver exact solve was infeasible at round %s/%s; "
@@ -1594,8 +2501,15 @@ def solve_layout(
 
         q = verify.get("quality") or {}
         score = int(q.get("layout_score") or 0)
-        if best_verify is None or score > best_score:
+        rank_key = _verify_rank_key(verify)
+        if (
+            best_verify is None
+            or best_rank_key is None
+            or rank_key > best_rank_key
+            or (rank_key == best_rank_key and score > best_score)
+        ):
             best_verify = verify
+            best_rank_key = rank_key
             best_score = score
             best_transforms = transforms
             best_variants = selected_variants
@@ -1625,6 +2539,8 @@ def solve_layout(
                         else []
                     ),
                     "Solved with finite-pose CP-SAT over enumerated candidates.",
+                    f"macro_root_cluster={round_strategy.get('root_cluster_id')}",
+                    f"root_wall_pin_focus_used={bool(round_strategy.get('used_wall_pin_focus'))}",
                     f"layout_score={score}",
                     f"state_signature={verify.get('state_signature')}",
                     f"round={round_idx + 1}/{max_rounds}",
@@ -1645,6 +2561,7 @@ def solve_layout(
                 "solver_debug": {
                     "verify": verify,
                     "candidate_counts": candidate_counts,
+                    "macro_strategy": round_strategy,
                     "cluster_constraints_summary": _cluster_constraints_summary(
                         cluster_constraints_n
                     ),
@@ -1702,6 +2619,10 @@ def solve_layout(
         notes.append(
             "Expanded the candidate pool once with relaxed macro pairwise hints."
         )
+    notes.append(f"macro_root_cluster={root_strategy_debug.get('root_cluster_id')}")
+    notes.append(
+        f"root_wall_pin_focus_used={bool(root_strategy_debug.get('used_wall_pin_focus'))}"
+    )
     if best_verify is not None:
         reasons = (best_verify.get("quality_gate") or {}).get("reasons") or []
         notes.append(f"quality_gate_reasons={json.dumps(reasons, ensure_ascii=False)}")
@@ -1742,6 +2663,7 @@ def solve_layout(
             "best_transforms": best_transforms,
             "best_selected_variants": best_variants,
             "candidate_counts": candidate_counts,
+            "macro_strategy": root_strategy_debug,
             "cluster_constraints_summary": _cluster_constraints_summary(
                 cluster_constraints_n
             ),

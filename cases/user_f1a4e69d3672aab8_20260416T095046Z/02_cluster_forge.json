@@ -1,0 +1,175 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "seating_zone",
+      "tag": "living",
+      "members": [
+        "sectional_sofa",
+        "coffee_table",
+        "armchair",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "sectional_sofa"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "sectional_sofa",
+          "b": "coffee_table"
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_facing",
+          "a": "armchair",
+          "b": "sectional_sofa",
+          "mode": "face_each_other",
+          "weight": 1
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "sectional_sofa": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "coffee_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "sectional_sofa": {
+            "front": "top",
+            "notes": "facing TV zone"
+          },
+          "armchair": {
+            "front": "right",
+            "notes": "facing center of seating"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "sectional_sofa",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "coffee_table",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 400,
+            "gap_max": 600
+          },
+          {
+            "id": "armchair",
+            "relative_to": "sectional_sofa",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "gap_min": 500,
+            "gap_max": 1000
+          },
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit"
+          }
+        ]
+      }
+    },
+    {
+      "cluster_id": "media_zone",
+      "tag": "living",
+      "members": [
+        "tv_console",
+        "bookshelf"
+      ],
+      "anchors": [
+        "tv_console"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "tv_console": [
+            0,
+            180
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "tv_console": {
+            "front": "bottom",
+            "notes": "facing seating zone"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "tv_console",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "bookshelf",
+            "relative_to": "tv_console",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "gap_min": 200,
+            "gap_max": 500
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Selected sectional_sofa, coffee_table, armchair, floor_lamp, tv_console, and bookshelf for a balanced modern living room.",
+    "Excluded redundant items like recliner, ottoman, and multiple storage cabinets to maintain open circulation."
+  ],
+  "missing": []
+}

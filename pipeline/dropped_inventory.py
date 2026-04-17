@@ -4,6 +4,13 @@ from copy import deepcopy
 from math import cos, hypot, radians, sin
 from typing import Any
 
+from layout.orientation_contract import (
+    effective_front_rotation as _effective_front_rotation_contract,
+    effective_front_side as _effective_front_side_contract,
+    normalize_cardinal_side,
+    side_to_vec,
+)
+
 try:
     from shapely.geometry import LineString, Polygon
     from shapely.ops import unary_union
@@ -470,6 +477,11 @@ def _place_reintroduced_item(
                 rotation=rotation,
                 front_side=front_side,
             )
+            front_side_world = _effective_front_side_contract(
+                base_front=front_side,
+                rotation=rotation,
+            )
+            front_world_vec = side_to_vec(front_side_world)
             if not _candidate_satisfies_reintroduce_contract(
                 room_polygon=room_polygon,
                 polygon=polygon,
@@ -506,6 +518,12 @@ def _place_reintroduced_item(
                     "w": int(source_width),
                     "h": int(source_height),
                 },
+                "front_world": (
+                    None
+                    if front_world_vec is None
+                    else {"dx": int(front_world_vec[0]), "dy": int(front_world_vec[1])}
+                ),
+                "front_side_world": front_side_world,
             }
             preference = _candidate_preference(
                 room_polygon=room_polygon,
@@ -789,20 +807,11 @@ def _cluster_front_side(cluster_meta: dict[str, Any], object_type: str) -> str:
     facing = cluster_rules.get("facing") if isinstance(cluster_rules, dict) else None
     rule = facing.get(object_type) if isinstance(facing, dict) else None
     front_side = rule.get("front") if isinstance(rule, dict) else None
-    front_text = str(front_side or "top").strip().lower()
-    if front_text in {"top", "bottom", "left", "right"}:
-        return front_text
-    return "top"
+    return normalize_cardinal_side(front_side, default="top") or "top"
 
 
 def _effective_front_rotation(*, rotation: int, front_side: str) -> int:
-    front_offsets = {
-        "top": 0,
-        "bottom": 180,
-        "left": 90,
-        "right": 270,
-    }
-    return (int(rotation) + front_offsets.get(front_side, 0)) % 360
+    return _effective_front_rotation_contract(rotation=rotation, front_side=front_side)
 
 
 def _candidate_satisfies_reintroduce_contract(

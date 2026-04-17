@@ -1,0 +1,85 @@
+{
+  "status": "OK",
+  "assumptions": [
+    "Deterministic tier-count policy applied from cluster membership, room area, and budget heuristics.",
+    "User notes suggest a clutter-light layout, so optional items start conservative.",
+    "Estimated available room area is 20.42 m2.",
+    "Room geometry is irregular enough that the primary seed starts sparser before later refill passes."
+  ],
+  "decisions": [
+    {
+      "object_type": "coffee_table",
+      "category": "coffee_table",
+      "cluster_id": "c_seating_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "primary",
+      "rationale": "Deterministic policy marked coffee_table as primary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.9,
+        "W": 0.5,
+        "H": 0.44,
+        "A": 0.45,
+        "R": 1.8,
+        "source_id": "coffee_table_006"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "c_seating_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "rationale": "Deterministic policy marked armchair as anchor in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.84,
+        "W": 0.71,
+        "H": 0.85,
+        "A": 0.5963999999999999,
+        "R": 1.1830985915492958,
+        "source_id": "armchair_007"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "c_seating_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked side_table as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.37,
+        "H": 0.58,
+        "A": 0.1443,
+        "R": 1.0540540540540542,
+        "source_id": "side_table_007"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "c_seating_area",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "rationale": "Deterministic policy marked floor_lamp as secondary in living; kept at quantity 1 with size tier S for a minimal furnishing plan.",
+      "rep_dims_m": {
+        "L": 0.35,
+        "W": 0.32,
+        "H": 1.51,
+        "A": 0.11199999999999999,
+        "R": 1.09375,
+        "source_id": "floor_lamp_004"
+      }
+    }
+  ],
+  "global_notes": [
+    "TierCountDirector used deterministic rules instead of an LLM.",
+    "Budget seeding considered the requested style: modern.",
+    "Initial furnishing mode: minimal."
+  ],
+  "budget_valid": true
+}
