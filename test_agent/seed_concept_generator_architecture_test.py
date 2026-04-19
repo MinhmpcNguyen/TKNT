@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+import unittest
+
+from agent.seed_concept_generator import SeedConceptGenerator, solver_plan_from_concept
+
+
+class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
+    def test_concepts_emit_operational_solver_guidance(self) -> None:
+        room_model = _room_model()
+        clusters = _clusters()
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=5,
+        )
+
+        operational_zones = bundle["macro_region_map"]["protected_topology"][
+            "operational_zones"
+        ]
+        self.assertTrue(operational_zones)
+        self.assertTrue(
+            all(
+                {
+                    "region",
+                    "priority",
+                    "enforcement",
+                    "max_overlap_ratio",
+                    "applies_to",
+                    "violation_severity",
+                }
+                <= set(zone)
+                for zone in operational_zones
+            )
+        )
+
+        concepts = bundle["concepts"]
+        self.assertEqual(len(concepts), 5)
+        for concept in concepts:
+            allowed = concept["allowed_variant_families_by_cluster"]
+            self.assertEqual(set(allowed), {"main_seating", "media", "storage"})
+            self.assertTrue(
+                all(2 <= len(families) <= 4 for families in allowed.values())
+            )
+            self.assertTrue(
+                all(
+                    set(families).isdisjoint({"social_anchor", "media", "work"})
+                    for families in allowed.values()
+                )
+            )
+            self.assertIn("conversation_facing", allowed["main_seating"])
+            self.assertIn("media_facing", allowed["media"])
+
+            core_rows = {
+                row["cluster_id"]: row
+                for row in concept["cluster_zone_plan"]
+                if row["cluster_id"] in {"main_seating", "media"}
+            }
+            self.assertNotEqual(
+                _zone_logic_class(core_rows["main_seating"]["zone_assignment"]),
+                _zone_logic_class(core_rows["media"]["zone_assignment"]),
+            )
+
+            self.assertTrue(concept["critical_object_orientations"])
+            self.assertTrue(
+                all(
+                    {"object_id", "intents", "priority"} <= set(item)
+                    for item in concept["critical_object_orientations"]
+                )
+            )
+            self.assertTrue(concept["primary_pair_contracts"])
+            self.assertTrue(
+                all(
+                    {
+                        "pair_type",
+                        "cluster_a",
+                        "cluster_b",
+                        "strength",
+                        "required",
+                    }
+                    <= set(contract)
+                    for contract in concept["primary_pair_contracts"]
+                )
+            )
+            self.assertIn(
+                "required_publishable_diagnostics",
+                concept["concept_readiness_requirements"],
+            )
+            self.assertIn("family_match_weight", concept["variant_bias_weights"])
+            self.assertTrue(concept["macro_constraints"]["protected_topology"])
+
+        solver_plan = solver_plan_from_concept(
+            concept=concepts[0],
+            room_model_json=room_model,
+            room_type="living_room",
+        )
+        self.assertTrue(solver_plan["object_orientations"])
+        self.assertEqual(
+            solver_plan["allowed_variant_families_by_cluster"],
+            concepts[0]["allowed_variant_families_by_cluster"],
+        )
+        self.assertTrue(solver_plan["cluster_directional_relations"])
+
+
+def _zone_logic_class(zone: object) -> str:
+    text = str(zone or "")
+    if "focal" in text:
+        return "focal"
+    if "daylight" in text:
+        return "daylight"
+    if "edge" in text or "storage" in text:
+        return "perimeter"
+    if "floating" in text or "center" in text:
+        return "center"
+    return text
+
+
+def _room_model() -> dict[str, object]:
+    return {
+        "room": {
+            "room_id": "living_test",
+            "polygon_ccw": [
+                {"x": 0, "y": 0},
+                {"x": 5000, "y": 0},
+                {"x": 5000, "y": 3600},
+                {"x": 0, "y": 3600},
+            ],
+        },
+        "meta": {"room_type": "living_room"},
+        "openings": {
+            "doors": [{"id": "entry_door"}],
+            "windows": [{"id": "main_window"}],
+        },
+        "affordance_map": {
+            "focal_surfaces": ["wall_north"],
+            "usable_wall_segments": ["wall_north", "wall_south", "wall_east"],
+            "entry_landing_zones": ["entry_landing"],
+            "primary_circulation_corridors": ["entry_to_center"],
+            "center_openness_regions": ["room_center"],
+            "daylight_regions": ["main_window_zone"],
+            "wall_anchor_candidates": ["wall_south", "wall_east"],
+        },
+    }
+
+
+def _clusters() -> dict[str, object]:
+    return {
+        "clusters": [
+            {
+                "cluster_id": "main_seating",
+                "members": ["sectional_sofa", "coffee_table"],
+                "anchors": ["sectional_sofa"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "medium",
+                        "daylight_affinity": "medium",
+                        "floating_allowed": True,
+                    }
+                },
+            },
+            {
+                "cluster_id": "media",
+                "members": ["tv_console"],
+                "anchors": ["tv_console"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "low",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+            {
+                "cluster_id": "storage",
+                "members": ["bookcase"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+        ]
+    }
+
+
+if __name__ == "__main__":
+    unittest.main()

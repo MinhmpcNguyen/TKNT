@@ -4,7 +4,7 @@ import {
   type InventoryModelDescriptorResolution,
 } from './models';
 
-const REINTRODUCED_ASSET_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
+const REFILL_ASSET_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
 const TRAILING_NUMERIC_ASSET_SUFFIX_PATTERN = /(?:[_-]\d+)+$/;
 
 export type InventoryPreviewMatchSource =
@@ -56,7 +56,7 @@ function canonicalizeToken(value: unknown): string | null {
   if (!raw) {
     return null;
   }
-  return raw.toLowerCase().replace(REINTRODUCED_ASSET_ID_PATTERN, '').replace(/[\s-]+/g, '_').trim();
+  return raw.toLowerCase().replace(REFILL_ASSET_ID_PATTERN, '').replace(/[\s-]+/g, '_').trim();
 }
 
 function canonicalizeAssetPrefix(value: unknown): string | null {
@@ -133,13 +133,13 @@ export function normalizePreviewAssetId(value: unknown): string | null {
   if (!raw) {
     return null;
   }
-  const normalized = raw.replace(REINTRODUCED_ASSET_ID_PATTERN, '').trim();
+  const normalized = raw.replace(REFILL_ASSET_ID_PATTERN, '').trim();
   return normalized || raw;
 }
 
 export function isReintroducedIdentifier(value: unknown): boolean {
   const raw = readString(value);
-  return raw ? REINTRODUCED_ASSET_ID_PATTERN.test(raw) : false;
+  return raw ? REFILL_ASSET_ID_PATTERN.test(raw) : false;
 }
 
 export function getInventoryDimensionsMm(

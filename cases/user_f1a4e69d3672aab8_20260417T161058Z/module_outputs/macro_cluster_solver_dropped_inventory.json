@@ -1,0 +1,54 @@
+{
+  "status": "OK",
+  "total_dropped_items": 2,
+  "clusters": [
+    {
+      "cluster_id": "pet_or_entry_support",
+      "items": [
+        {
+          "cluster_id": "pet_or_entry_support",
+          "object_type": "shoe_rack",
+          "category": "shoe_rack",
+          "size_tier": "S",
+          "priority": "optional",
+          "rep_dims_m": {
+            "L": 0.66,
+            "W": 0.28,
+            "H": 0.53,
+            "A": 0.18480000000000002,
+            "R": 2.357142857142857,
+            "source_id": "shoe_rack_006"
+          },
+          "rationale": "dropped by utility ranking under clutter and circulation budget",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "items": [
+        {
+          "cluster_id": "storage_display_support",
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "size_tier": "S",
+          "priority": "optional",
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          },
+          "rationale": "dropped by utility ranking under clutter and circulation budget",
+          "drop_reason": "seed_omission",
+          "drop_attempt": 0,
+          "drop_sequence": 1
+        }
+      ]
+    }
+  ]
+}

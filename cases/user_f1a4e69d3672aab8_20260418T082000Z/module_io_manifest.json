@@ -1,0 +1,211 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260418T082000Z",
+  "scope": "pipeline.orchestrator.run_case",
+  "generated_at_utc": "2026-04-18T08:20:00.732323+00:00",
+  "modules": [
+    {
+      "module": "room_interpreter",
+      "implementation": "agent.room_interpreter.RoomInterpreter.generate",
+      "inputs": [
+        "prepared_input_payload",
+        "description",
+        "special_notes"
+      ],
+      "output": "room model with normalized geometry, openings, room metadata, notes, and conflicts",
+      "output_artifact": "module_outputs/room_interpreter.json",
+      "legacy_artifact": "01_room_interpreter.json"
+    },
+    {
+      "module": "stylist_style_policy",
+      "implementation": "agent.stylist.Stylist.compile_style_policy",
+      "inputs": [
+        "room_type",
+        "planning_guidance_text",
+        "room_output"
+      ],
+      "output": "style policy used by cluster planning and accessory refill",
+      "output_artifact": "module_outputs/stylist_style_policy.json",
+      "legacy_artifact": null
+    },
+    {
+      "module": "cluster_forge",
+      "implementation": "agent.cluster_forge.ClusterForge.generate",
+      "inputs": [
+        "room_type",
+        "planning_guidance_text",
+        "room_output",
+        "inventory_catalog",
+        "style_policy"
+      ],
+      "output": "semantic layout program and cluster definitions with members, anchors, and constraints",
+      "output_artifact": "module_outputs/cluster_forge.json",
+      "legacy_artifact": "02_cluster_forge.json"
+    },
+    {
+      "module": "tier_count_director",
+      "implementation": "agent.tier_count_director.TierCountDirector.generate",
+      "inputs": [
+        "planning_guidance_text",
+        "room_output",
+        "prepared_input_payload",
+        "cluster_output"
+      ],
+      "output": "inventory tier/count decisions per cluster",
+      "output_artifact": "module_outputs/tier_count_director.json",
+      "legacy_artifact": "03_tier_count.json"
+    },
+    {
+      "module": "cluster_output_merger",
+      "implementation": "cluster_composer.merge.merge_cluster_outputs",
+      "inputs": [
+        "cluster_output",
+        "tier_output"
+      ],
+      "output": "merged cluster payload combining semantic clusters and tier/count decisions",
+      "output_artifact": "module_outputs/cluster_output_merger.json",
+      "legacy_artifact": "04_cluster_merged.json"
+    },
+    {
+      "module": "cluster_composer",
+      "implementation": "agent.cluster_composer.ClusterComposer.generate",
+      "inputs": [
+        "merged_output",
+        "cluster_id",
+        "planning_guidance_text"
+      ],
+      "output": "relative object layout for each cluster",
+      "output_artifact": "module_outputs/cluster_composer/<cluster_id>.json",
+      "legacy_artifact": "clusters/cluster_composer_<cluster_id>.json"
+    },
+    {
+      "module": "cluster_outline",
+      "implementation": "cluster_composer.outline.compute_cluster_outline",
+      "inputs": [
+        "cluster_composer_output"
+      ],
+      "output": "outline/envelope payload for each composed cluster",
+      "output_artifact": "module_outputs/cluster_outline/<cluster_id>.json",
+      "legacy_artifact": "clusters/cluster_outline_<cluster_id>.json"
+    },
+    {
+      "module": "cluster_outline_bundle",
+      "implementation": "pipeline.orchestrator._compose_variant_bundle_from_tier_output",
+      "inputs": [
+        "cluster_outline outputs by cluster"
+      ],
+      "output": "all cluster outlines keyed by cluster_id",
+      "output_artifact": "module_outputs/cluster_outline_bundle.json",
+      "legacy_artifact": "05_cluster_outlines.json"
+    },
+    {
+      "module": "seed_concept_generator",
+      "implementation": "agent.seed_concept_generator.SeedConceptGenerator.generate_bundle",
+      "inputs": [
+        "room_output",
+        "seed-aware planner cluster context",
+        "target_count"
+      ],
+      "output": "macro concepts and solver relation plans for layout variants",
+      "output_artifact": "module_outputs/seed_concept_generator.json",
+      "legacy_artifact": "05c_seed_relation_plans.json"
+    },
+    {
+      "module": "seed_concept_relation_plan",
+      "implementation": "agent.seed_concept_generator.solver_plan_from_concept",
+      "inputs": [
+        "macro_concept",
+        "room_output"
+      ],
+      "output": "canonical relation plan consumed by MacroClusterSolver",
+      "output_artifact": "module_outputs/seed_concept_relation_plan.json",
+      "legacy_artifact": "05b_cluster_relation_plan.json"
+    },
+    {
+      "module": "macro_cluster_solver",
+      "implementation": "agent.solver.solver.MacroClusterSolver.generate",
+      "inputs": [
+        "room_output",
+        "cluster_outlines",
+        "relation_plan",
+        "cluster_output",
+        "GLOBAL_LAYOUT_GRID_MM"
+      ],
+      "output": "absolute macro placement solution for cluster outlines",
+      "output_artifact": "module_outputs/macro_cluster_solver.json",
+      "legacy_artifact": "06a_cluster_solver.json"
+    },
+    {
+      "module": "macro_cluster_solver_dropped_inventory",
+      "implementation": "pipeline.dropped_inventory.dropped_inventory_payload",
+      "inputs": [
+        "dropped_inventory_by_cluster"
+      ],
+      "output": "dropped or omitted inventory details scoped by cluster",
+      "output_artifact": "module_outputs/macro_cluster_solver_dropped_inventory.json",
+      "legacy_artifact": "06b_solver_dropped_inventory.json"
+    },
+    {
+      "module": "phase2_controller",
+      "implementation": "agent.phase2_controller.Phase2Controller.generate",
+      "inputs": [
+        "room_output",
+        "merged_output",
+        "cluster_outlines",
+        "relation_plan",
+        "solver_output",
+        "cluster_output"
+      ],
+      "output": "phase-2 refinement result, including proposal, evaluation, and absolute layout",
+      "output_artifact": "module_outputs/phase2_controller.json",
+      "legacy_artifact": null
+    },
+    {
+      "module": "controlled_accessory_refill",
+      "implementation": "pipeline.dropped_inventory.controlled_accessory_refill",
+      "inputs": [
+        "room_output",
+        "absolute_layout",
+        "cluster_output",
+        "dropped_inventory_by_cluster",
+        "refill_policy"
+      ],
+      "output": "accessory refill summary and updated absolute layout when eligible",
+      "output_artifact": "module_outputs/controlled_accessory_refill.json",
+      "legacy_artifact": "07b_accessory_refill.json"
+    },
+    {
+      "module": "absolute_layout",
+      "implementation": "agent.phase2_controller.Phase2Controller.generate:absolute_layout",
+      "inputs": [
+        "phase2_controller output",
+        "manual_placements"
+      ],
+      "output": "canonical absolute layout consumed by Stylist",
+      "output_artifact": "module_outputs/absolute_layout.json",
+      "legacy_artifact": "07_absolute_layout.json"
+    },
+    {
+      "module": "stylist",
+      "implementation": "agent.stylist.Stylist.generate_style_plan/apply_style_plan",
+      "inputs": [
+        "absolute_layout",
+        "stylist_user_context",
+        "tenant_id"
+      ],
+      "output": "styled result with selected inventory/assets/material/style metadata",
+      "output_artifact": "module_outputs/stylist.json",
+      "legacy_artifact": "08_stylist.json"
+    },
+    {
+      "module": "layout_variants",
+      "implementation": "pipeline.layout_variants.select_distinct_final_gallery_candidates",
+      "inputs": [
+        "final styled candidates",
+        "target_final_count"
+      ],
+      "output": "final selectable gallery variants",
+      "output_artifact": "module_outputs/layout_variants.json",
+      "legacy_artifact": "09_layout_variants.json"
+    }
+  ]
+}

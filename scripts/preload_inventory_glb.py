@@ -44,7 +44,10 @@ TEXT_MODEL_NAME = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
 DEFAULT_CHUNK_SIZE = 4096
 DEFAULT_MODELS_PUBLIC_DIR = Path("frontend/public/assets/inventory_models")
 DEFAULT_MODELS_URL_PREFIX = "/assets/inventory_models"
-REINTRODUCED_OBJECT_ID_PATTERN = re.compile(r"__reintroduced(?:_\d+)?$", re.IGNORECASE)
+REFILL_OBJECT_ID_PATTERN = re.compile(
+    r"__(?:reintroduced|accessory_refill)(?:_\d+)?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -74,7 +77,7 @@ def canonicalize_style_key(style: str) -> str:
 
 
 def strip_reintroduced_suffix(value: str) -> str:
-    stripped = REINTRODUCED_OBJECT_ID_PATTERN.sub("", value).strip()
+    stripped = REFILL_OBJECT_ID_PATTERN.sub("", value).strip()
     return stripped or value.strip()
 
 
@@ -128,9 +131,7 @@ def build_query_text(query: RetrievalQuery) -> str:
         if query.style_tags
         else ""
     )
-    material_fragment = (
-        f" with {query.material} material" if query.material else ""
-    )
+    material_fragment = f" with {query.material} material" if query.material else ""
     return (
         f"A high-poly {object_name}{material_fragment} in {query.style} style, high quality."
         f"{style_context}"
@@ -237,7 +238,9 @@ def retrieve_top_matches(
 
     return [
         (str(uids[tensor_index]), float(similarity))
-        for tensor_index, similarity in zip(best_indices.tolist(), best_sims.tolist(), strict=True)
+        for tensor_index, similarity in zip(
+            best_indices.tolist(), best_sims.tolist(), strict=True
+        )
     ]
 
 
@@ -263,9 +266,7 @@ def load_inventory_assets(
 
     repo = PostgresAssetRepository()
     assets = list(
-        repo.list_assets(
-            AssetFilter(tenant_id=TenantId(tenant_id), type="FURNITURE")
-        )
+        repo.list_assets(AssetFilter(tenant_id=TenantId(tenant_id), type="FURNITURE"))
     )
 
     normalized_ids = {
@@ -294,7 +295,9 @@ def build_retrieval_queries(
 ) -> list[RetrievalQuery]:
     queries: list[RetrievalQuery] = []
     for asset in assets:
-        style_tags = tuple(str(tag).strip() for tag in asset.style_tags if str(tag).strip())
+        style_tags = tuple(
+            str(tag).strip() for tag in asset.style_tags if str(tag).strip()
+        )
         if all_styles:
             style_keys = unique_style_keys(style_tags)
             style_values = style_keys
@@ -439,7 +442,10 @@ def reset_existing_models(
             top_level_raw_url = top_level_model.get("url")
             if isinstance(top_level_raw_url, str) and top_level_raw_url.strip():
                 top_level_url = top_level_raw_url
-        elif isinstance(attributes.get("model_url"), str) and str(attributes["model_url"]).strip():
+        elif (
+            isinstance(attributes.get("model_url"), str)
+            and str(attributes["model_url"]).strip()
+        ):
             top_level_url = str(attributes["model_url"]).strip()
 
         should_clear_top_level = False
@@ -690,7 +696,9 @@ def main() -> None:
     print(f"Device: {device}")
 
     if not args.all_styles and (args.style is None or not str(args.style).strip()):
-        raise ValueError("Provide --style, or use --all-styles to preload all inventory style_tags.")
+        raise ValueError(
+            "Provide --style, or use --all-styles to preload all inventory style_tags."
+        )
 
     assets = load_inventory_assets(
         tenant_id=args.tenant_id,
@@ -727,7 +735,9 @@ def main() -> None:
         all_styles=bool(args.all_styles),
     )
     if not queries:
-        raise ValueError("No retrieval queries were generated from the selected inventory assets.")
+        raise ValueError(
+            "No retrieval queries were generated from the selected inventory assets."
+        )
     query_texts = [build_query_text(query) for query in queries]
 
     print(f"Loading text encoder for {len(queries)} inventory asset(s)...")

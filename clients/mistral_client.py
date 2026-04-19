@@ -65,6 +65,7 @@ class MistralClient:
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
         temperature: float | None = None,
+        top_p: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
@@ -79,6 +80,7 @@ class MistralClient:
                 messages,
                 model_name=resolved_model_name,
                 temperature=temperature,
+                top_p=top_p,
                 max_tokens=max_tokens,
                 tools=tools,
             )
@@ -86,6 +88,8 @@ class MistralClient:
         options: dict[str, object] = {}
         if temperature is not None:
             options["temperature"] = temperature
+        if top_p is not None:
+            options["top_p"] = top_p
         if max_tokens is not None:
             options["num_predict"] = max_tokens
 
@@ -275,12 +279,15 @@ class MistralClient:
         *,
         model_name: str,
         temperature: float | None,
+        top_p: float | None,
         max_tokens: int | None,
         tools: Sequence[dict[str, object]],
     ) -> object:
         options: dict[str, object] = {}
         if temperature is not None:
             options["temperature"] = temperature
+        if top_p is not None:
+            options["top_p"] = top_p
         if max_tokens is not None:
             options["num_predict"] = max_tokens
 

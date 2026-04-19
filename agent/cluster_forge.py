@@ -5,6 +5,10 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from agent.semantic_layout_planner import (
+    SemanticLayoutPlanner,
+    semantic_program_to_cluster_forge_payload,
+)
 from agent_schema.clusterF_schema import ClusterForgeOutput
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
@@ -22,6 +26,10 @@ from layout.semantic_roles import (
 from prompt.cluster_forge import CLUSTER_FORGE_PROMPT
 from prompt.system import SYSTEM_PROMPT
 from stylist.room_selection_rules import get_room_selection_rule
+from stylist.style_policy import (
+    apply_style_policy_to_semantic_program,
+    compile_style_policy,
+)
 
 logger = logging.getLogger(__name__)
 _FORGE_RESPONSE_MIME_TYPE = "application/json"
@@ -109,9 +117,51 @@ class ClusterForge:
         description: str | None = None,
         special_notes: str | None = None,
         *,
+        room_model_json: Mapping[str, object] | None = None,
+        inventory_catalog: Sequence[Mapping[str, object]] | None = None,
+        semantic_program_rules: Mapping[str, object] | None = None,
+        style_policy_json: Mapping[str, object] | None = None,
+        use_semantic_planner: bool = True,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> ClusterForgeOutput:
+        if use_semantic_planner and room_model_json is not None:
+            brief_text = "\n".join(
+                item
+                for item in (description or "", special_notes or "")
+                if item.strip()
+            )
+            style_policy = (
+                dict(style_policy_json)
+                if isinstance(style_policy_json, Mapping)
+                else compile_style_policy(
+                    room_type=room_type,
+                    brief_text=brief_text,
+                    room_model_json=room_model_json,
+                    semantic_program_rules=semantic_program_rules,
+                )
+            )
+            semantic_program = SemanticLayoutPlanner().generate(
+                room_model_json=room_model_json,
+                room_type=room_type,
+                brief_text=brief_text,
+                inventory_catalog=inventory_catalog,
+                semantic_program_rules=semantic_program_rules,
+                style_policy=style_policy,
+                use_llm=True,
+                temperature=0.2,
+                top_p=0.9,
+                max_tokens=max_tokens,
+            )
+            semantic_payload = apply_style_policy_to_semantic_program(
+                semantic_program.model_dump(),
+                style_policy,
+            )
+            payload = semantic_program_to_cluster_forge_payload(semantic_payload)
+            payload["style_policy"] = style_policy
+            payload = _normalize_cluster_forge_payload(payload)
+            return ClusterForgeOutput.model_validate(payload)
+
         response = get_llm_client(provider="gemini").chat_completion(
             self.build_messages(
                 room_type,
@@ -218,6 +268,10 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
         payload["clusters"] = []
         return payload
 
+    semantic_anchor_candidates = _dominant_anchor_candidates_by_cluster(
+        payload.get("semantic_layout_program")
+    )
+    room_type = _cluster_forge_room_type(payload)
     for cluster in clusters:
         if not isinstance(cluster, dict):
             continue
@@ -262,8 +316,135 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
             payload=payload,
             cluster_id=cluster_id if isinstance(cluster_id, str) else "",
             cluster=cluster,
+            semantic_anchor_candidates=semantic_anchor_candidates,
+        )
+        _relax_core_social_wall_attachment(
+            payload=payload,
+            room_type=room_type,
+            cluster_id=cluster_id if isinstance(cluster_id, str) else "",
+            cluster=cluster,
         )
     return payload
+
+
+def _cluster_forge_room_type(payload: Mapping[str, object] | None) -> str:
+    if not isinstance(payload, Mapping):
+        return ""
+    semantic_program = payload.get("semantic_layout_program")
+    if isinstance(semantic_program, Mapping):
+        value = str(semantic_program.get("room_type") or "").strip()
+        if value:
+            return value
+    return str(payload.get("room_type") or "").strip()
+
+
+def _relax_core_social_wall_attachment(
+    *,
+    payload: dict[str, object],
+    room_type: str,
+    cluster_id: str,
+    cluster: dict[str, object],
+) -> None:
+    if room_type != "living_room":
+        return
+    members = _coerce_str_list(cluster.get("members"))
+    if not members:
+        return
+    cluster_rules = cluster.get("cluster_rules")
+    if not isinstance(cluster_rules, dict):
+        return
+    has_lounge_anchor = any(is_lounge_anchor_like(member) for member in members)
+    if not has_lounge_anchor:
+        return
+    zone_claims = cluster_rules.get("zone_claims")
+    if not isinstance(zone_claims, dict):
+        zone_claims = {}
+        cluster_rules["zone_claims"] = zone_claims
+
+    wall_affinity = str(zone_claims.get("wall_affinity") or "").strip().lower()
+    if _cluster_targets_media(payload=payload, cluster_id=cluster_id):
+        zone_claims["wall_affinity"] = "low"
+    elif wall_affinity == "high":
+        zone_claims["wall_affinity"] = "medium"
+    elif not wall_affinity:
+        zone_claims["wall_affinity"] = "medium"
+
+    zone_claims["daylight_affinity"] = "high"
+
+    if not bool(zone_claims.get("floating_allowed")):
+        zone_claims["floating_allowed"] = True
+
+    preferred_regions = _coerce_str_list(zone_claims.get("preferred_regions"))
+    preferred_regions = [
+        region for region in preferred_regions if region != "floating_support_zone"
+    ]
+    preferred_regions.insert(0, "floating_support_zone")
+    zone_claims["preferred_regions"] = preferred_regions
+
+    avoid_regions = [
+        region
+        for region in _coerce_str_list(zone_claims.get("avoid_regions"))
+        if region != "center_openness_core"
+    ]
+    zone_claims["avoid_regions"] = avoid_regions
+    _append_payload_note(
+        payload,
+        f"Cluster {cluster_id}: relaxed wall attachment for core social cluster to allow floating exploration.",
+    )
+
+
+def _cluster_targets_media(*, payload: Mapping[str, object], cluster_id: str) -> bool:
+    if not cluster_id:
+        return False
+    semantic_program = payload.get("semantic_layout_program")
+    if not isinstance(semantic_program, Mapping):
+        return False
+    active_clusters = semantic_program.get("active_clusters")
+    if not isinstance(active_clusters, Sequence) or isinstance(active_clusters, str):
+        active_clusters = ()
+    for semantic_cluster in active_clusters:
+        if not isinstance(semantic_cluster, Mapping):
+            continue
+        if str(semantic_cluster.get("cluster_id") or "").strip() != cluster_id:
+            continue
+        relation_intents = semantic_cluster.get("relation_intents")
+        if not isinstance(relation_intents, Sequence) or isinstance(
+            relation_intents, str
+        ):
+            continue
+        for intent in relation_intents:
+            if not isinstance(intent, Mapping):
+                continue
+            target = str(
+                intent.get("target_cluster")
+                or intent.get("target_cluster_id")
+                or intent.get("target")
+                or ""
+            ).strip()
+            if target == "media":
+                return True
+    for key in ("orientation_preferences", "adjacency_preferences"):
+        preferences = semantic_program.get(key)
+        if not isinstance(preferences, Sequence) or isinstance(preferences, str):
+            continue
+        for preference in preferences:
+            if not isinstance(preference, Mapping):
+                continue
+            left = str(
+                preference.get("a")
+                or preference.get("cluster_a")
+                or preference.get("source_cluster")
+                or ""
+            ).strip()
+            right = str(
+                preference.get("b")
+                or preference.get("cluster_b")
+                or preference.get("target_cluster")
+                or ""
+            ).strip()
+            if (left, right) in {(cluster_id, "media"), ("media", cluster_id)}:
+                return True
+    return False
 
 
 def _coerce_str_list(value: object) -> list[str]:
@@ -636,11 +817,60 @@ def _append_payload_note(payload: dict[str, object], note: str) -> None:
         notes.append(note)
 
 
+def _dominant_anchor_candidates_by_cluster(
+    semantic_layout_program: object,
+) -> dict[str, list[str]]:
+    if not isinstance(semantic_layout_program, Mapping):
+        return {}
+    out: dict[str, list[str]] = {}
+    clusters = semantic_layout_program.get("active_clusters")
+    if not isinstance(clusters, Sequence):
+        return out
+    for cluster in clusters:
+        if not isinstance(cluster, Mapping):
+            continue
+        cluster_id = cluster.get("cluster_id")
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            continue
+        candidates = _coerce_str_list(cluster.get("dominant_anchor_candidates"))
+        if candidates:
+            out[cluster_id.strip()] = _unique_str_list(candidates)
+    return out
+
+
+def _unique_str_list(values: Sequence[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _dominant_anchor_candidates_for_cluster(
+    *,
+    cluster_id: str,
+    cluster: Mapping[str, object],
+    semantic_anchor_candidates: Mapping[str, Sequence[str]],
+) -> list[str]:
+    cluster_rules = cluster.get("cluster_rules")
+    rule_candidates = (
+        _coerce_str_list(cluster_rules.get("dominant_anchor_candidates"))
+        if isinstance(cluster_rules, Mapping)
+        else []
+    )
+    semantic_candidates = list(semantic_anchor_candidates.get(cluster_id, []))
+    return _unique_str_list(rule_candidates + semantic_candidates)
+
+
 def _sanitize_cluster_constraints(
     *,
     payload: dict[str, object],
     cluster_id: str,
     cluster: dict[str, object],
+    semantic_anchor_candidates: Mapping[str, Sequence[str]],
 ) -> None:
     member_list = [
         item
@@ -649,14 +879,22 @@ def _sanitize_cluster_constraints(
     ]
     cluster["members"] = member_list
     members = set(member_list)
+    cluster_rules = cluster.get("cluster_rules")
+    anchor_candidates = _dominant_anchor_candidates_for_cluster(
+        cluster_id=cluster_id,
+        cluster=cluster,
+        semantic_anchor_candidates=semantic_anchor_candidates,
+    )
+    if anchor_candidates and isinstance(cluster_rules, dict):
+        cluster_rules["dominant_anchor_candidates"] = anchor_candidates
     cluster["anchors"] = _sanitize_cluster_anchors(
         payload=payload,
         cluster_id=cluster_id,
         cluster_tag=str(cluster.get("tag") or "").lower(),
         members=member_list,
         anchors=cluster.get("anchors"),
+        anchor_candidates=anchor_candidates,
     )
-    cluster_rules = cluster.get("cluster_rules")
     grid_mm = GLOBAL_LAYOUT_GRID_MM
     if isinstance(cluster_rules, Mapping):
         grid_mm = _coerce_int(
@@ -784,17 +1022,35 @@ def _sanitize_cluster_anchors(
     cluster_tag: str,
     members: Sequence[str],
     anchors: object,
+    anchor_candidates: Sequence[str] | None = None,
 ) -> list[str]:
     member_set = {member for member in members if isinstance(member, str) and member}
     raw_anchors = _coerce_str_list(anchors)
     kept = [anchor for anchor in raw_anchors if anchor in member_set]
     dropped = [anchor for anchor in raw_anchors if anchor not in member_set]
+    valid_anchor_candidates = [
+        candidate
+        for candidate in _coerce_str_list(list(anchor_candidates or []))
+        if candidate in member_set
+    ]
 
     if dropped:
         _append_payload_note(
             payload,
             f"Cluster {cluster_id}: dropped anchors not present in members: {sorted(set(dropped))}.",
         )
+
+    if valid_anchor_candidates:
+        candidate_set = set(valid_anchor_candidates)
+        invalid_semantic_anchors = [
+            anchor for anchor in kept if anchor not in candidate_set
+        ]
+        kept = [anchor for anchor in kept if anchor in candidate_set]
+        if invalid_semantic_anchors:
+            _append_payload_note(
+                payload,
+                f"Cluster {cluster_id}: dropped anchors outside dominant anchor candidates: {sorted(set(invalid_semantic_anchors))}.",
+            )
 
     kept = _cohere_primary_anchor_members(
         payload=payload,
@@ -806,7 +1062,11 @@ def _sanitize_cluster_anchors(
     if kept:
         return kept
 
-    fallback = _choose_fallback_anchor(cluster_tag=cluster_tag, members=members)
+    fallback_members = valid_anchor_candidates or list(members)
+    fallback = _choose_fallback_anchor(
+        cluster_tag=cluster_tag,
+        members=fallback_members,
+    )
     if fallback is not None:
         if raw_anchors:
             note = (
@@ -1104,6 +1364,17 @@ def _upsert_anchor_side_semantic(
         "proximity": _normalize_semantic_proximity(proximity),
         "selection": "best_fit",
     }
+    support_role = _infer_semantic_support_role(
+        object_id=object_id,
+        relative_to=relative_to,
+        kind="anchor_side",
+        side_options=side_options,
+    )
+    if support_role is not None:
+        record["support_role"] = support_role
+        band_intent = _semantic_band_intent_from_role(support_role)
+        if band_intent is not None:
+            record["band_intent"] = band_intent
     if orientation is not None:
         record["orientation"] = orientation
     _upsert_semantic_placement(semantic_placements, record)
@@ -1132,6 +1403,17 @@ def _upsert_dock_semantic(
         "proximity": _normalize_semantic_proximity(proximity),
         "selection": "best_fit",
     }
+    support_role = _infer_semantic_support_role(
+        object_id=object_id,
+        relative_to=relative_to,
+        kind="dock_to_edge",
+        b_edge=b_edge,
+    )
+    if support_role is not None:
+        record["support_role"] = support_role
+        band_intent = _semantic_band_intent_from_role(support_role)
+        if band_intent is not None:
+            record["band_intent"] = band_intent
     if orientation is not None:
         record["orientation"] = orientation
     _upsert_semantic_placement(semantic_placements, record)
@@ -1535,6 +1817,22 @@ def _normalize_semantic_placements(
         orientation = _normalize_semantic_orientation(item.get("orientation"))
         if orientation is not None:
             record["orientation"] = orientation
+        support_role = _normalize_semantic_support_role(item.get("support_role"))
+        if support_role is None:
+            support_role = _infer_semantic_support_role(
+                object_id=obj_id,
+                relative_to=relative_to,
+                kind=record["kind"],
+                side_options=item.get("side_options")
+                if isinstance(item.get("side_options"), list)
+                else None,
+                b_edge=str(item.get("b_edge") or "") or None,
+            )
+        if support_role is not None:
+            record["support_role"] = support_role
+            band_intent = _semantic_band_intent_from_role(support_role)
+            if band_intent is not None:
+                record["band_intent"] = band_intent
         if "gap_min" in item or "gap_max" in item:
             gap_min, gap_max = _normalize_gap_range(
                 item.get("gap_min"),
@@ -1577,6 +1875,96 @@ def _normalize_semantic_orientation(value: object) -> str | None:
     token = value.strip().lower()
     if token in {"face_base", "same_direction"}:
         return token
+    return None
+
+
+def _normalize_semantic_support_role(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    token = value.strip().lower()
+    if token in {
+        "frontal_support",
+        "side_support",
+        "secondary_seat",
+        "peripheral_support",
+        "wall_support",
+    }:
+        return token
+    return None
+
+
+def _semantic_band_intent_from_role(value: object) -> str | None:
+    token = _normalize_semantic_support_role(value)
+    if token == "frontal_support":
+        return "front_band"
+    if token == "secondary_seat":
+        return "flank_band"
+    if token == "side_support":
+        return "beside_base"
+    if token == "wall_support":
+        return "wall_band"
+    if token == "peripheral_support":
+        return "peripheral_band"
+    return None
+
+
+def _infer_semantic_support_role(
+    *,
+    object_id: str,
+    relative_to: str,
+    kind: str,
+    side_options: Sequence[str] | None = None,
+    b_edge: str | None = None,
+) -> str | None:
+    key = object_id.lower()
+    base = relative_to.lower()
+    options = {
+        str(item).strip().lower() for item in (side_options or []) if str(item).strip()
+    }
+    edge = str(b_edge or "").strip().lower()
+
+    if any(
+        token in key for token in ("coffee_table", "bench", "ottoman", "console_table")
+    ):
+        return "frontal_support"
+    if any(token in key for token in ("armchair", "chair", "stool", "seat")):
+        return "secondary_seat"
+    if any(
+        token in key for token in ("side_table", "nightstand", "bedside", "end_table")
+    ):
+        return "side_support"
+    if any(token in key for token in ("lamp",)):
+        return "peripheral_support"
+    if any(
+        token in key
+        for token in (
+            "shelf",
+            "bookshelf",
+            "cabinet",
+            "dresser",
+            "wardrobe",
+            "buffet",
+            "sideboard",
+        )
+    ):
+        return "wall_support"
+    if kind == "dock_to_edge" and edge in {"front", "back"}:
+        return "frontal_support"
+    if kind == "anchor_side" and options & {
+        "head",
+        "front",
+        "head_left",
+        "head_right",
+        "front_left",
+        "front_right",
+    }:
+        return "frontal_support"
+    if kind == "anchor_side" and options & {"left", "right"}:
+        return "side_support"
+    if is_seat_like(object_id) and is_lounge_anchor_like(relative_to):
+        return "secondary_seat"
+    if is_lounge_anchor_like(base) and is_storage_anchor_like(object_id):
+        return "wall_support"
     return None
 
 

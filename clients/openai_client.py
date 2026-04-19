@@ -59,6 +59,7 @@ class OpenAIClient:
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
         temperature: float | None = None,
+        top_p: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
@@ -76,6 +77,8 @@ class OpenAIClient:
         }
         if temperature is not None:
             params["temperature"] = temperature
+        if top_p is not None:
+            params["top_p"] = top_p
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
         if tools is not None:

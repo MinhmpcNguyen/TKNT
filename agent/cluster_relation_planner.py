@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
-from agent_schema.cluster_relation_planner_schema import ClusterRelationPlannerOutput
 from clients.base_client import ChatMessage
-from clients.llm_client import get_llm_client
-from config.gemini_config import GeminiConfig
+from agent.seed_concept_generator import SeedConceptGenerator
 from prompt.cluster_relation_planner import CLUSTER_RELATION_PLANNER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -114,78 +112,18 @@ class ClusterRelationPlanner:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> str:
-        t0 = perf_counter()
-        messages = self.build_messages(
-            room_model_json=room_model_json,
-            clusters_json=clusters_json,
-            description=description,
-            special_notes=special_notes,
-        )
+        _ = description, model_name, temperature, max_tokens
         logger.info(
-            "ClusterRelationPlanner start room_id=%s clusters=%s",
+            "ClusterRelationPlanner compatibility wrapper using deterministic SeedConceptGenerator room_id=%s clusters=%s",
             _extract_room_id(room_model_json),
             len(_extract_clusters_map(clusters_json)),
         )
-
-        client = get_llm_client(provider="gemini")
-        last_raw = ""
-        resolved_model_name = str(
-            model_name or GeminiConfig.AGENT_MODELS.get("planner") or ""
-        ).strip()
-
-        for attempt in range(2):
-            logger.info(
-                "ClusterRelationPlanner attempt %s/2 model=%s",
-                attempt + 1,
-                resolved_model_name or "unspecified",
-            )
-            response = client.chat_completion(
-                messages,
-                model_key="primary",
-                model_name=resolved_model_name or None,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            last_raw = _extract_content(response)
-            logger.info(
-                "ClusterRelationPlanner response length=%s",
-                len(last_raw) if isinstance(last_raw, str) else 0,
-            )
-
-            try:
-                _parse_json(last_raw)
-                logger.info(
-                    "ClusterRelationPlanner parsed OK in %.2fs",
-                    perf_counter() - t0,
-                )
-                return last_raw
-            except ValueError:
-                if attempt == 1:
-                    break
-                messages.append({"role": "assistant", "content": last_raw})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Return valid JSON only. "
-                            "Do not include markdown fences, explanations, or prose outside the JSON object."
-                        ),
-                    }
-                )
-
-        logger.warning(
-            "ClusterRelationPlanner using deterministic fallback after invalid JSON in %.2fs",
-            perf_counter() - t0,
-        )
-        fallback = _build_deterministic_fallback_relation_plan(
+        payload = SeedConceptGenerator().generate(
             room_model_json=room_model_json,
             clusters_json=clusters_json,
-            reason=(
-                "ClusterRelationPlanner LLM response was not valid JSON after retry; "
-                "using deterministic macro fallback."
-            ),
+            special_notes=special_notes,
         )
-        return json.dumps(fallback, ensure_ascii=True)
+        return json.dumps(payload, ensure_ascii=True)
 
     def generate(
         self,
@@ -199,34 +137,18 @@ class ClusterRelationPlanner:
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         t0 = perf_counter()
-        raw = self.generate_raw(
+        _ = description, model_name, temperature, max_tokens
+        result = SeedConceptGenerator().generate(
             room_model_json=room_model_json,
             clusters_json=clusters_json,
-            description=description,
             special_notes=special_notes,
-            model_name=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        payload = _parse_json(raw)
-        payload = _normalize_relation_plan_payload(
-            payload,
-            room_model_json=room_model_json,
-            clusters_json=clusters_json,
-        )
-
-        if "room_id" not in payload or not isinstance(payload.get("room_id"), str):
-            payload["room_id"] = _extract_room_id(room_model_json)
-
-        result = ClusterRelationPlannerOutput.model_validate(payload).model_dump(
-            by_alias=True
         )
         logger.info(
-            "ClusterRelationPlanner done in %.2fs status=%s",
+            "ClusterRelationPlanner compatibility wrapper done in %.2fs status=%s",
             perf_counter() - t0,
             result.get("status"),
         )
-        return result
+        return dict(result)
 
 
 def _minify_room_model(room_model_json: dict[str, Any]) -> dict[str, Any]:
@@ -355,14 +277,21 @@ def _minify_clusters(clusters_json: dict[str, Any]) -> dict[str, Any]:
             else [],
         }
 
+    semantic_program = clusters_json.get("semantic_layout_program")
     seed_layout_state = clusters_json.get("seed_layout_state")
     free_space_regions = clusters_json.get("free_space_regions")
-    if not isinstance(seed_layout_state, dict) and not isinstance(
-        free_space_regions, list
+    if (
+        not isinstance(seed_layout_state, dict)
+        and not isinstance(free_space_regions, list)
+        and not isinstance(semantic_program, dict)
     ):
         return out
 
     payload: dict[str, Any] = {"clusters": out}
+    if isinstance(semantic_program, dict):
+        payload["semantic_layout_program"] = _minify_semantic_layout_program(
+            semantic_program
+        )
     if isinstance(seed_layout_state, dict):
         payload["seed_layout_state"] = {
             "notes": [
@@ -396,6 +325,46 @@ def _minify_clusters(clusters_json: dict[str, Any]) -> dict[str, Any]:
             if isinstance(row, dict)
         ][:8]
     return payload
+
+
+def _minify_semantic_layout_program(program: dict[str, Any]) -> dict[str, Any]:
+    active_clusters = program.get("active_clusters")
+    clusters: list[dict[str, Any]] = []
+    if isinstance(active_clusters, list):
+        for cluster in active_clusters:
+            if not isinstance(cluster, dict):
+                continue
+            clusters.append(
+                {
+                    "cluster_id": cluster.get("cluster_id"),
+                    "priority": cluster.get("priority"),
+                    "semantic_role": cluster.get("semantic_role"),
+                    "zone_claims": cluster.get("zone_claims")
+                    if isinstance(cluster.get("zone_claims"), dict)
+                    else {},
+                    "relation_intents": cluster.get("relation_intents")
+                    if isinstance(cluster.get("relation_intents"), list)
+                    else [],
+                    "degradation_ladder": cluster.get("degradation_ladder")
+                    if isinstance(cluster.get("degradation_ladder"), list)
+                    else [],
+                }
+            )
+
+    return {
+        "status": program.get("status"),
+        "room_type": program.get("room_type"),
+        "active_clusters": clusters[:12],
+        "global_layout_intent": program.get("global_layout_intent")
+        if isinstance(program.get("global_layout_intent"), dict)
+        else {},
+        "macro_relations": program.get("macro_relations")
+        if isinstance(program.get("macro_relations"), dict)
+        else {},
+        "controlled_degradation": program.get("controlled_degradation")
+        if isinstance(program.get("controlled_degradation"), dict)
+        else {},
+    }
 
 
 def _normalize_constraints(value: Any) -> list[dict[str, Any]]:
@@ -2173,9 +2142,7 @@ def _resolve_affinity_conflicts(plan: dict[str, Any]) -> None:
             value for value in _uniq_keep_order(prefer_values) if value not in overlap
         ]
         entry["avoid"] = _uniq_keep_order(avoid_values)
-        cleaned_conflicts.append(
-            f"{cluster_id}: {', '.join(sorted(overlap))}"
-        )
+        cleaned_conflicts.append(f"{cluster_id}: {', '.join(sorted(overlap))}")
 
     if cleaned_conflicts:
         notes = plan.setdefault("notes", [])

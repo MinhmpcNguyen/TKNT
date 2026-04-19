@@ -9,6 +9,7 @@ from typing import Any
 
 from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from prompt.tier_count import TIER_COUNT_DIRECTOR, TIER_COUNT_DIRECTOR_SYSTEM
+from stylist.style_policy import extract_style_policy
 
 logger = logging.getLogger(__name__)
 _LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
@@ -174,6 +175,7 @@ def _run_hardcoded_tier_count(
     max_steps: int,
     size_profiles_by_category: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    _ = max_steps
     clusters_json = context.get("clusters_json")
     required_types = _extract_member_types(clusters_json)
     if not required_types:
@@ -194,9 +196,22 @@ def _run_hardcoded_tier_count(
     available_area_m2 = _estimate_available_area_m2(context.get("room_model_json"))
     room_scale = _classify_room_scale(available_area_m2)
     room_affordances = _extract_room_affordances(context.get("room_model_json"))
+    semantic_program = _extract_semantic_program(clusters_json)
+    style_policy = extract_style_policy(clusters_json)
+    room_type = _infer_room_type(context.get("room_model_json"), semantic_program)
+    capacity_model = _compute_capacity_model(
+        room_model_json=context.get("room_model_json"),
+        available_area_m2=available_area_m2,
+        room_scale=room_scale,
+        furnishing_mode=furnishing_mode,
+    )
+    capacity_model = _apply_style_policy_to_capacity_model(
+        capacity_model,
+        style_policy=style_policy,
+    )
 
     logger.info(
-        "TierCount deterministic mode: available_area_m2=%.2f room_scale=%s furnishing_mode=%s",
+        "TierCount utility mode: available_area_m2=%.2f room_scale=%s furnishing_mode=%s",
         available_area_m2,
         room_scale,
         furnishing_mode,
@@ -208,171 +223,1446 @@ def _run_hardcoded_tier_count(
         existing=size_profiles_by_category,
     )
 
-    decisions = _build_seed_decisions(
+    bundles = _build_candidate_decision_set(
         clusters_json=clusters_json,
+        semantic_program=semantic_program,
+        anchors_by_cluster=anchors_by_cluster,
+        droppable_clusters=droppable_clusters,
+    )
+    draft = _select_inventory_decision_program(
+        bundles=bundles,
+        room_type=room_type,
         room_scale=room_scale,
         furnishing_mode=furnishing_mode,
-        droppable_clusters=droppable_clusters,
-        room_affordances=room_affordances,
+        capacity_model=capacity_model,
+        size_profiles_by_category=size_profiles,
+        semantic_program=semantic_program,
+        style_policy=style_policy,
     )
+    decisions = draft["decisions"]
 
-    draft = {
-        "status": "OK",
-        "assumptions": _build_deterministic_assumptions(
-            context=context,
-            furnishing_mode=furnishing_mode,
-            available_area_m2=available_area_m2,
-            room_affordances=room_affordances,
-        ),
-        "decisions": decisions,
-        "global_notes": _build_deterministic_notes(
-            context=context,
-            furnishing_mode=furnishing_mode,
-        ),
-    }
-
-    ok, detail = _validate_decisions(
-        draft.get("decisions"),
+    valid, detail = _validate_decisions(
+        decisions,
         required_types,
         members_by_cluster=members_by_cluster,
         anchors_by_cluster=anchors_by_cluster,
         droppable_clusters=droppable_clusters,
     )
-    if not ok:
-        raise ValueError(f"Deterministic tier-count seed is invalid: {detail}")
+    if not valid:
+        draft["status"] = "NEEDS_REVIEW"
+        draft.setdefault("conflicts", []).append(detail)
 
-    frozen_cluster_budget_limits_m2: dict[str, float] | None = None
-    rescue_mode_used = False
-    current_draft = draft
-    latest_budget_out: dict[str, Any] | None = None
+    draft["assumptions"] = _build_deterministic_assumptions(
+        context=context,
+        furnishing_mode=furnishing_mode,
+        available_area_m2=available_area_m2,
+        room_affordances=room_affordances,
+        style_policy=style_policy,
+    )
+    draft["global_notes"] = _build_deterministic_notes(
+        context=context,
+        furnishing_mode=furnishing_mode,
+    )
+    draft["budget_valid"] = draft["status"] == "OK"
+    _attach_rep_dims(draft, size_profiles)
+    return draft
 
-    for attempt in range(max(1, int(max_steps))):
-        logger.info("TierCount deterministic budget pass %s/%s", attempt + 1, max_steps)
 
-        budget_out = _run_budget_check_for_result(
-            result=current_draft,
-            context=context,
-            size_profiles_by_category=size_profiles,
-            frozen_cluster_budget_limits_m2=frozen_cluster_budget_limits_m2,
-            rescue_mode=False,
+def _extract_semantic_program(clusters_json: Any) -> dict[str, Any]:
+    if not isinstance(clusters_json, dict):
+        return {}
+    semantic_program = clusters_json.get("semantic_layout_program")
+    if isinstance(semantic_program, dict):
+        return semantic_program
+    if isinstance(clusters_json.get("active_clusters"), list):
+        return clusters_json
+    return {}
+
+
+def _infer_room_type(room_model_json: Any, semantic_program: dict[str, Any]) -> str:
+    if isinstance(room_model_json, dict):
+        for key in ("room_type", "type"):
+            value = room_model_json.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        room = room_model_json.get("room")
+        if isinstance(room, dict):
+            value = room.get("room_type") or room.get("type")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        meta = room_model_json.get("meta")
+        if isinstance(meta, dict):
+            value = meta.get("room_type") or meta.get("type")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    value = semantic_program.get("room_type")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "room"
+
+
+def _compute_capacity_model(
+    *,
+    room_model_json: Any,
+    available_area_m2: float,
+    room_scale: str,
+    furnishing_mode: str,
+) -> dict[str, Any]:
+    room_area_m2 = available_area_m2
+    room_polygon: list[dict[str, int]] = []
+    affordance_map: dict[str, Any] = {}
+
+    if isinstance(room_model_json, dict):
+        area_mm2 = room_model_json.get("area_mm2")
+        if isinstance(area_mm2, (int, float)) and area_mm2 > 0:
+            room_area_m2 = float(area_mm2) / 1_000_000.0
+
+        room = room_model_json.get("room")
+        if isinstance(room, dict):
+            polygon = room.get("polygon_ccw")
+            if isinstance(polygon, list):
+                room_polygon = [p for p in polygon if isinstance(p, dict)]
+
+        raw_affordance = room_model_json.get("affordance_map")
+        if isinstance(raw_affordance, dict):
+            affordance_map = raw_affordance
+
+    perimeter_m = _polygon_perimeter_m(room_polygon)
+    usable_wall_segments = _list_value(affordance_map.get("usable_wall_segments"))
+    floating_zones = _list_value(affordance_map.get("floating_zone_candidates"))
+    center_regions = _list_value(affordance_map.get("center_openness_regions"))
+    corridors = _list_value(affordance_map.get("primary_circulation_corridors"))
+    entry_zones = _list_value(affordance_map.get("entry_landing_zones"))
+
+    wall_signal = (
+        len(usable_wall_segments) if usable_wall_segments else perimeter_m / 2.5
+    )
+    floating_signal = len(floating_zones) if floating_zones else 1.0
+    center_signal = len(center_regions) if center_regions else 1.0
+    circulation_signal = len(corridors) if corridors else 1.0
+
+    density_ratio = {"minimal": 0.30, "neutral": 0.38, "generous": 0.44}.get(
+        furnishing_mode,
+        0.38,
+    )
+    if room_scale == "small":
+        density_ratio -= 0.04
+    elif room_scale == "large":
+        density_ratio += 0.04
+    density_ratio = max(0.24, min(0.50, density_ratio))
+
+    wall_capacity_m2 = max(room_area_m2 * 0.18, wall_signal * 0.75)
+    floating_capacity_m2 = max(room_area_m2 * 0.16, floating_signal * 1.15)
+    center_openness_budget_m2 = room_area_m2 * (0.26 + 0.03 * center_signal)
+    circulation_budget_m2 = room_area_m2 * (0.18 + 0.02 * circulation_signal)
+    clutter_budget_m2 = room_area_m2 * density_ratio
+
+    return {
+        "available_area_m2": room_area_m2,
+        "target_density": "balanced",
+        "density_ratio": density_ratio,
+        "wall_capacity_m2": wall_capacity_m2,
+        "floating_capacity_m2": floating_capacity_m2,
+        "center_openness_budget_m2": center_openness_budget_m2,
+        "circulation_budget_m2": circulation_budget_m2,
+        "clutter_budget_m2": clutter_budget_m2,
+        "entry_conflict_sensitivity": "high" if entry_zones else "moderate",
+        "center_openness_weight": "high",
+        "circulation_penalty_weight": "high",
+        "semantic_core_preserve_weight": "very_high",
+        "signals": {
+            "usable_wall_segments": len(usable_wall_segments),
+            "floating_zone_candidates": len(floating_zones),
+            "center_openness_regions": len(center_regions),
+            "primary_circulation_corridors": len(corridors),
+            "entry_landing_zones": len(entry_zones),
+        },
+    }
+
+
+def _apply_style_policy_to_capacity_model(
+    capacity_model: dict[str, Any],
+    *,
+    style_policy: dict[str, Any],
+) -> dict[str, Any]:
+    if not style_policy:
+        return capacity_model
+    out = dict(capacity_model)
+    layout_policy = _style_layout_policy(style_policy)
+    weights = style_policy.get("policy_weights")
+    weights = weights if isinstance(weights, dict) else {}
+    density_multiplier = float(weights.get("density_multiplier") or 1.0)
+    density_ratio = float(out.get("density_ratio") or 0.38) * density_multiplier
+    if _style_level(layout_policy.get("center_openness_bias")) >= 3:
+        density_ratio = min(density_ratio, 0.34)
+        out["center_openness_weight"] = "very_high"
+        out["circulation_penalty_weight"] = "very_high"
+    if _style_level(layout_policy.get("clutter_tolerance")) <= 1:
+        density_ratio = min(density_ratio, 0.32)
+    if _style_level(layout_policy.get("clutter_tolerance")) >= 3:
+        density_ratio = max(density_ratio, 0.40)
+    density_ratio = max(0.22, min(0.52, density_ratio))
+    room_area = max(0.1, float(out.get("available_area_m2") or 0.1))
+    out["target_density"] = _style_target_density(style_policy)
+    out["density_ratio"] = density_ratio
+    out["clutter_budget_m2"] = room_area * density_ratio
+    out["style_policy"] = {
+        "style_name": style_policy.get("style_name"),
+        "layout_policy": layout_policy,
+    }
+    return out
+
+
+def _polygon_perimeter_m(points_mm: list[dict[str, int]]) -> float:
+    if len(points_mm) < 2:
+        return 0.0
+    total_mm = 0.0
+    for idx, point in enumerate(points_mm):
+        nxt = points_mm[(idx + 1) % len(points_mm)]
+        dx = float(nxt.get("x", 0)) - float(point.get("x", 0))
+        dy = float(nxt.get("y", 0)) - float(point.get("y", 0))
+        total_mm += (dx * dx + dy * dy) ** 0.5
+    return total_mm / 1000.0
+
+
+def _list_value(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _build_candidate_decision_set(
+    *,
+    clusters_json: Any,
+    semantic_program: dict[str, Any],
+    anchors_by_cluster: dict[str, set[str]],
+    droppable_clusters: set[str],
+) -> list[dict[str, Any]]:
+    clusters = _cluster_list(clusters_json)
+    semantic_clusters = _semantic_clusters_by_id(semantic_program)
+
+    bundles: list[dict[str, Any]] = []
+    for cluster in clusters[:8]:
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        semantic_cluster = semantic_clusters.get(cluster_id, {})
+        cluster_bundles = _bundles_from_semantic_cluster(
+            cluster=cluster,
+            semantic_cluster=semantic_cluster,
+            anchors=anchors_by_cluster.get(cluster_id, set()),
+            droppable=cluster_id in droppable_clusters,
         )
-        if _tool_output_has_error(budget_out):
-            raise RuntimeError(
-                f"estimate_budget failed in deterministic tier count: {_tool_error_text(budget_out)}"
-            )
-        latest_budget_out = budget_out
+        if not cluster_bundles:
+            cluster_bundles = [
+                _fallback_bundle_from_cluster(
+                    cluster=cluster,
+                    anchors=anchors_by_cluster.get(cluster_id, set()),
+                    droppable=cluster_id in droppable_clusters,
+                )
+            ]
+        bundles.extend(cluster_bundles[:4])
 
-        if (
-            frozen_cluster_budget_limits_m2 is None
-            and isinstance(budget_out.get("cluster_budget_limits_m2"), dict)
-            and not bool(budget_out.get("rescue_mode", False))
-        ):
-            frozen_cluster_budget_limits_m2 = budget_out["cluster_budget_limits_m2"]
+    return bundles
 
-        if bool(budget_out.get("input_decisions_fit", False)):
-            return _build_ok_result(
-                decisions=current_draft.get("decisions", []),
-                base_draft=current_draft,
-                size_profiles_by_category=size_profiles,
-                budget_mode=None,
-            )
 
-        recommended_decisions = budget_out.get("recommended_decisions")
-        if bool(budget_out.get("recommended_decisions_fit", False)) and isinstance(
-            recommended_decisions, list
-        ):
-            return _build_ok_result(
-                decisions=recommended_decisions,
-                base_draft=current_draft,
-                size_profiles_by_category=size_profiles,
-                budget_mode=None,
-            )
+def _cluster_list(clusters_json: Any) -> list[dict[str, Any]]:
+    if not isinstance(clusters_json, dict):
+        return []
+    clusters = clusters_json.get("clusters")
+    if not isinstance(clusters, list):
+        return []
+    return [cluster for cluster in clusters if isinstance(cluster, dict)]
 
-        next_decisions = _select_next_budget_decisions(
-            current_decisions=current_draft.get("decisions", []),
-            budget_out=budget_out,
-        )
-        if next_decisions is not None:
-            current_draft = _merge_recommended_decisions_into_draft(
-                current_draft,
-                next_decisions,
-            )
+
+def _semantic_clusters_by_id(
+    semantic_program: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    active_clusters = semantic_program.get("active_clusters")
+    if not isinstance(active_clusters, list):
+        return out
+    for row in active_clusters:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = row.get("cluster_id")
+        if isinstance(cluster_id, str) and cluster_id.strip():
+            out[cluster_id] = row
+    return out
+
+
+def _bundles_from_semantic_cluster(
+    *,
+    cluster: dict[str, Any],
+    semantic_cluster: dict[str, Any],
+    anchors: set[str],
+    droppable: bool,
+) -> list[dict[str, Any]]:
+    raw_bundles = semantic_cluster.get("required_bundles")
+    if not isinstance(raw_bundles, list):
+        return []
+
+    members = _string_list_from_any(cluster.get("members"))
+    member_lookup = _members_by_base_type(members)
+    cluster_priority = str(semantic_cluster.get("priority") or "").strip().lower()
+    bundles: list[dict[str, Any]] = []
+
+    for raw_bundle in raw_bundles:
+        if not isinstance(raw_bundle, dict):
+            continue
+        raw_objects = raw_bundle.get("objects")
+        if not isinstance(raw_objects, list):
             continue
 
-        if not rescue_mode_used:
-            rescue_budget_out = _run_budget_check_for_result(
-                result=current_draft,
-                context=context,
-                size_profiles_by_category=size_profiles,
-                frozen_cluster_budget_limits_m2=None,
-                rescue_mode=True,
-            )
-            if _tool_output_has_error(rescue_budget_out):
-                raise RuntimeError(
-                    "estimate_budget rescue failed in deterministic tier count: "
-                    f"{_tool_error_text(rescue_budget_out)}"
-                )
-            latest_budget_out = rescue_budget_out
-            rescue_mode_used = True
-
-            if bool(rescue_budget_out.get("input_decisions_fit", False)):
-                return _build_ok_result(
-                    decisions=current_draft.get("decisions", []),
-                    base_draft=current_draft,
-                    size_profiles_by_category=size_profiles,
-                    budget_mode="rescue",
-                )
-
-            rescue_recommended_decisions = rescue_budget_out.get(
-                "recommended_decisions"
-            )
-            if bool(
-                rescue_budget_out.get("recommended_decisions_fit", False)
-            ) and isinstance(rescue_recommended_decisions, list):
-                return _build_ok_result(
-                    decisions=rescue_recommended_decisions,
-                    base_draft=current_draft,
-                    size_profiles_by_category=size_profiles,
-                    budget_mode="rescue",
-                )
-
-            next_decisions = _select_next_budget_decisions(
-                current_decisions=current_draft.get("decisions", []),
-                budget_out=rescue_budget_out,
-            )
-            if next_decisions is not None:
-                current_draft = _merge_recommended_decisions_into_draft(
-                    current_draft,
-                    next_decisions,
-                )
+        objects: list[dict[str, Any]] = []
+        for raw_object in raw_objects:
+            if not isinstance(raw_object, dict):
                 continue
-
-            if _tool_reports_hard_unsat(rescue_budget_out):
-                return _build_unsat_result(
-                    base_draft=current_draft,
-                    fallback_decisions=rescue_recommended_decisions
-                    if isinstance(rescue_recommended_decisions, list)
-                    else current_draft.get("decisions", []),
-                    budget_out=rescue_budget_out,
-                    size_profiles_by_category=size_profiles,
+            base_type = str(raw_object.get("object_type") or "").strip()
+            if not base_type:
+                continue
+            matched_members = member_lookup.get(
+                _profile_category_for_member(base_type),
+                [],
+            )
+            for member in matched_members:
+                role = str(raw_object.get("role") or "support")
+                if droppable:
+                    role = "decor_light"
+                objects.append(
+                    {
+                        "object_type": member,
+                        "base_type": _profile_category_for_member(member),
+                        "role": role,
+                        "required": bool(raw_object.get("required", False))
+                        and not droppable,
+                        "max_keep": _positive_int(
+                            raw_object.get("max_keep"),
+                            default=1,
+                        ),
+                    }
                 )
 
-        if _tool_reports_hard_unsat(budget_out):
-            return _build_unsat_result(
-                base_draft=current_draft,
-                fallback_decisions=current_draft.get("decisions", []),
-                budget_out=budget_out,
-                size_profiles_by_category=size_profiles,
+        if not objects:
+            continue
+        bundle_id = str(
+            raw_bundle.get("bundle_id") or f"{cluster.get('cluster_id')}_bundle"
+        )
+        bundles.append(
+            {
+                "cluster_id": str(cluster.get("cluster_id")),
+                "bundle_id": bundle_id,
+                "bundle_class": _bundle_class(cluster_priority, objects, droppable),
+                "preserve_level": _preserve_level(
+                    cluster_priority,
+                    objects,
+                    droppable,
+                ),
+                "objects": _dedupe_bundle_objects(objects, anchors),
+                "cluster_priority": cluster_priority or "support",
+                "droppable": droppable,
+            }
+        )
+
+    return bundles
+
+
+def _fallback_bundle_from_cluster(
+    *,
+    cluster: dict[str, Any],
+    anchors: set[str],
+    droppable: bool,
+) -> dict[str, Any]:
+    cluster_id = str(cluster.get("cluster_id") or "cluster")
+    tag = str(cluster.get("tag") or "").strip().lower()
+    objects: list[dict[str, Any]] = []
+    for member in _string_list_from_any(cluster.get("members")):
+        role = "decor_light" if droppable else _fallback_role(member, anchors)
+        objects.append(
+            {
+                "object_type": member,
+                "base_type": _profile_category_for_member(member),
+                "role": role,
+                "required": member in anchors and not droppable,
+                "max_keep": _fallback_max_keep(member, tag),
+            }
+        )
+
+    priority = "optional" if droppable else ("core" if anchors else "support")
+    return {
+        "cluster_id": cluster_id,
+        "bundle_id": f"{cluster_id}_bundle",
+        "bundle_class": _bundle_class(priority, objects, droppable),
+        "preserve_level": _preserve_level(priority, objects, droppable),
+        "objects": objects,
+        "cluster_priority": priority,
+        "droppable": droppable,
+    }
+
+
+def _members_by_base_type(members: list[str]) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for member in members:
+        out.setdefault(_profile_category_for_member(member), []).append(member)
+    return out
+
+
+def _dedupe_bundle_objects(
+    objects: list[dict[str, Any]],
+    anchors: set[str],
+) -> list[dict[str, Any]]:
+    by_type: dict[str, dict[str, Any]] = {}
+    for obj in objects:
+        object_type = str(obj.get("object_type") or "")
+        if not object_type:
+            continue
+        existing = by_type.get(object_type)
+        if existing is None:
+            by_type[object_type] = obj
+            continue
+        existing["required"] = bool(existing.get("required")) or bool(
+            obj.get("required")
+        )
+        if object_type in anchors:
+            existing["role"] = "dominant_anchor"
+    return list(by_type.values())
+
+
+def _fallback_role(member: str, anchors: set[str]) -> str:
+    if member in anchors:
+        return "dominant_anchor"
+    member_key = _norm_key(member)
+    if any(token in member_key for token in OPTIONAL_MEMBER_TOKENS):
+        return "decor_light"
+    if any(token in member_key for token in SECONDARY_MEMBER_TOKENS):
+        return "support"
+    if any(token in member_key for token in MEDIUM_MEMBER_TOKENS):
+        return "workflow_anchor"
+    return "support"
+
+
+def _fallback_max_keep(member: str, cluster_tag: str) -> int:
+    member_key = _norm_key(member)
+    if member_key == "nightstand":
+        return 2
+    if "chair" in member_key and cluster_tag == "dining":
+        return 4
+    return 1
+
+
+def _bundle_class(
+    priority: str,
+    objects: list[dict[str, Any]],
+    droppable: bool,
+) -> str:
+    if droppable:
+        return "decor_light"
+    if priority == "core" or any(
+        str(obj.get("role")) == "dominant_anchor" and bool(obj.get("required"))
+        for obj in objects
+    ):
+        return "indispensable"
+    if priority in {"support", "strong_support"} or any(
+        bool(obj.get("required")) for obj in objects
+    ):
+        return "strong_support"
+    return "optional"
+
+
+def _preserve_level(
+    priority: str,
+    objects: list[dict[str, Any]],
+    droppable: bool,
+) -> str:
+    if droppable:
+        return "low"
+    if priority == "core" or any(
+        str(obj.get("role")) == "dominant_anchor" for obj in objects
+    ):
+        return "highest"
+    if priority in {"support", "strong_support"}:
+        return "high"
+    return "medium"
+
+
+def _select_inventory_decision_program(
+    *,
+    bundles: list[dict[str, Any]],
+    room_type: str,
+    room_scale: str,
+    furnishing_mode: str,
+    capacity_model: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+    semantic_program: dict[str, Any],
+    style_policy: dict[str, Any],
+) -> dict[str, Any]:
+    used_footprint_m2 = 0.0
+    selected_count = 0
+    dropped_types: list[str] = []
+    conflicts: list[str] = []
+    decisions: list[dict[str, Any]] = []
+    cluster_decisions_by_id: dict[str, dict[str, Any]] = {}
+
+    for bundle in sorted(bundles, key=_bundle_sort_key):
+        cluster_id = str(bundle.get("cluster_id") or "cluster")
+        bundle_decision = {
+            "bundle_id": str(bundle.get("bundle_id") or f"{cluster_id}_bundle"),
+            "preserve_level": str(bundle.get("preserve_level") or "medium"),
+            "bundle_class": str(bundle.get("bundle_class") or "optional"),
+            "objects": [],
+        }
+        cluster_decision = cluster_decisions_by_id.setdefault(
+            cluster_id,
+            {
+                "cluster_id": cluster_id,
+                "decision_status": "active",
+                "selected_bundles": [],
+            },
+        )
+        cluster_decision["selected_bundles"].append(bundle_decision)
+
+        for obj in _bundle_objects(bundle):
+            score = _score_object_utility(
+                obj=obj,
+                bundle=bundle,
+                used_footprint_m2=used_footprint_m2,
+                capacity_model=capacity_model,
+                size_profiles_by_category=size_profiles_by_category,
+                style_policy=style_policy,
+            )
+            quantity = _select_quantity(
+                obj=obj,
+                bundle=bundle,
+                score=score,
+                used_footprint_m2=used_footprint_m2,
+                capacity_model=capacity_model,
+                room_scale=room_scale,
+                furnishing_mode=furnishing_mode,
+            )
+            size_tier = _select_size_tier(
+                obj=obj,
+                quantity=quantity,
+                score=score,
+                used_footprint_m2=used_footprint_m2,
+                capacity_model=capacity_model,
+                size_profiles_by_category=size_profiles_by_category,
+                room_scale=room_scale,
+                furnishing_mode=furnishing_mode,
+            )
+            footprint_m2 = _footprint_for_object(
+                obj=obj,
+                quantity=quantity,
+                size_tier=size_tier or "S",
+                size_profiles_by_category=size_profiles_by_category,
             )
 
-        break
+            if quantity > 0:
+                used_footprint_m2 += footprint_m2
+                selected_count += quantity
+            else:
+                dropped_types.append(str(obj["object_type"]))
 
-    return _build_unsat_result(
-        base_draft=current_draft,
-        fallback_decisions=current_draft.get("decisions", []),
-        budget_out=latest_budget_out or {},
-        size_profiles_by_category=size_profiles,
+            role = str(obj.get("role") or "support")
+            reason = _decision_reason(quantity=quantity, role=role, score=score)
+            decision_object = {
+                "object_type": str(obj["object_type"]),
+                "quantity": quantity,
+                "size_tier": size_tier if quantity > 0 else None,
+                "role": role,
+                "decision_reason": reason,
+                "utility_score": round(float(score["total"]), 3),
+                "utility_breakdown": {
+                    key: round(float(value), 3) for key, value in score.items()
+                },
+            }
+            bundle_decision["objects"].append(decision_object)
+
+            decisions.append(
+                {
+                    "object_type": str(obj["object_type"]),
+                    "category": str(obj["object_type"]),
+                    "cluster_id": cluster_id,
+                    "quantity": quantity,
+                    "size_tier": size_tier or "S",
+                    "priority": _legacy_priority(role, bundle),
+                    "preserve_level": str(bundle.get("preserve_level") or "medium"),
+                    "bundle_id": str(bundle.get("bundle_id") or ""),
+                    "role": role,
+                    "rationale": reason,
+                    "utility_score": round(float(score["total"]), 3),
+                }
+            )
+
+            if quantity > 0 and _is_core_object(obj, bundle) and score["total"] < 0:
+                conflicts.append(
+                    f"{obj['object_type']} is semantically required but has negative utility under capacity."
+                )
+
+    circulation_pressure = _circulation_pressure(
+        used_footprint_m2=used_footprint_m2,
+        capacity_model=capacity_model,
     )
+    status = _decision_status(
+        decisions=decisions,
+        conflicts=conflicts,
+        used_footprint_m2=used_footprint_m2,
+        capacity_model=capacity_model,
+    )
+
+    return {
+        "status": status,
+        "room_type": room_type,
+        "cluster_decisions": list(cluster_decisions_by_id.values()),
+        "global_density_policy": {
+            "target_density": _style_target_density(style_policy),
+            "clutter_budget_level": _style_clutter_budget_level(
+                furnishing_mode,
+                style_policy,
+            ),
+            "center_openness_preserved": circulation_pressure <= 0.72,
+            "style_policy_applied": bool(style_policy),
+        },
+        "capacity_model": capacity_model,
+        "decision_summary": {
+            "selected_object_count": selected_count,
+            "dropped_object_types": sorted(set(dropped_types)),
+            "estimated_footprint_mm2": int(round(used_footprint_m2 * 1_000_000)),
+            "estimated_circulation_pressure": round(circulation_pressure, 3),
+        },
+        "degradation_ready_order": _build_degradation_ready_order(decisions),
+        "missing": list(semantic_program.get("missing") or []),
+        "conflicts": conflicts,
+        "confidence": _inventory_confidence(status, conflicts, decisions),
+        "notes": [
+            "Tier Count used deterministic utility, capacity, and bundle-preserving rules.",
+            "No pose, macro placement, cluster composition, or LLM step was used.",
+        ],
+        "decisions": decisions,
+    }
+
+
+def _bundle_sort_key(bundle: dict[str, Any]) -> tuple[int, str]:
+    rank = {
+        "indispensable": 0,
+        "strong_support": 1,
+        "optional": 2,
+        "decor_light": 3,
+    }
+    return (
+        rank.get(str(bundle.get("bundle_class") or "optional"), 4),
+        str(bundle.get("bundle_id") or ""),
+    )
+
+
+def _bundle_objects(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    objects = bundle.get("objects")
+    if not isinstance(objects, list):
+        return []
+    return [obj for obj in objects if isinstance(obj, dict)]
+
+
+def _score_object_utility(
+    *,
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+    style_policy: dict[str, Any],
+) -> dict[str, float]:
+    role = str(obj.get("role") or "support")
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    required = bool(obj.get("required"))
+    bundle_class = str(bundle.get("bundle_class") or "optional")
+
+    functional = _functional_utility(role, base_type)
+    semantic = _semantic_utility(
+        role=role,
+        required=required,
+        bundle_class=bundle_class,
+        preserve_level=str(bundle.get("preserve_level") or "medium"),
+    )
+    completeness = _completeness_utility(base_type, bundle)
+    footprint_m2 = _footprint_for_object(
+        obj=obj,
+        quantity=1,
+        size_tier="M",
+        size_profiles_by_category=size_profiles_by_category,
+    )
+    roomfit = _roomfit_utility(
+        base_type=base_type,
+        footprint_m2=footprint_m2,
+        capacity_model=capacity_model,
+    )
+    clutter = _clutter_penalty(
+        footprint_m2=footprint_m2,
+        used_footprint_m2=used_footprint_m2,
+        capacity_model=capacity_model,
+    )
+    circulation = _circulation_penalty(
+        base_type=base_type,
+        footprint_m2=footprint_m2,
+        capacity_model=capacity_model,
+    )
+    redundancy = _redundancy_penalty(object_type, bundle)
+    style_bias = _style_object_utility_bias(
+        obj=obj,
+        bundle=bundle,
+        style_policy=style_policy,
+    )
+    space_surplus_bonus = _surplus_optional_support_bonus(
+        obj=obj,
+        bundle=bundle,
+        used_footprint_m2=used_footprint_m2,
+        capacity_model=capacity_model,
+        style_policy=style_policy,
+    )
+    total = (
+        functional
+        + semantic
+        + completeness
+        + roomfit
+        + style_bias
+        + space_surplus_bonus
+        - clutter
+        - circulation
+        - redundancy
+    )
+
+    return {
+        "function": functional,
+        "semantic": semantic,
+        "completeness": completeness,
+        "roomfit": roomfit,
+        "clutter_penalty": clutter,
+        "circulation_penalty": circulation,
+        "redundancy_penalty": redundancy,
+        "style_policy_bias": style_bias,
+        "space_surplus_bonus": space_surplus_bonus,
+        "total": total,
+    }
+
+
+def _functional_utility(role: str, base_type: str) -> float:
+    role_scores = {
+        "dominant_anchor": 5.0,
+        "workflow_anchor": 4.3,
+        "support": 2.7,
+        "secondary_support": 2.1,
+        "decor_light": 0.9,
+        "optional": 0.8,
+    }
+    score = role_scores.get(role, 2.0)
+    if any(
+        token in base_type
+        for token in ("bed", "desk", "dining_table", "sofa", "tv_console")
+    ):
+        score += 0.6
+    return score
+
+
+def _semantic_utility(
+    *,
+    role: str,
+    required: bool,
+    bundle_class: str,
+    preserve_level: str,
+) -> float:
+    score = 1.2 if required else 0.0
+    if bundle_class == "indispensable":
+        score += 2.0
+    elif bundle_class == "strong_support":
+        score += 1.0
+    elif bundle_class == "decor_light":
+        score -= 0.3
+    if preserve_level == "highest":
+        score += 1.0
+    if role == "dominant_anchor":
+        score += 0.8
+    return score
+
+
+def _completeness_utility(base_type: str, bundle: dict[str, Any]) -> float:
+    bundle_types = {
+        str(
+            obj.get("base_type")
+            or _profile_category_for_member(str(obj.get("object_type") or ""))
+        )
+        for obj in _bundle_objects(bundle)
+    }
+    if base_type == "nightstand" and "bed" in bundle_types:
+        return 1.5
+    if base_type in {"desk_chair", "chair"} and "desk" in bundle_types:
+        return 1.3
+    if base_type in {"coffee_table", "side_table"} and any(
+        token in bundle_types for token in ("sofa", "sectional_sofa", "armchair")
+    ):
+        return 1.1
+    if "chair" in base_type and "dining_table" in bundle_types:
+        return 1.4
+    return 0.45
+
+
+def _roomfit_utility(
+    *,
+    base_type: str,
+    footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> float:
+    placement_mode = _placement_mode(base_type)
+    capacity_key = (
+        "wall_capacity_m2"
+        if placement_mode == "wall_backed"
+        else "floating_capacity_m2"
+    )
+    capacity = max(0.1, float(capacity_model.get(capacity_key) or 0.1))
+    ratio = footprint_m2 / capacity
+    if ratio <= 0.22:
+        return 1.4
+    if ratio <= 0.38:
+        return 0.8
+    if ratio <= 0.55:
+        return 0.2
+    return -0.8
+
+
+def _clutter_penalty(
+    *,
+    footprint_m2: float,
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> float:
+    budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    after_ratio = (used_footprint_m2 + footprint_m2) / budget
+    if after_ratio <= 0.72:
+        return 0.15
+    if after_ratio <= 1.0:
+        return 0.8 + after_ratio * 0.5
+    return 1.8 + (after_ratio - 1.0) * 4.0
+
+
+def _circulation_penalty(
+    *,
+    base_type: str,
+    footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> float:
+    budget = max(0.1, float(capacity_model.get("circulation_budget_m2") or 0.1))
+    pressure = footprint_m2 / budget
+    multiplier = 1.4 if _placement_mode(base_type) == "floating" else 0.8
+    if any(
+        token in base_type for token in ("bed", "sofa", "sectional", "dining_table")
+    ):
+        multiplier += 0.35
+    return pressure * multiplier
+
+
+def _redundancy_penalty(object_type: str, bundle: dict[str, Any]) -> float:
+    base_type = _profile_category_for_member(object_type)
+    similar_count = sum(
+        1
+        for obj in _bundle_objects(bundle)
+        if _profile_category_for_member(str(obj.get("object_type") or "")) == base_type
+    )
+    if similar_count <= 1:
+        return 0.0
+    if base_type in {"chair", "armchair", "nightstand"}:
+        return 0.25
+    return 0.65 * (similar_count - 1)
+
+
+def _select_quantity(
+    *,
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    score: dict[str, float],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+    room_scale: str,
+    furnishing_mode: str,
+) -> int:
+    if _is_core_object(obj, bundle):
+        return _core_quantity(obj, bundle, room_scale, furnishing_mode)
+
+    total = float(score["total"])
+    surplus_keep = _allow_surplus_optional_keep(
+        obj=obj,
+        bundle=bundle,
+        score=score,
+        used_footprint_m2=used_footprint_m2,
+        capacity_model=capacity_model,
+    )
+    if (
+        str(bundle.get("bundle_class")) == "decor_light"
+        and total < 3.4
+        and not surplus_keep
+    ):
+        return 0
+    if total < 2.2 and not surplus_keep:
+        return 0
+
+    footprint_m2 = _footprint_for_object(
+        obj=obj,
+        quantity=1,
+        size_tier="M",
+        size_profiles_by_category={},
+    )
+    clutter_budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    if (
+        used_footprint_m2 + footprint_m2 > clutter_budget * 1.04
+        and total < 4.0
+        and not surplus_keep
+    ):
+        return 0
+
+    base_type = str(obj.get("base_type") or "")
+    max_keep = _positive_int(obj.get("max_keep"), default=1)
+    if base_type == "nightstand" and _bundle_contains_base_type(bundle, "bed"):
+        if furnishing_mode != "minimal" and room_scale in {"medium", "large"}:
+            return min(2, max_keep)
+    return min(1, max_keep)
+
+
+def _core_quantity(
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    room_scale: str,
+    furnishing_mode: str,
+) -> int:
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    max_keep = _positive_int(obj.get("max_keep"), default=1)
+    if base_type == "nightstand" and _bundle_contains_base_type(bundle, "bed"):
+        if furnishing_mode == "minimal" or room_scale == "small":
+            return 1
+        return min(2, max_keep)
+    if "chair" in base_type and _bundle_contains_base_type(bundle, "dining_table"):
+        if room_scale == "small":
+            return min(2, max_keep)
+        return min(4, max_keep)
+    return min(1, max_keep)
+
+
+def _select_size_tier(
+    *,
+    obj: dict[str, Any],
+    quantity: int,
+    score: dict[str, float],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+    room_scale: str,
+    furnishing_mode: str,
+) -> str | None:
+    if quantity <= 0:
+        return None
+
+    candidates = _available_tiers_for_object(obj, size_profiles_by_category)
+    if not candidates:
+        return "M"
+
+    scored = [
+        (
+            _score_size_tier(
+                obj=obj,
+                tier=tier,
+                quantity=quantity,
+                utility_score=float(score["total"]),
+                used_footprint_m2=used_footprint_m2,
+                capacity_model=capacity_model,
+                size_profiles_by_category=size_profiles_by_category,
+                room_scale=room_scale,
+                furnishing_mode=furnishing_mode,
+            ),
+            _tier_tiebreak(tier),
+            tier,
+        )
+        for tier in candidates[:3]
+    ]
+    return max(scored, key=lambda row: (row[0], row[1]))[2]
+
+
+def _score_size_tier(
+    *,
+    obj: dict[str, Any],
+    tier: str,
+    quantity: int,
+    utility_score: float,
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+    room_scale: str,
+    furnishing_mode: str,
+) -> float:
+    role = str(obj.get("role") or "support")
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    footprint_m2 = _footprint_for_object(
+        obj=obj,
+        quantity=quantity,
+        size_tier=tier,
+        size_profiles_by_category=size_profiles_by_category,
+    )
+    clutter_budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    after_ratio = (used_footprint_m2 + footprint_m2) / clutter_budget
+
+    preferred = "M" if role in {"dominant_anchor", "workflow_anchor"} else "S"
+    if (
+        role == "dominant_anchor"
+        and room_scale == "large"
+        and furnishing_mode == "generous"
+    ):
+        preferred = "L"
+    if base_type == "bed":
+        preferred = "M"
+        if (
+            room_scale == "large"
+            and furnishing_mode == "generous"
+            and after_ratio < 0.72
+        ):
+            preferred = "L"
+
+    dominance = 1.0 if tier == preferred else 0.35
+    if role not in {"dominant_anchor", "workflow_anchor"} and tier == "L":
+        dominance -= 0.9
+    if tier == "L" and after_ratio > 0.82:
+        dominance -= 1.2
+    if tier == "M" and after_ratio > 0.95:
+        dominance -= 0.7
+
+    fit = 1.2 if after_ratio <= 0.72 else 0.3 if after_ratio <= 1.0 else -1.2
+    naturalness = {"S": 0.18, "M": 0.12, "L": -0.18}.get(tier, 0.0)
+    return utility_score * 0.12 + dominance + fit + naturalness
+
+
+def _available_tiers_for_object(
+    obj: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+) -> list[str]:
+    profile = _profile_for_object(obj, size_profiles_by_category)
+    rep_dims = profile.get("rep_dims_m") if isinstance(profile, dict) else None
+    if not isinstance(rep_dims, dict):
+        return ["S", "M", "L"]
+    tiers = [tier for tier in ("S", "M", "L") if isinstance(rep_dims.get(tier), dict)]
+    return tiers or ["S", "M", "L"]
+
+
+def _tier_tiebreak(tier: str) -> int:
+    return {"S": 2, "M": 1, "L": 0}.get(tier, 0)
+
+
+def _profile_for_object(
+    obj: dict[str, Any],
+    size_profiles_by_category: dict[str, Any],
+) -> dict[str, Any]:
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    for key in (object_type, base_type, _profile_category_for_member(object_type)):
+        profile = size_profiles_by_category.get(key)
+        if isinstance(profile, dict):
+            return profile
+    generic = size_profiles_by_category.get("__generic__")
+    return generic if isinstance(generic, dict) else {}
+
+
+def _footprint_for_object(
+    *,
+    obj: dict[str, Any],
+    quantity: int,
+    size_tier: str,
+    size_profiles_by_category: dict[str, Any],
+) -> float:
+    if quantity <= 0:
+        return 0.0
+    profile = _profile_for_object(obj, size_profiles_by_category)
+    rep_dims = profile.get("rep_dims_m") if isinstance(profile, dict) else None
+    rep = rep_dims.get(size_tier.upper()) if isinstance(rep_dims, dict) else None
+    if isinstance(rep, dict):
+        area = float(rep.get("A") or 0.0)
+        if area <= 0:
+            area = float(rep.get("L") or 0.0) * float(rep.get("W") or 0.0)
+        if area > 0:
+            return area * quantity
+
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    fallback = {
+        "bed": 3.6,
+        "sofa": 2.1,
+        "sectional_sofa": 3.4,
+        "desk": 1.2,
+        "dining_table": 1.8,
+        "wardrobe": 1.3,
+        "tv_console": 0.8,
+        "coffee_table": 0.7,
+        "nightstand": 0.25,
+        "chair": 0.45,
+        "armchair": 0.75,
+        "floor_lamp": 0.12,
+    }.get(base_type, 0.55)
+    tier_mult = {"S": 0.75, "M": 1.0, "L": 1.35}.get(size_tier.upper(), 1.0)
+    return fallback * tier_mult * quantity
+
+
+def _placement_mode(base_type: str) -> str:
+    if any(
+        token in base_type
+        for token in (
+            "bed",
+            "wardrobe",
+            "closet",
+            "bookshelf",
+            "cabinet",
+            "dresser",
+            "tv_console",
+            "console",
+            "desk",
+        )
+    ):
+        return "wall_backed"
+    return "floating"
+
+
+def _space_surplus_ratio(
+    *,
+    capacity_model: dict[str, Any],
+    used_footprint_m2: float,
+) -> float:
+    room_area = max(0.1, float(capacity_model.get("available_area_m2") or 0.1))
+    clutter_budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    room_headroom = max(0.0, 1.0 - used_footprint_m2 / room_area)
+    budget_headroom = max(0.0, 1.0 - used_footprint_m2 / clutter_budget)
+    return max(0.0, min(1.0, 0.45 * room_headroom + 0.55 * budget_headroom))
+
+
+def _surplus_optional_support_bonus(
+    *,
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+    style_policy: dict[str, Any],
+) -> float:
+    role = str(obj.get("role") or "support")
+    bundle_class = str(bundle.get("bundle_class") or "optional")
+    if role in {"dominant_anchor", "workflow_anchor"}:
+        return 0.0
+    if bundle_class not in {
+        "optional",
+        "decor_light",
+        "strong_support",
+    } and role not in {"support", "secondary_support", "optional"}:
+        return 0.0
+
+    layout_policy = _style_layout_policy(style_policy)
+    target_density = str(layout_policy.get("target_density") or "balanced")
+    if target_density not in {"low_to_balanced", "balanced", "medium", "moderate_high"}:
+        return 0.0
+
+    surplus = _space_surplus_ratio(
+        capacity_model=capacity_model,
+        used_footprint_m2=used_footprint_m2,
+    )
+    if surplus < 0.38:
+        return 0.0
+
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    placement_mode = _placement_mode(base_type)
+    role_bonus = 0.0
+    if placement_mode == "wall_backed":
+        role_bonus += 0.45
+    if any(
+        token in base_type
+        for token in (
+            "bookshelf",
+            "cabinet",
+            "shelf",
+            "console",
+            "shoe",
+            "rack",
+            "storage",
+        )
+    ):
+        role_bonus += 0.35
+    if role in {"support", "secondary_support"}:
+        role_bonus += 0.18
+    if bundle_class == "decor_light":
+        role_bonus -= 0.10
+
+    return max(0.0, min(1.1, role_bonus * min(1.0, surplus / 0.75)))
+
+
+def _allow_surplus_optional_keep(
+    *,
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    score: dict[str, float],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> bool:
+    object_type = str(obj.get("object_type") or "")
+    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
+    role = str(obj.get("role") or "support")
+    bundle_class = str(bundle.get("bundle_class") or "optional")
+    if role in {"dominant_anchor", "workflow_anchor"}:
+        return False
+    if bundle_class not in {
+        "optional",
+        "decor_light",
+        "strong_support",
+    } and role not in {"support", "secondary_support", "optional"}:
+        return False
+    if _placement_mode(base_type) != "wall_backed":
+        return False
+    surplus = _space_surplus_ratio(
+        capacity_model=capacity_model, used_footprint_m2=used_footprint_m2
+    )
+    if surplus < 0.42:
+        return False
+    if float(score.get("circulation_penalty") or 0.0) > 0.28:
+        return False
+    if float(score.get("clutter_penalty") or 0.0) > 1.55:
+        return False
+    return float(score.get("total") or 0.0) >= 0.0
+
+
+def _is_core_object(obj: dict[str, Any], bundle: dict[str, Any]) -> bool:
+    if bool(bundle.get("droppable")):
+        return False
+    role = str(obj.get("role") or "")
+    return bool(obj.get("required")) or role in {"dominant_anchor", "workflow_anchor"}
+
+
+def _bundle_contains_base_type(bundle: dict[str, Any], base_type: str) -> bool:
+    return any(
+        str(
+            obj.get("base_type")
+            or _profile_category_for_member(str(obj.get("object_type") or ""))
+        )
+        == base_type
+        for obj in _bundle_objects(bundle)
+    )
+
+
+def _positive_int(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _string_list_from_any(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
+
+
+def _legacy_priority(role: str, bundle: dict[str, Any]) -> str:
+    _ = bundle
+    if role == "dominant_anchor":
+        return "anchor"
+    if role == "workflow_anchor":
+        return "primary"
+    if role in {"decor_light", "optional"}:
+        return "optional"
+    return "secondary"
+
+
+def _decision_reason(
+    *,
+    quantity: int,
+    role: str,
+    score: dict[str, float],
+) -> str:
+    if quantity <= 0:
+        return "dropped by utility ranking under clutter and circulation budget"
+    if role == "dominant_anchor":
+        return "highest functional utility and semantic anchor value"
+    if role == "workflow_anchor":
+        return "required workflow utility under room-fit budget"
+    if float(score.get("space_surplus_bonus") or 0.0) >= 0.35:
+        return "kept because the room still has spatial surplus after core layout needs"
+    if float(score["completeness"]) >= 1.0:
+        return "high completeness utility under clutter budget"
+    return "positive utility after room-fit and circulation penalties"
+
+
+def _circulation_pressure(
+    *,
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> float:
+    room_area = max(0.1, float(capacity_model.get("available_area_m2") or 0.1))
+    clutter_budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    raw = 0.6 * (used_footprint_m2 / room_area) + 0.4 * (
+        used_footprint_m2 / clutter_budget
+    )
+    return max(0.0, min(1.0, raw))
+
+
+def _decision_status(
+    *,
+    decisions: list[dict[str, Any]],
+    conflicts: list[str],
+    used_footprint_m2: float,
+    capacity_model: dict[str, Any],
+) -> str:
+    if conflicts:
+        return "NEEDS_REVIEW"
+    core_kept = [
+        decision
+        for decision in decisions
+        if str(decision.get("priority")) in {"anchor", "primary"}
+        and int(decision.get("quantity") or 0) > 0
+    ]
+    if not core_kept:
+        return "UNSAT"
+    budget = max(0.1, float(capacity_model.get("clutter_budget_m2") or 0.1))
+    if used_footprint_m2 > budget * 1.15:
+        return "NEEDS_REVIEW"
+    return "OK"
+
+
+def _build_degradation_ready_order(decisions: list[dict[str, Any]]) -> list[str]:
+    active = [
+        decision
+        for decision in decisions
+        if isinstance(decision, dict) and int(decision.get("quantity") or 0) > 0
+    ]
+    drop_first = [
+        str(row.get("role") or row.get("priority") or "support")
+        for row in sorted(active, key=_degradation_sort_key)
+        if str(row.get("priority")) in {"optional", "secondary"}
+    ]
+    shrink_first = [
+        str(row.get("object_type"))
+        for row in sorted(active, key=_degradation_sort_key)
+        if str(row.get("size_tier")) in {"M", "L"}
+    ]
+    order: list[str] = []
+    if drop_first:
+        order.append(f"drop {drop_first[0]}")
+    if shrink_first:
+        order.append(f"shrink {shrink_first[0]} tier")
+    order.extend(
+        f"reduce {str(row.get('object_type'))} count"
+        for row in sorted(active, key=_degradation_sort_key)
+        if int(row.get("quantity") or 0) > 1
+    )
+    return _uniq(order)
+
+
+def _degradation_sort_key(row: dict[str, Any]) -> tuple[int, float, str]:
+    priority_rank = {"optional": 0, "secondary": 1, "primary": 2, "anchor": 3}
+    priority = str(row.get("priority") or "secondary")
+    score = float(row.get("utility_score") or 0.0)
+    return (priority_rank.get(priority, 1), score, str(row.get("object_type") or ""))
+
+
+def _clutter_budget_level(furnishing_mode: str) -> str:
+    if furnishing_mode == "minimal":
+        return "low"
+    if furnishing_mode == "generous":
+        return "moderate_high"
+    return "moderate"
+
+
+def _style_clutter_budget_level(
+    furnishing_mode: str,
+    style_policy: dict[str, Any],
+) -> str:
+    layout_policy = _style_layout_policy(style_policy)
+    clutter_tolerance = _style_level(layout_policy.get("clutter_tolerance"))
+    if clutter_tolerance <= 1:
+        return "low"
+    if clutter_tolerance >= 3:
+        return "moderate_high"
+    return _clutter_budget_level(furnishing_mode)
+
+
+def _style_target_density(style_policy: dict[str, Any]) -> str:
+    layout_policy = _style_layout_policy(style_policy)
+    value = layout_policy.get("target_density")
+    return str(value or "balanced")
+
+
+def _style_object_utility_bias(
+    *,
+    obj: dict[str, Any],
+    bundle: dict[str, Any],
+    style_policy: dict[str, Any],
+) -> float:
+    if not style_policy:
+        return 0.0
+    role = str(obj.get("role") or "support")
+    bundle_class = str(bundle.get("bundle_class") or "optional")
+    object_type = str(obj.get("object_type") or "").lower()
+    layout_policy = _style_layout_policy(style_policy)
+    weights = style_policy.get("policy_weights")
+    weights = weights if isinstance(weights, dict) else {}
+    bias = 0.0
+    if role in {"decor", "decor_light"} or bundle_class == "decor_light":
+        bias += float(weights.get("decor_utility_bias") or 0.0)
+    if role in {"secondary_support", "support", "optional"}:
+        bias += float(weights.get("optional_utility_bias") or 0.0)
+    if _style_level(layout_policy.get("decor_tolerance")) <= 1 and any(
+        token in object_type for token in ("art", "plant", "vase", "decor", "cushion")
+    ):
+        bias -= 0.35
+    if (
+        _style_level(layout_policy.get("clutter_tolerance")) <= 1
+        and bundle_class == "optional"
+    ):
+        bias -= 0.35
+    return bias
+
+
+def _style_layout_policy(style_policy: dict[str, Any]) -> dict[str, Any]:
+    layout_policy = style_policy.get("layout_policy")
+    return dict(layout_policy) if isinstance(layout_policy, dict) else {}
+
+
+def _style_level(value: Any) -> int:
+    text = str(value or "").lower()
+    if "very_high" in text or text == "high":
+        return 4
+    if "medium_high" in text:
+        return 3
+    if "low_to_medium" in text or "low_to_balanced" in text:
+        return 1
+    if "medium" in text or "balanced" in text:
+        return 2
+    if "low" in text:
+        return 0
+    return 2
+
+
+def _inventory_confidence(
+    status: str,
+    conflicts: list[str],
+    decisions: list[dict[str, Any]],
+) -> float:
+    if status == "UNSAT":
+        return 0.35
+    active_count = sum(int(row.get("quantity") or 0) for row in decisions)
+    base = 0.86 if active_count else 0.45
+    base -= min(0.22, len(conflicts) * 0.07)
+    if status == "NEEDS_REVIEW":
+        base -= 0.12
+    return round(max(0.25, min(0.94, base)), 2)
+
+
+def _uniq(values: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
 
 
 def _ensure_size_profiles(
@@ -414,508 +1704,16 @@ def _ensure_size_profiles(
     return profiles
 
 
-def _build_seed_decisions(
-    *,
-    clusters_json: Any,
-    room_scale: str,
-    furnishing_mode: str,
-    droppable_clusters: set[str],
-    room_affordances: dict[str, Any],
-) -> list[dict[str, Any]]:
-    if not isinstance(clusters_json, dict):
-        return []
-
-    clusters = clusters_json.get("clusters")
-    if not isinstance(clusters, list):
-        return []
-
-    decisions: list[dict[str, Any]] = []
-    cluster_lookup: dict[str, dict[str, Any]] = {}
-    for cluster in clusters:
-        if not isinstance(cluster, dict):
-            continue
-
-        cluster_id = cluster.get("cluster_id")
-        if not isinstance(cluster_id, str) or not cluster_id:
-            continue
-        cluster_lookup[cluster_id] = cluster
-
-        tag = str(cluster.get("tag") or "").strip().lower()
-        members = cluster.get("members")
-        if not isinstance(members, list):
-            continue
-
-        anchors = {
-            a
-            for a in (cluster.get("anchors") or [])
-            if isinstance(a, str) and a.strip()
-        }
-        access_required_ids = _extract_cluster_access_required_ids(cluster)
-        droppable = cluster_id in droppable_clusters
-
-        for member in members:
-            if not isinstance(member, str) or not member.strip():
-                continue
-
-            priority = _determine_member_priority(
-                member=member,
-                cluster_tag=tag,
-                anchors=anchors,
-                access_required_ids=access_required_ids,
-                droppable=droppable,
-            )
-            quantity = _determine_member_quantity(
-                member=member,
-                priority=priority,
-                cluster_tag=tag,
-                room_scale=room_scale,
-                furnishing_mode=furnishing_mode,
-                droppable=droppable,
-                anchors=anchors,
-            )
-            size_tier = _determine_member_size_tier(
-                member=member,
-                priority=priority,
-                room_scale=room_scale,
-                furnishing_mode=furnishing_mode,
-            )
-
-            decisions.append(
-                {
-                    "object_type": member,
-                    "category": member,
-                    "cluster_id": cluster_id,
-                    "quantity": quantity,
-                    "size_tier": size_tier,
-                    "priority": priority,
-                    "rationale": _build_member_rationale(
-                        member=member,
-                        cluster_tag=tag,
-                        priority=priority,
-                        quantity=quantity,
-                        size_tier=size_tier,
-                        furnishing_mode=furnishing_mode,
-                    ),
-                }
-            )
-
-    return _apply_primary_seed_sparsity(
-        decisions=decisions,
-        cluster_lookup=cluster_lookup,
-        room_scale=room_scale,
-        furnishing_mode=furnishing_mode,
-        room_affordances=room_affordances,
-    )
-
-
-def _apply_primary_seed_sparsity(
-    *,
-    decisions: list[dict[str, Any]],
-    cluster_lookup: dict[str, dict[str, Any]],
-    room_scale: str,
-    furnishing_mode: str,
-    room_affordances: dict[str, Any],
-) -> list[dict[str, Any]]:
-    if not decisions:
-        return decisions
-
-    decisions_by_cluster: dict[str, list[dict[str, Any]]] = {}
-    for row in decisions:
-        if not isinstance(row, dict):
-            continue
-        cluster_id = str(row.get("cluster_id") or "").strip()
-        if not cluster_id:
-            continue
-        decisions_by_cluster.setdefault(cluster_id, []).append(row)
-
-    for cluster_id, scoped in decisions_by_cluster.items():
-        cluster = cluster_lookup.get(cluster_id)
-        if not isinstance(cluster, dict):
-            continue
-        if not _should_use_sparse_primary_seed(
-            cluster=cluster,
-            room_scale=room_scale,
-            furnishing_mode=furnishing_mode,
-            room_affordances=room_affordances,
-        ):
-            continue
-
-        dependency_ids = _extract_seed_dependency_ids(cluster)
-        access_required_ids = _extract_cluster_access_required_ids(cluster)
-        protected_support_ids = dependency_ids | access_required_ids
-
-        anchor_rows = [
-            row
-            for row in scoped
-            if int(row.get("quantity") or 0) > 0
-            and str(row.get("priority") or "").strip().lower() == "anchor"
-        ]
-        kept_anchor_ids = {
-            str(row.get("object_type") or row.get("category") or "")
-            for row in sorted(anchor_rows, key=_anchor_seed_keep_sort_key)[
-                : _max_active_anchor_count(
-                    room_scale=room_scale,
-                    furnishing_mode=furnishing_mode,
-                    room_affordances=room_affordances,
-                )
-            ]
-        }
-        for row in anchor_rows:
-            object_type = str(row.get("object_type") or row.get("category") or "")
-            if object_type in kept_anchor_ids:
-                continue
-            row["quantity"] = 0
-            _append_seed_adjustment_rationale(
-                row,
-                "Primary seed kept one representative anchor to improve geometric feasibility.",
-            )
-
-        max_support_items = _max_sparse_support_items(
-            room_scale=room_scale,
-            furnishing_mode=furnishing_mode,
-            room_affordances=room_affordances,
-            kept_anchor_ids=kept_anchor_ids,
-        )
-        support_rows = [
-            row
-            for row in scoped
-            if int(row.get("quantity") or 0) > 0
-            and str(row.get("priority") or "").strip().lower()
-            in {"primary", "secondary", "optional"}
-            and str(row.get("object_type") or row.get("category") or "")
-            not in protected_support_ids
-        ]
-        kept_support_ids = {
-            str(row.get("object_type") or row.get("category") or "")
-            for row in sorted(support_rows, key=_support_seed_keep_sort_key)[
-                :max_support_items
-            ]
-        }
-        for row in support_rows:
-            object_type = str(row.get("object_type") or row.get("category") or "")
-            if object_type in kept_support_ids:
-                continue
-            row["quantity"] = 0
-            _append_seed_adjustment_rationale(
-                row,
-                "Primary seed temporarily omitted this support item so the solver can find an initial feasible layout.",
-            )
-
-    return decisions
-
-
-def _extract_seed_dependency_ids(cluster: dict[str, Any]) -> set[str]:
-    dependent_ids: set[str] = set()
-
-    hard_constraints = cluster.get("hard_constraints")
-    if isinstance(hard_constraints, list):
-        for item in hard_constraints:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("type") or "") not in {
-                "dock_to_edge",
-                "anchor_side",
-                "contain_in",
-            }:
-                continue
-            member_id = item.get("a")
-            if isinstance(member_id, str) and member_id.strip():
-                dependent_ids.add(member_id)
-
-    rules = cluster.get("cluster_rules")
-    if isinstance(rules, dict):
-        semantic_placements = rules.get("semantic_placements")
-        if isinstance(semantic_placements, list):
-            for item in semantic_placements:
-                if not isinstance(item, dict):
-                    continue
-                member_id = item.get("id")
-                if isinstance(member_id, str) and member_id.strip():
-                    dependent_ids.add(member_id)
-
-    return dependent_ids
-
-
-def _should_use_sparse_primary_seed(
-    *,
-    cluster: dict[str, Any],
-    room_scale: str,
-    furnishing_mode: str,
-    room_affordances: dict[str, Any],
-) -> bool:
-    members = cluster.get("members")
-    member_count = (
-        len(
-            [member for member in members if isinstance(member, str) and member.strip()]
-        )
-        if isinstance(members, list)
-        else 0
-    )
-    anchors = cluster.get("anchors")
-    anchor_count = (
-        len(
-            [anchor for anchor in anchors if isinstance(anchor, str) and anchor.strip()]
-        )
-        if isinstance(anchors, list)
-        else 0
-    )
-    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
-
-    if _is_fast_layout_mode():
-        return member_count >= 3 or anchor_count > 0
-    if furnishing_mode == "minimal":
-        return True
-    if anchor_count > 1:
-        return True
-    if member_count >= 5 and room_scale != "large":
-        return True
-    return member_count >= 4 and irregularity_ratio < 0.92
-
-
-def _max_active_anchor_count(
-    *,
-    room_scale: str,
-    furnishing_mode: str,
-    room_affordances: dict[str, Any],
-) -> int:
-    if _is_fast_layout_mode():
-        return 1
-    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
-    if (
-        furnishing_mode == "generous"
-        and room_scale == "large"
-        and irregularity_ratio >= 0.95
-    ):
-        return 2
-    return 1
-
-
-def _max_sparse_support_items(
-    *,
-    room_scale: str,
-    furnishing_mode: str,
-    room_affordances: dict[str, Any],
-    kept_anchor_ids: set[str],
-) -> int:
-    if _is_fast_layout_mode():
-        return 0
-    irregularity_ratio = float(room_affordances.get("fill_ratio") or 1.0)
-    large_anchor_pressure = any(
-        _member_pressure_rank(anchor_id) >= 2 for anchor_id in kept_anchor_ids
-    )
-    if furnishing_mode == "minimal":
-        if large_anchor_pressure:
-            return 0
-        return 1
-    if room_scale == "large" and irregularity_ratio >= 0.95:
-        return 2 if not large_anchor_pressure else 1
-    return 1 if not large_anchor_pressure else 0
-
-
-def _anchor_seed_keep_sort_key(row: dict[str, Any]) -> tuple[int, str]:
-    object_type = str(row.get("object_type") or row.get("category") or "")
-    return (-_member_pressure_rank(object_type), object_type)
-
-
-def _support_seed_keep_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
-    priority = str(row.get("priority") or "secondary").strip().lower()
-    priority_rank = {"primary": 0, "secondary": 1, "optional": 2}.get(priority, 3)
-    object_type = str(row.get("object_type") or row.get("category") or "")
-    return (priority_rank, _member_pressure_rank(object_type), object_type)
-
-
-def _append_seed_adjustment_rationale(row: dict[str, Any], note: str) -> None:
-    rationale = str(row.get("rationale") or "").strip()
-    if note in rationale:
-        return
-    row["rationale"] = f"{rationale} {note}".strip()
-
-
-def _member_pressure_rank(member: str | None) -> int:
-    member_key = _norm_key(member)
-    if any(token in member_key for token in LARGE_MEMBER_TOKENS):
-        return 3
-    if any(token in member_key for token in MEDIUM_MEMBER_TOKENS):
-        return 2
-    if any(token in member_key for token in SECONDARY_MEMBER_TOKENS):
-        return 1
-    return 0
-
-
-def _extract_cluster_access_required_ids(cluster: dict[str, Any]) -> set[str]:
-    required_ids: set[str] = set()
-
-    hard_constraints = cluster.get("hard_constraints")
-    if isinstance(hard_constraints, list):
-        for item in hard_constraints:
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "requires_access":
-                continue
-            member_id = item.get("id")
-            if isinstance(member_id, str) and member_id.strip():
-                required_ids.add(member_id)
-
-    rules = cluster.get("cluster_rules")
-    if isinstance(rules, dict):
-        access_requirements = rules.get("access_requirements")
-        if isinstance(access_requirements, list):
-            for item in access_requirements:
-                if not isinstance(item, dict):
-                    continue
-                member_id = item.get("id")
-                if isinstance(member_id, str) and member_id.strip():
-                    required_ids.add(member_id)
-
-    return required_ids
-
-
-def _determine_member_priority(
-    *,
-    member: str,
-    cluster_tag: str,
-    anchors: set[str],
-    access_required_ids: set[str],
-    droppable: bool,
-) -> str:
-    if member in anchors:
-        return "anchor"
-    if member in access_required_ids:
-        return "primary" if not droppable else "secondary"
-
-    member_key = _norm_key(member)
-    if any(token in member_key for token in OPTIONAL_MEMBER_TOKENS):
-        return "optional" if droppable else "secondary"
-    if any(token in member_key for token in SECONDARY_MEMBER_TOKENS):
-        return "secondary"
-
-    if droppable or cluster_tag in {"misc", "decor", "accent", "accessory"}:
-        return (
-            "secondary"
-            if any(token in member_key for token in LARGE_MEMBER_TOKENS)
-            else "optional"
-        )
-
-    if cluster_tag in {
-        "sleep",
-        "work",
-        "living",
-        "storage",
-        "kitchen",
-        "dining",
-        "bathroom",
-    }:
-        return "primary"
-
-    return "secondary"
-
-
-def _determine_member_quantity(
-    *,
-    member: str,
-    priority: str,
-    cluster_tag: str,
-    room_scale: str,
-    furnishing_mode: str,
-    droppable: bool,
-    anchors: set[str],
-) -> int:
-    member_key = _norm_key(member)
-    if priority == "anchor":
-        return 1
-
-    if member_key == "nightstand":
-        if any(_norm_key(anchor) == "bed" for anchor in anchors):
-            if furnishing_mode == "generous" and room_scale in {"medium", "large"}:
-                return 2
-            if furnishing_mode == "neutral" and room_scale == "large":
-                return 2
-        return 1
-
-    if priority == "primary":
-        return 1
-
-    if priority == "secondary":
-        if droppable and furnishing_mode == "minimal":
-            return 0
-        return 1
-
-    if priority == "optional":
-        if furnishing_mode == "generous" and room_scale != "small":
-            return 1
-        if (
-            cluster_tag in {"living"}
-            and room_scale == "large"
-            and member_key == "floor_lamp"
-        ):
-            return 1
-        return 0
-
-    return 1
-
-
-def _determine_member_size_tier(
-    *,
-    member: str,
-    priority: str,
-    room_scale: str,
-    furnishing_mode: str,
-) -> str:
-    member_key = _norm_key(member)
-
-    if member_key == "bed":
-        if room_scale == "large" and furnishing_mode != "minimal":
-            return "L"
-        return "M"
-
-    if any(token in member_key for token in LARGE_MEMBER_TOKENS):
-        base_tier = "M"
-    elif any(token in member_key for token in MEDIUM_MEMBER_TOKENS):
-        base_tier = "M"
-    elif priority in {"anchor", "primary"}:
-        base_tier = "M"
-    else:
-        base_tier = "S"
-
-    if furnishing_mode == "minimal":
-        return _shift_tier(base_tier, -1 if base_tier != "S" else 0)
-    if (
-        furnishing_mode == "generous"
-        and priority in {"anchor", "primary"}
-        and room_scale in {"medium", "large"}
-    ):
-        return _shift_tier(base_tier, 1)
-    if room_scale == "small" and priority != "anchor":
-        return _shift_tier(base_tier, -1)
-    return base_tier
-
-
-def _build_member_rationale(
-    *,
-    member: str,
-    cluster_tag: str,
-    priority: str,
-    quantity: int,
-    size_tier: str,
-    furnishing_mode: str,
-) -> str:
-    quantity_note = "kept" if quantity >= 1 else "dropped"
-    cluster_note = cluster_tag or "cluster"
-    return (
-        f"Deterministic policy marked {member} as {priority} in {cluster_note}; "
-        f"{quantity_note} at quantity {quantity} with size tier {size_tier} for a {furnishing_mode} furnishing plan."
-    )
-
-
 def _build_deterministic_assumptions(
     *,
     context: dict[str, Any],
     furnishing_mode: str,
     available_area_m2: float,
     room_affordances: dict[str, Any],
+    style_policy: dict[str, Any],
 ) -> list[str]:
     assumptions = [
-        "Deterministic tier-count policy applied from cluster membership, room area, and budget heuristics."
+        "Deterministic tier-count policy applied from semantic bundles, room capacity, and utility scores."
     ]
     if furnishing_mode == "minimal":
         assumptions.append(
@@ -929,7 +1727,11 @@ def _build_deterministic_assumptions(
     fill_ratio = float(room_affordances.get("fill_ratio") or 1.0)
     if fill_ratio < 0.92:
         assumptions.append(
-            "Room geometry is irregular enough that the primary seed starts sparser before later refill passes."
+            "Room geometry is irregular enough that room-fit and circulation penalties are weighted more carefully."
+        )
+    if style_policy:
+        assumptions.append(
+            "Style policy adjusted density, clutter, and decor utility without overriding required functional anchors."
         )
     return assumptions
 
@@ -942,7 +1744,7 @@ def _build_deterministic_notes(
     notes = ["TierCountDirector used deterministic rules instead of an LLM."]
     style = _infer_style(context)
     if style:
-        notes.append(f"Budget seeding considered the requested style: {style}.")
+        notes.append(f"Utility scoring considered the requested style: {style}.")
     notes.append(f"Initial furnishing mode: {furnishing_mode}.")
     return notes
 
@@ -1068,16 +1870,6 @@ def _classify_room_scale(area_m2: float) -> str:
     if area_m2 < 18.0:
         return "medium"
     return "large"
-
-
-def _shift_tier(tier: str, delta: int) -> str:
-    ordered = ["S", "M", "L"]
-    try:
-        idx = ordered.index(tier.upper())
-    except ValueError:
-        idx = 1
-    next_idx = max(0, min(len(ordered) - 1, idx + delta))
-    return ordered[next_idx]
 
 
 def _profile_category_for_member(member: str) -> str:

@@ -77,7 +77,6 @@ class StyledObject(BaseModel):
         return value
 
 
-
 class RoomInfo(BaseModel):
     room_id: str
     room_type: str
@@ -92,6 +91,7 @@ class StylistOutput(BaseModel):
     status: Literal["OK", "NEED_INFO", "UNSAT"]
     room: RoomInfo | None = None
     objects: list[StyledObject] = Field(default_factory=list)
+    final_style_plan: dict[str, object] | None = None
     notes: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
 

@@ -32,6 +32,7 @@ fake_llm_module.get_llm_client = lambda *args, **kwargs: None
 sys.modules["clients.llm_client"] = fake_llm_module
 
 _cluster_forge = importlib.import_module("agent.cluster_forge")
+_semantic_layout_planner = importlib.import_module("agent.semantic_layout_planner")
 _room_selection_rules = importlib.import_module("stylist.room_selection_rules")
 ClusterForgeOutput = importlib.import_module(
     "agent_schema.clusterF_schema"
@@ -434,6 +435,97 @@ class ClusterForgeArchitectureTest(unittest.TestCase):
                 for note in parsed.notes
             )
         )
+
+    def test_normalize_rejects_anchor_outside_dominant_candidates(self) -> None:
+        payload = {
+            "status": "OK",
+            "clusters": [
+                {
+                    "cluster_id": "main_seating",
+                    "tag": "living",
+                    "members": ["coffee_table", "armchair", "sofa"],
+                    "anchors": ["coffee_table"],
+                    "hard_constraints": [],
+                    "soft_constraints": [],
+                    "cluster_rules": {
+                        "dominant_anchor_candidates": ["sofa", "sectional_sofa"]
+                    },
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        normalized = _cluster_forge._normalize_cluster_forge_payload(payload)
+
+        self.assertEqual(normalized["clusters"][0]["anchors"], ["sofa"])
+        self.assertTrue(
+            any(
+                "outside dominant anchor candidates" in note
+                for note in normalized["notes"]
+            )
+        )
+
+    def test_semantic_payload_prefers_candidate_anchor_over_corrupt_role(
+        self,
+    ) -> None:
+        semantic_program = {
+            "status": "OK",
+            "room_type": "living_room",
+            "active_clusters": [
+                {
+                    "cluster_id": "main_seating",
+                    "priority": "core",
+                    "activation_reason": "test",
+                    "semantic_role": "core_social_zone",
+                    "dominant_anchor_candidates": ["sofa", "sectional_sofa"],
+                    "required_bundles": [
+                        {
+                            "bundle_id": "main_seating_bundle",
+                            "objects": [
+                                {
+                                    "object_type": "coffee_table",
+                                    "role": "dominant_anchor",
+                                    "required": True,
+                                },
+                                {
+                                    "object_type": "sofa",
+                                    "role": "dominant_anchor",
+                                    "required": True,
+                                },
+                            ],
+                        }
+                    ],
+                    "zone_claims": {},
+                    "relation_intents": [],
+                    "degradation_ladder": [],
+                }
+            ],
+            "notes": [],
+            "missing": [],
+        }
+
+        payload = _semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+            semantic_program
+        )
+        cluster = payload["clusters"][0]
+
+        self.assertEqual(cluster["anchors"], ["sofa"])
+        self.assertEqual(cluster["tag"], "living")
+        self.assertEqual(
+            cluster["cluster_rules"]["dominant_anchor_candidates"],
+            ["sofa"],
+        )
+
+    def test_cluster_tag_treats_main_seating_with_coffee_table_as_living(
+        self,
+    ) -> None:
+        tag = _semantic_layout_planner._cluster_tag(
+            "main_seating",
+            ["coffee_table", "armchair", "side_table", "sofa"],
+        )
+
+        self.assertEqual(tag, "living")
 
     def test_normalize_keeps_single_primary_anchor_for_living_cluster(self) -> None:
         payload = {

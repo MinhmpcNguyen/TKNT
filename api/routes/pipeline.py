@@ -450,15 +450,32 @@ def get_result(case_id: str) -> PipelineResultResponse:
 def get_artifact(case_id: str, name: str) -> ArtifactResponse:
     paths = case_paths(case_id)
     mapping = {
+        "module_io_manifest": paths.module_io_manifest,
         "room_interpreter": paths.room_interpreter,
+        "stylist_style_policy": paths.module_output("stylist_style_policy"),
         "cluster_forge": paths.cluster_forge,
         "tier_count": paths.tier_count,
+        "tier_count_director": paths.module_output("tier_count_director"),
         "cluster_merged": paths.cluster_merged,
+        "cluster_output_merger": paths.module_output("cluster_output_merger"),
         "cluster_relation_plan": paths.cluster_relation_plan,
+        "seed_concept_relation_plan": paths.module_output(
+            "seed_concept_relation_plan"
+        ),
+        "seed_concept_generator": paths.module_output("seed_concept_generator"),
         "cluster_placer": paths.cluster_placer,
+        "phase2_controller": paths.module_output("phase2_controller"),
+        "macro_cluster_solver": paths.module_output("macro_cluster_solver"),
+        "macro_cluster_solver_dropped_inventory": paths.module_output(
+            "macro_cluster_solver_dropped_inventory"
+        ),
         "absolute_layout": paths.absolute_layout,
+        "controlled_accessory_refill": paths.module_output(
+            "controlled_accessory_refill"
+        ),
         "stylist": paths.stylist,
         "cluster_outlines": paths.cluster_outlines_all,
+        "cluster_outline_bundle": paths.module_output("cluster_outline_bundle"),
         "layout_variants": paths.layout_variants,
     }
     path = mapping.get(name)

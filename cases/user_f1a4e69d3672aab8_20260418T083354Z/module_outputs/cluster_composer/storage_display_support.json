@@ -1,0 +1,391 @@
+{
+  "status": "OK",
+  "cluster_id": "storage_display_support",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "bookshelf",
+      "x": 0,
+      "y": 0,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "bookshelf",
+        "x": 0,
+        "y": 0,
+        "w": 630,
+        "h": 250
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 630,
+      "max_y": 250
+    },
+    "tight_hull_polygon_mm": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 630,
+        "y": 0
+      },
+      {
+        "x": 630,
+        "y": 250
+      },
+      {
+        "x": 0,
+        "y": 250
+      }
+    ],
+    "tight_hull_polygons_mm": [
+      [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 250
+        },
+        {
+          "x": 0,
+          "y": 250
+        }
+      ]
+    ],
+    "interaction_hull_polygon_mm": [],
+    "interaction_hull_polygons_mm": [],
+    "variant_family": "wall_storage_linear",
+    "family_fidelity": 1.0
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "cluster_effective_front_side": "top",
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "bookshelf": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "variant_bundle": [
+    {
+      "variant_id": "storage_display_support__wall_storage_linear__01",
+      "variant_family": "wall_storage_linear",
+      "canonical_variant_family": "storage_wall",
+      "source_type": "family_native",
+      "family_fidelity": 1.0,
+      "semantic_confidence": 1.0,
+      "fallback_heavy": false,
+      "solver_friendliness": 0.7119047619047619,
+      "semantic_signature": [
+        "wall_storage_linear",
+        "dominant_anchor",
+        "required_access_preserved",
+        "center:light",
+        "hull:(2.52, 1.0, 1)",
+        "wall:bookshelf:left",
+        "wall:bookshelf:bottom",
+        "wall:bookshelf:right",
+        "wall:bookshelf:top",
+        "access_zones:1"
+      ],
+      "local_placements": [
+        {
+          "id": "bookshelf",
+          "x": 0,
+          "y": 0,
+          "rot": 0
+        }
+      ],
+      "interaction_placements": [
+        {
+          "id": "bookshelf",
+          "x": 0,
+          "y": 0,
+          "w": 630,
+          "h": 250
+        },
+        {
+          "id": "access:bookshelf",
+          "x": 215,
+          "y": 250,
+          "w": 200,
+          "h": 200
+        }
+      ],
+      "tight_hull_polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 250
+        },
+        {
+          "x": 0,
+          "y": 250
+        }
+      ],
+      "tight_hull_polygons_mm": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 630,
+            "y": 0
+          },
+          {
+            "x": 630,
+            "y": 250
+          },
+          {
+            "x": 0,
+            "y": 250
+          }
+        ]
+      ],
+      "interaction_hull_polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 0
+        },
+        {
+          "x": 630,
+          "y": 250
+        },
+        {
+          "x": 415,
+          "y": 250
+        },
+        {
+          "x": 415,
+          "y": 450
+        },
+        {
+          "x": 215,
+          "y": 450
+        },
+        {
+          "x": 215,
+          "y": 250
+        },
+        {
+          "x": 0,
+          "y": 250
+        }
+      ],
+      "interaction_hull_polygons_mm": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 630,
+            "y": 0
+          },
+          {
+            "x": 630,
+            "y": 250
+          },
+          {
+            "x": 415,
+            "y": 250
+          },
+          {
+            "x": 415,
+            "y": 450
+          },
+          {
+            "x": 215,
+            "y": 450
+          },
+          {
+            "x": 215,
+            "y": 250
+          },
+          {
+            "x": 0,
+            "y": 250
+          }
+        ]
+      ],
+      "family_contract_reasons": [
+        "family contract passed"
+      ],
+      "local_bbox_mm": {
+        "min": [
+          0,
+          0
+        ],
+        "max": [
+          630,
+          250
+        ]
+      },
+      "wall_contact_edges": [
+        {
+          "object_id": "bookshelf",
+          "edge": "left"
+        },
+        {
+          "object_id": "bookshelf",
+          "edge": "bottom"
+        },
+        {
+          "object_id": "bookshelf",
+          "edge": "right"
+        },
+        {
+          "object_id": "bookshelf",
+          "edge": "top"
+        }
+      ],
+      "required_access_zones": [
+        {
+          "id": "bookshelf",
+          "x": 215,
+          "y": 250,
+          "w": 200,
+          "h": 200,
+          "kind": "front_clearance"
+        }
+      ],
+      "local_quality": {
+        "functional_score": 0.9999999999999999,
+        "naturalness_score": 0.95,
+        "semantic_coherence_score": 0.9333809523809523,
+        "compactness_score": 0.6389474235723039,
+        "family_fidelity_score": 1.0,
+        "awkwardness_penalty": 0.0,
+        "solver_friendliness_score": 0.7119047619047619,
+        "split_cluster_penalty": 0.0,
+        "awkward_grouping_penalty": 0.0,
+        "fake_support_penalty": 0.0,
+        "compaction_semantic_penalty": 0.0
+      },
+      "hard_valid": true
+    }
+  ],
+  "canonical_variant_id": "storage_display_support__wall_storage_linear__01",
+  "canonical_variant_family": "storage_wall",
+  "variant_summary": {
+    "variant_count": 1,
+    "families": {
+      "wall_storage_linear": 1
+    },
+    "fallback_variant_count": 0,
+    "best_semantic_coherence_score": 0.9334
+  },
+  "family_coverage": {
+    "requested": [
+      "storage_wall",
+      "storage_buffered_entry",
+      "edge_storage"
+    ],
+    "covered": [
+      "storage_wall"
+    ],
+    "missing": [
+      "edge_storage",
+      "storage_buffered_entry"
+    ]
+  },
+  "tight_hull_polygon_mm": [
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 630,
+      "y": 0
+    },
+    {
+      "x": 630,
+      "y": 250
+    },
+    {
+      "x": 0,
+      "y": 250
+    }
+  ],
+  "tight_hull_polygons_mm": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 630,
+        "y": 0
+      },
+      {
+        "x": 630,
+        "y": 250
+      },
+      {
+        "x": 0,
+        "y": 250
+      }
+    ]
+  ],
+  "interaction_hull_polygon_mm": [],
+  "interaction_hull_polygons_mm": [],
+  "variant_family": "wall_storage_linear",
+  "source_type": "family_native",
+  "family_fidelity": 1.0,
+  "semantic_confidence": 1.0,
+  "fallback_heavy": false,
+  "solver_friendliness": 0.7119047619047619,
+  "family_contract_reasons": [
+    "family contract passed"
+  ],
+  "conflicts": [],
+  "notes": [
+    "ClusterComposer used deterministic semantic archetypes instead of an LLM.",
+    "Kept 1 diverse local variants for macro solving."
+  ],
+  "missing": []
+}

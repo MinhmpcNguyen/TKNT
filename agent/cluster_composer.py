@@ -3,16 +3,23 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
 from agent_schema.cluster_composer_schema import ClusterComposerOutput
+from cluster_composer.outline import _outline_polygons_union_grid
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from layout.grid_policy import normalize_layout_grid_mm
 from layout.orientation_contract import (
     rotate_side_ccw_90s as _rotate_side_ccw_90s_contract,
+)
+from layout.orientation_contract import (
     side_to_vec as _side_to_vec_contract,
+)
+from layout.orientation_contract import (
     vec_to_side as _vec_to_side_contract,
 )
 from prompt.cluster_composer import CLUSTER_COMPOSER_PROMPT
@@ -20,6 +27,126 @@ from prompt.system import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 FIXED_ACCESS_CLEARANCE_RATIO = 0.25
+DEFAULT_TARGET_VALID_VARIANTS_PER_CLUSTER = 6
+HARD_CAP_VARIANTS_PER_CLUSTER = 12
+MAX_VARIANT_FAMILIES_PER_CLUSTER = 4
+MIN_SEMANTIC_DISTANCE_BETWEEN_KEPT_VARIANTS = 0.25
+MIN_POSE_DISTANCE_BETWEEN_KEPT_VARIANTS = 0.15
+CORE_CLUSTER_FAMILY_FIDELITY_THRESHOLD = 0.60
+SUPPORT_CLUSTER_FAMILY_FIDELITY_THRESHOLD = 0.50
+
+ARCHETYPE_LIBRARY: dict[str, tuple[str, ...]] = {
+    "sleep_core": (
+        "headboard_wall_balanced",
+        "headboard_wall_single_side",
+        "bed_plus_storage_buffer",
+        "bed_plus_window_side_bench",
+    ),
+    "sleep": (
+        "headboard_wall_balanced",
+        "headboard_wall_single_side",
+        "bed_plus_storage_buffer",
+        "bed_plus_window_side_bench",
+    ),
+    "living_media": (
+        "media_facing",
+        "conversation_facing",
+        "window_oriented",
+        "open_center",
+    ),
+    "living": (
+        "media_facing",
+        "conversation_facing",
+        "window_oriented",
+        "open_center",
+    ),
+    "seating": (
+        "media_facing",
+        "conversation_facing",
+        "window_oriented",
+        "open_center",
+    ),
+    "media": (
+        "media_facing",
+        "wall_media_linear",
+        "open_center",
+    ),
+    "work_study": (
+        "wall_desk",
+        "daylight_desk",
+        "compact_corner_work",
+    ),
+    "work": (
+        "wall_desk",
+        "daylight_desk",
+        "compact_corner_work",
+    ),
+    "dining_core": (
+        "centered_dining",
+        "wall_shifted_dining",
+        "hospitality_open_side",
+    ),
+    "dining": (
+        "centered_dining",
+        "wall_shifted_dining",
+        "hospitality_open_side",
+    ),
+    "storage": (
+        "wall_storage_linear",
+        "storage_buffered_entry",
+        "compact_storage_bank",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class SemanticSeedCandidate:
+    family: str
+    source_type: str
+    placements: list[dict[str, Any]]
+    family_fidelity: float
+    semantic_confidence: float
+    notes: list[str]
+
+
+@dataclass(frozen=True)
+class SemanticContext:
+    cluster_id: str
+    cluster_type: str
+    semantic_role: str | None
+    members: list[str]
+    specs: dict[str, dict[str, Any]]
+    roles: dict[str, str]
+    role_ids: dict[str, list[str]]
+    dominant_anchor_id: str | None
+    required_object_ids: set[str]
+    optional_object_ids: set[str]
+    bundle_graph: dict[str, list[str]]
+    grid_mm: int
+    semantic_placements: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class LocalQualityBreakdown:
+    functional_score: float
+    naturalness_score: float
+    semantic_coherence_score: float
+    compactness_score: float
+    family_fidelity_score: float
+    awkwardness_penalty: float
+    solver_friendliness_score: float
+    split_cluster_penalty: float = 0.0
+    awkward_grouping_penalty: float = 0.0
+    fake_support_penalty: float = 0.0
+    compaction_semantic_penalty: float = 0.0
+
+
+@dataclass(frozen=True)
+class FamilyContractResult:
+    passed: bool
+    family_fidelity: float
+    semantic_confidence: float
+    contract_reasons: list[str]
 
 
 @dataclass(frozen=True)
@@ -84,6 +211,11 @@ class ClusterComposer:
 def _find_cluster(merged_clusters: dict[str, Any], cluster_id: str) -> dict[str, Any]:
     if not isinstance(merged_clusters, dict):
         raise ValueError("merged_clusters missing or invalid (expected dict).")
+    if _cluster_id(merged_clusters) == cluster_id and (
+        isinstance(merged_clusters.get("inventory_decision"), dict)
+        or isinstance(merged_clusters.get("decisions"), list)
+    ):
+        return merged_clusters
     clusters = merged_clusters.get("clusters", [])
     if isinstance(clusters, list):
         for cluster in clusters:
@@ -141,137 +273,182 @@ def _run_deterministic_controller(
     del special_notes
     del verifier_feedback_json
 
-    access_clearance_ratio = FIXED_ACCESS_CLEARANCE_RATIO
-    expected_member_ids = _member_ids(cluster)
-    if not expected_member_ids:
-        return json.dumps(
-            {
-                "status": "NEED_INFO",
-                "cluster_id": str(cluster.get("cluster_id") or ""),
-                "local_placements": [],
-                "notes": ["Cluster has no members to compose."],
-                "missing": ["members"],
-            },
-            ensure_ascii=True,
-        )
+    payload = _generate_cluster_variant_bundle_payload(
+        cluster=cluster,
+        max_steps=max_steps,
+        access_clearance_ratio=FIXED_ACCESS_CLEARANCE_RATIO,
+    )
+    return json.dumps(payload, ensure_ascii=True)
 
-    best_valid_draft: dict[str, Any] | None = None
-    best_valid_eval: dict[str, Any] | None = None
-    best_valid_rank: tuple[Any, ...] | None = None
 
-    seed_states = _build_search_seed_states(cluster)
-    visited: set[str] = set()
-    frontier: list[
-        tuple[tuple[Any, ...], int, list[dict[str, Any]], dict[str, Any]]
-    ] = []
+def _generate_cluster_variant_bundle_payload(
+    *,
+    cluster: dict[str, Any],
+    max_steps: int,
+    access_clearance_ratio: float,
+) -> dict[str, Any]:
+    member_ids = _member_ids(cluster)
+    cluster_id = _cluster_id(cluster)
+    if not member_ids:
+        return {
+            "status": "NEED_INFO",
+            "cluster_id": cluster_id,
+            "local_placements": [],
+            "variant_bundle": [],
+            "notes": ["Cluster has no members to compose."],
+            "missing": ["members"],
+            "conflicts": [],
+        }
+
+    ctx = _semantic_context(cluster)
+    ctx = _ctx_with_local_seed_required_relaxation(cluster=cluster, ctx=ctx)
+
+    families = _select_variant_families(cluster, ctx)
+    target_count = _target_variant_count(cluster)
     step_budget = max(1, int(max_steps))
+    candidates = _collect_semantic_candidate_states(
+        cluster=cluster,
+        families=families,
+        ctx=ctx,
+    )
 
-    for placements in seed_states:
-        ok, detail = _validate_local_placements_full(placements, expected_member_ids)
+    valid_variants: list[dict[str, Any]] = []
+    seen_placements: set[str] = set()
+    conflicts: list[str] = []
+
+    for candidate in candidates:
+        canonical = _canonicalize_local_placements(candidate.placements)
+        signature = _placements_signature(canonical)
+        if not canonical or signature in seen_placements:
+            continue
+        seen_placements.add(signature)
+
+        ok, detail = _validate_local_placements_full(canonical, member_ids)
         if not ok:
-            logger.warning("ClusterComposer deterministic seed rejected: %s", detail)
+            conflicts.append(f"{candidate.family}: {detail}")
             continue
-
-        canonical = _canonicalize_local_placements(placements)
-        state_sig = _placements_signature(canonical)
-        if state_sig in visited:
-            continue
-        visited.add(state_sig)
 
         eval_out = _run_verifier_once(
             cluster=cluster,
             placements=canonical,
             access_clearance_ratio=access_clearance_ratio,
         )
-        frontier.append((_tool_rank(eval_out), 0, canonical, eval_out))
-
-    if not frontier:
-        return json.dumps(
-            {
-                "status": "UNSAT",
-                "cluster_id": str(cluster.get("cluster_id") or ""),
-                "local_frame": {
-                    "unit": "mm",
-                    "grid_mm": _extract_grid_mm(cluster),
-                    "origin_note": "(0,0) is an arbitrary local origin for this cluster",
-                },
-                "local_placements": [],
-                "cluster_footprint": {
-                    "type": "union_of_rects",
-                    "rects": [],
-                    "local_bbox": {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0},
-                },
-                "notes": ["No valid deterministic seed state could be generated."],
-                "missing": [],
-            },
-            ensure_ascii=True,
-        )
-
-    steps_used = 0
-    while frontier and steps_used < step_budget:
-        frontier.sort(key=lambda item: (item[0], item[1]))
-        current_rank, depth, placements, eval_out = frontier.pop(0)
-        steps_used += 1
-
-        if eval_out.get("result") == "VALID":
-            placements, eval_out, improve_rounds = _greedy_improve_valid_layout(
+        if eval_out.get("result") != "VALID":
+            repaired, repaired_eval, _ = _repair_invalid_seed_layout(
                 cluster=cluster,
                 access_clearance_ratio=access_clearance_ratio,
-                placements=placements,
+                placements=canonical,
                 verifier_eval=eval_out,
-                max_rounds=max(1, step_budget - steps_used),
+                max_rounds=min(12, step_budget),
+                family=candidate.family,
+                ctx=ctx,
             )
-            current_rank = _tool_rank(eval_out)
-
-            if best_valid_rank is None or current_rank < best_valid_rank:
-                best_valid_rank = current_rank
-                best_valid_draft = {
-                    "cluster_id": cluster.get("cluster_id"),
-                    "local_placements": placements,
-                }
-                best_valid_eval = eval_out
-
-            if improve_rounds > 0:
-                logger.info(
-                    "ClusterComposer deterministic refinement applied %s improving rounds.",
-                    improve_rounds,
+            if repaired_eval.get("result") != "VALID":
+                conflicts.extend(
+                    _conflict_notes_for_family(candidate.family, repaired_eval)
                 )
-            continue
+                continue
+            canonical = repaired
+            eval_out = repaired_eval
 
-        successors = _collect_ranked_patch_successors(
+        improved, improved_eval, _ = _greedy_improve_valid_layout(
             cluster=cluster,
             access_clearance_ratio=access_clearance_ratio,
-            tool_output=eval_out,
-            placements=placements,
-            limit=3,
+            placements=canonical,
+            verifier_eval=eval_out,
+            max_rounds=min(20, step_budget),
+            family=candidate.family,
+            ctx=ctx,
         )
-
-        for successor_rank, successor_placements, successor_eval in successors:
-            state_sig = _placements_signature(successor_placements)
-            if state_sig in visited:
-                continue
-            visited.add(state_sig)
-            frontier.append(
-                (successor_rank, depth + 1, successor_placements, successor_eval)
+        contract = _family_contract_validator(
+            family=candidate.family,
+            placements=improved,
+            ctx=ctx,
+            verifier_eval=improved_eval,
+        )
+        if not contract.passed:
+            conflicts.append(
+                f"{candidate.family}: family contract failed: "
+                f"{'; '.join(contract.contract_reasons[:4])}"
             )
+            continue
 
-    if best_valid_draft is not None and isinstance(
-        best_valid_draft.get("local_placements"), list
-    ):
-        payload = _build_cluster_output_from_placements(
+        fidelity_threshold = _family_fidelity_threshold(ctx)
+        if (
+            candidate.source_type == "family_native"
+            and contract.family_fidelity < fidelity_threshold
+        ):
+            conflicts.append(
+                f"{candidate.family}: family_fidelity "
+                f"{contract.family_fidelity:.2f} below "
+                f"{fidelity_threshold:.2f} threshold"
+            )
+            continue
+        if candidate.source_type == "fallback_generic" and _is_core_cluster(ctx):
+            conflicts.append(
+                "fallback_generic: core cluster fallback reserved for debug/backoff, "
+                "not solver output"
+            )
+            continue
+
+        variant = _build_cluster_variant_payload(
             cluster=cluster,
-            placements=_canonicalize_local_placements(
-                best_valid_draft["local_placements"]
+            candidate=SemanticSeedCandidate(
+                family=candidate.family,
+                source_type=candidate.source_type,
+                placements=improved,
+                family_fidelity=contract.family_fidelity,
+                semantic_confidence=contract.semantic_confidence,
+                notes=[*candidate.notes, *contract.contract_reasons],
             ),
-            verifier_eval=best_valid_eval,
-            notes=["ClusterComposer used deterministic search instead of an LLM."],
+            verifier_eval=improved_eval,
+            ctx=ctx,
+            contract=contract,
         )
-        return json.dumps(payload, ensure_ascii=True)
+        valid_variants.append(variant)
 
-    return json.dumps(
-        {
+    native_variants = [
+        variant
+        for variant in valid_variants
+        if variant.get("source_type") == "family_native"
+        and float(variant.get("family_fidelity") or 0.0)
+        >= _family_fidelity_threshold(ctx)
+    ]
+    if native_variants:
+        valid_variants = native_variants
+    elif _is_core_cluster(ctx):
+        droppable_ids = _local_seed_droppable_ids(cluster=cluster, ctx=ctx)
+        return _semantic_fail_payload(
+            cluster=cluster,
+            conflicts=[
+                *_dedupe_strings(conflicts)[:12],
+                (
+                    "Core cluster has no family_native variant at or above "
+                    f"{CORE_CLUSTER_FAMILY_FIDELITY_THRESHOLD:.2f} fidelity."
+                ),
+                (
+                    "Allowed local-seed degradation order: "
+                    f"{droppable_ids if droppable_ids else '[]'}"
+                ),
+                (
+                    "Failure happened after semantic-first local composition, "
+                    "so the remaining unplaced objects are outside the permitted "
+                    "local degradation ladder."
+                ),
+            ],
+        )
+
+    kept_variants = _select_diverse_variants(
+        valid_variants,
+        target_count=target_count,
+    )
+    for variant in kept_variants:
+        variant["variant_id"] = f"{_safe_slug(cluster_id)}__{variant['variant_id']}"
+
+    if not kept_variants:
+        return {
             "status": "UNSAT",
-            "cluster_id": str(cluster.get("cluster_id") or ""),
+            "cluster_id": cluster_id,
             "local_frame": {
                 "unit": "mm",
                 "grid_mm": _extract_grid_mm(cluster),
@@ -283,13 +460,4121 @@ def _run_deterministic_controller(
                 "rects": [],
                 "local_bbox": {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0},
             },
+            "variant_bundle": [],
             "notes": [
-                "ClusterComposer deterministic search exhausted without a verified valid layout."
+                "ClusterComposer deterministic semantic variant generation found no hard-valid layout."
             ],
             "missing": [],
-        },
-        ensure_ascii=True,
+            "conflicts": _dedupe_strings(conflicts)[:12],
+        }
+
+    primary = _select_canonical_variant(kept_variants)
+    primary_output = _build_cluster_output_from_placements(
+        cluster=cluster,
+        placements=[
+            item.model_dump() if hasattr(item, "model_dump") else item
+            for item in primary["local_placements"]
+        ],
+        verifier_eval=None,
+        notes=[
+            "ClusterComposer used deterministic semantic archetypes instead of an LLM.",
+            f"Kept {len(kept_variants)} diverse local variants for macro solving.",
+        ],
+        variant_family=str(primary.get("variant_family") or ""),
+        family_fidelity=float(primary.get("family_fidelity") or 0.0),
     )
+    primary_output["variant_bundle"] = kept_variants
+    primary_output["canonical_variant_id"] = primary.get("variant_id")
+    primary_output["variant_summary"] = _build_variant_summary(kept_variants)
+    primary_output["family_coverage"] = _family_coverage(kept_variants, families)
+    primary_output["source_type"] = primary.get("source_type")
+    primary_output["family_fidelity"] = primary.get("family_fidelity")
+    primary_output["semantic_confidence"] = primary.get("semantic_confidence")
+    primary_output["fallback_heavy"] = primary.get("fallback_heavy")
+    primary_output["solver_friendliness"] = primary.get("solver_friendliness")
+    primary_output["family_contract_reasons"] = (
+        primary.get("family_contract_reasons") or []
+    )
+    primary_output["conflicts"] = _dedupe_strings(conflicts)[:12]
+    return primary_output
+
+
+def _collect_semantic_candidate_states(
+    *,
+    cluster: dict[str, Any],
+    families: list[str],
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    native = _collect_family_native_candidates(
+        cluster=cluster,
+        families=families[:MAX_VARIANT_FAMILIES_PER_CLUSTER],
+        ctx=ctx,
+    )
+    out = list(native)
+    native_good = [
+        candidate
+        for candidate in native
+        if candidate.family_fidelity >= _family_fidelity_threshold(ctx)
+    ]
+    fallback_threshold = max(1, min(len(families), 2))
+    if (
+        not native_good
+        and len(native) < fallback_threshold
+        and not _is_core_cluster(ctx)
+    ):
+        out.extend(_collect_fallback_generic_candidates(cluster=cluster, ctx=ctx))
+
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[SemanticSeedCandidate] = []
+    for candidate in out:
+        canonical = _canonicalize_local_placements(candidate.placements)
+        key = (
+            candidate.family,
+            candidate.source_type,
+            _placements_signature(canonical),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(
+            SemanticSeedCandidate(
+                family=candidate.family,
+                source_type=candidate.source_type,
+                placements=canonical,
+                family_fidelity=_family_fidelity_score(candidate, ctx),
+                semantic_confidence=candidate.semantic_confidence,
+                notes=candidate.notes,
+            )
+        )
+    return deduped[:96]
+
+
+def _collect_family_native_candidates(
+    *,
+    cluster: dict[str, Any],
+    families: list[str],
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    out: list[SemanticSeedCandidate] = []
+    for family in families:
+        out.extend(_generate_family_seed_states(cluster, family, ctx))
+    return out
+
+
+def _collect_fallback_generic_candidates(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    out: list[SemanticSeedCandidate] = []
+    for strategy in ("row", "compact_wrap", "balanced_wrap", "two_column"):
+        placements = _build_fallback_pack_layout(cluster, strategy=strategy)
+        if not placements:
+            continue
+        out.append(
+            _seed_candidate(
+                "fallback_generic",
+                placements,
+                "fallback_generic",
+                ctx,
+                notes=[f"Generic fallback pack layout using {strategy}."],
+            )
+        )
+    return out
+
+
+def _generate_family_seed_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    family_key = family.strip().lower()
+    seeds: list[SemanticSeedCandidate] = []
+
+    if family_key in {
+        "media_facing",
+        "conversation_facing",
+        "window_oriented",
+        "open_center",
+    }:
+        seeds.extend(_generate_living_family_states(cluster, family_key, ctx))
+    elif family_key.startswith("headboard") or family_key.startswith("bed_plus"):
+        seeds.extend(_generate_sleep_family_states(cluster, family_key, ctx))
+    elif "desk" in family_key or "work" in family_key:
+        seeds.extend(_generate_work_family_states(cluster, family_key, ctx))
+    elif "dining" in family_key or "hospitality" in family_key:
+        seeds.extend(_generate_dining_family_states(cluster, family_key, ctx))
+    elif "storage" in family_key:
+        seeds.extend(_generate_storage_family_states(cluster, family_key, ctx))
+
+    out: list[SemanticSeedCandidate] = []
+    seen: set[str] = set()
+    for candidate in seeds:
+        canonical = _seed_normalize_to_origin(candidate.placements)
+        signature = _placements_signature(canonical)
+        if not canonical or signature in seen:
+            continue
+        contract = _family_contract_validator(
+            family=family_key,
+            placements=canonical,
+            ctx=ctx,
+            verifier_eval=None,
+        )
+        if (
+            not _validate_family_fidelity(family_key, canonical, ctx)
+            or not contract.passed
+            or contract.family_fidelity < _family_fidelity_threshold(ctx)
+        ):
+            continue
+        seen.add(signature)
+        out.append(
+            SemanticSeedCandidate(
+                family=family_key,
+                source_type="family_native",
+                placements=canonical,
+                family_fidelity=contract.family_fidelity,
+                semantic_confidence=contract.semantic_confidence,
+                notes=[*candidate.notes, *contract.contract_reasons],
+            )
+        )
+    return out
+
+
+def _generate_living_family_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    composer_by_family = {
+        "media_facing": _compose_media_facing_seed,
+        "conversation_facing": _compose_conversation_seed,
+        "window_oriented": _compose_window_oriented_seed,
+        "open_center": _compose_open_center_seed,
+    }
+    composer = composer_by_family.get(family)
+    if composer is None:
+        return []
+    seeds = [composer(cluster, ctx)]
+    if family in {"conversation_facing", "open_center"} and seeds[0]:
+        seeds.append(_mirror_seed_layout(seeds[0], cluster, axis="x"))
+    if family == "window_oriented" and seeds[0]:
+        seeds.append(_rotate_seed_layout(seeds[0], cluster, degrees=90))
+    return [
+        _seed_candidate(
+            family,
+            seed,
+            "family_native",
+            ctx,
+            notes=[f"Native living-room semantic seed for {family}."],
+        )
+        for seed in seeds
+        if seed
+    ]
+
+
+def _generate_sleep_family_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    composer_by_family = {
+        "headboard_wall_balanced": _compose_headboard_balanced_seed,
+        "headboard_wall_single_side": _compose_headboard_single_side_seed,
+        "bed_plus_storage_buffer": _compose_bed_storage_buffer_seed,
+        "bed_plus_window_side_bench": _compose_bed_window_bench_seed,
+    }
+    composer = composer_by_family.get(family)
+    if composer is None:
+        return []
+    seed = composer(cluster, ctx)
+    seeds = [seed]
+    if seed and family in {"headboard_wall_single_side", "bed_plus_window_side_bench"}:
+        seeds.append(_mirror_seed_layout(seed, cluster, axis="x"))
+    return [
+        _seed_candidate(
+            family,
+            item,
+            "family_native",
+            ctx,
+            notes=[f"Native sleep semantic seed for {family}."],
+        )
+        for item in seeds
+        if item and _bedside_access_ok(item, ctx)
+    ]
+
+
+def _generate_work_family_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    composer_by_family = {
+        "wall_desk": _compose_wall_desk_seed,
+        "daylight_desk": _compose_daylight_desk_seed,
+        "compact_corner_work": _compose_compact_corner_work_seed,
+    }
+    composer = composer_by_family.get(family)
+    if composer is None:
+        return []
+    seed = composer(cluster, ctx)
+    seeds = [seed]
+    if seed and family == "compact_corner_work":
+        seeds.append(_rotate_seed_layout(seed, cluster, degrees=90))
+    return [
+        _seed_candidate(
+            family,
+            item,
+            "family_native",
+            ctx,
+            notes=[f"Native work semantic seed for {family}."],
+        )
+        for item in seeds
+        if item and _desk_chair_access_ok(item, ctx)
+    ]
+
+
+def _generate_dining_family_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    composer_by_family = {
+        "centered_dining": _compose_centered_dining_seed,
+        "wall_shifted_dining": _compose_wall_shifted_dining_seed,
+        "hospitality_open_side": _compose_hospitality_open_side_seed,
+    }
+    composer = composer_by_family.get(family)
+    if composer is None:
+        return []
+    seed = composer(cluster, ctx)
+    seeds = [seed]
+    if seed and family != "centered_dining":
+        seeds.append(_mirror_seed_layout(seed, cluster, axis="x"))
+    return [
+        _seed_candidate(
+            family,
+            item,
+            "family_native",
+            ctx,
+            notes=[f"Native dining semantic seed for {family}."],
+        )
+        for item in seeds
+        if item and _dining_seat_ring_ok(item, ctx)
+    ]
+
+
+def _generate_storage_family_states(
+    cluster: dict[str, Any],
+    family: str,
+    ctx: SemanticContext,
+) -> list[SemanticSeedCandidate]:
+    composer_by_family = {
+        "wall_storage_linear": _compose_wall_storage_linear_seed,
+        "storage_buffered_entry": _compose_storage_buffered_entry_seed,
+        "compact_storage_bank": _compose_compact_storage_bank_seed,
+    }
+    composer = composer_by_family.get(family)
+    if composer is None:
+        return []
+    seed = composer(cluster, ctx)
+    seeds = [seed]
+    if seed and family == "storage_buffered_entry":
+        seeds.append(_mirror_seed_layout(seed, cluster, axis="x"))
+    return [
+        _seed_candidate(
+            family,
+            item,
+            "family_native",
+            ctx,
+            notes=[f"Native storage semantic seed for {family}."],
+        )
+        for item in seeds
+        if item and _storage_front_access_ok(item, ctx)
+    ]
+
+
+def _compose_media_facing_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    anchor_id = _living_anchor_id(ctx)
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    central_ids = _role_ids(ctx, "central_support")
+    if central_ids:
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=central_ids[0],
+            base_id=anchor_id,
+            side=front,
+            gap=max(300, ctx.grid_mm * 4),
+            align="center",
+            face_base=False,
+            desired_front=front,
+        )
+    for idx, oid in enumerate(_role_ids(ctx, "media_support", "media_anchor")):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=front,
+            gap=max(1200, ctx.grid_mm * 16) + idx * ctx.grid_mm * 2,
+            align="center",
+            face_base=True,
+        )
+    _place_flanking_seats(
+        cluster,
+        ctx,
+        placements,
+        anchor_id,
+        front,
+        family="media_facing",
+    )
+    return _complete_semantic_seed(cluster, ctx, "media_facing", placements)
+
+
+def _compose_conversation_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    anchor_id = _living_anchor_id(ctx)
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    central_ids = _role_ids(ctx, "central_support")
+    if central_ids:
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=central_ids[0],
+            base_id=anchor_id,
+            side=front,
+            gap=max(250, ctx.grid_mm * 4),
+            align="center",
+            face_base=False,
+            desired_front=front,
+        )
+    _place_flanking_seats(
+        cluster,
+        ctx,
+        placements,
+        anchor_id,
+        front,
+        family="conversation_facing",
+    )
+    remaining_seats = [
+        oid
+        for oid in _role_ids(ctx, "secondary_anchor", "secondary_support")
+        if oid not in placements
+    ]
+    for oid in remaining_seats:
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=_opposite_side(front),
+            gap=max(450, ctx.grid_mm * 6),
+            align="center",
+            face_base=False,
+            desired_front=front,
+        )
+    for oid in _role_ids(ctx, "media_support", "media_anchor"):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=_rotate_cardinal_side(front, 1),
+            gap=max(900, ctx.grid_mm * 12),
+            align="end",
+            face_base=False,
+            desired_front=front,
+        )
+    return _complete_semantic_seed(cluster, ctx, "conversation_facing", placements)
+
+
+def _compose_window_oriented_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    anchor_id = _living_anchor_id(ctx)
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=90)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    secondary = _role_ids(ctx, "secondary_anchor", "secondary_support")
+    window_side = _rotate_cardinal_side(front, 1)
+    for idx, oid in enumerate(secondary):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=window_side if idx == 0 else _opposite_side(window_side),
+            gap=max(350, ctx.grid_mm * 5),
+            align="center",
+            face_base=False,
+        )
+    for oid in _role_ids(ctx, "central_support"):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=front,
+            gap=max(250, ctx.grid_mm * 4),
+            align="center",
+            face_base=False,
+        )
+    return _complete_semantic_seed(cluster, ctx, "window_oriented", placements)
+
+
+def _compose_open_center_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    anchor_id = _living_anchor_id(ctx)
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    edge_sides = [
+        _rotate_cardinal_side(front, -1),
+        _rotate_cardinal_side(front, 1),
+        _opposite_side(front),
+    ]
+    edge_ids = [
+        *_role_ids(ctx, "secondary_anchor", "secondary_support"),
+        *_role_ids(ctx, "media_support", "media_anchor"),
+        *_role_ids(ctx, "side_support", "accessory_support", "storage_support"),
+    ]
+    for idx, oid in enumerate(edge_ids):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=edge_sides[idx % len(edge_sides)],
+            gap=max(600, ctx.grid_mm * 8),
+            align="center",
+            face_base=ctx.roles.get(oid) in {"secondary_anchor", "secondary_support"},
+        )
+    return _complete_semantic_seed(cluster, ctx, "open_center", placements)
+
+
+def _compose_headboard_balanced_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_sleep_seed(
+        cluster=cluster,
+        ctx=ctx,
+        family="headboard_wall_balanced",
+        side_sequence=["left", "right"],
+        storage_sides=["right", "left"],
+    )
+
+
+def _compose_headboard_single_side_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_sleep_seed(
+        cluster=cluster,
+        ctx=ctx,
+        family="headboard_wall_single_side",
+        side_sequence=["left"],
+        storage_sides=["right", "bottom"],
+    )
+
+
+def _compose_bed_storage_buffer_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_sleep_seed(
+        cluster=cluster,
+        ctx=ctx,
+        family="bed_plus_storage_buffer",
+        side_sequence=["left", "right"],
+        storage_sides=["bottom", "right", "left"],
+    )
+
+
+def _compose_bed_window_bench_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_sleep_seed(
+        cluster=cluster,
+        ctx=ctx,
+        family="bed_plus_window_side_bench",
+        side_sequence=["left", "right"],
+        storage_sides=["top", "bottom"],
+        bench_side="top",
+    )
+
+
+def _compose_sleep_seed(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    family: str,
+    side_sequence: list[str],
+    storage_sides: list[str],
+    bench_side: str | None = None,
+) -> list[dict[str, Any]]:
+    anchor_id = _first_matching_id(ctx.members, ("bed",)) or ctx.dominant_anchor_id
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    side_ids = [
+        oid
+        for oid in ctx.members
+        if oid != anchor_id and _object_kind(oid) in {"nightstand", "side_table"}
+    ]
+    for idx, oid in enumerate(side_ids):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=side_sequence[min(idx, len(side_sequence) - 1)],
+            gap=ctx.grid_mm,
+            align="center",
+            face_base=False,
+        )
+    storage_ids = [
+        oid
+        for oid in ctx.members
+        if oid not in placements
+        and (
+            ctx.roles.get(oid) == "storage_support"
+            or any(
+                token in _object_kind(oid)
+                for token in ("bench", "dresser", "wardrobe", "closet")
+            )
+        )
+    ]
+    for idx, oid in enumerate(storage_ids):
+        side = (
+            bench_side
+            if bench_side and "bench" in _object_kind(oid)
+            else storage_sides[idx % len(storage_sides)]
+        )
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=side,
+            gap=max(450, ctx.grid_mm * 6),
+            align="center",
+            face_base=False,
+        )
+    return _complete_semantic_seed(cluster, ctx, family, placements)
+
+
+def _compose_wall_desk_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_work_seed(cluster, ctx, "wall_desk", prefer_rot=0, chair_side=None)
+
+
+def _compose_daylight_desk_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_work_seed(
+        cluster,
+        ctx,
+        "daylight_desk",
+        prefer_rot=90,
+        chair_side=None,
+    )
+
+
+def _compose_compact_corner_work_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_work_seed(
+        cluster,
+        ctx,
+        "compact_corner_work",
+        prefer_rot=0,
+        chair_side="top",
+    )
+
+
+def _compose_work_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    family: str,
+    *,
+    prefer_rot: int,
+    chair_side: str | None,
+) -> list[dict[str, Any]]:
+    anchor_id = (
+        _first_matching_id(ctx.members, ("desk", "work")) or ctx.dominant_anchor_id
+    )
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=prefer_rot)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+    front = chair_side or _global_front_side(cluster, ctx, anchor_id, anchor)
+    for oid in [
+        mid for mid in ctx.members if mid != anchor_id and "chair" in _object_kind(mid)
+    ]:
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=front,
+            gap=0,
+            align="center",
+            face_base=True,
+        )
+    return _complete_semantic_seed(cluster, ctx, family, placements)
+
+
+def _compose_centered_dining_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_dining_seed(
+        cluster, ctx, "centered_dining", ["bottom", "top", "left", "right"]
+    )
+
+
+def _compose_wall_shifted_dining_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_dining_seed(
+        cluster, ctx, "wall_shifted_dining", ["top", "left", "right"]
+    )
+
+
+def _compose_hospitality_open_side_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_dining_seed(
+        cluster, ctx, "hospitality_open_side", ["bottom", "left", "right"]
+    )
+
+
+def _compose_dining_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    family: str,
+    sides: list[str],
+) -> list[dict[str, Any]]:
+    anchor_id = (
+        _first_matching_id(ctx.members, ("dining", "table")) or ctx.dominant_anchor_id
+    )
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    seats = [
+        oid
+        for oid in ctx.members
+        if oid != anchor_id
+        and any(token in _object_kind(oid) for token in ("chair", "bench", "stool"))
+    ]
+    for idx, oid in enumerate(seats):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=sides[idx % len(sides)],
+            gap=max(ctx.grid_mm * 2, 150),
+            align="center",
+            face_base=True,
+        )
+    service_ids = [
+        oid
+        for oid in ctx.members
+        if oid not in placements
+        and any(
+            token in _object_kind(oid)
+            for token in ("sideboard", "buffet", "cart", "bar")
+        )
+    ]
+    for oid in service_ids:
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side="top" if family != "wall_shifted_dining" else "bottom",
+            gap=max(600, ctx.grid_mm * 8),
+            align="center",
+            face_base=False,
+        )
+    return _complete_semantic_seed(cluster, ctx, family, placements)
+
+
+def _compose_wall_storage_linear_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_storage_seed(cluster, ctx, "wall_storage_linear", "row")
+
+
+def _compose_storage_buffered_entry_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_storage_seed(cluster, ctx, "storage_buffered_entry", "buffer")
+
+
+def _compose_compact_storage_bank_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    return _compose_storage_seed(cluster, ctx, "compact_storage_bank", "bank")
+
+
+def _compose_storage_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    family: str,
+    mode: str,
+) -> list[dict[str, Any]]:
+    anchor_id = _preferred_storage_anchor(ctx) or ctx.dominant_anchor_id
+    if anchor_id is None:
+        return []
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    ordered = [oid for oid in ctx.members if oid != anchor_id]
+    if mode == "bank":
+        sides = ["right", "top", "right", "top"]
+        gap = max(ctx.grid_mm, 100)
+    elif mode == "buffer":
+        sides = ["bottom", "right", "left"]
+        gap = max(350, ctx.grid_mm * 5)
+    else:
+        sides = ["right", "right", "right", "right"]
+        gap = max(ctx.grid_mm, 150)
+    base_id = anchor_id
+    for idx, oid in enumerate(ordered):
+        before = set(placements)
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=base_id if mode == "row" else anchor_id,
+            side=sides[idx % len(sides)],
+            gap=gap,
+            align="center",
+            face_base=False,
+        )
+        if mode == "row" and set(placements) != before:
+            base_id = oid
+    return _complete_semantic_seed(cluster, ctx, family, placements)
+
+
+def _role_ids(ctx: SemanticContext, *roles: str) -> list[str]:
+    out: list[str] = []
+    for role in roles:
+        out.extend(ctx.role_ids.get(role, []))
+    return [oid for oid in out if oid in ctx.members]
+
+
+def _living_anchor_id(ctx: SemanticContext) -> str | None:
+    if (
+        isinstance(ctx.dominant_anchor_id, str)
+        and ctx.dominant_anchor_id in ctx.members
+    ):
+        return ctx.dominant_anchor_id
+
+    explicit_anchor_ids = [
+        oid for oid in ctx.members if ctx.roles.get(oid) == "dominant_anchor"
+    ]
+    if explicit_anchor_ids:
+        return explicit_anchor_ids[0]
+
+    sofa_like = [
+        oid
+        for oid in ctx.members
+        if any(
+            token in _object_kind(oid) for token in ("sofa", "sectional", "loveseat")
+        )
+    ]
+    if sofa_like:
+        return sofa_like[0]
+
+    chair_like = [
+        oid
+        for oid in ctx.members
+        if any(
+            token in _object_kind(oid) for token in ("armchair", "chair", "recliner")
+        )
+    ]
+    return chair_like[0] if chair_like else None
+
+
+def _preferred_storage_anchor(ctx: SemanticContext) -> str | None:
+    return _first_matching_id(
+        ctx.members,
+        ("wardrobe", "closet", "shelf", "cabinet", "dresser", "storage"),
+    )
+
+
+def _place_flanking_seats(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+    anchor_id: str,
+    front: str,
+    *,
+    family: str = "",
+) -> None:
+    side_sequence = [
+        _rotate_cardinal_side(front, -1),
+        _rotate_cardinal_side(front, 1),
+    ]
+    if _normalize_token(family) == "conversation_facing":
+        side_sequence = [
+            _rotate_cardinal_side(front, -1),
+            _rotate_cardinal_side(front, 1),
+        ]
+    for idx, oid in enumerate(_role_ids(ctx, "secondary_anchor", "secondary_support")):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=side_sequence[idx % len(side_sequence)],
+            gap=max(300, ctx.grid_mm * 4),
+            align="center",
+            face_base=False,
+            desired_front=front,
+        )
+
+
+def _degradation_token_to_object_id(
+    *,
+    token: str,
+    ctx: SemanticContext,
+) -> str | None:
+    token_norm = _normalize_token(token)
+    if not token_norm.startswith("drop_"):
+        return None
+
+    body = token_norm[5:]
+    if not body or body.startswith("if_"):
+        return None
+
+    for oid in ctx.members:
+        if _normalize_token(oid) == body or _object_kind(oid) == body:
+            return oid
+    return None
+
+
+def _local_seed_protected_ids(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> set[str]:
+    del cluster
+    protected: set[str] = set()
+
+    if isinstance(ctx.dominant_anchor_id, str) and ctx.dominant_anchor_id:
+        protected.add(ctx.dominant_anchor_id)
+
+    for row in ctx.semantic_placements:
+        if not isinstance(row, dict):
+            continue
+        object_id = str(row.get("id") or "")
+        if not object_id:
+            continue
+        support_role = _semantic_support_role_for_row(row, object_id=object_id)
+        if support_role == "frontal_support":
+            protected.add(object_id)
+
+    return protected
+
+
+def _local_seed_droppable_ids(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[str]:
+    rules = cluster.get("cluster_rules") if isinstance(cluster, dict) else None
+    ladder = rules.get("degradation_ladder") if isinstance(rules, dict) else None
+    if not isinstance(ladder, list):
+        return []
+
+    protected = _local_seed_protected_ids(cluster=cluster, ctx=ctx)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    for token in ladder:
+        if not isinstance(token, str):
+            continue
+        object_id = _degradation_token_to_object_id(token=token, ctx=ctx)
+        if not object_id:
+            continue
+        if object_id in protected:
+            continue
+        if object_id in seen:
+            continue
+        seen.add(object_id)
+        out.append(object_id)
+
+    return out
+
+
+def _ctx_with_local_seed_required_relaxation(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> SemanticContext:
+    droppable = set(_local_seed_droppable_ids(cluster=cluster, ctx=ctx))
+    if not droppable:
+        return ctx
+
+    relaxed_required = set(ctx.required_object_ids) - droppable
+    relaxed_optional = set(ctx.optional_object_ids) | droppable
+
+    return SemanticContext(
+        cluster_id=ctx.cluster_id,
+        cluster_type=ctx.cluster_type,
+        semantic_role=ctx.semantic_role,
+        members=ctx.members,
+        specs=ctx.specs,
+        roles=ctx.roles,
+        role_ids=ctx.role_ids,
+        dominant_anchor_id=ctx.dominant_anchor_id,
+        required_object_ids=relaxed_required,
+        optional_object_ids=relaxed_optional,
+        bundle_graph=ctx.bundle_graph,
+        grid_mm=ctx.grid_mm,
+        semantic_placements=ctx.semantic_placements,
+    )
+
+
+def _local_seed_dependents_of(
+    *,
+    root_id: str,
+    ctx: SemanticContext,
+    placements: Mapping[str, dict[str, Any]],
+) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = {root_id}
+    queue: list[str] = [root_id]
+
+    while queue:
+        current = queue.pop(0)
+        for row in ctx.semantic_placements:
+            if not isinstance(row, dict):
+                continue
+            object_id = str(row.get("id") or "")
+            relative_to = str(row.get("relative_to") or "")
+            if not object_id or not relative_to:
+                continue
+            if relative_to != current:
+                continue
+            if object_id not in placements:
+                continue
+            if object_id in seen:
+                continue
+            seen.add(object_id)
+            out.append(object_id)
+            queue.append(object_id)
+
+    return out
+
+
+def _complete_semantic_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    family: str,
+    placements: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    droppable_order = _local_seed_droppable_ids(cluster=cluster, ctx=ctx)
+    droppable_set = set(droppable_order)
+
+    working = dict(placements)
+    dropped_ids: list[str] = []
+    tried_drop_roots: set[str] = set()
+
+    while True:
+        remaining = [
+            oid for oid in ctx.members if oid not in working and oid not in dropped_ids
+        ]
+
+        updated, unplaced, auto_dropped = _place_leftover_objects(
+            cluster=cluster,
+            ctx=ctx,
+            placements=working,
+            object_ids=remaining,
+            family=family,
+        )
+
+        for oid in auto_dropped:
+            if oid not in dropped_ids:
+                dropped_ids.append(oid)
+
+        if not unplaced:
+            return _seed_normalize_to_origin(list(updated.values()))
+
+        victim: str | None = None
+        cascade_to_drop: list[str] = []
+
+        for candidate_id in droppable_order:
+            if candidate_id in tried_drop_roots:
+                continue
+            if candidate_id not in updated:
+                continue
+
+            dependents = _local_seed_dependents_of(
+                root_id=candidate_id,
+                ctx=ctx,
+                placements=updated,
+            )
+            if any(dep not in droppable_set for dep in dependents):
+                tried_drop_roots.add(candidate_id)
+                continue
+
+            victim = candidate_id
+            cascade_to_drop = dependents
+            break
+
+        if victim is None:
+            return []
+
+        tried_drop_roots.add(victim)
+        updated.pop(victim, None)
+        if victim not in dropped_ids:
+            dropped_ids.append(victim)
+
+        for dep_id in cascade_to_drop:
+            updated.pop(dep_id, None)
+            if dep_id not in dropped_ids:
+                dropped_ids.append(dep_id)
+
+        working = updated
+
+
+def _seed_candidate(
+    family: str,
+    placements: list[dict[str, Any]],
+    source_type: str,
+    ctx: SemanticContext,
+    notes: list[str] | None = None,
+) -> SemanticSeedCandidate:
+    canonical = _seed_normalize_to_origin(placements)
+    candidate = SemanticSeedCandidate(
+        family=family,
+        source_type=source_type,
+        placements=canonical,
+        family_fidelity=0.0,
+        semantic_confidence=0.92 if source_type == "family_native" else 0.45,
+        notes=list(notes or []),
+    )
+    return SemanticSeedCandidate(
+        family=family,
+        source_type=source_type,
+        placements=canonical,
+        family_fidelity=_family_fidelity_score(candidate, ctx),
+        semantic_confidence=candidate.semantic_confidence,
+        notes=candidate.notes,
+    )
+
+
+def _validate_family_fidelity(
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> bool:
+    if not placements:
+        return False
+    placed_ids = {p.get("id") for p in placements if isinstance(p, dict)}
+    if not set(ctx.required_object_ids).issubset(placed_ids):
+        return False
+    return _score_family_fidelity(family, placements, ctx, {}) >= 0.45
+
+
+def _family_contract_validator(
+    *,
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+    verifier_eval: dict[str, Any] | None,
+) -> FamilyContractResult:
+    canonical = _canonicalize_local_placements(placements)
+    placed = {p.get("id") for p in canonical if isinstance(p, dict)}
+    reasons: list[str] = []
+    penalties = 0.0
+    bonuses = 0.0
+
+    if not canonical:
+        return FamilyContractResult(False, 0.0, 0.0, ["no placements"])
+
+    missing_required = sorted(ctx.required_object_ids - placed)
+    if missing_required:
+        reasons.append(f"missing required objects: {missing_required}")
+        penalties += 0.35
+
+    placement_by_id = {
+        str(p["id"]): p
+        for p in canonical
+        if isinstance(p, dict) and isinstance(p.get("id"), str)
+    }
+    anchor_id = ctx.dominant_anchor_id
+    anchor = placement_by_id.get(anchor_id or "")
+    if anchor_id and anchor is None:
+        reasons.append(f"dominant anchor not placed: {anchor_id}")
+        penalties += 0.30
+    elif anchor_id:
+        bonuses += 0.08
+
+    if anchor_id and anchor is not None:
+        front = _global_front_side({}, ctx, anchor_id, anchor)
+        support_penalty, support_reasons, support_bonus = _family_support_contract(
+            family=family,
+            ctx=ctx,
+            placement_by_id=placement_by_id,
+            anchor_id=anchor_id,
+            anchor_front=front,
+        )
+        penalties += support_penalty
+        bonuses += support_bonus
+        reasons.extend(support_reasons)
+
+    rects = _rects_for_context_placements(ctx, canonical)
+    component_count = _cluster_component_count(
+        rects,
+        gap_tolerance=max(900, ctx.grid_mm * 16),
+    )
+    if component_count > 1:
+        reasons.append(f"split cluster into {component_count} islands")
+        penalties += min(0.35, 0.15 * float(component_count - 1))
+    else:
+        bonuses += 0.07
+
+    if _family_breaks_center_reserve(family=family, rects=rects):
+        reasons.append("center reserve occupied by family layout")
+        penalties += 0.25
+
+    if _verifier_has_error(verifier_eval, {"ACCESS_BLOCKED"}):
+        reasons.append("important access zone blocked")
+        penalties += 0.30
+    elif isinstance(verifier_eval, dict) and verifier_eval.get("result") == "VALID":
+        bonuses += 0.08
+
+    base = _score_family_fidelity(family, canonical, ctx, verifier_eval or {})
+    if _normalize_token(family) == "fallback_generic":
+        reasons.append("fallback generic reserve candidate")
+        base = min(base, 0.35)
+
+    blocking_contract_failures = _has_blocking_contract_failures(reasons)
+    fidelity = _clamp01(base + bonuses - penalties)
+    threshold = _family_fidelity_threshold(ctx)
+    passed = (
+        not missing_required
+        and fidelity >= min(threshold, 0.50)
+        and not blocking_contract_failures
+    )
+    if _normalize_token(family) == "fallback_generic":
+        passed = (
+            not missing_required
+            and component_count <= 2
+            and not blocking_contract_failures
+        )
+
+    if not reasons:
+        reasons.append("family contract passed")
+    confidence = _clamp01(
+        0.35
+        + 0.65 * fidelity
+        - min(0.25, penalties * 0.35)
+        - (0.18 if blocking_contract_failures else 0.0)
+    )
+    return FamilyContractResult(
+        passed=passed,
+        family_fidelity=fidelity,
+        semantic_confidence=confidence,
+        contract_reasons=_dedupe_strings(reasons),
+    )
+
+
+def _family_support_contract(
+    *,
+    family: str,
+    ctx: SemanticContext,
+    placement_by_id: dict[str, dict[str, Any]],
+    anchor_id: str,
+    anchor_front: str,
+) -> tuple[float, list[str], float]:
+    family_token = _normalize_token(family)
+    reasons: list[str] = []
+    penalty = 0.0
+    bonus = 0.0
+
+    semantic_penalty, semantic_reasons, semantic_bonus = _semantic_support_contract(
+        ctx=ctx,
+        placement_by_id=placement_by_id,
+    )
+    penalty += semantic_penalty
+    bonus += semantic_bonus
+    reasons.extend(semantic_reasons)
+
+    central_ids = _placed_role_ids(ctx, placement_by_id, "central_support")
+    if central_ids:
+        for object_id in central_ids:
+            side = _relative_side_between(ctx, anchor_id, object_id, placement_by_id)
+            if side != anchor_front:
+                reasons.append(f"central support {object_id} outside anchor use band")
+                penalty += 0.16
+            else:
+                bonus += 0.08
+
+    media_ids = _placed_role_ids(ctx, placement_by_id, "media_support", "media_anchor")
+    if "media" in family_token and media_ids:
+        for object_id in media_ids:
+            side = _relative_side_between(ctx, anchor_id, object_id, placement_by_id)
+            if side != anchor_front:
+                reasons.append(f"media support {object_id} not in viewing band")
+                penalty += 0.18
+            else:
+                bonus += 0.08
+
+    secondary_ids = _placed_role_ids(
+        ctx,
+        placement_by_id,
+        "secondary_anchor",
+        "secondary_support",
+        "side_support",
+    )
+    allowed_secondary = _family_allowed_secondary_sides(
+        family_token=family_token,
+        anchor_front=anchor_front,
+    )
+    for object_id in secondary_ids:
+        side = _relative_side_between(ctx, anchor_id, object_id, placement_by_id)
+        if side not in allowed_secondary:
+            reasons.append(f"secondary support {object_id} drifted to {side}")
+            penalty += 0.12
+        else:
+            bonus += 0.04
+
+    workflow_ids = _placed_role_ids(ctx, placement_by_id, "workflow_anchor")
+    if ("desk" in family_token or "work" in family_token) and workflow_ids:
+        for object_id in workflow_ids:
+            if object_id == anchor_id:
+                continue
+            side = _relative_side_between(ctx, anchor_id, object_id, placement_by_id)
+            if side != anchor_front:
+                reasons.append(f"workflow support {object_id} outside use band")
+                penalty += 0.14
+            else:
+                bonus += 0.06
+
+    return min(0.45, penalty), reasons, min(0.25, bonus)
+
+
+def _placed_role_ids(
+    ctx: SemanticContext,
+    placement_by_id: dict[str, dict[str, Any]],
+    *roles: str,
+) -> list[str]:
+    return [
+        object_id
+        for role in roles
+        for object_id in ctx.role_ids.get(role, [])
+        if object_id in placement_by_id
+    ]
+
+
+def _family_allowed_secondary_sides(
+    *,
+    family_token: str,
+    anchor_front: str,
+) -> set[str]:
+    left = _rotate_cardinal_side(anchor_front, -1)
+    right = _rotate_cardinal_side(anchor_front, 1)
+    back = _opposite_side(anchor_front)
+    if "media" in family_token:
+        return {left, right, anchor_front}
+    if "conversation" in family_token:
+        return {left, right, anchor_front}
+    if "open_center" in family_token:
+        return {left, right, back}
+    if "headboard" in family_token or "bed_plus" in family_token:
+        return {left, right, back}
+    if "dining" in family_token or "hospitality" in family_token:
+        return {anchor_front, left, right, back}
+    return {anchor_front, left, right, back}
+
+
+def _relative_side_between(
+    ctx: SemanticContext,
+    base_id: str,
+    object_id: str,
+    placement_by_id: dict[str, dict[str, Any]],
+) -> str:
+    base_rect = _rect_for_placement(ctx=ctx, placement=placement_by_id[base_id])
+    object_rect = _rect_for_placement(ctx=ctx, placement=placement_by_id[object_id])
+    if base_rect is None or object_rect is None:
+        return "unknown"
+    base_cx = (base_rect[0] + base_rect[2]) / 2.0
+    base_cy = (base_rect[1] + base_rect[3]) / 2.0
+    object_cx = (object_rect[0] + object_rect[2]) / 2.0
+    object_cy = (object_rect[1] + object_rect[3]) / 2.0
+    dx = object_cx - base_cx
+    dy = object_cy - base_cy
+    if abs(dx) > abs(dy):
+        return "right" if dx > 0 else "left"
+    return "top" if dy > 0 else "bottom"
+
+
+def _placement_front_side(
+    object_id: str,
+    placement_by_id: dict[str, dict[str, Any]],
+    ctx: SemanticContext,
+) -> str:
+    placement = placement_by_id.get(object_id)
+    if placement is None:
+        return "unknown"
+    return _global_front_side({}, ctx, object_id, placement)
+
+
+def _semantic_support_role_for_row(
+    row: Mapping[str, Any],
+    *,
+    object_id: str,
+) -> str:
+    token = _normalize_token(row.get("support_role") or "")
+    if token in {
+        "frontal_support",
+        "side_support",
+        "secondary_seat",
+        "peripheral_support",
+        "wall_support",
+    }:
+        return token
+    key = _normalize_token(object_id)
+    if any(
+        item in key for item in ("coffee_table", "bench", "ottoman", "console_table")
+    ):
+        return "frontal_support"
+    if any(item in key for item in ("armchair", "chair", "stool", "seat")):
+        return "secondary_seat"
+    if any(
+        item in key for item in ("side_table", "nightstand", "bedside", "end_table")
+    ):
+        return "side_support"
+    if "lamp" in key:
+        return "peripheral_support"
+    if any(
+        item in key
+        for item in (
+            "shelf",
+            "bookshelf",
+            "cabinet",
+            "dresser",
+            "wardrobe",
+            "buffet",
+            "sideboard",
+        )
+    ):
+        return "wall_support"
+    return ""
+
+
+def _semantic_allowed_world_sides(base_front: str, row: Mapping[str, Any]) -> set[str]:
+    left = _rotate_cardinal_side(base_front, -1)
+    right = _rotate_cardinal_side(base_front, 1)
+    back = _opposite_side(base_front)
+    option_map = {
+        "head": base_front,
+        "front": base_front,
+        "left": left,
+        "right": right,
+        "back": back,
+        "foot": back,
+        "head_left": base_front,
+        "head_right": base_front,
+        "front_left": base_front,
+        "front_right": base_front,
+        "foot_left": back,
+        "foot_right": back,
+        "back_left": back,
+        "back_right": back,
+    }
+    out: set[str] = set()
+    for option in row.get("side_options") or []:
+        side = option_map.get(_normalize_token(option))
+        if side:
+            out.add(side)
+    return out
+
+
+def _rect_center_for_object(
+    ctx: SemanticContext,
+    placement_by_id: Mapping[str, dict[str, Any]],
+    object_id: str,
+) -> tuple[float, float] | None:
+    placement = placement_by_id.get(object_id)
+    if not isinstance(placement, Mapping):
+        return None
+    rect = _rect_for_placement(ctx=ctx, placement=dict(placement))
+    if rect is None:
+        return None
+    return ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0)
+
+
+def _semantic_relative_axes(
+    *,
+    ctx: SemanticContext,
+    base_id: str,
+    object_id: str,
+    placement_by_id: Mapping[str, dict[str, Any]],
+    base_front: str,
+) -> tuple[float, float] | None:
+    base_center = _rect_center_for_object(ctx, placement_by_id, base_id)
+    object_center = _rect_center_for_object(ctx, placement_by_id, object_id)
+    if base_center is None or object_center is None:
+        return None
+    dx = float(object_center[0] - base_center[0])
+    dy = float(object_center[1] - base_center[1])
+    if base_front == "top":
+        return (dy, dx)
+    if base_front == "bottom":
+        return (-dy, dx)
+    if base_front == "left":
+        return (-dx, dy)
+    if base_front == "right":
+        return (dx, dy)
+    return None
+
+
+def _is_in_front_band(
+    *,
+    ctx: SemanticContext,
+    base_id: str,
+    object_id: str,
+    placement_by_id: Mapping[str, dict[str, Any]],
+    base_front: str,
+) -> bool:
+    axes = _semantic_relative_axes(
+        ctx=ctx,
+        base_id=base_id,
+        object_id=object_id,
+        placement_by_id=placement_by_id,
+        base_front=base_front,
+    )
+    if axes is None:
+        return False
+    front_proj, lateral_proj = axes
+    return front_proj > 0.0 and abs(lateral_proj) <= max(260.0, front_proj * 0.85)
+
+
+def _is_in_flank_band(
+    *,
+    ctx: SemanticContext,
+    base_id: str,
+    object_id: str,
+    placement_by_id: Mapping[str, dict[str, Any]],
+    base_front: str,
+) -> bool:
+    axes = _semantic_relative_axes(
+        ctx=ctx,
+        base_id=base_id,
+        object_id=object_id,
+        placement_by_id=placement_by_id,
+        base_front=base_front,
+    )
+    if axes is None:
+        return False
+    front_proj, lateral_proj = axes
+    return (
+        abs(lateral_proj) >= max(220.0, abs(front_proj) * 0.8) and front_proj > -260.0
+    )
+
+
+def _has_blocking_contract_failures(reasons: Sequence[str]) -> bool:
+    blocking_markers = (
+        "missing required objects",
+        "dominant anchor not placed",
+        "important access zone blocked",
+        "split cluster into",
+        "center reserve occupied",
+        "missing semantic base",
+        "outside anchor use band",
+        "drifted outside frontal band",
+        "breaks anchor-facing consistency",
+        "breaks anchor front consistency",
+        "not in viewing band",
+        "semantic orientation mismatch",
+        "is not facing its semantic base",
+        "violates semantic side band",
+        "drifted behind anchor",
+        "is not beside its base",
+    )
+    for row in reasons:
+        text = str(row or "").strip().lower()
+        if text and any(marker in text for marker in blocking_markers):
+            return True
+    return False
+
+
+def _semantic_support_contract(
+    *,
+    ctx: SemanticContext,
+    placement_by_id: dict[str, dict[str, Any]],
+) -> tuple[float, list[str], float]:
+    reasons: list[str] = []
+    penalty = 0.0
+    bonus = 0.0
+    for row in ctx.semantic_placements:
+        object_id = str(row.get("id") or "")
+        base_id = str(row.get("relative_to") or "")
+        if not object_id or not base_id:
+            continue
+        if object_id not in placement_by_id or base_id not in placement_by_id:
+            continue
+        actual_side = _relative_side_between(ctx, base_id, object_id, placement_by_id)
+        base_front = _placement_front_side(base_id, placement_by_id, ctx)
+        object_front = _placement_front_side(object_id, placement_by_id, ctx)
+        allowed_sides = _semantic_allowed_world_sides(base_front, row)
+        support_role = _semantic_support_role_for_row(row, object_id=object_id)
+        band_intent = _normalize_token(row.get("band_intent") or support_role)
+
+        if support_role == "frontal_support" or band_intent == "front_band":
+            if not _is_in_front_band(
+                ctx=ctx,
+                base_id=base_id,
+                object_id=object_id,
+                placement_by_id=placement_by_id,
+                base_front=base_front,
+            ):
+                reasons.append(
+                    f"semantic support {object_id} drifted outside frontal band"
+                )
+                penalty += 0.34
+            elif actual_side == base_front:
+                bonus += 0.12
+            else:
+                bonus += 0.06
+            if object_front not in {base_front, _opposite_side(base_front)}:
+                reasons.append(
+                    f"frontal support {object_id} breaks anchor front consistency"
+                )
+                penalty += 0.14
+        elif support_role == "side_support" or band_intent == "beside_base":
+            allowed = {
+                _rotate_cardinal_side(base_front, -1),
+                _rotate_cardinal_side(base_front, 1),
+            }
+            if actual_side not in allowed or not _is_in_flank_band(
+                ctx=ctx,
+                base_id=base_id,
+                object_id=object_id,
+                placement_by_id=placement_by_id,
+                base_front=base_front,
+            ):
+                reasons.append(f"semantic support {object_id} is not beside its base")
+                penalty += 0.28
+            else:
+                bonus += 0.08
+        elif support_role == "secondary_seat" or band_intent == "flank_band":
+            preferred = allowed_sides or {
+                _rotate_cardinal_side(base_front, -1),
+                _rotate_cardinal_side(base_front, 1),
+            }
+            if actual_side not in preferred or not _is_in_flank_band(
+                ctx=ctx,
+                base_id=base_id,
+                object_id=object_id,
+                placement_by_id=placement_by_id,
+                base_front=base_front,
+            ):
+                reasons.append(
+                    f"secondary seat {object_id} violates semantic side band"
+                )
+                penalty += 0.28
+            elif actual_side == _opposite_side(base_front):
+                reasons.append(f"secondary seat {object_id} drifted behind anchor")
+                penalty += 0.20
+            else:
+                bonus += 0.10
+        elif band_intent == "wall_band":
+            if allowed_sides and actual_side not in allowed_sides:
+                reasons.append(
+                    f"wall support {object_id} drifted away from its wall band"
+                )
+                penalty += 0.16
+            else:
+                bonus += 0.05
+        elif allowed_sides and actual_side not in allowed_sides:
+            reasons.append(
+                f"semantic placement {object_id} violates allowed support band"
+            )
+            penalty += 0.16
+        else:
+            bonus += 0.04
+
+        orientation = _normalize_token(row.get("orientation") or "")
+        if support_role == "secondary_seat" and orientation == "same_direction":
+            if object_front != base_front:
+                reasons.append(
+                    f"secondary seat {object_id} breaks anchor-facing consistency"
+                )
+                penalty += 0.24
+        elif orientation:
+            if orientation == "same_direction" and object_front != base_front:
+                reasons.append(f"semantic orientation mismatch for {object_id}")
+                penalty += 0.14
+            elif orientation == "face_base" and actual_side in {
+                "left",
+                "right",
+                "top",
+                "bottom",
+            }:
+                expected_front = _opposite_side(actual_side)
+                if object_front != expected_front:
+                    reasons.append(f"{object_id} is not facing its semantic base")
+                    penalty += 0.16
+
+    return min(0.75, penalty), reasons, min(0.32, bonus)
+
+
+def _cluster_component_count(
+    rects: list[dict[str, Any]],
+    *,
+    gap_tolerance: int,
+) -> int:
+    if not rects:
+        return 0
+    remaining = set(range(len(rects)))
+    components = 0
+    while remaining:
+        components += 1
+        stack = [remaining.pop()]
+        while stack:
+            idx = stack.pop()
+            connected = [
+                other
+                for other in list(remaining)
+                if _rect_gap_distance(rects[idx], rects[other]) <= gap_tolerance
+            ]
+            for other in connected:
+                remaining.remove(other)
+                stack.append(other)
+    return components
+
+
+def _rect_gap_distance(first: dict[str, Any], second: dict[str, Any]) -> int:
+    ax1 = int(first.get("x", 0))
+    ay1 = int(first.get("y", 0))
+    ax2 = ax1 + int(first.get("w", 0))
+    ay2 = ay1 + int(first.get("h", 0))
+    bx1 = int(second.get("x", 0))
+    by1 = int(second.get("y", 0))
+    bx2 = bx1 + int(second.get("w", 0))
+    by2 = by1 + int(second.get("h", 0))
+    gap_x = max(0, max(ax1, bx1) - min(ax2, bx2))
+    gap_y = max(0, max(ay1, by1) - min(ay2, by2))
+    return int(math.hypot(gap_x, gap_y))
+
+
+def _family_breaks_center_reserve(
+    *,
+    family: str,
+    rects: list[dict[str, Any]],
+) -> bool:
+    family_token = _normalize_token(family)
+    if "open_center" not in family_token or not rects:
+        return False
+    bbox = _local_bbox_from_rects(rects)
+    return _center_usage_signature(rects, bbox) == "occupied"
+
+
+def _verifier_has_error(
+    verifier_eval: dict[str, Any] | None,
+    codes: set[str],
+) -> bool:
+    if not isinstance(verifier_eval, dict):
+        return False
+    errors = verifier_eval.get("errors")
+    if not isinstance(errors, list):
+        return False
+    for error in errors:
+        if isinstance(error, dict) and error.get("code") in codes:
+            return True
+    return False
+
+
+def _is_core_cluster(ctx: SemanticContext) -> bool:
+    tokens = [
+        _normalize_token(ctx.cluster_id),
+        _normalize_token(ctx.cluster_type),
+        _normalize_token(ctx.semantic_role or ""),
+    ]
+    return any("core" in token or token in {"primary", "main"} for token in tokens)
+
+
+def _family_fidelity_threshold(ctx: SemanticContext) -> float:
+    if _is_core_cluster(ctx):
+        return CORE_CLUSTER_FAMILY_FIDELITY_THRESHOLD
+    return SUPPORT_CLUSTER_FAMILY_FIDELITY_THRESHOLD
+
+
+def _semantic_fail_payload(
+    *,
+    cluster: dict[str, Any],
+    conflicts: list[str],
+) -> dict[str, Any]:
+    return {
+        "status": "SEMANTIC_FAIL",
+        "cluster_id": _cluster_id(cluster),
+        "local_frame": {
+            "unit": "mm",
+            "grid_mm": _extract_grid_mm(cluster),
+            "origin_note": "(0,0) is an arbitrary local origin for this cluster",
+        },
+        "local_placements": [],
+        "cluster_footprint": {
+            "type": "union_of_rects",
+            "rects": [],
+            "local_bbox": {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0},
+            "tight_hull_polygon_mm": [],
+            "tight_hull_polygons_mm": [],
+            "interaction_hull_polygon_mm": [],
+            "interaction_hull_polygons_mm": [],
+        },
+        "variant_bundle": [],
+        "notes": [
+            "ClusterComposer rejected the core candidate set by semantic family contract."
+        ],
+        "missing": [],
+        "conflicts": _dedupe_strings(conflicts)[:12],
+    }
+
+
+def _family_fidelity_score(
+    candidate: SemanticSeedCandidate,
+    ctx: SemanticContext,
+) -> float:
+    if candidate.source_type == "fallback_generic":
+        return min(
+            0.35,
+            _score_family_fidelity(candidate.family, candidate.placements, ctx, {}),
+        )
+    return _score_family_fidelity(candidate.family, candidate.placements, ctx, {})
+
+
+def _bedside_access_ok(placements: list[dict[str, Any]], ctx: SemanticContext) -> bool:
+    del ctx
+    return bool(placements)
+
+
+def _desk_chair_access_ok(
+    placements: list[dict[str, Any]], ctx: SemanticContext
+) -> bool:
+    del ctx
+    return bool(placements)
+
+
+def _dining_seat_ring_ok(
+    placements: list[dict[str, Any]], ctx: SemanticContext
+) -> bool:
+    del ctx
+    return bool(placements)
+
+
+def _storage_front_access_ok(
+    placements: list[dict[str, Any]], ctx: SemanticContext
+) -> bool:
+    del ctx
+    return bool(placements)
+
+
+def _score_living_grouping_naturalness(
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> float:
+    return _score_group_naturalness(family=family, placements=placements, ctx=ctx)
+
+
+def _cluster_id(cluster: dict[str, Any]) -> str:
+    direct = cluster.get("cluster_id") if isinstance(cluster, dict) else None
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    if isinstance(program, dict):
+        value = program.get("cluster_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown_cluster"
+
+
+def _select_variant_families(
+    cluster: dict[str, Any],
+    ctx: SemanticContext | None = None,
+) -> list[str]:
+    policy = cluster.get("composer_policy") if isinstance(cluster, dict) else None
+    cluster_type = (
+        ctx.cluster_type if ctx is not None else _resolve_cluster_type(cluster)
+    )
+    semantic_role = (
+        ctx.semantic_role if ctx is not None else _semantic_role_from_cluster(cluster)
+    )
+
+    if isinstance(policy, dict):
+        raw = policy.get("variant_families")
+        if isinstance(raw, list):
+            families = [
+                item.strip() for item in raw if isinstance(item, str) and item.strip()
+            ]
+            if families:
+                return families[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
+
+    library = (
+        cluster.get("cluster_archetype_library")
+        if isinstance(cluster.get("cluster_archetype_library"), dict)
+        else None
+    )
+    if isinstance(library, dict):
+        raw = library.get("variant_families")
+        if isinstance(raw, list):
+            families = [
+                item.strip() for item in raw if isinstance(item, str) and item.strip()
+            ]
+            if families:
+                return families[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
+
+    role_token = _normalize_token(semantic_role or "")
+    if role_token:
+        if "media" in role_token:
+            cluster_type = "living_media"
+        elif "social" in role_token or "conversation" in role_token:
+            cluster_type = "living"
+        elif "storage" in role_token or "entry" in role_token:
+            cluster_type = "storage"
+        elif "sleep" in role_token or "bed" in role_token:
+            cluster_type = "sleep"
+        elif "work" in role_token or "study" in role_token:
+            cluster_type = "work"
+        elif "dining" in role_token:
+            cluster_type = "dining"
+
+    return list(
+        ARCHETYPE_LIBRARY.get(cluster_type, ARCHETYPE_LIBRARY.get("living", ()))
+    )[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
+
+
+def _resolve_cluster_type(cluster: dict[str, Any]) -> str:
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    if isinstance(program, dict):
+        value = program.get("cluster_type")
+        if isinstance(value, str) and value.strip():
+            token = _normalize_token(value)
+            resolved = _cluster_type_from_token(token)
+            if resolved is not None:
+                return resolved
+
+    value = cluster.get("cluster_type")
+    if isinstance(value, str) and value.strip():
+        token = _normalize_token(value)
+        resolved = _cluster_type_from_token(token)
+        if resolved is not None:
+            return resolved
+
+    inferred_type = _infer_cluster_type_from_structure(cluster)
+    if inferred_type is not None:
+        return inferred_type
+
+    for key in ("semantic_role", "tag"):
+        value = cluster.get(key)
+        if isinstance(value, str) and value.strip():
+            token = _normalize_token(value)
+            resolved = _cluster_type_from_token(token)
+            if resolved is not None:
+                return resolved
+
+    return "living"
+
+
+def _infer_cluster_type(cluster: dict[str, Any]) -> str:
+    return _resolve_cluster_type(cluster)
+
+
+def _cluster_type_from_token(token: str) -> str | None:
+    if token in ARCHETYPE_LIBRARY:
+        return token
+    if "media" in token:
+        return "living_media"
+    if "living" in token or "seating" in token or "social" in token:
+        return "living"
+    if "sleep" in token or "bed" in token:
+        return "sleep"
+    if "work" in token or "study" in token or "desk" in token:
+        return "work"
+    if "dining" in token or "meal" in token:
+        return "dining"
+    if "storage" in token or "closet" in token or "wardrobe" in token:
+        return "storage"
+    return None
+
+
+def _semantic_role_from_cluster(cluster: dict[str, Any]) -> str | None:
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    if isinstance(program, dict):
+        value = program.get("semantic_role") or program.get("role")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    value = cluster.get("semantic_role")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _infer_cluster_type_from_structure(cluster: dict[str, Any]) -> str | None:
+    scores = {
+        "living": 0,
+        "living_media": 0,
+        "sleep": 0,
+        "work": 0,
+        "dining": 0,
+        "storage": 0,
+    }
+    for token in _cluster_structure_tokens(cluster):
+        inferred = _infer_type_from_token(token)
+        if inferred is None:
+            continue
+        score_type, weight = inferred
+        scores[score_type] += weight
+
+    ranked = sorted(
+        ((score, cluster_type) for cluster_type, score in scores.items() if score > 0),
+        key=lambda item: (-item[0], item[1]),
+    )
+    if not ranked:
+        return None
+    return ranked[0][1]
+
+
+def _cluster_structure_tokens(cluster: dict[str, Any]) -> list[str]:
+    tokens = [_normalize_token(_cluster_id(cluster))]
+    for key in ("members", "anchors"):
+        values = cluster.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                tokens.append(_normalize_token(value))
+
+    decisions = cluster.get("decisions")
+    if isinstance(decisions, list):
+        for row in decisions:
+            if not isinstance(row, dict):
+                continue
+            for key in ("object_type", "category"):
+                value = row.get(key)
+                if isinstance(value, str) and value.strip():
+                    tokens.append(_normalize_token(value))
+    return [token for token in tokens if token]
+
+
+def _infer_type_from_token(token: str) -> tuple[str, int] | None:
+    if not token:
+        return None
+    if "media" in token or token.startswith("tv_") or token == "tv":
+        return ("living_media", 4)
+    if "seat" in token or "living" in token:
+        return ("living", 3)
+    if "sleep" in token or "bed" in token:
+        return ("sleep", 3)
+    if "work" in token or "study" in token or "desk" in token:
+        return ("work", 3)
+    if "dining" in token:
+        return ("dining", 3)
+    if "storage" in token:
+        return ("storage", 3)
+    if any(
+        marker in token
+        for marker in (
+            "sofa",
+            "sectional",
+            "armchair",
+            "recliner",
+            "loveseat",
+            "ottoman",
+            "coffee_table",
+            "floor_lamp",
+        )
+    ):
+        return ("living", 2)
+    if any(
+        marker in token for marker in ("nightstand", "headboard", "mattress", "dresser")
+    ):
+        return ("sleep", 2)
+    if any(marker in token for marker in ("office_chair", "task_chair", "workstation")):
+        return ("work", 2)
+    if any(
+        marker in token
+        for marker in ("dining_table", "bar_stool", "sideboard", "buffet")
+    ):
+        return ("dining", 2)
+    if any(
+        marker in token
+        for marker in (
+            "bookshelf",
+            "shoe_rack",
+            "wardrobe",
+            "closet",
+            "cabinet",
+        )
+    ):
+        return ("storage", 2)
+    return None
+
+
+def _target_variant_count(cluster: dict[str, Any]) -> int:
+    policy = cluster.get("composer_policy") if isinstance(cluster, dict) else None
+    raw = policy.get("target_variant_count") if isinstance(policy, dict) else None
+    if not isinstance(raw, int):
+        rules = cluster.get("cluster_rules") if isinstance(cluster, dict) else None
+        raw = rules.get("target_variant_count") if isinstance(rules, dict) else None
+    if not isinstance(raw, int):
+        raw = DEFAULT_TARGET_VALID_VARIANTS_PER_CLUSTER
+    return max(1, min(int(raw), HARD_CAP_VARIANTS_PER_CLUSTER))
+
+
+def _build_cluster_variant_payload(
+    *,
+    cluster: dict[str, Any],
+    candidate: SemanticSeedCandidate,
+    verifier_eval: dict[str, Any],
+    ctx: SemanticContext,
+    contract: FamilyContractResult,
+) -> dict[str, Any]:
+    base = _build_cluster_output_from_placements(
+        cluster=cluster,
+        placements=candidate.placements,
+        verifier_eval=verifier_eval,
+        notes=[],
+        variant_family=candidate.family,
+        family_fidelity=candidate.family_fidelity,
+    )
+    rects = (base.get("cluster_footprint") or {}).get("rects")
+    rects = rects if isinstance(rects, list) else []
+    bbox = _local_bbox_from_rects(rects)
+    body_polygons = _outline_polygons_union_grid(rects)
+    body_polygon = body_polygons[0] if len(body_polygons) == 1 else []
+    interaction_rects = _interaction_rects_from_verifier(verifier_eval)
+    interaction_polygons = _outline_polygons_union_grid(interaction_rects)
+    interaction_polygon = (
+        interaction_polygons[0] if len(interaction_polygons) == 1 else []
+    )
+    quality = _local_quality_from_eval(
+        family=candidate.family,
+        verifier_eval=verifier_eval,
+        rects=rects,
+        placements=base.get("local_placements") or [],
+        ctx=ctx,
+    )
+    fallback_heavy = candidate.source_type == "fallback_generic"
+
+    return {
+        "variant_id": "",
+        "variant_family": candidate.family,
+        "source_type": candidate.source_type,
+        "family_fidelity": _clamp01(contract.family_fidelity),
+        "semantic_confidence": _clamp01(contract.semantic_confidence),
+        "fallback_heavy": fallback_heavy,
+        "solver_friendliness": quality.solver_friendliness_score,
+        "semantic_signature": _semantic_signature_for_variant(
+            cluster=cluster,
+            family=candidate.family,
+            placements=base.get("local_placements") or [],
+            ctx=ctx,
+            rects=rects,
+            wall_contacts=_wall_contact_edges(rects, bbox),
+            access_zones=_required_access_zones_from_verifier(verifier_eval),
+        ),
+        "local_placements": base.get("local_placements") or [],
+        "interaction_placements": interaction_rects,
+        "tight_hull_polygon_mm": body_polygon,
+        "tight_hull_polygons_mm": body_polygons,
+        "interaction_hull_polygon_mm": interaction_polygon,
+        "interaction_hull_polygons_mm": interaction_polygons,
+        "family_contract_reasons": contract.contract_reasons,
+        "local_bbox_mm": {
+            "min": (int(bbox["min_x"]), int(bbox["min_y"])),
+            "max": (int(bbox["max_x"]), int(bbox["max_y"])),
+        },
+        "wall_contact_edges": _wall_contact_edges(rects, bbox),
+        "required_access_zones": _required_access_zones_from_verifier(verifier_eval),
+        "local_quality": quality.__dict__,
+        "hard_valid": verifier_eval.get("result") == "VALID",
+        "_rank": _variant_rank_key(
+            quality.__dict__,
+            verifier_eval,
+            fallback_heavy=fallback_heavy,
+        ),
+        "_pose_signature": _normalized_pose_signature(
+            base.get("local_placements") or [],
+            bbox=bbox,
+        ),
+        "_hull_signature": _hull_shape_signature(rects, bbox),
+        "_contact_signature": _contact_pattern_signature(
+            _wall_contact_edges(rects, bbox)
+        ),
+        "_center_signature": _center_usage_signature(rects, bbox),
+    }
+
+
+def _select_diverse_variants(
+    variants: list[dict[str, Any]],
+    *,
+    target_count: int,
+) -> list[dict[str, Any]]:
+    ranked = sorted(variants, key=lambda item: item.get("_rank", ()))
+    selected = _select_best_per_family(ranked, target_count=target_count)
+    if len(selected) < target_count:
+        selected.extend(
+            _select_cross_family_diverse(
+                ranked,
+                selected=selected,
+                target_count=target_count,
+            )
+        )
+
+    family_counts: dict[str, int] = {}
+    cleaned: list[dict[str, Any]] = []
+    for variant in selected[:target_count]:
+        item = dict(variant)
+        family = str(item.get("variant_family") or "variant")
+        family_counts[family] = family_counts.get(family, 0) + 1
+        item["variant_id"] = f"{_safe_slug(family)}__{family_counts[family]:02d}"
+        item.pop("_rank", None)
+        item.pop("_pose_signature", None)
+        item.pop("_hull_signature", None)
+        item.pop("_contact_signature", None)
+        item.pop("_center_signature", None)
+        cleaned.append(item)
+    return cleaned
+
+
+def _select_canonical_variant(variants: list[dict[str, Any]]) -> dict[str, Any]:
+    if not variants:
+        return {}
+    return sorted(
+        variants,
+        key=lambda item: (
+            bool(item.get("fallback_heavy")),
+            -float(item.get("family_fidelity") or 0.0),
+            -float(item.get("semantic_confidence") or 0.0),
+            -float(
+                (
+                    (item.get("local_quality") or {})
+                    if isinstance(item.get("local_quality"), dict)
+                    else {}
+                ).get(
+                    "semantic_coherence_score",
+                    0.0,
+                )
+            ),
+            str(item.get("variant_id") or ""),
+        ),
+    )[0]
+
+
+def _build_variant_summary(variants: list[dict[str, Any]]) -> dict[str, Any]:
+    families: dict[str, int] = {}
+    fallback_count = 0
+    best_quality = 0.0
+    for variant in variants:
+        family = str(variant.get("variant_family") or "unknown")
+        families[family] = families.get(family, 0) + 1
+        if variant.get("fallback_heavy"):
+            fallback_count += 1
+        quality = variant.get("local_quality")
+        if isinstance(quality, dict):
+            best_quality = max(
+                best_quality,
+                float(quality.get("semantic_coherence_score") or 0.0),
+            )
+    return {
+        "variant_count": len(variants),
+        "families": families,
+        "fallback_variant_count": fallback_count,
+        "best_semantic_coherence_score": round(best_quality, 4),
+    }
+
+
+def _family_coverage(
+    variants: list[dict[str, Any]],
+    requested_families: list[str],
+) -> dict[str, Any]:
+    present = {
+        str(variant.get("variant_family") or "")
+        for variant in variants
+        if variant.get("source_type") != "fallback_generic"
+    }
+    requested = [family for family in requested_families if family]
+    return {
+        "requested": requested,
+        "covered": sorted(family for family in requested if family in present),
+        "missing": sorted(family for family in requested if family not in present),
+    }
+
+
+def _select_best_per_family(
+    variants: list[dict[str, Any]],
+    *,
+    target_count: int,
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen_families: set[str] = set()
+    for variant in variants:
+        if len(selected) >= target_count:
+            break
+        if variant.get("source_type") == "fallback_generic":
+            continue
+        family = str(variant.get("variant_family") or "")
+        if family in seen_families:
+            continue
+        selected.append(variant)
+        seen_families.add(family)
+    return selected
+
+
+def _select_cross_family_diverse(
+    variants: list[dict[str, Any]],
+    *,
+    selected: list[dict[str, Any]],
+    target_count: int,
+) -> list[dict[str, Any]]:
+    additions: list[dict[str, Any]] = []
+    working = list(selected)
+    native = [
+        item for item in variants if item.get("source_type") != "fallback_generic"
+    ]
+    fallback = [
+        item for item in variants if item.get("source_type") == "fallback_generic"
+    ]
+    for pool in (native, fallback):
+        for variant in pool:
+            if len(working) >= target_count:
+                return additions
+            if variant in working:
+                continue
+            if not _is_diverse_variant(variant, working):
+                continue
+            working.append(variant)
+            additions.append(variant)
+    if len(working) < target_count:
+        for variant in variants:
+            if len(working) >= target_count:
+                break
+            if variant in working:
+                continue
+            working.append(variant)
+            additions.append(variant)
+    return additions
+
+
+def _is_diverse_variant(
+    candidate: dict[str, Any],
+    selected: list[dict[str, Any]],
+) -> bool:
+    candidate_signature = set(candidate.get("semantic_signature") or [])
+    candidate_pose = candidate.get("_pose_signature")
+    for existing in selected:
+        existing_signature = set(existing.get("semantic_signature") or [])
+        semantic_distance = _jaccard_distance(candidate_signature, existing_signature)
+        pose_distance = _pose_distance(
+            candidate_pose,
+            existing.get("_pose_signature"),
+        )
+        hull_distance = _hull_shape_distance(
+            candidate.get("_hull_signature"),
+            existing.get("_hull_signature"),
+        )
+        contact_distance = _contact_pattern_distance(
+            candidate.get("_contact_signature"),
+            existing.get("_contact_signature"),
+        )
+        center_distance = _center_usage_distance(
+            candidate.get("_center_signature"),
+            existing.get("_center_signature"),
+        )
+        same_family = candidate.get("variant_family") == existing.get("variant_family")
+        if same_family and pose_distance < MIN_POSE_DISTANCE_BETWEEN_KEPT_VARIANTS:
+            return False
+        if semantic_distance < MIN_SEMANTIC_DISTANCE_BETWEEN_KEPT_VARIANTS:
+            pattern_distance = (
+                hull_distance + contact_distance + center_distance
+            ) / 3.0
+            if (
+                pose_distance < MIN_POSE_DISTANCE_BETWEEN_KEPT_VARIANTS
+                and pattern_distance < 0.20
+            ):
+                return False
+    return True
+
+
+def _semantic_context(cluster: dict[str, Any]) -> SemanticContext:
+    specs = {
+        spec["id"]: spec
+        for spec in _build_object_specs(cluster)
+        if isinstance(spec, dict) and isinstance(spec.get("id"), str)
+    }
+    members = [member for member in _member_ids(cluster) if member in specs]
+    upstream_role_map = _extract_upstream_role_map(cluster)
+    roles = _assign_object_roles(
+        cluster=cluster,
+        specs=specs,
+        members=members,
+        upstream_role_map=upstream_role_map,
+    )
+    role_ids: dict[str, list[str]] = {}
+    for object_id, role in roles.items():
+        role_ids.setdefault(role, []).append(object_id)
+    required_ids, optional_ids = _extract_required_optional_ids(cluster)
+    required_ids = {oid for oid in required_ids if oid in members}
+    optional_ids = {oid for oid in optional_ids if oid in members}
+    if not required_ids:
+        required_ids = set(members) - optional_ids
+    upstream_anchor = _extract_upstream_dominant_anchor(cluster)
+    return SemanticContext(
+        cluster_id=_cluster_id(cluster),
+        cluster_type=_resolve_cluster_type(cluster),
+        semantic_role=_semantic_role_from_cluster(cluster),
+        members=members,
+        specs=specs,
+        roles=roles,
+        role_ids=role_ids,
+        dominant_anchor_id=_pick_dominant_anchor(
+            cluster,
+            specs,
+            members,
+            roles,
+            upstream_dominant_anchor=upstream_anchor,
+        ),
+        required_object_ids=required_ids,
+        optional_object_ids=optional_ids,
+        bundle_graph=_extract_bundle_graph(cluster),
+        grid_mm=_extract_grid_mm(cluster),
+        semantic_placements=tuple(_extract_semantic_placements(cluster)),
+    )
+
+
+def _extract_upstream_role_map(cluster: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    candidates: list[Any] = []
+    if isinstance(program, dict):
+        candidates.extend(
+            [
+                program.get("roles"),
+                program.get("role_map"),
+                program.get("object_roles"),
+            ]
+        )
+    candidates.extend(
+        [
+            cluster.get("roles"),
+            cluster.get("role_map"),
+            cluster.get("object_roles"),
+        ]
+    )
+    for raw in candidates:
+        if isinstance(raw, dict):
+            for object_id, role in raw.items():
+                if (
+                    isinstance(object_id, str)
+                    and isinstance(role, str)
+                    and role.strip()
+                ):
+                    out[object_id] = _normalize_role_name(role)
+        elif isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                object_id = item.get("id") or item.get("object_id")
+                role = item.get("role") or item.get("semantic_role")
+                if (
+                    isinstance(object_id, str)
+                    and isinstance(role, str)
+                    and role.strip()
+                ):
+                    out[object_id] = _normalize_role_name(role)
+    return out
+
+
+def _extract_bundle_graph(cluster: dict[str, Any]) -> dict[str, list[str]]:
+    raw_values: list[Any] = []
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    if isinstance(program, dict):
+        raw_values.extend([program.get("bundle_graph"), program.get("relations")])
+    raw_values.extend([cluster.get("bundle_graph"), cluster.get("relations")])
+    graph: dict[str, set[str]] = {}
+    for raw in raw_values:
+        if isinstance(raw, dict):
+            for key, values in raw.items():
+                if not isinstance(key, str):
+                    continue
+                if isinstance(values, list):
+                    graph.setdefault(key, set()).update(
+                        item for item in values if isinstance(item, str)
+                    )
+        elif isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                a = item.get("a") or item.get("source") or item.get("from")
+                b = item.get("b") or item.get("target") or item.get("to")
+                if isinstance(a, str) and isinstance(b, str):
+                    graph.setdefault(a, set()).add(b)
+                    graph.setdefault(b, set()).add(a)
+    return {key: sorted(values) for key, values in graph.items()}
+
+
+def _extract_required_optional_ids(
+    cluster: dict[str, Any],
+) -> tuple[set[str], set[str]]:
+    required: set[str] = set()
+    optional: set[str] = set()
+    decisions = cluster.get("decisions")
+    if isinstance(decisions, list):
+        for item in decisions:
+            if not isinstance(item, dict):
+                continue
+            object_id = (
+                item.get("object_id") or item.get("object_type") or item.get("category")
+            )
+            if not isinstance(object_id, str) or not object_id:
+                continue
+            priority = str(item.get("priority") or "").lower()
+            required_flag = item.get("required")
+            if required_flag is True or priority in {"anchor", "primary", "required"}:
+                required.add(object_id)
+            elif required_flag is False or priority == "optional":
+                optional.add(object_id)
+
+    inventory = cluster.get("inventory_decision")
+    objects = inventory.get("objects") if isinstance(inventory, dict) else None
+    if isinstance(objects, list):
+        for item in objects:
+            if not isinstance(item, dict):
+                continue
+            object_id = (
+                item.get("object_id") or item.get("object_type") or item.get("category")
+            )
+            if not isinstance(object_id, str) or not object_id:
+                continue
+            if item.get("required") is True:
+                required.add(object_id)
+            elif (
+                item.get("required") is False
+                or str(item.get("priority") or "").lower() == "optional"
+            ):
+                optional.add(object_id)
+
+    required.update(_seed_collect_access_required(cluster))
+    optional -= required
+    return required, optional
+
+
+def _extract_upstream_dominant_anchor(cluster: dict[str, Any]) -> str | None:
+    program = cluster.get("cluster_program") if isinstance(cluster, dict) else None
+    candidates: list[Any] = []
+    if isinstance(program, dict):
+        candidates.extend(
+            [
+                program.get("dominant_anchor_id"),
+                program.get("anchor_id"),
+                program.get("primary_anchor"),
+            ]
+        )
+    candidates.extend(
+        [
+            cluster.get("dominant_anchor_id"),
+            cluster.get("anchor_id"),
+            cluster.get("primary_anchor"),
+        ]
+    )
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _normalize_role_name(role: str) -> str:
+    token = _normalize_token(role)
+    if any(marker in token for marker in ("dominant", "primary_anchor", "main")):
+        return "dominant_anchor"
+    if "workflow" in token:
+        return "workflow_anchor"
+    if any(marker in token for marker in ("media", "tv", "console")):
+        return "media_support"
+    if "storage" in token:
+        return "storage_support"
+    if any(marker in token for marker in ("side", "nightstand", "lamp")):
+        return "side_support"
+    if any(marker in token for marker in ("central", "table", "ottoman")):
+        return "central_support"
+    if "anchor" in token:
+        return "secondary_anchor"
+    if "support" in token:
+        return "secondary_support"
+    return token or "secondary_support"
+
+
+def _assign_object_roles(
+    *,
+    cluster: dict[str, Any],
+    specs: dict[str, dict[str, Any]],
+    members: list[str],
+    upstream_role_map: dict[str, str] | None = None,
+) -> dict[str, str]:
+    anchors = {
+        item
+        for item in cluster.get("anchors", [])
+        if isinstance(item, str) and item in members
+    }
+    priority_by_id = _seed_build_priority_map(cluster)
+    roles: dict[str, str] = {}
+    sorted_members = sorted(
+        members,
+        key=lambda oid: (
+            0 if oid in anchors else 1,
+            int(priority_by_id.get(oid, 9)),
+            -_spec_area(specs.get(oid)),
+            oid,
+        ),
+    )
+
+    dominant_assigned = False
+    for oid in sorted_members:
+        upstream_role = (upstream_role_map or {}).get(oid)
+        if upstream_role:
+            roles[oid] = upstream_role
+            if upstream_role == "dominant_anchor":
+                dominant_assigned = True
+            continue
+
+        kind = _object_kind(oid)
+        priority = int(priority_by_id.get(oid, 9))
+        if oid in anchors or priority == 0:
+            if not dominant_assigned:
+                roles[oid] = "dominant_anchor"
+                dominant_assigned = True
+            elif "tv" in kind or "media" in kind or "console" in kind:
+                roles[oid] = "media_support"
+            elif any(
+                token in kind for token in ("coffee_table", "ottoman", "center_table")
+            ):
+                roles[oid] = "central_support"
+            elif "table" in kind and not any(
+                token in kind for token in ("side", "night")
+            ):
+                roles[oid] = "central_support"
+            elif any(token in kind for token in ("desk", "workstation", "vanity")):
+                roles[oid] = "workflow_anchor"
+            elif any(
+                token in kind
+                for token in ("wardrobe", "closet", "dresser", "shelf", "cabinet")
+            ):
+                roles[oid] = "storage_support"
+            else:
+                roles[oid] = "secondary_anchor"
+            continue
+        if any(token in kind for token in ("tv", "media", "console")):
+            roles[oid] = "media_support"
+        elif any(
+            token in kind for token in ("coffee_table", "ottoman", "center_table")
+        ):
+            roles[oid] = "central_support"
+        elif "table" in kind and not any(token in kind for token in ("side", "night")):
+            roles[oid] = "central_support"
+        elif any(token in kind for token in ("desk", "workstation", "vanity")):
+            roles[oid] = "workflow_anchor"
+        elif any(
+            token in kind
+            for token in ("wardrobe", "closet", "dresser", "shelf", "cabinet")
+        ):
+            roles[oid] = "storage_support"
+        elif any(token in kind for token in ("chair", "sofa", "bench", "recliner")):
+            roles[oid] = "secondary_support"
+        elif any(token in kind for token in ("lamp", "side", "nightstand")):
+            roles[oid] = "side_support"
+        else:
+            roles[oid] = "secondary_support" if priority <= 2 else "accessory_support"
+    return roles
+
+
+def _pick_dominant_anchor(
+    cluster: dict[str, Any],
+    specs: dict[str, dict[str, Any]],
+    members: list[str],
+    roles: dict[str, str],
+    upstream_dominant_anchor: str | None = None,
+) -> str | None:
+    if upstream_dominant_anchor in members:
+        return upstream_dominant_anchor
+    cluster_type = _resolve_cluster_type(cluster)
+    priority_map = _seed_build_priority_map(cluster)
+    priority_anchors = [oid for oid in members if int(priority_map.get(oid, 9)) == 0]
+    role_anchors = [oid for oid in members if roles.get(oid) == "dominant_anchor"]
+    workflow_anchors = [
+        oid for oid in members if roles.get(oid) in {"workflow_anchor", "media_support"}
+    ]
+    candidates = priority_anchors or role_anchors or workflow_anchors or list(members)
+    preferred = _preferred_anchor_candidates(
+        candidates=candidates,
+        cluster_type=cluster_type,
+    )
+    if preferred:
+        candidates = preferred
+    if candidates:
+        return sorted(candidates, key=lambda oid: (-_spec_area(specs.get(oid)), oid))[0]
+    return None
+
+
+def _preferred_anchor_candidates(
+    *,
+    candidates: list[str],
+    cluster_type: str,
+) -> list[str]:
+    preferred_markers_by_type = {
+        "living": ("sofa", "sectional", "loveseat", "armchair", "recliner", "bench"),
+        "living_media": ("tv", "media", "console", "projector"),
+        "sleep": ("bed", "headboard"),
+        "work": ("desk", "workstation"),
+        "dining": ("dining_table", "table"),
+        "storage": ("wardrobe", "closet", "bookshelf", "cabinet", "shelf"),
+    }
+    markers = preferred_markers_by_type.get(cluster_type, ())
+    if not markers:
+        return []
+    return [
+        object_id
+        for object_id in candidates
+        if any(marker in _object_kind(object_id) for marker in markers)
+    ]
+
+
+def _place_anchor_first(
+    ctx: SemanticContext,
+    anchor_id: str,
+    *,
+    prefer_rot: int,
+) -> dict[str, dict[str, Any]]:
+    spec = ctx.specs.get(anchor_id)
+    if not isinstance(spec, dict):
+        return {}
+    rot = _seed_first_allowed_rotation(spec, prefer=prefer_rot)
+    return {anchor_id: {"id": anchor_id, "x": 0, "y": 0, "rot": int(rot)}}
+
+
+def _place_object_on_side(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+    object_id: str,
+    base_id: str,
+    side: str,
+    gap: int,
+    align: str,
+    face_base: bool,
+    desired_front: str | None = None,
+) -> None:
+    if object_id in placements or base_id not in placements:
+        return
+    specs = ctx.specs
+    spec = specs.get(object_id)
+    base_spec = specs.get(base_id)
+    if not isinstance(spec, dict) or not isinstance(base_spec, dict):
+        return
+
+    grid_mm = int(ctx.grid_mm)
+    base = placements[base_id]
+    bx = int(base["x"])
+    by = int(base["y"])
+    bw, bh = _seed_rotated_wh(base_spec, int(base["rot"]))
+    desired_front_side = (
+        desired_front
+        if desired_front is not None
+        else (_opposite_side(side) if face_base else None)
+    )
+    rot = _rotation_for_front_side(cluster, object_id, spec, desired_front_side)
+    ow, oh = _seed_rotated_wh(spec, rot)
+    gap = _seed_snap_up_value(max(0, int(gap)), grid_mm)
+
+    if side == "top":
+        x = _aligned_axis_start(bx, bw, ow, align, grid_mm)
+        y = _seed_snap_up_value(by + bh + gap, grid_mm)
+    elif side == "bottom":
+        x = _aligned_axis_start(bx, bw, ow, align, grid_mm)
+        y = _seed_snap_down_value(by - oh - gap, grid_mm)
+    elif side == "left":
+        x = _seed_snap_down_value(bx - ow - gap, grid_mm)
+        y = _aligned_axis_start(by, bh, oh, align, grid_mm)
+    else:
+        x = _seed_snap_up_value(bx + bw + gap, grid_mm)
+        y = _aligned_axis_start(by, bh, oh, align, grid_mm)
+
+    candidate = {"id": object_id, "x": int(x), "y": int(y), "rot": int(rot)}
+    if _candidate_overlaps_existing(
+        ctx=ctx, candidate=candidate, placements=placements
+    ):
+        return
+    placements[object_id] = candidate
+
+
+def _place_leftover_objects(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+    object_ids: Sequence[str],
+    family: str,
+) -> tuple[dict[str, dict[str, Any]], list[str], list[str]]:
+    updated = dict(placements)
+    droppable_ids = set(_local_seed_droppable_ids(cluster=cluster, ctx=ctx))
+
+    ordered_ids = _semantic_topological_leftover_order(
+        ctx=ctx,
+        placed_ids=set(updated),
+        object_ids=object_ids,
+    )
+
+    unplaced: list[str] = []
+    dropped: list[str] = []
+
+    for oid in ordered_ids:
+        if oid in updated:
+            continue
+
+        placed = _try_place_from_explicit_semantic_rules(
+            cluster=cluster,
+            ctx=ctx,
+            placements=updated,
+            object_id=oid,
+            family=family,
+        )
+        if placed is None:
+            placed = _try_place_on_semantic_slot(
+                cluster=cluster,
+                ctx=ctx,
+                placements=updated,
+                object_id=oid,
+                family=family,
+            )
+
+        if placed is None:
+            if oid in droppable_ids:
+                dropped.append(oid)
+                continue
+            unplaced.append(oid)
+        else:
+            updated[oid] = placed
+
+    return updated, unplaced, dropped
+
+
+def _semantic_topological_leftover_order(
+    *,
+    ctx: SemanticContext,
+    placed_ids: set[str],
+    object_ids: Sequence[str],
+) -> list[str]:
+    requested = [oid for oid in object_ids if isinstance(oid, str) and oid]
+    requested_set = set(requested)
+    if not requested:
+        return []
+
+    followers: dict[str, set[str]] = {oid: set() for oid in requested}
+    indegree: dict[str, int] = {oid: 0 for oid in requested}
+
+    for oid in requested:
+        for row in _semantic_rows_for_object(ctx, oid):
+            base_id = str(row.get("relative_to") or "")
+            if not base_id or base_id in placed_ids:
+                continue
+            if base_id not in requested_set or base_id == oid:
+                continue
+            followers.setdefault(base_id, set()).add(oid)
+            indegree[oid] = indegree.get(oid, 0) + 1
+
+    queue: list[str] = [oid for oid in requested if indegree.get(oid, 0) == 0]
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    while queue:
+        oid = queue.pop(0)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        ordered.append(oid)
+        for child in sorted(followers.get(oid, set())):
+            indegree[child] = max(0, indegree.get(child, 0) - 1)
+            if indegree[child] == 0:
+                queue.append(child)
+
+    for oid in requested:
+        if oid not in seen:
+            ordered.append(oid)
+    return ordered
+
+
+def _semantic_rows_for_object(
+    ctx: SemanticContext,
+    object_id: str,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in ctx.semantic_placements:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("id") or "") != object_id:
+            continue
+        out.append(dict(row))
+    return out
+
+
+def _semantic_slot_entries_for_row(
+    *,
+    base_front: str,
+    row: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    option_map = {
+        "head": (base_front, "center"),
+        "front": (base_front, "center"),
+        "head_left": (base_front, "start"),
+        "front_left": (base_front, "start"),
+        "head_right": (base_front, "end"),
+        "front_right": (base_front, "end"),
+        "left": (_rotate_cardinal_side(base_front, -1), "center"),
+        "right": (_rotate_cardinal_side(base_front, 1), "center"),
+        "foot": (_opposite_side(base_front), "center"),
+        "back": (_opposite_side(base_front), "center"),
+        "foot_left": (_opposite_side(base_front), "start"),
+        "back_left": (_opposite_side(base_front), "start"),
+        "foot_right": (_opposite_side(base_front), "end"),
+        "back_right": (_opposite_side(base_front), "end"),
+    }
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    raw_options = (
+        row.get("side_options") if isinstance(row.get("side_options"), list) else []
+    )
+    for raw in raw_options:
+        token = _normalize_token(raw)
+        entry = option_map.get(token)
+        if entry is None:
+            continue
+        key = (entry[0], entry[1])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"side": entry[0], "align": entry[1], "token": token})
+    if not out:
+        out.append({"side": base_front, "align": "center", "token": "head"})
+    return out
+
+
+def _semantic_gap_candidates(row: Mapping[str, Any], grid_mm: int) -> list[int]:
+    raw_min = row.get("gap_min")
+    raw_max = row.get("gap_max")
+    gap_min = int(raw_min) if isinstance(raw_min, (int, float)) else max(grid_mm, 50)
+    gap_max = int(raw_max) if isinstance(raw_max, (int, float)) else gap_min
+    if gap_max < gap_min:
+        gap_min, gap_max = gap_max, gap_min
+    values = [gap_min, (gap_min + gap_max) // 2, gap_max]
+    out: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        snapped = _seed_snap_up_value(max(0, int(value)), grid_mm)
+        if snapped in seen:
+            continue
+        seen.add(snapped)
+        out.append(snapped)
+    return out or [max(grid_mm, 50)]
+
+
+def _semantic_desired_front(
+    *,
+    base_front: str,
+    actual_side: str,
+    row: Mapping[str, Any],
+    object_id: str,
+) -> str | None:
+    orientation = _normalize_token(row.get("orientation") or "")
+    support_role = _semantic_support_role_for_row(row, object_id=object_id)
+    if orientation == "same_direction":
+        return base_front
+    if orientation == "face_base" and actual_side in {"left", "right", "top", "bottom"}:
+        return _opposite_side(actual_side)
+    if support_role in {
+        "frontal_support",
+        "secondary_seat",
+        "side_support",
+        "wall_support",
+    }:
+        return base_front
+    return None
+
+
+def _try_place_from_explicit_semantic_rules(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+    object_id: str,
+    family: str,
+) -> dict[str, Any] | None:
+    del family
+    rows = _semantic_rows_for_object(ctx, object_id)
+    if not rows:
+        return None
+
+    for row in rows:
+        base_id = str(row.get("relative_to") or "")
+        if not base_id or base_id not in placements:
+            continue
+        base_pl = placements[base_id]
+        base_front = _global_front_side(cluster, ctx, base_id, base_pl)
+        slot_entries = _semantic_slot_entries_for_row(base_front=base_front, row=row)
+        gap_values = _semantic_gap_candidates(row, ctx.grid_mm)
+        for slot in slot_entries:
+            side = str(slot["side"])
+            align = str(slot["align"])
+            desired_front = _semantic_desired_front(
+                base_front=base_front,
+                actual_side=side,
+                row=row,
+                object_id=object_id,
+            )
+            for gap in gap_values:
+                trial = dict(placements)
+                _place_object_on_side(
+                    cluster=cluster,
+                    ctx=ctx,
+                    placements=trial,
+                    object_id=object_id,
+                    base_id=base_id,
+                    side=side,
+                    gap=gap,
+                    align=align,
+                    face_base=False,
+                    desired_front=desired_front,
+                )
+                placed = trial.get(object_id)
+                if placed is not None:
+                    return placed
+    return None
+
+
+def _semantic_row_primary_base(
+    *,
+    ctx: SemanticContext,
+    object_id: str,
+    placements: Mapping[str, dict[str, Any]],
+) -> str | None:
+    for row in _semantic_rows_for_object(ctx, object_id):
+        base_id = str(row.get("relative_to") or "")
+        if base_id and base_id in placements:
+            return base_id
+    return None
+
+
+def _semantic_slot_candidates_for_leftover(
+    *,
+    family: str,
+    object_id: str,
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    explicit_rows = _semantic_rows_for_object(ctx, object_id)
+    explicit_slots: list[dict[str, Any]] = []
+    for row in explicit_rows:
+        base_id = str(row.get("relative_to") or "")
+        if not base_id or base_id not in placements:
+            continue
+        base_pl = placements[base_id]
+        base_front = _global_front_side({}, ctx, base_id, base_pl)
+        gap_values = _semantic_gap_candidates(row, ctx.grid_mm)
+        for slot in _semantic_slot_entries_for_row(base_front=base_front, row=row):
+            explicit_slots.append(
+                {
+                    "base_id": base_id,
+                    "side": str(slot["side"]),
+                    "gap": gap_values[0],
+                    "align": str(slot["align"]),
+                    "face_base": False,
+                    "desired_front": _semantic_desired_front(
+                        base_front=base_front,
+                        actual_side=str(slot["side"]),
+                        row=row,
+                        object_id=object_id,
+                    ),
+                }
+            )
+    if explicit_slots:
+        return explicit_slots
+
+    role = ctx.roles.get(object_id, "")
+    anchor_id = ctx.dominant_anchor_id
+    if anchor_id is None or anchor_id not in placements:
+        anchor_id = next(iter(placements), None)
+    base_id = (
+        _semantic_row_primary_base(ctx=ctx, object_id=object_id, placements=placements)
+        or anchor_id
+    )
+    if base_id is None:
+        return []
+
+    base_pl = placements[base_id]
+    front = _global_front_side({}, ctx, base_id, base_pl)
+    left = _rotate_cardinal_side(front, -1)
+    right = _rotate_cardinal_side(front, 1)
+    back = _opposite_side(front)
+    gap = max(ctx.grid_mm * 2, 150)
+
+    family_token = _normalize_token(family)
+    if role in {"media_support", "media_anchor"} or "media" in _object_kind(object_id):
+        return [
+            {
+                "base_id": base_id,
+                "side": front,
+                "gap": max(1200, ctx.grid_mm * 16),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            }
+        ]
+    if role in {"side_support", "accessory_support"}:
+        return [
+            {
+                "base_id": base_id,
+                "side": left,
+                "gap": gap,
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            },
+            {
+                "base_id": base_id,
+                "side": right,
+                "gap": gap,
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            },
+        ]
+    if role == "storage_support" or "storage" in family_token:
+        side_order = (
+            [back, right, left] if "entry" in family_token else [right, left, back]
+        )
+        return [
+            {
+                "base_id": base_id,
+                "side": side,
+                "gap": max(450, ctx.grid_mm * 6),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            }
+            for side in side_order
+        ]
+    if role in {"secondary_support", "secondary_anchor"}:
+        return [
+            {
+                "base_id": base_id,
+                "side": left,
+                "gap": max(300, ctx.grid_mm * 4),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            },
+            {
+                "base_id": base_id,
+                "side": right,
+                "gap": max(300, ctx.grid_mm * 4),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            },
+            {
+                "base_id": base_id,
+                "side": back,
+                "gap": max(300, ctx.grid_mm * 4),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            },
+        ]
+    if role == "central_support":
+        return [
+            {
+                "base_id": base_id,
+                "side": front,
+                "gap": max(250, ctx.grid_mm * 4),
+                "align": "center",
+                "face_base": False,
+                "desired_front": front,
+            }
+        ]
+    return []
+
+
+def _try_place_on_semantic_slot(
+    *,
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+    object_id: str,
+    family: str,
+) -> dict[str, Any] | None:
+    placed = _try_place_from_explicit_semantic_rules(
+        cluster=cluster,
+        ctx=ctx,
+        placements=placements,
+        object_id=object_id,
+        family=family,
+    )
+    if placed is not None:
+        return placed
+
+    for slot in _semantic_slot_candidates_for_leftover(
+        family=family,
+        object_id=object_id,
+        ctx=ctx,
+        placements=placements,
+    ):
+        trial = dict(placements)
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=trial,
+            object_id=object_id,
+            base_id=str(slot["base_id"]),
+            side=str(slot["side"]),
+            gap=int(slot["gap"]),
+            align=str(slot["align"]),
+            face_base=bool(slot["face_base"]),
+            desired_front=(
+                str(slot.get("desired_front"))
+                if slot.get("desired_front") is not None
+                else None
+            ),
+        )
+        placed = trial.get(object_id)
+        if placed is not None:
+            return placed
+    return None
+
+
+def _candidate_overlaps_existing(
+    *,
+    ctx: SemanticContext,
+    candidate: dict[str, Any],
+    placements: dict[str, dict[str, Any]],
+) -> bool:
+    candidate_rect = _rect_for_placement(ctx=ctx, placement=candidate)
+    if candidate_rect is None:
+        return True
+    for placement in placements.values():
+        other_rect = _rect_for_placement(ctx=ctx, placement=placement)
+        if other_rect is None:
+            continue
+        if _rects_intersect(candidate_rect, other_rect):
+            return True
+    return False
+
+
+def _rect_for_placement(
+    *,
+    ctx: SemanticContext,
+    placement: dict[str, Any],
+) -> tuple[int, int, int, int] | None:
+    oid = placement.get("id")
+    if not isinstance(oid, str):
+        return None
+    spec = ctx.specs.get(oid)
+    if not isinstance(spec, dict):
+        return None
+    w, h = _seed_rotated_wh(spec, int(placement.get("rot", 0) or 0))
+    x = int(placement.get("x", 0) or 0)
+    y = int(placement.get("y", 0) or 0)
+    return (x, y, x + w, y + h)
+
+
+def _bbox_for_placements(
+    *,
+    ctx: SemanticContext,
+    placements: dict[str, dict[str, Any]],
+) -> dict[str, int]:
+    rects = []
+    for placement in placements.values():
+        rect = _rect_for_placement(ctx=ctx, placement=placement)
+        if rect is None:
+            continue
+        x1, y1, x2, y2 = rect
+        rects.append(
+            {"id": str(placement["id"]), "x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1}
+        )
+    return _local_bbox_from_rects(rects)
+
+
+def _rects_intersect(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> bool:
+    return max(a[0], b[0]) < min(a[2], b[2]) and max(a[1], b[1]) < min(a[3], b[3])
+
+
+def _global_front_side(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+    object_id: str,
+    placement: dict[str, Any],
+) -> str:
+    spec = ctx.specs.get(object_id, {})
+    front = _seed_get_front_base(cluster, object_id, spec)
+    return _seed_rotate_side(front, int(placement.get("rot", 0) or 0))
+
+
+def _living_side_sequence(front_side: str, family: str) -> list[str]:
+    left = _rotate_cardinal_side(front_side, -1)
+    right = _rotate_cardinal_side(front_side, 1)
+    opposite = _opposite_side(front_side)
+    if family == "conversation_facing":
+        return [opposite, left, right, front_side]
+    if family == "open_center":
+        return [left, right, opposite, front_side]
+    return [left, right, opposite, front_side]
+
+
+def _rotation_for_front_side(
+    cluster: dict[str, Any],
+    object_id: str,
+    spec: dict[str, Any],
+    desired_front: str | None,
+) -> int:
+    if desired_front is None:
+        return _seed_first_allowed_rotation(spec, prefer=0)
+    allowed = spec.get("allowed_rotations")
+    allowed_rots = (
+        [int(value) % 360 for value in allowed if isinstance(value, int)]
+        if isinstance(allowed, list)
+        else [0, 90, 180, 270]
+    )
+    base_front = _seed_get_front_base(cluster, object_id, spec)
+    for rot in allowed_rots:
+        if _seed_rotate_side(base_front, rot) == desired_front:
+            return int(rot)
+    return _seed_first_allowed_rotation(spec, prefer=0)
+
+
+def _aligned_axis_start(
+    base_start: int,
+    base_extent: int,
+    object_extent: int,
+    align: str,
+    grid_mm: int,
+) -> int:
+    if align == "start":
+        raw = base_start
+    elif align == "end":
+        raw = base_start + base_extent - object_extent
+    else:
+        raw = base_start + (base_extent - object_extent) // 2
+    return _seed_snap_nearest_value(int(raw), grid_mm)
+
+
+def _interaction_rects_from_verifier(
+    verifier_eval: dict[str, Any],
+) -> list[dict[str, Any]]:
+    debug = verifier_eval.get("debug") if isinstance(verifier_eval, dict) else None
+    if not isinstance(debug, dict):
+        return []
+    rects: list[dict[str, Any]] = []
+    rects_clear = debug.get("rects_clear")
+    if isinstance(rects_clear, dict):
+        for object_id, rect in rects_clear.items():
+            item = _debug_rect_to_rect(str(object_id), rect)
+            if item is not None:
+                rects.append(item)
+    clearances = debug.get("front_clearance_rects")
+    if isinstance(clearances, dict):
+        for object_id, rect in clearances.items():
+            item = _debug_rect_to_rect(f"access:{object_id}", rect)
+            if item is not None:
+                rects.append(item)
+    return rects
+
+
+def _required_access_zones_from_verifier(
+    verifier_eval: dict[str, Any],
+) -> list[dict[str, Any]]:
+    debug = verifier_eval.get("debug") if isinstance(verifier_eval, dict) else None
+    if not isinstance(debug, dict):
+        return []
+    clearances = debug.get("front_clearance_rects")
+    if not isinstance(clearances, dict):
+        return []
+    zones: list[dict[str, Any]] = []
+    for object_id, rect in clearances.items():
+        item = _debug_rect_to_rect(str(object_id), rect)
+        if item is None:
+            continue
+        item["kind"] = "front_clearance"
+        zones.append(item)
+    return zones
+
+
+def _debug_rect_to_rect(object_id: str, rect: Any) -> dict[str, Any] | None:
+    if not isinstance(rect, dict):
+        return None
+    if all(key in rect for key in ("x1", "y1", "x2", "y2")):
+        x1 = int(rect.get("x1", 0) or 0)
+        y1 = int(rect.get("y1", 0) or 0)
+        x2 = int(rect.get("x2", 0) or 0)
+        y2 = int(rect.get("y2", 0) or 0)
+    else:
+        x1 = int(rect.get("x", 0) or 0)
+        y1 = int(rect.get("y", 0) or 0)
+        x2 = x1 + int(rect.get("w", 0) or 0)
+        y2 = y1 + int(rect.get("h", 0) or 0)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return {"id": object_id, "x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1}
+
+
+def _largest_outline_polygon(
+    polygons: list[list[dict[str, int]]],
+) -> list[dict[str, int]]:
+    if not polygons:
+        return []
+    return max(
+        polygons,
+        key=lambda poly: abs(_polygon_area_from_dict_points(poly)),
+    )
+
+
+def _polygon_area_from_dict_points(points: list[dict[str, int]]) -> float:
+    if len(points) < 3:
+        return 0.0
+    area = 0.0
+    for idx, point in enumerate(points):
+        nxt = points[(idx + 1) % len(points)]
+        area += float(point["x"] * nxt["y"] - nxt["x"] * point["y"])
+    return area * 0.5
+
+
+def _local_quality_from_eval(
+    *,
+    family: str,
+    verifier_eval: dict[str, Any],
+    rects: list[dict[str, Any]],
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> LocalQualityBreakdown:
+    quality = verifier_eval.get("quality") if isinstance(verifier_eval, dict) else None
+    quality = quality if isinstance(quality, dict) else {}
+    hard_valid = verifier_eval.get("result") == "VALID"
+    constraint_scores = (
+        ((verifier_eval.get("debug") or {}).get("constraint_scores") or {})
+        if isinstance(verifier_eval.get("debug"), dict)
+        else {}
+    )
+    soft = (
+        constraint_scores.get("soft_summary")
+        if isinstance(constraint_scores, dict)
+        else {}
+    )
+    soft_penalty = float((soft or {}).get("total_weighted_penalty") or 0.0)
+    fill_bbox = float(quality.get("fill_ratio_bbox", 1.0) or 1.0)
+    fill_hull = float(quality.get("fill_ratio_hull", 1.0) or 1.0)
+    compact_raw = float(quality.get("compactness_perimeter2_over_4piA", 1.0) or 1.0)
+    compactness = max(
+        0.0, min(1.0, (fill_bbox + fill_hull) / 2.0 / max(1.0, compact_raw))
+    )
+    contract = _family_contract_validator(
+        family=family,
+        placements=placements,
+        ctx=ctx,
+        verifier_eval=verifier_eval,
+    )
+    family_fidelity = contract.family_fidelity
+    functional = _score_functional_usefulness(
+        verifier_eval=verifier_eval,
+        placements=placements,
+        ctx=ctx,
+    )
+    naturalness = _score_group_naturalness(
+        family=family,
+        placements=placements,
+        ctx=ctx,
+    )
+    solver_friendliness = _score_solver_friendliness(
+        verifier_eval=verifier_eval,
+        rects=rects,
+        placements=placements,
+        ctx=ctx,
+    )
+    awkwardness = _score_awkwardness_penalty(
+        family=family,
+        placements=placements,
+        ctx=ctx,
+        verifier_eval=verifier_eval,
+    )
+    component_count = _cluster_component_count(
+        rects,
+        gap_tolerance=max(900, ctx.grid_mm * 16),
+    )
+    split_cluster_penalty = _clamp01(max(0, component_count - 1) * 0.22)
+    fake_support_penalty = _fake_support_penalty(contract.contract_reasons)
+    awkward_grouping_penalty = _clamp01(
+        awkwardness + split_cluster_penalty + fake_support_penalty
+    )
+    if not contract.passed:
+        functional *= 0.65
+        naturalness *= 0.70
+        solver_friendliness *= 0.75
+    naturalness = _clamp01((naturalness + max(0.0, 1.0 - soft_penalty / 1000.0)) / 2.0)
+    semantic = _clamp01(
+        0.38 * family_fidelity
+        + 0.24 * functional
+        + 0.18 * naturalness
+        + 0.20 * solver_friendliness
+        - 0.32 * split_cluster_penalty
+        - 0.24 * awkward_grouping_penalty
+        - 0.28 * fake_support_penalty
+    )
+    return LocalQualityBreakdown(
+        functional_score=_clamp01(functional if hard_valid else functional * 0.35),
+        naturalness_score=_clamp01(naturalness),
+        semantic_coherence_score=semantic,
+        compactness_score=_clamp01(
+            (compactness - split_cluster_penalty) if rects else 0.0
+        ),
+        family_fidelity_score=_clamp01(family_fidelity),
+        awkwardness_penalty=_clamp01(awkwardness),
+        solver_friendliness_score=_clamp01(solver_friendliness),
+        split_cluster_penalty=split_cluster_penalty,
+        awkward_grouping_penalty=awkward_grouping_penalty,
+        fake_support_penalty=fake_support_penalty,
+        compaction_semantic_penalty=0.0,
+    )
+
+
+def _variant_rank_key(
+    quality: dict[str, float],
+    verifier_eval: dict[str, Any],
+    *,
+    fallback_heavy: bool = False,
+) -> tuple[float, ...]:
+    tool_rank = _tool_rank(verifier_eval)
+    fallback_penalty = 1.0 if fallback_heavy else 0.0
+    return (
+        fallback_penalty,
+        *[float(value) for value in tool_rank],
+        -float(quality.get("semantic_coherence_score", 0.0)),
+        -float(quality.get("family_fidelity_score", 0.0)),
+        float(quality.get("awkwardness_penalty", 1.0)),
+        float(quality.get("split_cluster_penalty", 1.0)),
+        float(quality.get("awkward_grouping_penalty", 1.0)),
+        float(quality.get("fake_support_penalty", 1.0)),
+        -float(quality.get("functional_score", 0.0)),
+        -float(quality.get("naturalness_score", 0.0)),
+        -float(quality.get("solver_friendliness_score", 0.0)),
+        -float(quality.get("compactness_score", 0.0)),
+    )
+
+
+def _semantic_signature_for_variant(
+    *,
+    cluster: dict[str, Any],
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext | None = None,
+    rects: list[dict[str, Any]] | None = None,
+    wall_contacts: list[dict[str, str]] | None = None,
+    access_zones: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    ctx = ctx or _semantic_context(cluster)
+    placed_ids = {
+        row.get("id")
+        for row in placements
+        if isinstance(row, dict) and isinstance(row.get("id"), str)
+    }
+    signature = [family]
+    for role in (
+        "dominant_anchor",
+        "media_anchor",
+        "media_support",
+        "workflow_anchor",
+        "central_support",
+        "secondary_anchor",
+        "secondary_support",
+        "side_support",
+        "storage_support",
+        "accessory_support",
+    ):
+        if any(oid in placed_ids for oid in ctx.role_ids.get(role, [])):
+            signature.append(role)
+    for object_id, related in ctx.bundle_graph.items():
+        if object_id in placed_ids and any(oid in placed_ids for oid in related):
+            signature.append(f"bundle:{object_id}")
+    if _seed_collect_access_required(cluster):
+        signature.append("required_access_preserved")
+    if rects:
+        bbox = _local_bbox_from_rects(rects)
+        signature.append(f"center:{_center_usage_signature(rects, bbox)}")
+        signature.append(f"hull:{_hull_shape_signature(rects, bbox)}")
+    for item in wall_contacts or []:
+        signature.append(f"wall:{item.get('object_id')}:{item.get('edge')}")
+    if access_zones:
+        signature.append(f"access_zones:{len(access_zones)}")
+    return _dedupe_strings(signature)
+
+
+def _normalized_pose_signature(
+    placements: list[dict[str, Any]],
+    *,
+    bbox: dict[str, int],
+) -> dict[str, tuple[float, float, int]]:
+    span_x = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    span_y = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    min_x = int(bbox.get("min_x", 0))
+    min_y = int(bbox.get("min_y", 0))
+    out: dict[str, tuple[float, float, int]] = {}
+    for p in placements:
+        if not isinstance(p, dict) or not isinstance(p.get("id"), str):
+            continue
+        out[p["id"]] = (
+            round((int(p.get("x", 0) or 0) - min_x) / span_x, 4),
+            round((int(p.get("y", 0) or 0) - min_y) / span_y, 4),
+            int(p.get("rot", 0) or 0) % 360,
+        )
+    return out
+
+
+def _pose_distance(first: Any, second: Any) -> float:
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return 1.0
+    common = sorted(set(first.keys()) & set(second.keys()))
+    if not common:
+        return 1.0
+    total = 0.0
+    for oid in common:
+        a = first[oid]
+        b = second[oid]
+        if not (
+            isinstance(a, tuple)
+            and isinstance(b, tuple)
+            and len(a) == 3
+            and len(b) == 3
+        ):
+            continue
+        rot_delta = 0.0 if a[2] == b[2] else 0.25
+        total += (
+            abs(float(a[0]) - float(b[0])) + abs(float(a[1]) - float(b[1])) + rot_delta
+        )
+    return total / max(1, len(common))
+
+
+def _hull_shape_signature(
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+) -> tuple[float, float, int]:
+    width = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    height = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    area = sum(int(r.get("w", 0) or 0) * int(r.get("h", 0) or 0) for r in rects)
+    bbox_area = max(1, width * height)
+    return (
+        round(width / height, 3),
+        round(area / bbox_area, 3),
+        len(rects),
+    )
+
+
+def _contact_pattern_signature(
+    wall_contacts: list[dict[str, str]],
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            f"{item.get('object_id')}:{item.get('edge')}"
+            for item in wall_contacts
+            if isinstance(item, dict)
+        )
+    )
+
+
+def _center_usage_signature(
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+) -> str:
+    width = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    height = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    cx1 = int(bbox.get("min_x", 0)) + width // 3
+    cx2 = int(bbox.get("min_x", 0)) + (2 * width) // 3
+    cy1 = int(bbox.get("min_y", 0)) + height // 3
+    cy2 = int(bbox.get("min_y", 0)) + (2 * height) // 3
+    occupied = 0
+    for rect in rects:
+        rx1 = int(rect.get("x", 0) or 0)
+        ry1 = int(rect.get("y", 0) or 0)
+        rx2 = rx1 + int(rect.get("w", 0) or 0)
+        ry2 = ry1 + int(rect.get("h", 0) or 0)
+        if max(rx1, cx1) < min(rx2, cx2) and max(ry1, cy1) < min(ry2, cy2):
+            occupied += 1
+    if occupied == 0:
+        return "open"
+    if occupied == 1:
+        return "light"
+    return "occupied"
+
+
+def _hull_shape_distance(first: Any, second: Any) -> float:
+    if not (
+        isinstance(first, tuple)
+        and isinstance(second, tuple)
+        and len(first) == 3
+        and len(second) == 3
+    ):
+        return 1.0
+    return min(
+        1.0,
+        (
+            abs(float(first[0]) - float(second[0]))
+            + abs(float(first[1]) - float(second[1]))
+            + min(1.0, abs(int(first[2]) - int(second[2])) / 4.0)
+        )
+        / 3.0,
+    )
+
+
+def _contact_pattern_distance(first: Any, second: Any) -> float:
+    first_set = set(first) if isinstance(first, tuple) else set()
+    second_set = set(second) if isinstance(second, tuple) else set()
+    return _jaccard_distance(first_set, second_set)
+
+
+def _center_usage_distance(first: Any, second: Any) -> float:
+    if not isinstance(first, str) or not isinstance(second, str):
+        return 1.0
+    return 0.0 if first == second else 1.0
+
+
+def _wall_contact_edges(
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for rect in rects:
+        if not isinstance(rect, dict) or not isinstance(rect.get("id"), str):
+            continue
+        object_id = str(rect["id"])
+        x = int(rect.get("x", 0) or 0)
+        y = int(rect.get("y", 0) or 0)
+        w = int(rect.get("w", 0) or 0)
+        h = int(rect.get("h", 0) or 0)
+        if x == int(bbox.get("min_x", 0)):
+            out.append({"object_id": object_id, "edge": "left"})
+        if y == int(bbox.get("min_y", 0)):
+            out.append({"object_id": object_id, "edge": "bottom"})
+        if x + w == int(bbox.get("max_x", 0)):
+            out.append({"object_id": object_id, "edge": "right"})
+        if y + h == int(bbox.get("max_y", 0)):
+            out.append({"object_id": object_id, "edge": "top"})
+    return out
+
+
+def _conflict_notes_for_family(family: str, verifier_eval: dict[str, Any]) -> list[str]:
+    errors = verifier_eval.get("errors") if isinstance(verifier_eval, dict) else None
+    if not isinstance(errors, list):
+        return [f"{family}: verifier returned invalid."]
+    notes: list[str] = []
+    for err in errors[:3]:
+        if not isinstance(err, dict):
+            continue
+        code = str(err.get("code") or "INVALID")
+        detail = str(err.get("detail") or "").strip()
+        notes.append(f"{family}: {code}{': ' + detail if detail else ''}")
+    return notes
+
+
+def _first_matching_id(object_ids: list[str], tokens: tuple[str, ...]) -> str | None:
+    for oid in object_ids:
+        kind = _object_kind(oid)
+        if any(token in kind for token in tokens):
+            return oid
+    return None
+
+
+def _object_kind(object_id: str) -> str:
+    token = _normalize_token(object_id)
+    token = re.sub(r"_[0-9]+$", "", token)
+    return token
+
+
+def _normalize_token(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _safe_slug(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
+    return slug or "variant"
+
+
+def _spec_area(spec: dict[str, Any] | None) -> int:
+    if not isinstance(spec, dict):
+        return 0
+    return int(spec.get("w", 0) or 0) * int(spec.get("h", 0) or 0)
+
+
+def _opposite_side(side: str) -> str:
+    return {"top": "bottom", "bottom": "top", "left": "right", "right": "left"}.get(
+        side,
+        side,
+    )
+
+
+def _rotate_cardinal_side(side: str, quarter_turns: int) -> str:
+    sides = ["top", "right", "bottom", "left"]
+    if side not in sides:
+        return side
+    return sides[(sides.index(side) + int(quarter_turns)) % len(sides)]
+
+
+def _jaccard_distance(first: set[str], second: set[str]) -> float:
+    if not first and not second:
+        return 0.0
+    union = first | second
+    if not union:
+        return 0.0
+    return 1.0 - (len(first & second) / len(union))
+
+
+def _score_family_fidelity(
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+    verifier_eval: dict[str, Any],
+) -> float:
+    del verifier_eval
+    placed = {p.get("id") for p in placements if isinstance(p, dict)}
+    if not placed:
+        return 0.0
+    required_ratio = len(set(ctx.required_object_ids) & placed) / max(
+        1,
+        len(ctx.required_object_ids),
+    )
+    family_token = _normalize_token(family)
+    role_bonus = 0.0
+    if "media" in family_token:
+        role_bonus += 0.20 if _role_ids(ctx, "media_support", "media_anchor") else 0.10
+        role_bonus += 0.15 if _role_ids(ctx, "central_support") else 0.0
+    elif "conversation" in family_token:
+        role_bonus += (
+            0.20 if _role_ids(ctx, "secondary_anchor", "secondary_support") else 0.0
+        )
+        role_bonus += 0.15 if _role_ids(ctx, "central_support") else 0.0
+    elif "open_center" in family_token:
+        role_bonus += 0.25
+    elif "headboard" in family_token or "bed_plus" in family_token:
+        role_bonus += (
+            0.30
+            if any("bed" in _object_kind(oid) for oid in placed if isinstance(oid, str))
+            else 0.0
+        )
+        role_bonus += (
+            0.10
+            if any(
+                "nightstand" in _object_kind(oid)
+                for oid in placed
+                if isinstance(oid, str)
+            )
+            else 0.0
+        )
+    elif "desk" in family_token or "work" in family_token:
+        role_bonus += (
+            0.30
+            if any(
+                "desk" in _object_kind(oid) for oid in placed if isinstance(oid, str)
+            )
+            else 0.0
+        )
+        role_bonus += (
+            0.10
+            if any(
+                "chair" in _object_kind(oid) for oid in placed if isinstance(oid, str)
+            )
+            else 0.0
+        )
+    elif "dining" in family_token or "hospitality" in family_token:
+        role_bonus += (
+            0.30
+            if any(
+                "table" in _object_kind(oid) for oid in placed if isinstance(oid, str)
+            )
+            else 0.0
+        )
+        role_bonus += (
+            0.10
+            if any(
+                "chair" in _object_kind(oid) or "bench" in _object_kind(oid)
+                for oid in placed
+                if isinstance(oid, str)
+            )
+            else 0.0
+        )
+    elif "storage" in family_token:
+        role_bonus += 0.35 if _role_ids(ctx, "storage_support") else 0.20
+    return _clamp01(0.55 * required_ratio + role_bonus + 0.15)
+
+
+def _score_functional_usefulness(
+    *,
+    verifier_eval: dict[str, Any],
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> float:
+    placed = {p.get("id") for p in placements if isinstance(p, dict)}
+    required_ratio = len(ctx.required_object_ids & placed) / max(
+        1,
+        len(ctx.required_object_ids),
+    )
+    hard = 1.0 if verifier_eval.get("result") == "VALID" else 0.25
+    access = 0.35 if _verifier_has_error(verifier_eval, {"ACCESS_BLOCKED"}) else 1.0
+    workflow = 1.0
+    if _role_ids(ctx, "workflow_anchor"):
+        workflow = 1.0 if any("chair" in _object_kind(oid) for oid in placed) else 0.65
+    return _clamp01(
+        0.42 * hard + 0.26 * required_ratio + 0.20 * access + 0.12 * workflow
+    )
+
+
+def _score_group_naturalness(
+    *,
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> float:
+    rects = _rects_for_context_placements(ctx, placements)
+    if not rects:
+        return 0.0
+    bbox = _local_bbox_from_rects(rects)
+    center_usage = _center_usage_signature(rects, bbox)
+    family_token = _normalize_token(family)
+    score = 0.72
+    if "open_center" in family_token and center_usage == "open":
+        score += 0.18
+    if "open_center" not in family_token and center_usage != "occupied":
+        score += 0.06
+    if "storage" in family_token and _wall_contact_edges(rects, bbox):
+        score += 0.12
+    if _cluster_component_count(rects, gap_tolerance=max(900, ctx.grid_mm * 16)) > 1:
+        score -= 0.24
+    return _clamp01(score)
+
+
+def _score_solver_friendliness(
+    *,
+    verifier_eval: dict[str, Any],
+    rects: list[dict[str, Any]],
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+) -> float:
+    bbox = _local_bbox_from_rects(rects)
+    width = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    height = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    aspect = max(width / height, height / width)
+    aspect_score = _clamp01(1.2 / max(1.2, aspect))
+    access_zones = _required_access_zones_from_verifier(verifier_eval)
+    access_score = (
+        1.0 if access_zones or verifier_eval.get("result") == "VALID" else 0.5
+    )
+    component_penalty = _clamp01(
+        max(
+            0,
+            _cluster_component_count(rects, gap_tolerance=max(900, ctx.grid_mm * 16))
+            - 1,
+        )
+        * 0.20
+    )
+    tail_penalty = _solver_tail_geometry_penalty(rects)
+    return _clamp01(
+        0.55 * aspect_score
+        + 0.35 * access_score
+        + 0.10 * _clamp01(len(placements) / max(1, len(ctx.members)))
+        - component_penalty
+        - tail_penalty
+    )
+
+
+def _score_awkwardness_penalty(
+    *,
+    family: str,
+    placements: list[dict[str, Any]],
+    ctx: SemanticContext,
+    verifier_eval: dict[str, Any],
+) -> float:
+    penalty = 0.0
+    if verifier_eval.get("result") != "VALID":
+        penalty += 0.40
+    rects = _rects_for_context_placements(ctx, placements)
+    bbox = _local_bbox_from_rects(rects)
+    center_usage = _center_usage_signature(rects, bbox)
+    if family == "open_center" and center_usage == "occupied":
+        penalty += 0.30
+    if family == "conversation_facing" and not _role_ids(
+        ctx, "secondary_anchor", "secondary_support"
+    ):
+        penalty += 0.15
+    if family == "media_facing" and not _role_ids(ctx, "media_support", "media_anchor"):
+        penalty += 0.15
+    return _clamp01(penalty)
+
+
+def _fake_support_penalty(reasons: list[str]) -> float:
+    penalty = 0.0
+    for reason in reasons:
+        token = _normalize_token(reason)
+        if any(
+            marker in token
+            for marker in ("outside", "drifted", "not_in_viewing", "not_in")
+        ):
+            penalty += 0.16
+    return _clamp01(penalty)
+
+
+def _solver_tail_geometry_penalty(rects: list[dict[str, Any]]) -> float:
+    if len(rects) < 3:
+        return 0.0
+    bbox = _local_bbox_from_rects(rects)
+    width = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    height = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    min_extent = max(1, min(width, height))
+    tail_count = 0
+    for rect in rects:
+        cx = int(rect.get("x", 0)) + int(rect.get("w", 0)) / 2.0
+        cy = int(rect.get("y", 0)) + int(rect.get("h", 0)) / 2.0
+        near_edge = min(
+            abs(cx - int(bbox["min_x"])),
+            abs(cx - int(bbox["max_x"])),
+            abs(cy - int(bbox["min_y"])),
+            abs(cy - int(bbox["max_y"])),
+        )
+        if near_edge < min_extent * 0.08:
+            tail_count += 1
+    return _clamp01(max(0, tail_count - 1) * 0.08)
+
+
+def _score_relative_candidate_semantic(
+    *,
+    candidate: dict[str, Any],
+    rel: dict[str, Any],
+    ctx: SemanticContext | None,
+) -> float:
+    if ctx is None:
+        return 0.0
+    object_id = candidate.get("id")
+    if not isinstance(object_id, str):
+        return 0.0
+    role = ctx.roles.get(object_id, "")
+    relation_type = str(rel.get("type") or rel.get("kind") or "")
+    if role in {"side_support", "central_support"} and relation_type == "anchor_side":
+        return 0.20
+    if role in {"media_support", "storage_support"} and relation_type == "dock_to_edge":
+        return 0.15
+    return 0.0
+
+
+def _rects_for_context_placements(
+    ctx: SemanticContext,
+    placements: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rects: list[dict[str, Any]] = []
+    for placement in placements:
+        rect = _rect_for_placement(
+            ctx=ctx,
+            placement=placement,
+        )
+        if rect is None:
+            continue
+        x1, y1, x2, y2 = rect
+        rects.append(
+            {
+                "id": str(placement.get("id") or ""),
+                "x": x1,
+                "y": y1,
+                "w": x2 - x1,
+                "h": y2 - y1,
+            }
+        )
+    return rects
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _dedupe_strings(values: Any) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    if not isinstance(values, list):
+        return out
+    for item in values:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
 
 
 def _run_with_tools(
@@ -1069,6 +5354,11 @@ def _build_object_specs(cluster: dict[str, Any]) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
 
     decisions = cluster.get("decisions", [])
+    inventory = (
+        cluster.get("inventory_decision")
+        if isinstance(cluster.get("inventory_decision"), dict)
+        else None
+    )
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
     allowed_raw = rules.get("allowed_rotations") if isinstance(rules, dict) else None
     allowed = allowed_raw if isinstance(allowed_raw, dict) else {}
@@ -1076,31 +5366,65 @@ def _build_object_specs(cluster: dict[str, Any]) -> list[dict[str, Any]]:
     facing = facing_raw if isinstance(facing_raw, dict) else {}
 
     if not isinstance(decisions, list):
-        return specs
+        decisions = []
+
+    if not decisions and isinstance(inventory, dict):
+        objects = inventory.get("objects")
+        decisions = objects if isinstance(objects, list) else []
+
+    composer_policy = (
+        cluster.get("composer_policy")
+        if isinstance(cluster.get("composer_policy"), dict)
+        else {}
+    )
+    policy_rotations = composer_policy.get("allowed_rotations")
 
     for d in decisions:
         if not isinstance(d, dict):
             continue
 
-        obj_id = d.get("object_type") or d.get("category")
-        rep = d.get("rep_dims_m") or {}
-        if not isinstance(obj_id, str) or not obj_id or not isinstance(rep, dict):
+        obj_id = d.get("object_id") or d.get("object_type") or d.get("category")
+        if not isinstance(obj_id, str) or not obj_id:
             continue
 
-        L = float(rep.get("L", 0) or 0)
-        W = float(rep.get("W", 0) or 0)
+        dims_mm = d.get("dims_mm")
+        if isinstance(dims_mm, list) and len(dims_mm) >= 2:
+            L = float(dims_mm[0] or 0) / 1000.0
+            W = float(dims_mm[1] or 0) / 1000.0
+        else:
+            rep = _decision_rep_dims_for_current_tier(d)
+            if not isinstance(rep, dict):
+                continue
+            L = float(rep.get("L", 0) or 0)
+            W = float(rep.get("W", 0) or 0)
         if L <= 0 or W <= 0:
             continue
 
+        allowed_rots = allowed.get(obj_id)
+        if not isinstance(allowed_rots, list):
+            allowed_rots = (
+                policy_rotations
+                if isinstance(policy_rotations, list)
+                else [0, 90, 180, 270]
+            )
+
         w = int(round(L * 1000))
         h = int(round(W * 1000))
+        clearances = d.get("clearances")
+        clearance_mm = int(d.get("clearance_mm", 0) or 0)
+        if isinstance(clearances, dict):
+            clearance_mm = max(
+                clearance_mm,
+                int(clearances.get("access_front_mm", 0) or 0),
+                int(clearances.get("access_side_mm", 0) or 0),
+            )
 
         spec: dict[str, Any] = {
             "id": obj_id,
             "w": w,
             "h": h,
-            "clearance_mm": int(d.get("clearance_mm", 0) or 0),
-            "allowed_rotations": allowed.get(obj_id, [0, 90, 180, 270]),
+            "clearance_mm": clearance_mm,
+            "allowed_rotations": allowed_rots,
             "collision": d.get("collision", "solid"),
         }
 
@@ -1111,6 +5435,30 @@ def _build_object_specs(cluster: dict[str, Any]) -> list[dict[str, Any]]:
         specs.append(spec)
 
     return specs
+
+
+def _decision_rep_dims_for_current_tier(
+    decision: dict[str, Any],
+) -> dict[str, Any] | None:
+    tier = str(
+        decision.get("recommended_size_tier") or decision.get("size_tier") or ""
+    ).upper()
+    rep_by_tier = decision.get("rep_dims_m_by_tier")
+    if isinstance(rep_by_tier, dict) and tier:
+        rep = rep_by_tier.get(tier)
+        if isinstance(rep, dict):
+            return rep
+
+    size_profile = decision.get("size_profile")
+    if isinstance(size_profile, dict):
+        rep_dims = size_profile.get("rep_dims_m")
+        if isinstance(rep_dims, dict) and tier:
+            rep = rep_dims.get(tier)
+            if isinstance(rep, dict):
+                return rep
+
+    rep = decision.get("rep_dims_m")
+    return rep if isinstance(rep, dict) else None
 
 
 def _objects_have_valid_dims(objects: Any) -> bool:
@@ -1266,7 +5614,7 @@ def _extract_semantic_placements(cluster: dict[str, Any]) -> list[dict[str, Any]
     return out
 
 
-def _seed_local_layout(
+def _build_fallback_pack_layout(
     cluster: dict[str, Any], *, strategy: str = "row"
 ) -> list[dict[str, Any]]:
     members = _member_ids(cluster)
@@ -1410,6 +5758,7 @@ def _seed_local_layout(
                 spec_by_id=spec_by_id,
                 placements=placements,
                 grid_mm=grid_mm,
+                ctx=None,
             )
             if placed is None:
                 still_unresolved.append(rel)
@@ -1447,6 +5796,12 @@ def _seed_local_layout(
         fallback_x = x + w + fallback_gap
 
     return _seed_normalize_to_origin(list(placements.values()))
+
+
+def _seed_local_layout(
+    cluster: dict[str, Any], *, strategy: str = "row"
+) -> list[dict[str, Any]]:
+    return _build_fallback_pack_layout(cluster, strategy=strategy)
 
 
 def _seed_place_freestanding(
@@ -1747,6 +6102,12 @@ def _seed_snap_up_value(v: int, grid_mm: int) -> int:
     return int(math.ceil(v / grid_mm) * grid_mm)
 
 
+def _seed_snap_down_value(v: int, grid_mm: int) -> int:
+    if grid_mm <= 0:
+        return int(v)
+    return int(math.floor(v / grid_mm) * grid_mm)
+
+
 def _seed_snap_nearest_value(v: int, grid_mm: int) -> int:
     if grid_mm <= 0:
         return int(v)
@@ -1828,6 +6189,7 @@ def _seed_place_relative(
     spec_by_id: dict[str, dict[str, Any]],
     placements: dict[str, dict[str, Any]],
     grid_mm: int,
+    ctx: SemanticContext | None = None,
 ) -> dict[str, Any] | None:
     a = rel.get("a")
     b = rel.get("b")
@@ -1882,7 +6244,7 @@ def _seed_place_relative(
             return None
         candidate_sides = side_options or ([side] if isinstance(side, str) else [])
         best_candidate: dict[str, Any] | None = None
-        best_score: tuple[int, int] | None = None
+        best_score: tuple[float, int, int, int, int] | None = None
         for candidate_side in candidate_sides:
             base_side, qualifier_local = _seed_resolve_anchor_side(candidate_side)
             if base_side == "head":
@@ -1919,11 +6281,17 @@ def _seed_place_relative(
                 a_spec=a_spec,
                 placements=placements,
             )
+            semantic_score = _score_relative_candidate_semantic(
+                candidate=candidate,
+                rel=rel,
+                ctx=ctx,
+            )
+            ranked_score = (-semantic_score, *score)
             if str(rel.get("selection") or "best_fit") == "first_fit" and score[0] == 0:
                 return candidate
-            if best_score is None or score < best_score:
+            if best_score is None or ranked_score < best_score:
                 best_candidate = candidate
-                best_score = score
+                best_score = ranked_score
         return best_candidate
 
     else:
@@ -2485,6 +6853,8 @@ def _choose_best_single_patch(
     tool_output: dict[str, Any],
     placements: list[dict[str, Any]],
     tried_patch_keys: set[str],
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]] | None, dict[str, Any] | None]:
     baseline_rank = _tool_rank(tool_output)
     grid_mm = _extract_grid_mm(cluster)
@@ -2495,6 +6865,8 @@ def _choose_best_single_patch(
         tool_output=tool_output,
         placements=placements,
         grid_mm=grid_mm,
+        family=family,
+        ctx=ctx,
     )
 
     best_move: dict[str, Any] | None = None
@@ -2606,6 +6978,8 @@ def _greedy_improve_valid_layout(
     placements: list[dict[str, Any]],
     verifier_eval: dict[str, Any],
     max_rounds: int,
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
     current = _canonicalize_local_placements(placements)
     current_eval = verifier_eval if isinstance(verifier_eval, dict) else {}
@@ -2631,6 +7005,8 @@ def _greedy_improve_valid_layout(
             tool_output=current_eval,
             placements=current,
             tried_patch_keys=tried_patch_keys,
+            family=family,
+            ctx=ctx,
         )
         if (
             selected_move is None
@@ -2653,6 +7029,54 @@ def _greedy_improve_valid_layout(
     return current, current_eval, rounds
 
 
+def _repair_invalid_seed_layout(
+    *,
+    cluster: dict[str, Any],
+    access_clearance_ratio: float,
+    placements: list[dict[str, Any]],
+    verifier_eval: dict[str, Any],
+    max_rounds: int,
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    current = _canonicalize_local_placements(placements)
+    current_eval = verifier_eval if isinstance(verifier_eval, dict) else {}
+    if current_eval.get("result") == "VALID":
+        return current, current_eval, 0
+
+    rounds = 0
+    tried_patch_keys_by_state: dict[str, set[str]] = {}
+
+    for _ in range(max(0, int(max_rounds))):
+        state_sig = _placements_signature(current)
+        tried_patch_keys = tried_patch_keys_by_state.setdefault(state_sig, set())
+        selected_move, patched, patched_eval = _choose_best_single_patch(
+            cluster=cluster,
+            access_clearance_ratio=access_clearance_ratio,
+            tool_output=current_eval,
+            placements=current,
+            tried_patch_keys=tried_patch_keys,
+            family=family,
+            ctx=ctx,
+        )
+        if (
+            selected_move is None
+            or patched is None
+            or not isinstance(patched_eval, dict)
+        ):
+            break
+
+        tried_patch_keys.add(_move_key(selected_move))
+        current = _canonicalize_local_placements(patched)
+        current_eval = patched_eval
+        rounds += 1
+
+        if current_eval.get("result") == "VALID":
+            return current, current_eval, rounds
+
+    return current, current_eval, rounds
+
+
 def _collect_patch_candidates(
     *,
     cluster: dict[str, Any],
@@ -2660,6 +7084,8 @@ def _collect_patch_candidates(
     tool_output: dict[str, Any],
     placements: list[dict[str, Any]],
     grid_mm: int,
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
 ) -> list[dict[str, Any]]:
     del access_clearance_ratio  # tool ignores it; keep signature stable
 
@@ -2689,6 +7115,8 @@ def _collect_patch_candidates(
         _generate_rotation_escape_moves(
             cluster=cluster,
             placements=placements,
+            family=family,
+            ctx=ctx,
         )
     )
     out.extend(
@@ -2696,6 +7124,8 @@ def _collect_patch_candidates(
             cluster=cluster,
             placements=placements,
             grid_mm=grid_mm,
+            family=family,
+            ctx=ctx,
         )
     )
 
@@ -2866,6 +7296,8 @@ def _generate_rotation_escape_moves(
     *,
     cluster: dict[str, Any],
     placements: list[dict[str, Any]],
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
 ) -> list[dict[str, Any]]:
     decisions = cluster.get("decisions", [])
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
@@ -2874,12 +7306,37 @@ def _generate_rotation_escape_moves(
 
     placement_by_id = {p["id"]: p for p in _canonicalize_local_placements(placements)}
     moves: list[dict[str, Any]] = []
+    family_token = _normalize_token(family or "")
+    protected_anchor_id = (
+        ctx.dominant_anchor_id if isinstance(ctx, SemanticContext) else None
+    )
+    protect_anchor_rotation = False
+    if (
+        protected_anchor_id
+        and family_token
+        in {"media_facing", "conversation_facing", "open_center", "window_oriented"}
+        and isinstance(ctx, SemanticContext)
+    ):
+        for row in ctx.semantic_placements:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("relative_to") or "") != protected_anchor_id:
+                continue
+            role = _semantic_support_role_for_row(
+                row, object_id=str(row.get("id") or "")
+            )
+            band = _normalize_token(row.get("band_intent") or role)
+            if role == "frontal_support" or band == "front_band":
+                protect_anchor_rotation = True
+                break
 
     for d in decisions:
         if not isinstance(d, dict):
             continue
         obj_id = d.get("object_type") or d.get("category")
         if not isinstance(obj_id, str) or obj_id not in placement_by_id:
+            continue
+        if protect_anchor_rotation and obj_id == protected_anchor_id:
             continue
 
         current_rot = int(placement_by_id[obj_id]["rot"]) % 360
@@ -2893,7 +7350,6 @@ def _generate_rotation_escape_moves(
             rot = rot % 360
             if rot == current_rot:
                 continue
-
             moves.append(
                 {
                     "reason": "HOST_ROTATION_ESCAPE",
@@ -2911,6 +7367,8 @@ def _generate_compaction_moves(
     cluster: dict[str, Any],
     placements: list[dict[str, Any]],
     grid_mm: int,
+    family: str | None = None,
+    ctx: SemanticContext | None = None,
 ) -> list[dict[str, Any]]:
     canonical = _canonicalize_local_placements(placements)
     if not canonical:
@@ -2952,14 +7410,42 @@ def _generate_compaction_moves(
         if rect is None:
             continue
 
+        if not _compaction_allowed_for_family(
+            family=family,
+            object_id=object_id,
+            rect=rect,
+            rects=rects,
+            bbox=bbox,
+            ctx=ctx,
+        ):
+            continue
+
+        forbidden_x, forbidden_y = _compaction_forbidden_ranges(
+            family=family,
+            bbox=bbox,
+        )
+
         left_target = _compaction_target_left(
             rect=rect,
             rects=rects,
             bbox=bbox,
+            forbidden_x_ranges=forbidden_x,
         )
         if left_target < int(rect["x"]):
             dx = _host_snap_delta(left_target - int(rect["x"]), grid_mm)
-            if dx != 0:
+            semantic_penalty = _compaction_semantic_penalty(family, dx, 0)
+            if (
+                dx != 0
+                and semantic_penalty < 0.50
+                and _compaction_move_preserves_semantics(
+                    placements=canonical,
+                    move_object=object_id,
+                    dx=dx,
+                    dy=0,
+                    family=family,
+                    ctx=ctx,
+                )
+            ):
                 moves.append(
                     {
                         "reason": "COMPACT_LEFT_EDGE",
@@ -2968,6 +7454,7 @@ def _generate_compaction_moves(
                         "dy": 0,
                         "new_x": int(placement["x"] + dx),
                         "new_y": int(placement["y"]),
+                        "compaction_semantic_penalty": semantic_penalty,
                         "note": "Host-generated compaction move toward the left envelope.",
                     }
                 )
@@ -2976,10 +7463,23 @@ def _generate_compaction_moves(
             rect=rect,
             rects=rects,
             bbox=bbox,
+            forbidden_y_ranges=forbidden_y,
         )
         if down_target < int(rect["y"]):
             dy = _host_snap_delta(down_target - int(rect["y"]), grid_mm)
-            if dy != 0:
+            semantic_penalty = _compaction_semantic_penalty(family, 0, dy)
+            if (
+                dy != 0
+                and semantic_penalty < 0.50
+                and _compaction_move_preserves_semantics(
+                    placements=canonical,
+                    move_object=object_id,
+                    dx=0,
+                    dy=dy,
+                    family=family,
+                    ctx=ctx,
+                )
+            ):
                 moves.append(
                     {
                         "reason": "COMPACT_TOP_EDGE",
@@ -2988,6 +7488,7 @@ def _generate_compaction_moves(
                         "dy": int(dy),
                         "new_x": int(placement["x"]),
                         "new_y": int(placement["y"] + dy),
+                        "compaction_semantic_penalty": semantic_penalty,
                         "note": "Host-generated compaction move toward the top envelope.",
                     }
                 )
@@ -3000,6 +7501,7 @@ def _compaction_target_left(
     rect: dict[str, Any],
     rects: list[dict[str, Any]],
     bbox: dict[str, int],
+    forbidden_x_ranges: list[tuple[int, int]] | None = None,
 ) -> int:
     best = int(bbox.get("min_x", 0))
     current_x = int(rect.get("x", 0))
@@ -3019,6 +7521,10 @@ def _compaction_target_left(
         ):
             continue
         best = max(best, other_right)
+    for start, end in forbidden_x_ranges or []:
+        width = int(rect.get("w", 0))
+        if best < end and best + width > start:
+            best = max(best, end)
     return best
 
 
@@ -3027,6 +7533,7 @@ def _compaction_target_down(
     rect: dict[str, Any],
     rects: list[dict[str, Any]],
     bbox: dict[str, int],
+    forbidden_y_ranges: list[tuple[int, int]] | None = None,
 ) -> int:
     best = int(bbox.get("min_y", 0))
     current_x = int(rect.get("x", 0))
@@ -3046,7 +7553,101 @@ def _compaction_target_down(
         ):
             continue
         best = max(best, other_top)
+    for start, end in forbidden_y_ranges or []:
+        height = int(rect.get("h", 0))
+        if best < end and best + height > start:
+            best = max(best, end)
     return best
+
+
+def _compaction_allowed_for_family(
+    *,
+    family: str | None,
+    object_id: str,
+    rect: dict[str, Any],
+    rects: list[dict[str, Any]],
+    bbox: dict[str, int],
+    ctx: SemanticContext | None,
+) -> bool:
+    del rect
+    del rects
+    del bbox
+    if ctx is not None and object_id == ctx.dominant_anchor_id:
+        return False
+    family_token = _normalize_token(family or "")
+    if family_token in {"open_center", "conversation_facing", "media_facing"}:
+        role = ctx.roles.get(object_id, "") if ctx is not None else ""
+        return role in {"accessory_support", "side_support", "storage_support"}
+    return True
+
+
+def _compaction_semantic_penalty(
+    family: str | None,
+    dx: int,
+    dy: int,
+) -> float:
+    family_token = _normalize_token(family or "")
+    if family_token == "media_facing" and abs(dy) > abs(dx):
+        return 0.60
+    if family_token == "conversation_facing" and (dx != 0 or dy != 0):
+        return 0.35
+    if family_token == "open_center" and (dx != 0 or dy != 0):
+        return 0.45
+    return 0.0
+
+
+def _compaction_move_preserves_semantics(
+    *,
+    placements: list[dict[str, Any]],
+    move_object: str,
+    dx: int,
+    dy: int,
+    family: str | None,
+    ctx: SemanticContext | None,
+) -> bool:
+    if family is None or ctx is None:
+        return True
+    move = {
+        "move_object": move_object,
+        "dx": int(dx),
+        "dy": int(dy),
+    }
+    before = _family_contract_validator(
+        family=family,
+        placements=placements,
+        ctx=ctx,
+        verifier_eval=None,
+    )
+    patched = _apply_single_move(placements, move)
+    after = _family_contract_validator(
+        family=family,
+        placements=patched,
+        ctx=ctx,
+        verifier_eval=None,
+    )
+    threshold = _family_fidelity_threshold(ctx)
+    if not after.passed or after.family_fidelity < threshold:
+        return False
+    if after.family_fidelity + 0.02 < before.family_fidelity:
+        return False
+    return True
+
+
+def _compaction_forbidden_ranges(
+    *,
+    family: str | None,
+    bbox: dict[str, int],
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    family_token = _normalize_token(family or "")
+    if family_token != "open_center":
+        return [], []
+    width = max(1, int(bbox.get("max_x", 0)) - int(bbox.get("min_x", 0)))
+    height = max(1, int(bbox.get("max_y", 0)) - int(bbox.get("min_y", 0)))
+    x1 = int(bbox.get("min_x", 0)) + width // 3
+    x2 = int(bbox.get("min_x", 0)) + (2 * width) // 3
+    y1 = int(bbox.get("min_y", 0)) + height // 3
+    y2 = int(bbox.get("min_y", 0)) + (2 * height) // 3
+    return [(x1, x2)], [(y1, y2)]
 
 
 def _rects_overlap_on_axis(
@@ -3087,7 +7688,15 @@ def _run_verifier_once(
 
 def _extract_grid_mm(cluster: dict[str, Any]) -> int:
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
-    return normalize_layout_grid_mm((rules or {}).get("grid_mm"))
+    raw = (rules or {}).get("grid_mm") if isinstance(rules, dict) else None
+    if raw is None:
+        policy = (
+            cluster.get("composer_policy")
+            if isinstance(cluster.get("composer_policy"), dict)
+            else {}
+        )
+        raw = policy.get("grid_mm") if isinstance(policy, dict) else None
+    return normalize_layout_grid_mm(raw)
 
 
 def _build_cluster_output_from_placements(
@@ -3096,6 +7705,8 @@ def _build_cluster_output_from_placements(
     placements: list[dict[str, Any]],
     verifier_eval: dict[str, Any] | None = None,
     notes: list[str] | None = None,
+    variant_family: str | None = None,
+    family_fidelity: float | None = None,
 ) -> dict[str, Any]:
     cluster_id = str(cluster.get("cluster_id") or "")
     grid_mm = _extract_grid_mm(cluster)
@@ -3133,6 +7744,17 @@ def _build_cluster_output_from_placements(
         )
 
     bbox = _local_bbox_from_rects(rects)
+    tight_hull_polygons = _outline_polygons_union_grid(rects)
+    tight_hull_polygon = tight_hull_polygons[0] if len(tight_hull_polygons) == 1 else []
+    interaction_rects = (
+        _interaction_rects_from_verifier(verifier_eval)
+        if isinstance(verifier_eval, dict)
+        else []
+    )
+    interaction_hull_polygons = _outline_polygons_union_grid(interaction_rects)
+    interaction_hull_polygon = (
+        interaction_hull_polygons[0] if len(interaction_hull_polygons) == 1 else []
+    )
 
     orientation_meta = _infer_orientation_meta(
         cluster=cluster,
@@ -3155,7 +7777,19 @@ def _build_cluster_output_from_placements(
             "type": "union_of_rects",
             "rects": rects,
             "local_bbox": bbox,
+            "tight_hull_polygon_mm": tight_hull_polygon,
+            "tight_hull_polygons_mm": tight_hull_polygons,
+            "interaction_hull_polygon_mm": interaction_hull_polygon,
+            "interaction_hull_polygons_mm": interaction_hull_polygons,
+            "variant_family": variant_family,
+            "family_fidelity": family_fidelity,
         },
+        "tight_hull_polygon_mm": tight_hull_polygon,
+        "tight_hull_polygons_mm": tight_hull_polygons,
+        "interaction_hull_polygon_mm": interaction_hull_polygon,
+        "interaction_hull_polygons_mm": interaction_hull_polygons,
+        "variant_family": variant_family,
+        "family_fidelity": family_fidelity,
         "orientation_meta": orientation_meta,
         "notes": list(notes or []),
         "missing": [],
@@ -4001,6 +8635,22 @@ def _sanitize_cluster_output_payload(
         "local_placements",
         "cluster_footprint",
         "orientation_meta",
+        "variant_bundle",
+        "canonical_variant_id",
+        "variant_summary",
+        "family_coverage",
+        "tight_hull_polygon_mm",
+        "tight_hull_polygons_mm",
+        "interaction_hull_polygon_mm",
+        "interaction_hull_polygons_mm",
+        "variant_family",
+        "source_type",
+        "family_fidelity",
+        "semantic_confidence",
+        "fallback_heavy",
+        "solver_friendliness",
+        "family_contract_reasons",
+        "conflicts",
         "notes",
         "missing",
     }
@@ -4172,6 +8822,22 @@ def _extract_json_object(text: str) -> str:
 
 def _member_ids(cluster: dict[str, Any]) -> list[str]:
     members = cluster.get("members") if isinstance(cluster, dict) else None
-    if not isinstance(members, list):
+    if isinstance(members, list):
+        return [m for m in members if isinstance(m, str)]
+
+    inventory = (
+        cluster.get("inventory_decision")
+        if isinstance(cluster.get("inventory_decision"), dict)
+        else None
+    )
+    objects = inventory.get("objects") if isinstance(inventory, dict) else None
+    if not isinstance(objects, list):
         return []
-    return [m for m in members if isinstance(m, str)]
+    out: list[str] = []
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        object_id = obj.get("object_id") or obj.get("object_type")
+        if isinstance(object_id, str) and object_id:
+            out.append(object_id)
+    return out

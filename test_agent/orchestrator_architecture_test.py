@@ -112,6 +112,10 @@ _stub_module(
     "pipeline.dropped_inventory",
     collect_dropped_inventory=lambda **kwargs: {},
     collect_seed_omitted_inventory=lambda **kwargs: {},
+    controlled_accessory_refill=lambda **kwargs: (
+        kwargs.get("absolute_layout") or {},
+        {"refill_count": 0},
+    ),
     dropped_inventory_payload=lambda value: value,
     merge_dropped_inventory=lambda base, additions: {
         **(base or {}),
@@ -337,9 +341,24 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         calls: list[dict[str, object]] = []
 
         class _DummyRelationPlanner:
-            def generate(self, **kwargs):
+            def generate_bundle(self, **kwargs):
                 calls.append(kwargs)
-                return {"status": "OK", "cluster_relations": []}
+                return {
+                    "status": "OK",
+                    "room_type": "living_room",
+                    "concepts": [
+                        {
+                            "concept_family": "focal_axis",
+                            "spatial_character": "Focal axis",
+                            "cluster_zone_plan": [],
+                        },
+                        {
+                            "concept_family": "open_center",
+                            "spatial_character": "Open center",
+                            "cluster_zone_plan": [],
+                        },
+                    ],
+                }
 
         bundle = {
             "cluster_outlines": {
@@ -381,7 +400,6 @@ class OrchestratorArchitectureTest(unittest.TestCase):
 
         self.assertEqual(len(planned_bundles), 2)
         self.assertEqual(len(payload["variants"]), 2)
-        self.assertEqual(calls[0]["model_name"], "gemma-4-31b-it")
         seed_notes = (calls[0]["clusters_json"].get("seed_layout_state") or {}).get(
             "notes"
         ) or []

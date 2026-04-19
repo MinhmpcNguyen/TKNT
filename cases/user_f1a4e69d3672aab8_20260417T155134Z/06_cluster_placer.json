@@ -1,0 +1,31 @@
+{
+  "status": "NO_IMPROVEMENT",
+  "cluster_transforms": [
+    {
+      "cluster_id": "main_seating",
+      "x": 1250,
+      "y": 150,
+      "rot": 0
+    },
+    {
+      "cluster_id": "media",
+      "x": 3500,
+      "y": 3300,
+      "rot": 180
+    }
+  ],
+  "selected_variants": [
+    {
+      "cluster_id": "main_seating",
+      "variant_id": "main_seating__fallback_generic__01"
+    },
+    {
+      "cluster_id": "media",
+      "variant_id": "media__wall_storage_linear__01"
+    }
+  ],
+  "object_repairs": [],
+  "notes": [
+    "Micro refiner accepted: Relieve main-path squeeze near media.tv_console"
+  ]
+}

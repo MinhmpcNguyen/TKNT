@@ -88,7 +88,9 @@ class PreferFacingConstraint(BaseModel):
     weight: int
 
 
-SoftConstraint = PreferNearConstraint | PreferAlignEdgeConstraint | PreferFacingConstraint
+SoftConstraint = (
+    PreferNearConstraint | PreferAlignEdgeConstraint | PreferFacingConstraint
+)
 
 
 class FacingRule(BaseModel):
@@ -132,5 +134,7 @@ class Cluster(BaseModel):
 class ClusterForgeOutput(BaseModel):
     status: Literal["OK", "NEED_INFO", "UNSAT"]
     clusters: list[Cluster] = Field(default_factory=list)
+    semantic_layout_program: dict[str, object] | None = None
+    style_policy: dict[str, object] | None = None
     notes: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)

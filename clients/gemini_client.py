@@ -71,6 +71,7 @@ class GeminiClient:
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
         temperature: float | None = None,
+        top_p: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
@@ -83,6 +84,7 @@ class GeminiClient:
                 messages,
                 model_name=resolved_model_name,
                 temperature=temperature,
+                top_p=top_p,
                 max_tokens=max_tokens,
                 thinking_level=thinking_level,
                 response_mime_type=response_mime_type,
@@ -94,6 +96,7 @@ class GeminiClient:
             messages,
             model_name=resolved_model_name,
             temperature=temperature,
+            top_p=top_p,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
             response_mime_type=response_mime_type,
@@ -201,6 +204,7 @@ class GeminiClient:
         messages: Sequence[ChatMessage],
         *,
         temperature: float | None,
+        top_p: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
@@ -210,6 +214,8 @@ class GeminiClient:
         generation_config: dict[str, object] = {}
         if temperature is not None:
             generation_config["temperature"] = temperature
+        if top_p is not None:
+            generation_config["topP"] = top_p
         if max_tokens is not None:
             generation_config["maxOutputTokens"] = max_tokens
         if response_mime_type is not None:
@@ -228,6 +234,7 @@ class GeminiClient:
         *,
         model_name: str,
         temperature: float | None,
+        top_p: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
@@ -239,6 +246,7 @@ class GeminiClient:
         payload = self._build_chat_payload(
             messages,
             temperature=temperature,
+            top_p=top_p,
             max_tokens=max_tokens,
             thinking_level=applied_thinking_level,
             response_mime_type=response_mime_type,
@@ -257,6 +265,7 @@ class GeminiClient:
             retry_payload = self._build_chat_payload(
                 messages,
                 temperature=temperature,
+                top_p=top_p,
                 max_tokens=max_tokens,
                 thinking_level=None,
                 response_mime_type=response_mime_type,
@@ -269,6 +278,7 @@ class GeminiClient:
         *,
         model_name: str,
         temperature: float | None,
+        top_p: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
@@ -282,6 +292,7 @@ class GeminiClient:
                     messages,
                     model_name=candidate_model_name,
                     temperature=temperature,
+                    top_p=top_p,
                     max_tokens=max_tokens,
                     thinking_level=thinking_level,
                     response_mime_type=response_mime_type,
@@ -453,6 +464,7 @@ class GeminiClient:
         *,
         model_name: str,
         temperature: float | None,
+        top_p: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
@@ -468,6 +480,7 @@ class GeminiClient:
             [{"role": "user", "content": prompt}],
             model_name=model_name,
             temperature=temperature,
+            top_p=top_p,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
             response_mime_type=response_mime_type,

@@ -32,7 +32,7 @@ type FloorplanPreparation = {
   shiftDy: number;
 };
 
-const REINTRODUCED_OBJECT_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
+const REFILL_OBJECT_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
 
 export function preparePipelineResultLayouts(params: {
   roomPayload: any;
@@ -505,7 +505,7 @@ function normalizeLayoutAssetId(value: unknown): string | null {
   if (!raw) {
     return null;
   }
-  const normalized = raw.replace(REINTRODUCED_OBJECT_ID_PATTERN, '').trim();
+  const normalized = raw.replace(REFILL_OBJECT_ID_PATTERN, '').trim();
   return normalized || raw;
 }
 

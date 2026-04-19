@@ -12,16 +12,90 @@ from agent.cluster_placer import (
     compile_phase2_to_final_output,
     make_no_improvement_repair,
 )
+from agent.micro_refiner import MicroRefiner
 from agent.phase2_judge import Phase2Judge
 from cluster_placer.tools_v2 import (
     EnumeratePhase2RepairMoves,
     EvaluatePhase2Proposal,
     PromotePhase2RepairToSeedPayload,
-    ResolvePhase2HardViolations,
 )
 from layout.grid_policy import normalize_layout_grid_mm
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_solver_output_for_phase2(
+    solver_output: dict[str, Any] | None,
+) -> dict[str, Any]:
+    normalized = deepcopy(solver_output or {})
+    placer_seed = normalized.get("placer_seed") or {}
+    seed_layout = placer_seed.get("seed_layout") or {}
+
+    if isinstance(seed_layout, dict):
+        if not normalized.get("cluster_transforms") and seed_layout.get(
+            "cluster_transforms"
+        ):
+            normalized["cluster_transforms"] = deepcopy(
+                seed_layout.get("cluster_transforms") or []
+            )
+        if not normalized.get("selected_variants") and seed_layout.get(
+            "selected_variants"
+        ):
+            normalized["selected_variants"] = deepcopy(
+                seed_layout.get("selected_variants") or []
+            )
+
+    return normalized
+
+
+def _phase2_controller_result(
+    *,
+    proposal: dict[str, Any],
+    evaluation: dict[str, Any],
+    absolute_layout: dict[str, Any],
+    history: list[dict[str, Any]] | None = None,
+    hard_fix: dict[str, Any] | None = None,
+    notes: list[str] | None = None,
+) -> dict[str, Any]:
+    hard_valid = bool(evaluation.get("hard_valid"))
+    refined_layout_solution = {
+        "status": "OK"
+        if str(absolute_layout.get("status") or "").upper() == "OK"
+        else "PARTIAL_OK",
+        "hard_valid": hard_valid,
+        "quality_before": {},
+        "quality_after": {},
+        "applied_moves": [],
+        "notes": list(notes or []),
+    }
+    return {
+        "proposal": proposal,
+        "tool_evaluation": evaluation,
+        "judge_evaluation": {
+            "verdict": "ACCEPT" if hard_valid else "REVISE",
+            "reasonableness_score": int(
+                max(
+                    0,
+                    (
+                        (evaluation.get("baseline_comparison") or {}).get(
+                            "candidate_score"
+                        )
+                        or 0
+                    ),
+                )
+                // 100
+            ),
+            "next_step_mode": "stop" if hard_valid else "macro_layout",
+            "top_issues": [],
+            "repair_advice": list(notes or []),
+            "priority_clusters": [],
+        },
+        "absolute_layout": absolute_layout,
+        "refined_layout_solution": refined_layout_solution,
+        "history": history or [],
+        "hard_fix": hard_fix or {"result": "SKIPPED", "attempts": []},
+    }
+
 
 _MEANINGFUL_DELTA_BY_PHASE = {
     "macro_layout": 180,
@@ -49,6 +123,13 @@ _PLANNER_OBJECT_INTENTS = {
     "front_to_entry",
     "face_window",
     "front_to_window",
+    "in_front_of_anchor",
+    "align_with_anchor_axis",
+    "same_view_side_as_primary_pair",
+    "flank_anchor",
+    "not_behind_anchor_view",
+    "beside_secondary_seat",
+    "same_direction_as_anchor",
 }
 
 
@@ -980,6 +1061,31 @@ def _fallback_moves(
         if isinstance(move, dict) and _move_matches_search_phase(move, search_phase)
     ]
 
+    if _needs_primary_pair_axis_repair(payload, baseline_evaluation):
+        object_payload = deepcopy(payload)
+        _set_search_phase(object_payload, "object_refine")
+        extra_object_moves = deepcopy(
+            (
+                EnumeratePhase2RepairMoves(payload=object_payload, limit=24).get(
+                    "moves"
+                )
+                or []
+            )
+        )
+        seen_move_signatures = {
+            json.dumps(move, sort_keys=True, ensure_ascii=True)
+            for move in moves
+            if isinstance(move, dict)
+        }
+        for move in extra_object_moves:
+            if not isinstance(move, dict):
+                continue
+            signature = json.dumps(move, sort_keys=True, ensure_ascii=True)
+            if signature in seen_move_signatures:
+                continue
+            moves.append(move)
+            seen_move_signatures.add(signature)
+
     def _move_family(move: dict[str, Any]) -> str:
         kind = str(move.get("kind") or "")
         if kind == "cluster_variant":
@@ -1021,6 +1127,7 @@ def _fallback_moves(
 
     moves.sort(
         key=lambda move: (
+            _viewing_pair_move_priority(move, payload),
             1 if str(move.get("cluster_id") or "") in stuck_clusters else 0,
             1 if _move_family(move) in avoid_move_families else 0,
         )
@@ -1115,6 +1222,277 @@ def _forced_macro_moves(
     return forced
 
 
+def _cluster_cards_map(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for card in payload.get("cluster_cards") or []:
+        if not isinstance(card, dict):
+            continue
+        cluster_id = str(card.get("cluster_id") or "").strip()
+        if cluster_id:
+            out[cluster_id] = card
+    return out
+
+
+def _objects_world_map(
+    payload: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in payload.get("objects_world") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        object_id = str(row.get("object_id") or "").strip()
+        if cluster_id and object_id:
+            out[(cluster_id, object_id)] = row
+    return out
+
+
+def _bbox_center(bbox: dict[str, Any]) -> tuple[float, float]:
+    return (
+        (float(bbox.get("min_x", 0)) + float(bbox.get("max_x", 0))) / 2.0,
+        (float(bbox.get("min_y", 0)) + float(bbox.get("max_y", 0))) / 2.0,
+    )
+
+
+def _world_relative_side(base_bbox: dict[str, Any], object_bbox: dict[str, Any]) -> str:
+    base_cx, base_cy = _bbox_center(base_bbox)
+    obj_cx, obj_cy = _bbox_center(object_bbox)
+    dx = obj_cx - base_cx
+    dy = obj_cy - base_cy
+    if abs(dx) > abs(dy):
+        return "right" if dx >= 0 else "left"
+    return "top" if dy >= 0 else "bottom"
+
+
+def _semantic_side_targets_world(
+    *,
+    rule: dict[str, Any],
+    base_row: dict[str, Any],
+    object_row: dict[str, Any],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    base_bbox = base_row.get("bbox") or {}
+    object_bbox = object_row.get("bbox") or {}
+    if not isinstance(base_bbox, dict) or not isinstance(object_bbox, dict):
+        return []
+    base_cx, base_cy = _bbox_center(base_bbox)
+    base_w = float(base_bbox.get("max_x", 0)) - float(base_bbox.get("min_x", 0))
+    base_h = float(base_bbox.get("max_y", 0)) - float(base_bbox.get("min_y", 0))
+    obj_w = float(object_bbox.get("max_x", 0)) - float(object_bbox.get("min_x", 0))
+    obj_h = float(object_bbox.get("max_y", 0)) - float(object_bbox.get("min_y", 0))
+    gap = max(
+        int(rule.get("gap_min") or 0), min(int(rule.get("gap_max") or 0) or 0, 400)
+    )
+    if gap <= 0:
+        gap = max(grid_mm * 2, 150)
+
+    front_world = (
+        base_row.get("front_world")
+        if isinstance(base_row.get("front_world"), dict)
+        else {}
+    )
+    fx = float(front_world.get("dx", 0.0))
+    fy = float(front_world.get("dy", 0.0))
+    if abs(fx) >= abs(fy):
+        front_side = "right" if fx >= 0 else "left"
+    else:
+        front_side = "top" if fy >= 0 else "bottom"
+
+    def _rotate_side(side: str, quarter_turns: int) -> str:
+        sides = ["top", "right", "bottom", "left"]
+        try:
+            idx = sides.index(side)
+        except ValueError:
+            return side
+        return sides[(idx + quarter_turns) % 4]
+
+    left = _rotate_side(front_side, -1)
+    right = _rotate_side(front_side, 1)
+    back = _rotate_side(front_side, 2)
+    option_to_side = {
+        "head": front_side,
+        "front": front_side,
+        "left": left,
+        "right": right,
+        "back": back,
+        "foot": back,
+        "head_left": front_side,
+        "head_right": front_side,
+        "front_left": front_side,
+        "front_right": front_side,
+        "foot_left": back,
+        "foot_right": back,
+        "back_left": back,
+        "back_right": back,
+    }
+    targets: list[dict[str, Any]] = []
+    for option in rule.get("side_options") or []:
+        token = str(option).strip().lower()
+        world_side = option_to_side.get(token)
+        if world_side is None:
+            continue
+        if world_side == "right":
+            tx = base_cx + (base_w / 2.0 + obj_w / 2.0 + gap)
+            ty = base_cy
+        elif world_side == "left":
+            tx = base_cx - (base_w / 2.0 + obj_w / 2.0 + gap)
+            ty = base_cy
+        elif world_side == "top":
+            tx = base_cx
+            ty = base_cy + (base_h / 2.0 + obj_h / 2.0 + gap)
+        else:
+            tx = base_cx
+            ty = base_cy - (base_h / 2.0 + obj_h / 2.0 + gap)
+        if token.endswith("_left"):
+            tx -= max(base_w * 0.18, obj_w * 0.18)
+        elif token.endswith("_right"):
+            tx += max(base_w * 0.18, obj_w * 0.18)
+        targets.append(
+            {"option": str(option), "world_side": world_side, "cx": tx, "cy": ty}
+        )
+    return targets
+
+
+def _semantic_object_move_proposals(
+    *,
+    payload: dict[str, Any],
+    prioritized_objects: list[tuple[str, str]],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    cards = _cluster_cards_map(payload)
+    objects_world = _objects_world_map(payload)
+    proposals: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _opposite_side(side: str) -> str:
+        return {"left": "right", "right": "left", "top": "bottom", "bottom": "top"}.get(
+            side, side
+        )
+
+    def _front_side_from_row(row: dict[str, Any]) -> str:
+        front = (
+            row.get("front_world") if isinstance(row.get("front_world"), dict) else {}
+        )
+        dx = float(front.get("dx", 0.0))
+        dy = float(front.get("dy", 0.0))
+        if abs(dx) >= abs(dy):
+            return "right" if dx >= 0 else "left"
+        return "top" if dy >= 0 else "bottom"
+
+    for cluster_id, object_id in prioritized_objects[:8]:
+        card = cards.get(cluster_id) or {}
+        rules = (card.get("cluster_rules") or {}).get("semantic_placements") or []
+        object_row = objects_world.get((cluster_id, object_id))
+        if not isinstance(object_row, dict):
+            continue
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            if str(rule.get("id") or "") != object_id:
+                continue
+            base_id = str(rule.get("relative_to") or "").strip()
+            base_row = objects_world.get((cluster_id, base_id))
+            if not isinstance(base_row, dict):
+                continue
+            targets = _semantic_side_targets_world(
+                rule=rule,
+                base_row=base_row,
+                object_row=object_row,
+                grid_mm=grid_mm,
+            )
+            if not targets:
+                continue
+            object_bbox = object_row.get("bbox") or {}
+            base_bbox = base_row.get("bbox") or {}
+            if not isinstance(object_bbox, dict) or not isinstance(base_bbox, dict):
+                continue
+            current_side = _world_relative_side(base_bbox, object_bbox)
+            support_role = str(rule.get("support_role") or "").strip().lower()
+            base_front_side = _front_side_from_row(base_row)
+            obj_front_side = _front_side_from_row(object_row)
+            target = min(
+                targets,
+                key=lambda t: (
+                    0
+                    if str(t.get("world_side") or "") == base_front_side
+                    and support_role == "frontal_support"
+                    else 1,
+                    abs(float(t["cx"]) - _bbox_center(object_bbox)[0])
+                    + abs(float(t["cy"]) - _bbox_center(object_bbox)[1]),
+                ),
+            )
+            obj_cx, obj_cy = _bbox_center(object_bbox)
+            dx = int(round((float(target["cx"]) - obj_cx) / max(grid_mm, 1))) * grid_mm
+            dy = int(round((float(target["cy"]) - obj_cy) / max(grid_mm, 1))) * grid_mm
+            desired_front_side = None
+            orientation = str(rule.get("orientation") or "").strip().lower()
+            if orientation == "same_direction" or support_role == "wall_support":
+                desired_front_side = base_front_side
+            elif support_role == "frontal_support":
+                desired_front_side = base_front_side
+            elif support_role == "secondary_seat":
+                desired_front_side = base_front_side
+            elif support_role == "side_support":
+                desired_front_side = base_front_side
+            elif orientation == "face_base" and current_side in {
+                "left",
+                "right",
+                "top",
+                "bottom",
+            }:
+                desired_front_side = _opposite_side(current_side)
+            repairs = []
+            if (
+                dx != 0
+                or dy != 0
+                or current_side != str(target.get("world_side") or current_side)
+            ):
+                repairs.append(
+                    {
+                        "cluster_id": cluster_id,
+                        "object_id": object_id,
+                        "op": "nudge_object",
+                        "params": {"dx": dx, "dy": dy},
+                    }
+                )
+            if desired_front_side and desired_front_side != obj_front_side:
+                side_to_vec = {
+                    "left": {"dx": -1.0, "dy": 0.0},
+                    "right": {"dx": 1.0, "dy": 0.0},
+                    "top": {"dx": 0.0, "dy": 1.0},
+                    "bottom": {"dx": 0.0, "dy": -1.0},
+                }
+                vec = side_to_vec.get(desired_front_side)
+                if vec:
+                    repairs.insert(
+                        0,
+                        {
+                            "cluster_id": cluster_id,
+                            "object_id": object_id,
+                            "op": "set_front_override",
+                            "params": vec,
+                        },
+                    )
+            if not repairs:
+                continue
+            sig = json.dumps(repairs, sort_keys=True, ensure_ascii=True)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            proposals.append(
+                {
+                    "cluster_transforms": [],
+                    "selected_variants": [],
+                    "object_repairs": repairs,
+                    "notes": [
+                        f"Controller snapped {cluster_id}.{object_id} toward semantic slot {target.get('option')} relative to {base_id}."
+                    ],
+                }
+            )
+            break
+    return proposals
+
+
 def _forced_object_moves(
     payload: dict[str, Any], history: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -1134,6 +1512,13 @@ def _forced_object_moves(
         "front_to_entry",
         "face_window",
         "front_to_window",
+        "in_front_of_anchor",
+        "align_with_anchor_axis",
+        "preserve_access_around_anchor",
+        "flank_anchor",
+        "beside_secondary_seat",
+        "same_direction_as_anchor",
+        "face_cluster",
     }
     critical_orientation_targets = []
     for row in (
@@ -1171,6 +1556,24 @@ def _forced_object_moves(
             if isinstance(cid, str) and isinstance(oid, str):
                 prioritized_objects.append((cid, oid))
 
+    semantic_priority_seen: set[tuple[str, str]] = set(prioritized_objects)
+    for row in payload.get("cluster_cards") or []:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        rules = (row.get("cluster_rules") or {}).get("semantic_placements") or []
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            object_id = str(rule.get("id") or "").strip()
+            support_role = str(rule.get("support_role") or "").strip().lower()
+            if not cluster_id or not object_id:
+                continue
+            if support_role in {"frontal_support", "secondary_seat", "side_support"}:
+                key = (cluster_id, object_id)
+                if key not in semantic_priority_seen:
+                    prioritized_objects.append(key)
+                    semantic_priority_seen.add(key)
     if not prioritized_objects:
         for row in payload.get("objects_world") or []:
             if not isinstance(row, dict):
@@ -1190,6 +1593,13 @@ def _forced_object_moves(
     )
 
     forced: list[dict[str, Any]] = []
+    forced.extend(
+        _semantic_object_move_proposals(
+            payload=payload,
+            prioritized_objects=prioritized_objects,
+            grid_mm=grid_mm,
+        )
+    )
     single_repairs: list[dict[str, Any]] = []
     seen_single_repairs: set[tuple[str, str, str, str]] = set()
     seen_pair_repairs: set[str] = set()
@@ -1536,7 +1946,7 @@ def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
 
     if (
-        focus_mode == "viewing"
+        focus_mode in {"viewing", "mixed"}
         and isinstance(primary_cluster_id, str)
         and primary_cluster_id
         and isinstance(secondary_cluster_id, str)
@@ -1548,7 +1958,8 @@ def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
     for row in relation_plan.get("cluster_directional_relations") or []:
         if not isinstance(row, dict):
             continue
-        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+        relation = str(row.get("relation") or "").strip().lower()
+        if relation not in {"face_each_other", "access_faces_other"}:
             continue
         a = row.get("a")
         b = row.get("b")
@@ -1559,6 +1970,111 @@ def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
             pairs.append(pair)
 
     return pairs
+
+
+def _needs_primary_pair_axis_repair(
+    payload: dict[str, Any],
+    evaluation: dict[str, Any],
+) -> bool:
+    pair_clusters: set[str] = set()
+    for a, b in _viewing_cluster_pairs(payload):
+        pair_clusters.add(a)
+        pair_clusters.add(b)
+    if not pair_clusters:
+        return False
+    metrics = evaluation.get("metrics") or {}
+    gate_reasons = {
+        str(reason).strip()
+        for reason in (metrics.get("score_summary") or {}).get(
+            "quality_gate_reasons", []
+        )
+        if str(reason).strip()
+    }
+    if {
+        "critical_orientation_penalty_too_high",
+        "focal_pair_penalty_too_high",
+    }.intersection(gate_reasons):
+        return True
+    for row in metrics.get("orientation_debug") or []:
+        if not isinstance(row, dict):
+            continue
+        if int(row.get("penalty_mm") or 0) < 180:
+            continue
+        kind = str(row.get("kind") or "").strip()
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if kind in {
+            "cluster_directional_relation",
+            "cluster_orientation",
+            "object_orientation",
+        }:
+            if not cluster_id or cluster_id in pair_clusters:
+                return True
+    diagnosis = evaluation.get("diagnosis") or {}
+    prioritized_objects = {
+        str(row.get("object_id") or row.get("id") or "").strip()
+        for row in (diagnosis.get("prioritized_objects") or [])
+        if isinstance(row, dict)
+    }
+    if prioritized_objects.intersection(
+        {"sofa", "armchair", "coffee_table", "tv_console"}
+    ):
+        return True
+    return False
+
+
+def _viewing_pair_move_priority(
+    move: dict[str, Any],
+    payload: dict[str, Any],
+) -> int:
+    pair_clusters: set[str] = set()
+    for a, b in _viewing_cluster_pairs(payload):
+        pair_clusters.add(a)
+        pair_clusters.add(b)
+    if not pair_clusters:
+        return 5
+    kind = str(move.get("kind") or "")
+    if kind == "cluster_pose":
+        proposal = move.get("proposal") or {}
+        transforms = [
+            row
+            for row in (proposal.get("cluster_transforms") or [])
+            if isinstance(row, dict)
+        ]
+        seed_map = _seed_transform_map(payload.get("seed_layout") or {})
+        if any(
+            str(row.get("cluster_id") or "") in pair_clusters
+            and int(row.get("rot") or 0)
+            != int(
+                (seed_map.get(str(row.get("cluster_id") or "")) or {}).get("rot") or 0
+            )
+            for row in transforms
+        ):
+            return 0
+        if any(str(row.get("cluster_id") or "") in pair_clusters for row in transforms):
+            return 1
+    if kind == "object_pose":
+        repairs = [
+            row
+            for row in ((move.get("proposal") or {}).get("object_repairs") or [])
+            if isinstance(row, dict)
+        ]
+        for repair in repairs:
+            cluster_id = str(repair.get("cluster_id") or "")
+            object_id = str(repair.get("object_id") or "")
+            op = str(repair.get("op") or "")
+            if cluster_id in pair_clusters and op in {
+                "rotate_object",
+                "mirror_object",
+                "set_front_override",
+            }:
+                return 2 if object_id in {"sofa", "tv_console"} else 3
+            if cluster_id in pair_clusters and object_id in {
+                "coffee_table",
+                "armchair",
+                "side_table",
+            }:
+                return 4
+    return 5
 
 
 def _anchor_contract_cluster_ids(payload: dict[str, Any]) -> set[str]:
@@ -1897,369 +2413,148 @@ class Phase2Controller:
         solver_output_json: dict[str, Any],
         cluster_constraints_json: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        normalized_solver_output = _normalize_solver_output_for_phase2(
+            solver_output_json
+        )
         current_payload = build_phase2_payload(
             room_01=room_interpreter_json,
             clusters_04=cluster_merged_json,
             outlines_05=cluster_outlines_json,
             relation_05b=relation_plan_json,
-            placer_06=solver_output_json,
+            placer_06=normalized_solver_output,
             cluster_constraints=cluster_constraints_json,
         )
-        current_repair = _canonical_repair(current_payload)
-        current_baseline = EvaluatePhase2Proposal(
-            payload=current_payload,
-            repair=current_repair,
-        )
-        logger.info(
-            "Phase2Controller start: baseline_hard_valid=%s baseline_score=%s",
-            current_baseline.get("hard_valid"),
-            (
-                (current_baseline.get("baseline_comparison") or {}).get(
-                    "candidate_score"
-                )
-            ),
-        )
 
-        best_payload = deepcopy(current_payload)
-        best_proposal = deepcopy(current_repair)
-        best_tool_eval = current_baseline
-        best_judge_eval = _baseline_judge_stub(current_baseline)
+        result = MicroRefiner().refine(current_payload).as_controller_result()
+        absolute_layout = result.get("absolute_layout") or {}
+        if str(absolute_layout.get("status") or "").upper() == "OK":
+            return result
 
-        best_hard_valid_payload = deepcopy(current_payload)
-        best_hard_valid_proposal = deepcopy(current_repair)
-        best_hard_valid_eval = current_baseline
-        best_hard_valid_judge = _baseline_judge_stub(current_baseline)
-
-        history: list[dict[str, Any]] = []
-        controller_feedback: dict[str, Any] | None = None
-        attempted_signatures = {_proposal_signature(current_repair)}
-
-        for iteration in range(1, max(1, int(self.max_iterations)) + 1):
-            if controller_feedback is not None:
-                current_payload["controller_feedback"] = deepcopy(controller_feedback)
-            else:
-                current_payload.pop("controller_feedback", None)
-
-            requested_search_phase = None
-            if isinstance(controller_feedback, dict):
-                requested_search_phase = controller_feedback.get(
-                    "recommended_search_phase"
-                )
-            search_phase = _normalize_search_phase(
-                requested_search_phase or _current_search_phase(current_payload)
+        # Fallback path: if the solver produced a hard-valid seed that is still
+        # macro-blocked or locally invalid after materialization, run the
+        # deterministic phase-2 placer and explicitly try an object-refine pass
+        # when the seed diagnostics say the primary viewing pair is wrong.
+        fallback_notes = [
+            "Phase-2 fallback activated: deterministic repair from solver seed.",
+        ]
+        try:
+            seed_verify = (
+                (normalized_solver_output.get("placer_seed") or {}).get("seed_verify")
+                if isinstance(normalized_solver_output, dict)
+                else None
             )
-            _set_search_phase(current_payload, search_phase)
-
-            deterministic_shortlist = _shortlist_deterministic_candidates(
-                payload=current_payload,
-                baseline_evaluation=current_baseline,
-                attempted_signatures=attempted_signatures,
-                history=history,
-                search_phase=search_phase,
-            )
-
-            if _normalize_search_phase(search_phase) == "macro_layout" and (
-                _should_enter_object_refine_phase(
-                    iteration=iteration,
-                    history=history,
-                    macro_shortlist=deterministic_shortlist,
-                    baseline_evaluation=current_baseline,
-                )
+            candidate_payloads: list[tuple[str, dict[str, Any], list[str]]] = [
+                ("macro_layout", deepcopy(current_payload), list(fallback_notes))
+            ]
+            if isinstance(seed_verify, dict) and _needs_primary_pair_axis_repair(
+                current_payload,
+                seed_verify,
             ):
-                search_phase = "object_refine"
-                _set_search_phase(current_payload, search_phase)
-                deterministic_shortlist = _shortlist_deterministic_candidates(
-                    payload=current_payload,
-                    baseline_evaluation=current_baseline,
-                    attempted_signatures=attempted_signatures,
-                    history=history,
-                    search_phase=search_phase,
+                object_payload = deepcopy(current_payload)
+                _set_search_phase(object_payload, "object_refine")
+                candidate_payloads.insert(
+                    0,
+                    (
+                        "object_refine",
+                        object_payload,
+                        [
+                            *fallback_notes,
+                            "Primary viewing-pair/object-orientation pressure detected; object-refine fallback promoted before generic macro repair.",
+                        ],
+                    ),
                 )
 
-            shortlist_candidate = _select_shortlist_candidate(
-                deterministic_shortlist, history, search_phase
-            )
+            best_candidate: (
+                tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[str], str]
+                | None
+            ) = None
+            best_rank: tuple[int, int, int, int, int] | None = None
 
-            if _should_stop_object_refine_search(
-                history=history,
-                deterministic_shortlist=deterministic_shortlist,
-                search_phase=search_phase,
-            ):
-                logger.info(
-                    "Phase2Controller iteration %s: stopping object-refine search because recent attempts stalled and no positive deterministic object move remains",
-                    iteration,
+            for mode, candidate_payload, candidate_notes in candidate_payloads:
+                fallback_raw = self.placer.generate_from_payload(
+                    payload=candidate_payload,
+                    max_attempts=3,
                 )
-                break
-
-            if _should_stop_macro_search(
-                history=history,
-                deterministic_shortlist=deterministic_shortlist,
-                search_phase=search_phase,
-            ):
-                logger.info(
-                    "Phase2Controller iteration %s: stopping macro search because repeated small revisions failed to change the prioritized clusters",
-                    iteration,
+                fallback_proposal = _canonical_repair(
+                    candidate_payload,
+                    fallback_raw if isinstance(fallback_raw, dict) else {},
+                    notes=candidate_notes,
                 )
-                break
-
-            if shortlist_candidate and _should_use_deterministic_candidate(
-                shortlist_candidate["evaluation"], history
-            ):
-                logger.info(
-                    "Phase2Controller iteration %s/%s: using deterministic shortlist candidate phase=%s source=%s delta_score=%s",
-                    iteration,
-                    self.max_iterations,
-                    search_phase,
-                    shortlist_candidate.get("source"),
-                    _delta_score(shortlist_candidate["evaluation"]),
+                fallback_eval = EvaluatePhase2Proposal(
+                    payload=candidate_payload,
+                    repair=fallback_proposal,
                 )
-                proposal = deepcopy(shortlist_candidate["proposal"])
-                tool_eval = deepcopy(shortlist_candidate["evaluation"])
-            else:
-                logger.info(
-                    "Phase2Controller iteration %s/%s: calling placer phase=%s",
-                    iteration,
-                    self.max_iterations,
-                    search_phase,
-                )
-                raw_proposal = self.placer.generate_from_payload(
-                    payload=current_payload
-                )
-                logger.info(
-                    "Phase2Controller iteration %s: placer_status=%s notes=%s",
-                    iteration,
-                    raw_proposal.get("status"),
-                    raw_proposal.get("notes"),
-                )
-
-                if str(raw_proposal.get("status") or "").upper() == "REPAIRED":
-                    proposal = _canonical_repair(current_payload, raw_proposal)
-                else:
-                    logger.info(
-                        "Phase2Controller iteration %s: synthesizing fallback because placer returned %s",
-                        iteration,
-                        raw_proposal.get("status"),
+                if not bool(fallback_eval.get("hard_valid")):
+                    continue
+                snapped_payload, snapped_repair, snapped_eval = (
+                    _postsolve_orientation_snap(
+                        payload=candidate_payload,
+                        repair=fallback_proposal,
+                        rounds=2,
+                        move_limit=64 if mode == "object_refine" else 48,
                     )
-                    proposal = _choose_fallback_proposal(
-                        payload=current_payload,
-                        baseline_evaluation=current_baseline,
-                        attempted_signatures=attempted_signatures,
-                        history=history,
-                        search_phase=search_phase,
-                    )
-
-                if _proposal_signature(proposal) in attempted_signatures:
-                    logger.info(
-                        "Phase2Controller iteration %s: replacing repeated proposal with deterministic fallback",
-                        iteration,
-                    )
-                    proposal = _choose_fallback_proposal(
-                        payload=current_payload,
-                        baseline_evaluation=current_baseline,
-                        attempted_signatures=attempted_signatures,
-                        history=history,
-                        search_phase=search_phase,
-                    )
-
-                if _normalize_search_phase(
-                    search_phase
-                ) == "object_refine" and not _proposal_has_object_repairs(proposal):
-                    logger.info(
-                        "Phase2Controller iteration %s: object-refine phase requires object_repairs; replacing proposal with object fallback",
-                        iteration,
-                    )
-                    proposal = _choose_fallback_proposal(
-                        payload=current_payload,
-                        baseline_evaluation=current_baseline,
-                        attempted_signatures=attempted_signatures,
-                        history=history,
-                        search_phase=search_phase,
-                    )
-
-                tool_eval = EvaluatePhase2Proposal(
-                    payload=current_payload, repair=proposal
                 )
-
-                if shortlist_candidate and _should_replace_with_deterministic_candidate(
-                    shortlist_candidate["evaluation"], tool_eval
-                ):
-                    logger.info(
-                        "Phase2Controller iteration %s: replacing placer candidate with deterministic shortlist phase=%s source=%s",
-                        iteration,
-                        search_phase,
-                        shortlist_candidate.get("source"),
+                final_payload = deepcopy(snapped_payload)
+                final_payload["phase2_placer"] = {"phase2_repair": snapped_repair}
+                final_absolute_layout = compile_phase2_to_final_output(final_payload)
+                rank = _search_candidate_rank(snapped_eval)
+                if str(final_absolute_layout.get("status") or "").upper() == "OK":
+                    rank = (rank[0] + 1, *rank[1:])
+                if best_candidate is None or rank > (best_rank or (0, 0, 0, 0, 0)):
+                    best_candidate = (
+                        snapped_repair,
+                        snapped_eval,
+                        final_absolute_layout,
+                        candidate_notes,
+                        mode,
                     )
-                    proposal = deepcopy(shortlist_candidate["proposal"])
-                    tool_eval = deepcopy(shortlist_candidate["evaluation"])
-
-            attempted_signatures.add(_proposal_signature(proposal))
-            logger.info(
-                "Phase2Controller iteration %s: tool hard_valid=%s delta_score=%s",
-                iteration,
-                tool_eval.get("hard_valid"),
-                _delta_score(tool_eval),
-            )
-
-            direction_summary = _summarize_proposal_direction(current_payload, proposal)
-            if bool(tool_eval.get("hard_valid")):
-                judge_payload = _build_judge_payload(
-                    payload=current_payload,
-                    baseline_evaluation=current_baseline,
-                    candidate_evaluation=tool_eval,
-                    iteration=iteration,
-                    max_iterations=self.max_iterations,
-                    history=history,
-                    direction_summary=direction_summary,
-                )
-                judge_eval = self.judge.generate(judge_payload).model_dump()
-                logger.info(
-                    "Phase2Controller iteration %s: judge verdict=%s score=%s priority_clusters=%s",
-                    iteration,
-                    judge_eval.get("verdict"),
-                    judge_eval.get("reasonableness_score"),
-                    judge_eval.get("priority_clusters"),
-                )
-            else:
-                judge_eval = _invalid_judge_stub(tool_eval)
-                logger.info(
-                    "Phase2Controller iteration %s: skipping judge because tool marked candidate hard-invalid",
-                    iteration,
-                )
-
-            candidate_payload = PromotePhase2RepairToSeedPayload(
-                payload=current_payload,
-                repair=proposal,
-            )
-
-            history.append(
-                {
-                    "iteration": iteration,
-                    "search_phase": search_phase,
-                    "proposal": deepcopy(proposal),
-                    "tool_evaluation": deepcopy(tool_eval),
-                    "judge_evaluation": deepcopy(judge_eval),
-                    "direction_summary": direction_summary,
-                }
-            )
-
-            if _evaluation_rank(tool_eval, judge_eval) > _evaluation_rank(
-                best_tool_eval, best_judge_eval
-            ):
-                logger.info(
-                    "Phase2Controller iteration %s: candidate became new best-by-judge",
-                    iteration,
-                )
-                best_payload = deepcopy(candidate_payload)
-                best_proposal = deepcopy(proposal)
-                best_tool_eval = deepcopy(tool_eval)
-                best_judge_eval = deepcopy(judge_eval)
-
-            if bool(tool_eval.get("hard_valid")) and _evaluation_rank(
-                tool_eval, judge_eval
-            ) > _evaluation_rank(best_hard_valid_eval, best_hard_valid_judge):
-                best_hard_valid_payload = deepcopy(candidate_payload)
-                best_hard_valid_proposal = deepcopy(proposal)
-                best_hard_valid_eval = deepcopy(tool_eval)
-                best_hard_valid_judge = deepcopy(judge_eval)
+                    best_rank = rank
 
             if (
-                bool(tool_eval.get("hard_valid"))
-                and str(judge_eval.get("verdict") or "").upper() == "ACCEPT"
+                best_candidate is not None
+                and str(best_candidate[2].get("status") or "").upper() == "OK"
             ):
-                logger.info(
-                    "Phase2Controller iteration %s: accepted by judge", iteration
+                (
+                    snapped_repair,
+                    snapped_eval,
+                    final_absolute_layout,
+                    candidate_notes,
+                    mode,
+                ) = best_candidate
+                return _phase2_controller_result(
+                    proposal=snapped_repair,
+                    evaluation=snapped_eval,
+                    absolute_layout=final_absolute_layout,
+                    history=[
+                        {
+                            "stage": "micro_refiner",
+                            "status": "invalid_seed",
+                            "absolute_layout_status": str(
+                                absolute_layout.get("status") or "UNKNOWN"
+                            ),
+                        },
+                        {
+                            "stage": "deterministic_phase2_fallback",
+                            "mode": mode,
+                            "status": "accepted",
+                            "proposal_status": str(
+                                snapped_repair.get("status") or "REPAIRED"
+                            ),
+                        },
+                    ],
+                    hard_fix={
+                        "result": "APPLIED",
+                        "attempts": [
+                            {
+                                "mode": mode,
+                                "hard_valid": True,
+                                "notes": candidate_notes,
+                            }
+                        ],
+                    },
+                    notes=candidate_notes,
                 )
-                best_payload = deepcopy(candidate_payload)
-                best_proposal = deepcopy(proposal)
-                best_tool_eval = deepcopy(tool_eval)
-                best_judge_eval = deepcopy(judge_eval)
-                break
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.exception("Phase-2 deterministic fallback failed: %s", exc)
 
-            controller_feedback = _build_controller_feedback(
-                iteration=iteration,
-                evaluation=tool_eval,
-                judge_output=judge_eval,
-                history=history,
-            )
-
-            if _should_promote_candidate(
-                tool_eval,
-                judge_eval,
-                search_phase=search_phase,
-            ):
-                logger.info(
-                    "Phase2Controller iteration %s: promoting candidate to next baseline",
-                    iteration,
-                )
-                current_payload = deepcopy(candidate_payload)
-                current_baseline = EvaluatePhase2Proposal(
-                    payload=current_payload,
-                    repair=_canonical_repair(current_payload),
-                )
-            else:
-                logger.info(
-                    "Phase2Controller iteration %s: keeping current baseline for next search round",
-                    iteration,
-                )
-
-        final_payload = deepcopy(best_payload)
-        final_repair = _canonical_repair(
-            final_payload,
-            notes=deepcopy(best_proposal.get("notes") or []),
-        )
-        hard_fix_result = ResolvePhase2HardViolations(
-            payload=final_payload,
-            repair=final_repair,
-            max_rounds=120,
-            max_radius_steps=12,
-        )
-        final_repair = deepcopy(hard_fix_result.get("repair") or final_repair)
-        final_tool_eval = deepcopy(hard_fix_result.get("evaluation") or best_tool_eval)
-
-        if not bool(final_tool_eval.get("hard_valid")):
-            logger.warning(
-                "Phase2Controller hard-fix did not reach hard-valid output; falling back to best hard-valid candidate"
-            )
-            final_payload = deepcopy(best_hard_valid_payload)
-            final_repair = _canonical_repair(
-                final_payload,
-                notes=deepcopy(best_hard_valid_proposal.get("notes") or []),
-            )
-            final_tool_eval = deepcopy(best_hard_valid_eval)
-            best_judge_eval = deepcopy(best_hard_valid_judge)
-
-        snapped_payload, snapped_repair, snapped_evaluation = (
-            _postsolve_orientation_snap(
-                payload=final_payload,
-                repair=final_repair,
-            )
-        )
-        if (
-            bool(snapped_evaluation.get("hard_valid"))
-            and _delta_score(snapped_evaluation) > 0
-        ):
-            logger.info(
-                "Phase2Controller applied post-solve orientation snap delta_score=%s",
-                _delta_score(snapped_evaluation),
-            )
-            final_payload = deepcopy(snapped_payload)
-            final_repair = deepcopy(snapped_repair)
-            final_tool_eval = deepcopy(snapped_evaluation)
-
-        final_payload["phase2_placer"] = {"phase2_repair": deepcopy(final_repair)}
-        absolute_layout = compile_phase2_to_final_output(final_payload)
-        logger.info(
-            "Phase2Controller done: final_status=%s best_reasonableness=%s hard_fix_attempts=%s",
-            absolute_layout.get("status"),
-            best_judge_eval.get("reasonableness_score"),
-            len(hard_fix_result.get("attempts") or []),
-        )
-
-        return {
-            "proposal": final_repair,
-            "tool_evaluation": final_tool_eval,
-            "judge_evaluation": best_judge_eval,
-            "absolute_layout": absolute_layout,
-            "history": history,
-            "hard_fix": hard_fix_result,
-        }
+        return result

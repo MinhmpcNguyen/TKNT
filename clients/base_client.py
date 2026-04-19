@@ -22,6 +22,7 @@ class LLMClientProtocol(Protocol):
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
         temperature: float | None = None,
+        top_p: float | None = None,
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,

@@ -1,0 +1,64 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260418T082000Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-18T08:20:28.901533+00:00",
+  "error": "name '_dedupe_macro_concepts' is not defined",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-18T08:20:00.733280+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-18T08:20:11.025284+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-18T08:20:26.530227+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-18T08:20:26.627097+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 1/1",
+      "updated_at_utc": "2026-04-18T08:20:28.899730+00:00",
+      "progress_current": 1,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-04-18T08:20:28.899954+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "name '_dedupe_macro_concepts' is not defined",
+      "updated_at_utc": "2026-04-18T08:20:28.901533+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": "name '_dedupe_macro_concepts' is not defined"
+    }
+  ]
+}

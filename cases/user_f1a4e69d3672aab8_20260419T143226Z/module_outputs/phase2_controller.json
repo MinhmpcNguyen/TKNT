@@ -1,0 +1,2451 @@
+{
+  "proposal": {
+    "status": "REPAIRED",
+    "cluster_transforms": [
+      {
+        "cluster_id": "main_seating",
+        "x": 1200,
+        "y": 1300,
+        "rot": 0
+      },
+      {
+        "cluster_id": "media",
+        "x": 5800,
+        "y": 200,
+        "rot": 90
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "x": 50,
+        "y": 650,
+        "rot": 270
+      }
+    ],
+    "selected_variants": [
+      {
+        "cluster_id": "main_seating",
+        "variant_id": "main_seating__conversation_facing__01"
+      },
+      {
+        "cluster_id": "media",
+        "variant_id": "media__media_facing__01"
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "variant_id": "storage_display_support__wall_storage_linear__01"
+      }
+    ],
+    "object_repairs": [],
+    "notes": []
+  },
+  "tool_evaluation": {
+    "result": "OK",
+    "hard_valid": true,
+    "errors": [],
+    "violations_by_cluster": {},
+    "materialized_layout": {
+      "room": {
+        "unit": "mm",
+        "room_id": "room_1",
+        "name": "Main",
+        "room_type": "living_room",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6000,
+            "y": 0
+          },
+          {
+            "x": 6000,
+            "y": 3000
+          },
+          {
+            "x": 3500,
+            "y": 3000
+          },
+          {
+            "x": 3500,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "area_mm2": 21500000,
+        "area_m2": 21.5,
+        "perimeter_mm": 20000,
+        "centroid_mm": {
+          "x": 2797,
+          "y": 1826
+        },
+        "principal_axis": {
+          "angle_deg": 0,
+          "vector": {
+            "x": 1.0,
+            "y": 0.0
+          },
+          "confidence": 0.3
+        },
+        "bbox_mm": {
+          "min_x": 0,
+          "min_y": 0,
+          "max_x": 6000,
+          "max_y": 4000
+        },
+        "ceiling_height_mm": 2800,
+        "openings": {
+          "doors": [
+            {
+              "id": "door_1",
+              "kind": "door",
+              "segment_mm": [
+                {
+                  "x": 0,
+                  "y": 1600
+                },
+                {
+                  "x": 0,
+                  "y": 2600
+                }
+              ],
+              "original_segment_mm": [
+                {
+                  "x": 0,
+                  "y": 1600
+                },
+                {
+                  "x": 0,
+                  "y": 2600
+                }
+              ],
+              "wall_id": "wall_6",
+              "width_mm": 1000,
+              "wall_t_start_mm": 1400,
+              "wall_t_end_mm": 2400,
+              "snap_distance_mm": 0,
+              "swing_radius_mm": 900,
+              "hinge_hint": "UNKNOWN"
+            }
+          ],
+          "windows": [
+            {
+              "id": "window_1",
+              "kind": "window",
+              "segment_mm": [
+                {
+                  "x": 709,
+                  "y": 4000
+                },
+                {
+                  "x": 2708,
+                  "y": 4000
+                }
+              ],
+              "original_segment_mm": [
+                {
+                  "x": 709,
+                  "y": 4000
+                },
+                {
+                  "x": 2708,
+                  "y": 4000
+                }
+              ],
+              "wall_id": "wall_5",
+              "width_mm": 1999,
+              "wall_t_start_mm": 792,
+              "wall_t_end_mm": 2791,
+              "snap_distance_mm": 0,
+              "clearance_mm": 150
+            }
+          ]
+        },
+        "obstacles": [
+          {
+            "id": "door_1_swing",
+            "type": "door_swing",
+            "polygon_ccw": [
+              {
+                "x": 0,
+                "y": 2600
+              },
+              {
+                "x": 0,
+                "y": 1600
+              },
+              {
+                "x": 900,
+                "y": 1600
+              },
+              {
+                "x": 900,
+                "y": 2600
+              }
+            ],
+            "hard": true,
+            "source_id": "door_1"
+          },
+          {
+            "id": "door_1_entry_clearance",
+            "type": "entry_clearance",
+            "polygon_ccw": [
+              {
+                "x": 0,
+                "y": 2700
+              },
+              {
+                "x": 0,
+                "y": 1500
+              },
+              {
+                "x": 900,
+                "y": 1500
+              },
+              {
+                "x": 900,
+                "y": 2700
+              }
+            ],
+            "hard": true,
+            "source_id": "door_1"
+          },
+          {
+            "id": "window_1_clearance",
+            "type": "window_clearance",
+            "polygon_ccw": [
+              {
+                "x": 2708,
+                "y": 4000
+              },
+              {
+                "x": 709,
+                "y": 4000
+              },
+              {
+                "x": 709,
+                "y": 3850
+              },
+              {
+                "x": 2708,
+                "y": 3850
+              }
+            ],
+            "hard": true,
+            "source_id": "window_1"
+          }
+        ]
+      },
+      "clusters": [
+        {
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 1400,
+            "min_y": 1400,
+            "max_x": 5090,
+            "max_y": 2900
+          },
+          "world_center": {
+            "x": 3099,
+            "y": 2042
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "anchor_override": null
+        },
+        {
+          "cluster_id": "media",
+          "variant_id": "media__media_facing__01",
+          "bbox": {
+            "min_x": 5340,
+            "min_y": 300,
+            "max_x": 5800,
+            "max_y": 2790
+          },
+          "world_center": {
+            "x": 5565,
+            "y": 1664
+          },
+          "front_world": {
+            "dx": -1.0,
+            "dy": 0.0
+          },
+          "axis_world": {
+            "dx": -0.0,
+            "dy": 1.0
+          },
+          "anchor_override": null
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "variant_id": "storage_display_support__wall_storage_linear__01",
+          "bbox": {
+            "min_x": 50,
+            "min_y": 20,
+            "max_x": 300,
+            "max_y": 650
+          },
+          "world_center": {
+            "x": 175,
+            "y": 335
+          },
+          "front_world": {
+            "dx": 1.0,
+            "dy": -0.0
+          },
+          "axis_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "anchor_override": null
+        }
+      ],
+      "objects": [
+        {
+          "object_id": "armchair",
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 3850,
+            "min_y": 1890,
+            "max_x": 4690,
+            "max_y": 2600
+          },
+          "world_center": {
+            "x": 4270,
+            "y": 2245
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": -0.0
+          },
+          "required_clearance_mm": 178
+        },
+        {
+          "object_id": "coffee_table",
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 2300,
+            "min_y": 2400,
+            "max_x": 3200,
+            "max_y": 2900
+          },
+          "world_center": {
+            "x": 2750,
+            "y": 2650
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": 1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "required_clearance_mm": 125
+        },
+        {
+          "object_id": "floor_lamp",
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 1400,
+            "min_y": 1600,
+            "max_x": 1750,
+            "max_y": 1920
+          },
+          "world_center": {
+            "x": 1575,
+            "y": 1760
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": 1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "required_clearance_mm": 80
+        },
+        {
+          "object_id": "side_table",
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 4700,
+            "min_y": 1550,
+            "max_x": 5090,
+            "max_y": 1920
+          },
+          "world_center": {
+            "x": 4895,
+            "y": 1735
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": 1.0
+          },
+          "axis_world": {
+            "dx": 1.0,
+            "dy": 0.0
+          },
+          "required_clearance_mm": 92
+        },
+        {
+          "object_id": "sofa",
+          "cluster_id": "main_seating",
+          "variant_id": "main_seating__conversation_facing__01",
+          "bbox": {
+            "min_x": 1750,
+            "min_y": 1400,
+            "max_x": 3810,
+            "max_y": 2360
+          },
+          "world_center": {
+            "x": 2780,
+            "y": 1880
+          },
+          "front_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "axis_world": {
+            "dx": -1.0,
+            "dy": 0.0
+          },
+          "required_clearance_mm": 240
+        },
+        {
+          "object_id": "media_shelf",
+          "cluster_id": "media",
+          "variant_id": "media__media_facing__01",
+          "bbox": {
+            "min_x": 5400,
+            "min_y": 300,
+            "max_x": 5700,
+            "max_y": 1170
+          },
+          "world_center": {
+            "x": 5550,
+            "y": 735
+          },
+          "front_world": {
+            "dx": -1.0,
+            "dy": 0.0
+          },
+          "axis_world": {
+            "dx": -0.0,
+            "dy": 1.0
+          },
+          "required_clearance_mm": 75
+        },
+        {
+          "object_id": "tv_console",
+          "cluster_id": "media",
+          "variant_id": "media__media_facing__01",
+          "bbox": {
+            "min_x": 5340,
+            "min_y": 1200,
+            "max_x": 5800,
+            "max_y": 2790
+          },
+          "world_center": {
+            "x": 5570,
+            "y": 1995
+          },
+          "front_world": {
+            "dx": -1.0,
+            "dy": 0.0
+          },
+          "axis_world": {
+            "dx": -0.0,
+            "dy": 1.0
+          },
+          "required_clearance_mm": 115
+        },
+        {
+          "object_id": "bookshelf",
+          "cluster_id": "storage_display_support",
+          "variant_id": "storage_display_support__wall_storage_linear__01",
+          "bbox": {
+            "min_x": 50,
+            "min_y": 20,
+            "max_x": 300,
+            "max_y": 650
+          },
+          "world_center": {
+            "x": 175,
+            "y": 335
+          },
+          "front_world": {
+            "dx": 1.0,
+            "dy": -0.0
+          },
+          "axis_world": {
+            "dx": 0.0,
+            "dy": -1.0
+          },
+          "required_clearance_mm": 62
+        }
+      ]
+    },
+    "metrics": {
+      "score_summary": {
+        "score": -16006,
+        "penalties": {
+          "hard_penalty": 0,
+          "macro_penalty": 7720,
+          "micro_penalty": 10587,
+          "soft_penalty": 16006,
+          "total_penalty": 16006
+        },
+        "hard_violation_count": 0
+      },
+      "goal_alignment_summary": {
+        "room_notes": [
+          "Design target room type: living_room.",
+          "Requested style: modern.",
+          "Design a modern living room for 3–5 people. Keep the layout open, comfortable, and visually balanced with clear circulation from the entrance to the seating area and TV zone.\"",
+          "Keep the seating arrangement centered and uncluttered. Do not block window clearance. Avoid placing tall furniture in front of windows.",
+          "Soft usage hint: active_entry.",
+          "Soft usage hint: prefer_daylit_work_zone.",
+          "Soft usage hint: prefer_open_center.",
+          "Soft usage hint: likely_primary_focus=media_wall."
+        ],
+        "top_cluster_intents": [
+          {
+            "cluster_id": "main_seating",
+            "intent": null,
+            "penalty_mm": 1047,
+            "dot": 0.152
+          },
+          {
+            "cluster_id": "media",
+            "intent": "access_to_open_space",
+            "penalty_mm": 252,
+            "dot": 0.707
+          },
+          {
+            "cluster_id": "media",
+            "intent": "back_to_wall",
+            "penalty_mm": 250,
+            "dot": 40.0
+          },
+          {
+            "cluster_id": "media",
+            "intent": null,
+            "penalty_mm": 126,
+            "dot": 0.988
+          }
+        ],
+        "top_object_intents": [
+          {
+            "cluster_id": "main_seating",
+            "intent": "front_to_open_space",
+            "penalty_mm": 1024,
+            "dot": -0.707,
+            "object_id": "side_table"
+          },
+          {
+            "cluster_id": "main_seating",
+            "intent": "front_to_open_space",
+            "penalty_mm": 1024,
+            "dot": -0.707,
+            "object_id": "sofa"
+          },
+          {
+            "cluster_id": "main_seating",
+            "intent": "front_to_open_space",
+            "penalty_mm": 600,
+            "dot": 0.0,
+            "object_id": "coffee_table"
+          },
+          {
+            "cluster_id": "media",
+            "intent": "front_to_open_space",
+            "penalty_mm": 176,
+            "dot": 0.707,
+            "object_id": "tv_console"
+          },
+          {
+            "cluster_id": "media",
+            "intent": "back_to_wall",
+            "penalty_mm": 94,
+            "dot": 450.0,
+            "object_id": "tv_console"
+          },
+          {
+            "cluster_id": "main_seating",
+            "intent": "front_to_open_space",
+            "penalty_mm": 0,
+            "dot": 1.0,
+            "object_id": "armchair"
+          },
+          {
+            "cluster_id": "main_seating",
+            "intent": "front_to_open_space",
+            "penalty_mm": 0,
+            "dot": 1.0,
+            "object_id": "floor_lamp"
+          },
+          {
+            "cluster_id": "media",
+            "intent": "front_to_open_space",
+            "penalty_mm": 0,
+            "dot": 1.0,
+            "object_id": "media_shelf"
+          },
+          {
+            "cluster_id": "storage_display_support",
+            "intent": "front_to_open_space",
+            "penalty_mm": 0,
+            "dot": 1.0,
+            "object_id": "bookshelf"
+          }
+        ],
+        "top_global_layout_issues": [
+          {
+            "kind": "cluster_internal_constraint",
+            "cluster_id": "main_seating",
+            "penalty_mm": 5340,
+            "constraint_type": "prefer_near"
+          },
+          {
+            "kind": "main_path_clearance",
+            "cluster_id": null,
+            "penalty_mm": 2300
+          },
+          {
+            "kind": "main_path_object_blocker",
+            "cluster_id": "main_seating",
+            "penalty_mm": 1672,
+            "object_id": "floor_lamp"
+          },
+          {
+            "kind": "cluster_internal_constraint",
+            "cluster_id": "main_seating",
+            "penalty_mm": 1550,
+            "constraint_type": "semantic_proximity"
+          },
+          {
+            "kind": "central_congestion",
+            "cluster_id": "main_seating",
+            "penalty_mm": 947
+          },
+          {
+            "kind": "main_path_object_blocker",
+            "cluster_id": "main_seating",
+            "penalty_mm": 628,
+            "object_id": "sofa"
+          },
+          {
+            "kind": "viewing_pair_depth",
+            "cluster_id": null,
+            "penalty_mm": 332
+          },
+          {
+            "kind": "cluster_internal_constraint",
+            "cluster_id": "main_seating",
+            "penalty_mm": 310,
+            "constraint_type": "semantic_proximity"
+          },
+          {
+            "kind": "cluster_internal_constraint",
+            "cluster_id": "main_seating",
+            "penalty_mm": 240,
+            "constraint_type": "prefer_near"
+          },
+          {
+            "kind": "cluster_internal_constraint",
+            "cluster_id": "main_seating",
+            "penalty_mm": 240,
+            "constraint_type": "prefer_near"
+          }
+        ]
+      },
+      "cluster_internal_constraint_fidelity": [
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 5340,
+          "hard": false,
+          "subjects": {
+            "a": "side_table",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 1550,
+          "hard": false,
+          "subjects": {
+            "a": "coffee_table",
+            "b": "sofa"
+          },
+          "proximity": "compact",
+          "mapped_side": "left",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": -1450,
+          "gap_min_mm": 100,
+          "gap_max_mm": 350,
+          "target_gap_mm": 100,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 310,
+          "hard": false,
+          "subjects": {
+            "a": "armchair",
+            "b": "sofa"
+          },
+          "proximity": "loose",
+          "mapped_side": "right",
+          "relation_token": "left",
+          "qualifier_world": null,
+          "gap_mm": 40,
+          "gap_min_mm": 100,
+          "gap_max_mm": 350,
+          "target_gap_mm": 350,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 240,
+          "hard": false,
+          "subjects": {
+            "a": "coffee_table",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 240,
+          "hard": false,
+          "subjects": {
+            "a": "armchair",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "media",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 180,
+          "hard": false,
+          "subjects": {
+            "a": "media_shelf",
+            "b": "tv_console"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 125,
+          "hard": false,
+          "subjects": {
+            "a": "floor_lamp",
+            "b": "sofa"
+          },
+          "proximity": "balanced",
+          "mapped_side": "left",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": 0,
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "target_gap_mm": 125,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 115,
+          "hard": false,
+          "subjects": {
+            "a": "side_table",
+            "b": "armchair"
+          },
+          "proximity": "balanced",
+          "mapped_side": "right",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": 10,
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "target_gap_mm": 125,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "media",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 70,
+          "hard": false,
+          "subjects": {
+            "a": "media_shelf",
+            "b": "tv_console"
+          },
+          "proximity": "balanced",
+          "mapped_side": "left",
+          "relation_token": "left",
+          "qualifier_world": null,
+          "gap_mm": 30,
+          "gap_min_mm": 0,
+          "gap_max_mm": 200,
+          "target_gap_mm": 100,
+          "overlap_mm": null
+        }
+      ],
+      "cluster_affinity_to_preferred_zone": [
+        {
+          "cluster_id": "main_seating",
+          "preferred_zone": "far_from_entry",
+          "actual_zone": "far_from_entry",
+          "distance_mm": 160,
+          "penalty_mm": 115
+        },
+        {
+          "cluster_id": "media",
+          "preferred_zone": "recess_or_edge",
+          "actual_zone": "edge_side",
+          "distance_mm": 200,
+          "penalty_mm": 84
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "preferred_zone": "recess_or_edge",
+          "actual_zone": "edge_side",
+          "distance_mm": 20,
+          "penalty_mm": 8
+        }
+      ],
+      "opening_band_blocking": [],
+      "main_path_clearance": {
+        "paths": [
+          {
+            "path_id": "door_1->main_seating",
+            "opening_id": "door_1",
+            "target_cluster_id": "main_seating",
+            "priority": "high",
+            "desired_clearance_mm": 850,
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "blocked_samples": 2,
+            "sample_count": 9,
+            "blocked_ratio": 0.002,
+            "blocking_clusters": [
+              "main_seating"
+            ],
+            "blocking_objects": [
+              "main_seating.floor_lamp",
+              "main_seating.sofa"
+            ],
+            "penalty_mm": 2300
+          }
+        ],
+        "blocking_objects": [
+          {
+            "path_id": "door_1->main_seating",
+            "opening_id": "door_1",
+            "target_cluster_id": "main_seating",
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "blocked_area_mm2": 5117,
+            "blocked_ratio": 0.002,
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "penalty_mm": 1672
+          },
+          {
+            "path_id": "door_1->main_seating",
+            "opening_id": "door_1",
+            "target_cluster_id": "main_seating",
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "blocked_area_mm2": 1923,
+            "blocked_ratio": 0.001,
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "penalty_mm": 628
+          }
+        ],
+        "worst_blocked_ratio": 0.002,
+        "worst_clearance_shortage_mm": 425,
+        "lowest_min_clearance_mm": 0
+      },
+      "central_congestion": [
+        {
+          "cluster_id": "main_seating",
+          "intersection_area_mm2": 2388996,
+          "central_ratio": 0.653,
+          "penalty_mm": 947
+        }
+      ],
+      "cluster_edge_vs_center_fit": [
+        {
+          "cluster_id": "main_seating",
+          "area_ratio": 0.1526,
+          "edge_distance_mm": 316,
+          "penalty_mm": 135
+        },
+        {
+          "cluster_id": "media",
+          "area_ratio": 0.0462,
+          "edge_distance_mm": 200,
+          "penalty_mm": 45
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "area_ratio": 0.0073,
+          "edge_distance_mm": 20,
+          "penalty_mm": 4
+        }
+      ],
+      "object_front_clearance": [
+        {
+          "cluster_id": "main_seating",
+          "object_id": "armchair",
+          "required_clearance_mm": 178,
+          "current_front_clear_mm": 2245,
+          "best_open_clear_mm": 2245,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 0,
+          "distance_to_nearest_door_mm": 4272,
+          "distance_to_nearest_window_mm": 3105
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "coffee_table",
+          "required_clearance_mm": 125,
+          "current_front_clear_mm": 1350,
+          "best_open_clear_mm": 2590,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 600,
+          "distance_to_nearest_door_mm": 2804,
+          "distance_to_nearest_window_mm": 1705
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "floor_lamp",
+          "required_clearance_mm": 80,
+          "current_front_clear_mm": 2090,
+          "best_open_clear_mm": 2090,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 0,
+          "distance_to_nearest_door_mm": 1611,
+          "distance_to_nearest_window_mm": 2244
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "side_table",
+          "required_clearance_mm": 92,
+          "current_front_clear_mm": 1265,
+          "best_open_clear_mm": 2454,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 1024,
+          "distance_to_nearest_door_mm": 4909,
+          "distance_to_nearest_window_mm": 3909
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "sofa",
+          "required_clearance_mm": 240,
+          "current_front_clear_mm": 1880,
+          "best_open_clear_mm": 2786,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 1024,
+          "distance_to_nearest_door_mm": 2789,
+          "distance_to_nearest_window_mm": 2375
+        },
+        {
+          "cluster_id": "media",
+          "object_id": "media_shelf",
+          "required_clearance_mm": 75,
+          "current_front_clear_mm": 5550,
+          "best_open_clear_mm": 5550,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 0,
+          "distance_to_nearest_door_mm": 5715,
+          "distance_to_nearest_window_mm": 5042
+        },
+        {
+          "cluster_id": "media",
+          "object_id": "tv_console",
+          "required_clearance_mm": 115,
+          "current_front_clear_mm": 880,
+          "best_open_clear_mm": 2821,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 176,
+          "distance_to_nearest_door_mm": 5571,
+          "distance_to_nearest_window_mm": 4351
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "object_id": "bookshelf",
+          "required_clearance_mm": 62,
+          "current_front_clear_mm": 5225,
+          "best_open_clear_mm": 5225,
+          "shortage_mm": 0,
+          "dominant_penalty_mm": 0,
+          "distance_to_nearest_door_mm": 1774,
+          "distance_to_nearest_window_mm": 3973
+        }
+      ],
+      "cluster_entry_proximity": [
+        {
+          "cluster_id": "main_seating",
+          "distance_to_nearest_door_mm": 3100
+        },
+        {
+          "cluster_id": "media",
+          "distance_to_nearest_door_mm": 5582
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "distance_to_nearest_door_mm": 1774
+        }
+      ],
+      "cluster_window_alignment": [
+        {
+          "cluster_id": "main_seating",
+          "distance_to_nearest_window_mm": 2402,
+          "dominant_intent": null,
+          "dominant_penalty_mm": 1047,
+          "dot": 0.152
+        },
+        {
+          "cluster_id": "media",
+          "distance_to_nearest_window_mm": 4509,
+          "dominant_intent": "access_to_open_space",
+          "dominant_penalty_mm": 252,
+          "dot": 0.707
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "distance_to_nearest_window_mm": 3973,
+          "dominant_intent": null,
+          "dominant_penalty_mm": null,
+          "dot": null
+        }
+      ],
+      "cluster_window_band_occupancy": [
+        {
+          "cluster_id": "main_seating",
+          "distance_to_nearest_window_mm": 2402,
+          "window_clearance_hits": 0
+        },
+        {
+          "cluster_id": "media",
+          "distance_to_nearest_window_mm": 4509,
+          "window_clearance_hits": 0
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "distance_to_nearest_window_mm": 3973,
+          "window_clearance_hits": 0
+        }
+      ],
+      "path_obstruction_summary": {
+        "near_entry_clusters": [],
+        "near_entry_objects": [],
+        "worst_paths": [
+          {
+            "path_id": "door_1->main_seating",
+            "target_cluster_id": "main_seating",
+            "priority": "high",
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "blocked_samples": 2,
+            "sample_count": 9,
+            "blocking_clusters": [
+              "main_seating"
+            ],
+            "blocking_objects": [
+              "main_seating.floor_lamp",
+              "main_seating.sofa"
+            ]
+          }
+        ],
+        "main_path_blockers": [
+          {
+            "path_id": "door_1->main_seating",
+            "opening_id": "door_1",
+            "target_cluster_id": "main_seating",
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "blocked_area_mm2": 5117,
+            "blocked_ratio": 0.002,
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "penalty_mm": 1672
+          },
+          {
+            "path_id": "door_1->main_seating",
+            "opening_id": "door_1",
+            "target_cluster_id": "main_seating",
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "blocked_area_mm2": 1923,
+            "blocked_ratio": 0.001,
+            "min_clearance_mm": 0,
+            "clearance_shortage_mm": 425,
+            "penalty_mm": 628
+          }
+        ]
+      },
+      "zone_usage_summary": [
+        {
+          "cluster_id": "main_seating",
+          "zone": "interior"
+        },
+        {
+          "cluster_id": "media",
+          "zone": "interior"
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "zone": "entry_side"
+        }
+      ],
+      "orientation_debug": [
+        {
+          "kind": "cluster_directional_relation",
+          "cluster_id": "main_seating",
+          "other_cluster_id": "media",
+          "relation": "face_each_other",
+          "role": "primary",
+          "penalty_mm": 1047,
+          "dot": 0.152
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating",
+          "object_id": "side_table",
+          "intent": "front_to_open_space",
+          "penalty_mm": 1024,
+          "front_clear_mm": 1265,
+          "best_clear_mm": 2454,
+          "dot": -0.707
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating",
+          "object_id": "sofa",
+          "intent": "front_to_open_space",
+          "penalty_mm": 1024,
+          "front_clear_mm": 1880,
+          "best_clear_mm": 2786,
+          "dot": -0.707
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating",
+          "object_id": "coffee_table",
+          "intent": "front_to_open_space",
+          "penalty_mm": 600,
+          "front_clear_mm": 1350,
+          "best_clear_mm": 2590,
+          "dot": 0.0
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "media",
+          "intent": "access_to_open_space",
+          "penalty_mm": 252,
+          "dot": 0.707
+        },
+        {
+          "kind": "cluster_orientation",
+          "cluster_id": "media",
+          "intent": "back_to_wall",
+          "penalty_mm": 250,
+          "dot": 40.0,
+          "front_clear_mm": 475,
+          "back_clear_mm": 435,
+          "front_advantage_mm": 40
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "media",
+          "object_id": "tv_console",
+          "intent": "front_to_open_space",
+          "penalty_mm": 176,
+          "front_clear_mm": 880,
+          "best_clear_mm": 2821,
+          "dot": 0.707
+        },
+        {
+          "kind": "cluster_directional_relation",
+          "cluster_id": "media",
+          "other_cluster_id": "main_seating",
+          "relation": "face_each_other",
+          "role": "secondary",
+          "penalty_mm": 126,
+          "dot": 0.988
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "media",
+          "object_id": "tv_console",
+          "intent": "back_to_wall",
+          "penalty_mm": 94,
+          "dot": 450.0,
+          "front_clear_mm": 880,
+          "back_clear_mm": 430,
+          "front_advantage_mm": 450,
+          "target_object_id": null,
+          "target_object_cluster_id": null
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating",
+          "object_id": "armchair",
+          "intent": "front_to_open_space",
+          "penalty_mm": 0,
+          "front_clear_mm": 2245,
+          "best_clear_mm": 2245,
+          "dot": 1.0
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "main_seating",
+          "object_id": "floor_lamp",
+          "intent": "front_to_open_space",
+          "penalty_mm": 0,
+          "front_clear_mm": 2090,
+          "best_clear_mm": 2090,
+          "dot": 1.0
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "media",
+          "object_id": "media_shelf",
+          "intent": "front_to_open_space",
+          "penalty_mm": 0,
+          "front_clear_mm": 5550,
+          "best_clear_mm": 5550,
+          "dot": 1.0
+        },
+        {
+          "kind": "object_orientation",
+          "cluster_id": "storage_display_support",
+          "object_id": "bookshelf",
+          "intent": "front_to_open_space",
+          "penalty_mm": 0,
+          "front_clear_mm": 5225,
+          "best_clear_mm": 5225,
+          "dot": 1.0
+        }
+      ],
+      "global_layout_debug": [
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 5340,
+          "hard": false,
+          "subjects": {
+            "a": "side_table",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "main_path_clearance",
+          "path_id": "door_1->main_seating",
+          "opening_id": "door_1",
+          "target_cluster_id": "main_seating",
+          "priority": "high",
+          "desired_clearance_mm": 850,
+          "min_clearance_mm": 0,
+          "clearance_shortage_mm": 425,
+          "blocked_samples": 2,
+          "sample_count": 9,
+          "blocked_ratio": 0.002,
+          "blocking_clusters": [
+            "main_seating"
+          ],
+          "blocking_objects": [
+            "main_seating.floor_lamp",
+            "main_seating.sofa"
+          ],
+          "penalty_mm": 2300
+        },
+        {
+          "kind": "main_path_object_blocker",
+          "path_id": "door_1->main_seating",
+          "opening_id": "door_1",
+          "target_cluster_id": "main_seating",
+          "cluster_id": "main_seating",
+          "object_id": "floor_lamp",
+          "blocked_area_mm2": 5117,
+          "blocked_ratio": 0.002,
+          "min_clearance_mm": 0,
+          "clearance_shortage_mm": 425,
+          "penalty_mm": 1672
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 1550,
+          "hard": false,
+          "subjects": {
+            "a": "coffee_table",
+            "b": "sofa"
+          },
+          "proximity": "compact",
+          "mapped_side": "left",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": -1450,
+          "gap_min_mm": 100,
+          "gap_max_mm": 350,
+          "target_gap_mm": 100,
+          "overlap_mm": null
+        },
+        {
+          "kind": "central_congestion",
+          "cluster_id": "main_seating",
+          "intersection_area_mm2": 2388996,
+          "central_ratio": 0.653,
+          "penalty_mm": 947
+        },
+        {
+          "kind": "main_path_object_blocker",
+          "path_id": "door_1->main_seating",
+          "opening_id": "door_1",
+          "target_cluster_id": "main_seating",
+          "cluster_id": "main_seating",
+          "object_id": "sofa",
+          "blocked_area_mm2": 1923,
+          "blocked_ratio": 0.001,
+          "min_clearance_mm": 0,
+          "clearance_shortage_mm": 425,
+          "penalty_mm": 628
+        },
+        {
+          "kind": "viewing_pair_depth",
+          "primary_cluster_id": "main_seating",
+          "secondary_cluster_id": "media",
+          "penalty_mm": 332,
+          "primary_edge_distance_mm": 1039,
+          "secondary_edge_distance_mm": 435
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 310,
+          "hard": false,
+          "subjects": {
+            "a": "armchair",
+            "b": "sofa"
+          },
+          "proximity": "loose",
+          "mapped_side": "right",
+          "relation_token": "left",
+          "qualifier_world": null,
+          "gap_mm": 40,
+          "gap_min_mm": 100,
+          "gap_max_mm": 350,
+          "target_gap_mm": 350,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 240,
+          "hard": false,
+          "subjects": {
+            "a": "coffee_table",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 240,
+          "hard": false,
+          "subjects": {
+            "a": "armchair",
+            "b": "sofa"
+          }
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "media",
+          "constraint_type": "prefer_near",
+          "penalty_mm": 180,
+          "hard": false,
+          "subjects": {
+            "a": "media_shelf",
+            "b": "tv_console"
+          }
+        },
+        {
+          "kind": "cluster_edge_vs_center_fit",
+          "cluster_id": "main_seating",
+          "area_ratio": 0.1526,
+          "edge_distance_mm": 316,
+          "penalty_mm": 135
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 125,
+          "hard": false,
+          "subjects": {
+            "a": "floor_lamp",
+            "b": "sofa"
+          },
+          "proximity": "balanced",
+          "mapped_side": "left",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": 0,
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "target_gap_mm": 125,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_internal_constraint",
+          "cluster_id": "main_seating",
+          "constraint_type": "semantic_proximity",
+          "penalty_mm": 115,
+          "hard": false,
+          "subjects": {
+            "a": "side_table",
+            "b": "armchair"
+          },
+          "proximity": "balanced",
+          "mapped_side": "right",
+          "relation_token": "right",
+          "qualifier_world": null,
+          "gap_mm": 10,
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "target_gap_mm": 125,
+          "overlap_mm": null
+        },
+        {
+          "kind": "cluster_affinity_to_preferred_zone",
+          "cluster_id": "main_seating",
+          "preferred_zone": "far_from_entry",
+          "actual_zone": "far_from_entry",
+          "distance_mm": 160,
+          "penalty_mm": 115
+        },
+        {
+          "kind": "cluster_affinity_to_preferred_zone",
+          "cluster_id": "media",
+          "preferred_zone": "recess_or_edge",
+          "actual_zone": "edge_side",
+          "distance_mm": 200,
+          "penalty_mm": 84
+        }
+      ]
+    },
+    "diagnosis": {
+      "prioritized_clusters": [
+        {
+          "cluster_id": "main_seating",
+          "score": 14738.73
+        },
+        {
+          "cluster_id": "media",
+          "score": 1254.52
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "score": 12.88
+        }
+      ],
+      "prioritized_objects": [
+        {
+          "cluster_id": "main_seating",
+          "object_id": "sofa",
+          "score": 4664.66
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "side_table",
+          "score": 3911.66
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "coffee_table",
+          "score": 2330.0
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "floor_lamp",
+          "score": 1797.0
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "armchair",
+          "score": 430.0
+        },
+        {
+          "cluster_id": "media",
+          "object_id": "tv_console",
+          "score": 359.24
+        },
+        {
+          "cluster_id": "media",
+          "object_id": "media_shelf",
+          "score": 160.0
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "object_id": "bookshelf",
+          "score": 0.0
+        }
+      ],
+      "key_findings": [
+        "Cluster main_seating carries the largest remaining soft penalty (14738.73).",
+        "Cluster media carries the largest remaining soft penalty (1254.52).",
+        "Cluster storage_display_support carries the largest remaining soft penalty (12.88).",
+        "Cluster main_seating drifts from local constraint prefer_near (penalty=5340).",
+        "Cluster main_seating drifts from local constraint semantic_proximity (penalty=1550).",
+        "Cluster main_seating sits away from its preferred zone far_from_entry (penalty=115)."
+      ],
+      "enumerated_moves": [
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1400,
+                "rot": 0
+              },
+              {
+                "cluster_id": "media",
+                "x": 5900,
+                "y": 100,
+                "rot": 90
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Realign viewing pair main_seating and media: move focal cluster toward the opposite viewing wall and viewing partner away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1400,
+                "rot": 0
+              },
+              {
+                "cluster_id": "media",
+                "x": 5900,
+                "y": 200,
+                "rot": 90
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Realign viewing pair main_seating and media: move focal cluster toward the opposite viewing wall and viewing partner away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1300,
+                "rot": 0
+              },
+              {
+                "cluster_id": "media",
+                "x": 5900,
+                "y": 100,
+                "rot": 90
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Realign viewing pair main_seating and media: move focal cluster toward the opposite viewing wall and viewing partner away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1300,
+                "rot": 0
+              },
+              {
+                "cluster_id": "media",
+                "x": 5900,
+                "y": 200,
+                "rot": 90
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Realign viewing pair main_seating and media: move focal cluster toward the opposite viewing wall and viewing partner away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1400,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1300,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1200,
+                "y": 1400,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1000,
+                "y": 1500,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1000,
+                "y": 1300,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1200,
+                "y": 1500,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 900,
+                "y": 1600,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 900,
+                "y": 1300,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1200,
+                "y": 1600,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating away from the viewing partner"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1400,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating toward the opposite viewing wall"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1100,
+                "y": 1300,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating toward the opposite viewing wall"
+        },
+        {
+          "kind": "cluster_pose",
+          "cluster_id": "main_seating",
+          "proposal": {
+            "cluster_transforms": [
+              {
+                "cluster_id": "main_seating",
+                "x": 1200,
+                "y": 1400,
+                "rot": 0
+              }
+            ],
+            "selected_variants": [],
+            "object_repairs": []
+          },
+          "reason": "Move main_seating toward the opposite viewing wall"
+        }
+      ]
+    },
+    "baseline_comparison": {
+      "baseline_score": -16006,
+      "baseline_hard_valid": true,
+      "candidate_score": -16006,
+      "delta_score": 0,
+      "improved": false
+    }
+  },
+  "judge_evaluation": {
+    "verdict": "ACCEPT",
+    "reasonableness_score": 0,
+    "next_step_mode": "stop",
+    "top_issues": [],
+    "repair_advice": [
+      "Phase-2 fallback activated: deterministic repair from solver seed."
+    ],
+    "priority_clusters": []
+  },
+  "absolute_layout": {
+    "status": "OK",
+    "room": {
+      "unit": "mm",
+      "room_id": "room_1",
+      "name": "Main",
+      "room_type": "living_room",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 0
+        },
+        {
+          "x": 6000,
+          "y": 3000
+        },
+        {
+          "x": 3500,
+          "y": 3000
+        },
+        {
+          "x": 3500,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "area_mm2": 21500000,
+      "area_m2": 21.5,
+      "perimeter_mm": 20000,
+      "centroid_mm": {
+        "x": 2797,
+        "y": 1826
+      },
+      "principal_axis": {
+        "angle_deg": 0,
+        "vector": {
+          "x": 1.0,
+          "y": 0.0
+        },
+        "confidence": 0.3
+      },
+      "bbox_mm": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 6000,
+        "max_y": 4000
+      },
+      "ceiling_height_mm": 2800,
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "kind": "door",
+            "segment_mm": [
+              {
+                "x": 0,
+                "y": 1600
+              },
+              {
+                "x": 0,
+                "y": 2600
+              }
+            ],
+            "original_segment_mm": [
+              {
+                "x": 0,
+                "y": 1600
+              },
+              {
+                "x": 0,
+                "y": 2600
+              }
+            ],
+            "wall_id": "wall_6",
+            "width_mm": 1000,
+            "wall_t_start_mm": 1400,
+            "wall_t_end_mm": 2400,
+            "snap_distance_mm": 0,
+            "swing_radius_mm": 900,
+            "hinge_hint": "UNKNOWN"
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "kind": "window",
+            "segment_mm": [
+              {
+                "x": 709,
+                "y": 4000
+              },
+              {
+                "x": 2708,
+                "y": 4000
+              }
+            ],
+            "original_segment_mm": [
+              {
+                "x": 709,
+                "y": 4000
+              },
+              {
+                "x": 2708,
+                "y": 4000
+              }
+            ],
+            "wall_id": "wall_5",
+            "width_mm": 1999,
+            "wall_t_start_mm": 792,
+            "wall_t_end_mm": 2791,
+            "snap_distance_mm": 0,
+            "clearance_mm": 150
+          }
+        ]
+      },
+      "obstacles": [
+        {
+          "id": "door_1_swing",
+          "type": "door_swing",
+          "polygon_ccw": [
+            {
+              "x": 0,
+              "y": 2600
+            },
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 900,
+              "y": 1600
+            },
+            {
+              "x": 900,
+              "y": 2600
+            }
+          ],
+          "hard": true,
+          "source_id": "door_1"
+        },
+        {
+          "id": "door_1_entry_clearance",
+          "type": "entry_clearance",
+          "polygon_ccw": [
+            {
+              "x": 0,
+              "y": 2700
+            },
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 900,
+              "y": 1500
+            },
+            {
+              "x": 900,
+              "y": 2700
+            }
+          ],
+          "hard": true,
+          "source_id": "door_1"
+        },
+        {
+          "id": "window_1_clearance",
+          "type": "window_clearance",
+          "polygon_ccw": [
+            {
+              "x": 2708,
+              "y": 4000
+            },
+            {
+              "x": 709,
+              "y": 4000
+            },
+            {
+              "x": 709,
+              "y": 3850
+            },
+            {
+              "x": 2708,
+              "y": 3850
+            }
+          ],
+          "hard": true,
+          "source_id": "window_1"
+        }
+      ]
+    },
+    "objects": [
+      {
+        "object_id": "armchair",
+        "cluster_id": "main_seating",
+        "polygon_ccw": [
+          {
+            "x": 3850,
+            "y": 1890
+          },
+          {
+            "x": 4690,
+            "y": 1890
+          },
+          {
+            "x": 4690,
+            "y": 2600
+          },
+          {
+            "x": 3850,
+            "y": 2600
+          }
+        ],
+        "bbox": {
+          "min_x": 3850,
+          "min_y": 1890,
+          "max_x": 4690,
+          "max_y": 2600
+        },
+        "rotation_ccw": 0,
+        "source_rect": {
+          "x": 2650,
+          "y": 590,
+          "w": 840,
+          "h": 710
+        },
+        "front_world": {
+          "dx": 0.0,
+          "dy": -1.0
+        },
+        "front_side_world": "bottom",
+        "axis_world": {
+          "dx": 1.0,
+          "dy": -0.0
+        }
+      },
+      {
+        "object_id": "coffee_table",
+        "cluster_id": "main_seating",
+        "polygon_ccw": [
+          {
+            "x": 2300,
+            "y": 2400
+          },
+          {
+            "x": 3200,
+            "y": 2400
+          },
+          {
+            "x": 3200,
+            "y": 2900
+          },
+          {
+            "x": 2300,
+            "y": 2900
+          }
+        ],
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 2400,
+          "max_x": 3200,
+          "max_y": 2900
+        },
+        "rotation_ccw": 0,
+        "source_rect": {
+          "x": 1100,
+          "y": 1100,
+          "w": 900,
+          "h": 500
+        },
+        "front_world": {
+          "dx": 0.0,
+          "dy": 1.0
+        },
+        "front_side_world": "top",
+        "axis_world": {
+          "dx": 1.0,
+          "dy": 0.0
+        }
+      },
+      {
+        "object_id": "floor_lamp",
+        "cluster_id": "main_seating",
+        "polygon_ccw": [
+          {
+            "x": 1400,
+            "y": 1600
+          },
+          {
+            "x": 1750,
+            "y": 1600
+          },
+          {
+            "x": 1750,
+            "y": 1920
+          },
+          {
+            "x": 1400,
+            "y": 1920
+          }
+        ],
+        "bbox": {
+          "min_x": 1400,
+          "min_y": 1600,
+          "max_x": 1750,
+          "max_y": 1920
+        },
+        "rotation_ccw": 0,
+        "source_rect": {
+          "x": 200,
+          "y": 300,
+          "w": 350,
+          "h": 320
+        },
+        "front_world": {
+          "dx": 0.0,
+          "dy": 1.0
+        },
+        "front_side_world": "top",
+        "axis_world": {
+          "dx": 1.0,
+          "dy": 0.0
+        }
+      },
+      {
+        "object_id": "side_table",
+        "cluster_id": "main_seating",
+        "polygon_ccw": [
+          {
+            "x": 4700,
+            "y": 1550
+          },
+          {
+            "x": 5090,
+            "y": 1550
+          },
+          {
+            "x": 5090,
+            "y": 1920
+          },
+          {
+            "x": 4700,
+            "y": 1920
+          }
+        ],
+        "bbox": {
+          "min_x": 4700,
+          "min_y": 1550,
+          "max_x": 5090,
+          "max_y": 1920
+        },
+        "rotation_ccw": 0,
+        "source_rect": {
+          "x": 3500,
+          "y": 250,
+          "w": 390,
+          "h": 370
+        },
+        "front_world": {
+          "dx": 0.0,
+          "dy": 1.0
+        },
+        "front_side_world": "top",
+        "axis_world": {
+          "dx": 1.0,
+          "dy": 0.0
+        }
+      },
+      {
+        "object_id": "sofa",
+        "cluster_id": "main_seating",
+        "polygon_ccw": [
+          {
+            "x": 1750,
+            "y": 1400
+          },
+          {
+            "x": 3810,
+            "y": 1400
+          },
+          {
+            "x": 3810,
+            "y": 2360
+          },
+          {
+            "x": 1750,
+            "y": 2360
+          }
+        ],
+        "bbox": {
+          "min_x": 1750,
+          "min_y": 1400,
+          "max_x": 3810,
+          "max_y": 2360
+        },
+        "rotation_ccw": 0,
+        "source_rect": {
+          "x": 550,
+          "y": 100,
+          "w": 2060,
+          "h": 960
+        },
+        "front_world": {
+          "dx": 0.0,
+          "dy": -1.0
+        },
+        "front_side_world": "bottom",
+        "axis_world": {
+          "dx": -1.0,
+          "dy": 0.0
+        }
+      },
+      {
+        "object_id": "media_shelf",
+        "cluster_id": "media",
+        "polygon_ccw": [
+          {
+            "x": 5700,
+            "y": 300
+          },
+          {
+            "x": 5700,
+            "y": 1170
+          },
+          {
+            "x": 5400,
+            "y": 1170
+          },
+          {
+            "x": 5400,
+            "y": 300
+          }
+        ],
+        "bbox": {
+          "min_x": 5400,
+          "min_y": 300,
+          "max_x": 5700,
+          "max_y": 1170
+        },
+        "rotation_ccw": 270,
+        "source_rect": {
+          "x": 100,
+          "y": 100,
+          "w": 870,
+          "h": 300
+        },
+        "front_world": {
+          "dx": -1.0,
+          "dy": 0.0
+        },
+        "front_side_world": "left",
+        "axis_world": {
+          "dx": -0.0,
+          "dy": 1.0
+        }
+      },
+      {
+        "object_id": "tv_console",
+        "cluster_id": "media",
+        "polygon_ccw": [
+          {
+            "x": 5800,
+            "y": 1200
+          },
+          {
+            "x": 5800,
+            "y": 2790
+          },
+          {
+            "x": 5340,
+            "y": 2790
+          },
+          {
+            "x": 5340,
+            "y": 1200
+          }
+        ],
+        "bbox": {
+          "min_x": 5340,
+          "min_y": 1200,
+          "max_x": 5800,
+          "max_y": 2790
+        },
+        "rotation_ccw": 270,
+        "source_rect": {
+          "x": 1000,
+          "y": 0,
+          "w": 1590,
+          "h": 460
+        },
+        "front_world": {
+          "dx": -1.0,
+          "dy": 0.0
+        },
+        "front_side_world": "left",
+        "axis_world": {
+          "dx": -0.0,
+          "dy": 1.0
+        }
+      },
+      {
+        "object_id": "bookshelf",
+        "cluster_id": "storage_display_support",
+        "polygon_ccw": [
+          {
+            "x": 50,
+            "y": 650
+          },
+          {
+            "x": 50,
+            "y": 20
+          },
+          {
+            "x": 300,
+            "y": 20
+          },
+          {
+            "x": 300,
+            "y": 650
+          }
+        ],
+        "bbox": {
+          "min_x": 50,
+          "min_y": 20,
+          "max_x": 300,
+          "max_y": 650
+        },
+        "rotation_ccw": 90,
+        "source_rect": {
+          "x": 0,
+          "y": 0,
+          "w": 630,
+          "h": 250
+        },
+        "front_world": {
+          "dx": 1.0,
+          "dy": -0.0
+        },
+        "front_side_world": "right",
+        "axis_world": {
+          "dx": 0.0,
+          "dy": -1.0
+        }
+      }
+    ],
+    "notes": [],
+    "missing": []
+  },
+  "refined_layout_solution": {
+    "status": "OK",
+    "hard_valid": true,
+    "quality_before": {},
+    "quality_after": {},
+    "applied_moves": [],
+    "notes": [
+      "Phase-2 fallback activated: deterministic repair from solver seed."
+    ]
+  },
+  "history": [
+    {
+      "stage": "micro_refiner",
+      "status": "invalid_seed",
+      "absolute_layout_status": "INVALID"
+    },
+    {
+      "stage": "deterministic_phase2_fallback",
+      "status": "accepted",
+      "proposal_status": "REPAIRED"
+    }
+  ],
+  "hard_fix": {
+    "result": "APPLIED",
+    "attempts": [
+      {
+        "mode": "deterministic_phase2_fallback",
+        "hard_valid": true,
+        "notes": [
+          "Phase-2 fallback activated: deterministic repair from solver seed."
+        ]
+      }
+    ]
+  }
+}

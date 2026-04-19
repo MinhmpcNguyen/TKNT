@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import math
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple
 
 
 def compute_cluster_outline(
@@ -9,8 +8,8 @@ def compute_cluster_outline(
     *,
     normalize_non_negative: bool = True,
     snap_to_grid: bool = True,
-    outline_mode: str = "envelope",  # "envelope" | "union" | "buffered_union"
-    gap_fill_mm: int = 0,            # only used for buffered_union (e.g. 100~300)
+    outline_mode: str = "union",  # "envelope" | "union" | "buffered_union"
+    gap_fill_mm: int = 0,  # only used for buffered_union (e.g. 100~300)
     use_shapely: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -22,7 +21,7 @@ def compute_cluster_outline(
 
     outline_mode:
       - "envelope": staircase envelope polygon (over-approx; may fill gaps). No shapely required.
-      - "union": true outline of union-of-rects (shapely). May return multiple polygons if disjoint.
+      - "union": true outline of union-of-rects. May return multiple polygons if disjoint.
       - "buffered_union": union after buffering by gap_fill_mm (connect disjoint pieces), then buffer(-gap_fill_mm).
     """
     out = dict(cluster_output)
@@ -30,6 +29,39 @@ def compute_cluster_outline(
     rects = fp.get("rects") or []
     if not isinstance(rects, list):
         rects = []
+    if not rects:
+        rects = _rects_from_variant_bundle(out)
+        if rects:
+            fp["rects"] = rects
+            out["cluster_footprint"] = fp
+
+    if not rects:
+        outlines = _coerce_outline_polygons(
+            fp.get("outline_polygons_ccw")
+            or fp.get("tight_hull_polygons_mm")
+            or out.get("tight_hull_polygons_mm")
+        )
+        if not outlines:
+            outline = _coerce_outline_polygon(
+                fp.get("tight_hull_polygon_mm") or out.get("tight_hull_polygon_mm")
+            )
+            outlines = [outline] if outline else []
+        if outlines:
+            fp["local_bbox"] = _compute_local_bbox_from_polygons(outlines)
+            fp["outline_polygons_ccw"] = outlines
+            fp["outline_meta"] = {
+                "mode": "provided_hull",
+                "normalized_translation": {"dx": 0, "dy": 0},
+                "gap_fill_mm": 0,
+                "used_shapely": False,
+            }
+            out["cluster_footprint"] = fp
+            out["orientation_meta"] = (
+                cluster_output.get("orientation_meta")
+                if isinstance(cluster_output.get("orientation_meta"), dict)
+                else {}
+            )
+            return out
 
     # 1) bbox from rects
     bbox = _compute_local_bbox_from_rects(rects)
@@ -61,15 +93,17 @@ def compute_cluster_outline(
 
     elif mode in ("union", "buffered_union"):
         if not use_shapely:
-            # fallback: no shapely => envelope
-            poly = _staircase_envelope_polygon_ccw(rects)
-            outlines = [poly] if poly else []
-            mode = "envelope_fallback"
+            outlines = _outline_polygons_union_grid(rects)
+            mode = "union_grid_fallback"
         else:
-            outlines = _outline_polygons_union_shapely(
-                rects,
-                gap_fill_mm=gap_fill_mm if mode == "buffered_union" else 0
-            )
+            try:
+                outlines = _outline_polygons_union_shapely(
+                    rects,
+                    gap_fill_mm=gap_fill_mm if mode == "buffered_union" else 0,
+                )
+            except Exception:
+                outlines = _outline_polygons_union_grid(rects)
+                mode = "union_grid_fallback"
 
     else:
         # unknown mode -> envelope
@@ -82,7 +116,9 @@ def compute_cluster_outline(
     fp["outline_meta"] = {
         "mode": mode,
         "normalized_translation": {"dx": dx, "dy": dy},
-        "gap_fill_mm": int(gap_fill_mm) if outline_mode.strip().lower() == "buffered_union" else 0,
+        "gap_fill_mm": int(gap_fill_mm)
+        if outline_mode.strip().lower() == "buffered_union"
+        else 0,
         "used_shapely": bool(use_shapely and mode in ("union", "buffered_union")),
     }
     out["cluster_footprint"] = fp
@@ -98,7 +134,10 @@ def compute_cluster_outline(
 # Helpers: translation / bbox
 # ----------------------------
 
-def _translate_cluster(cluster_output: Dict[str, Any], dx: int, dy: int, *, grid_mm: int = 0) -> Dict[str, Any]:
+
+def _translate_cluster(
+    cluster_output: Dict[str, Any], dx: int, dy: int, *, grid_mm: int = 0
+) -> Dict[str, Any]:
     out = dict(cluster_output)
 
     def snap(v: int) -> int:
@@ -173,8 +212,8 @@ def _compute_local_bbox_from_rects(rects: List[Dict[str, Any]]) -> Dict[str, int
 
     min_x = 10**18
     min_y = 10**18
-    max_x = -10**18
-    max_y = -10**18
+    max_x = -(10**18)
+    max_y = -(10**18)
 
     for r in rects:
         if not isinstance(r, dict):
@@ -193,14 +232,105 @@ def _compute_local_bbox_from_rects(rects: List[Dict[str, Any]]) -> Dict[str, int
     if min_x == 10**18:
         return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
 
-    return {"min_x": int(min_x), "min_y": int(min_y), "max_x": int(max_x), "max_y": int(max_y)}
+    return {
+        "min_x": int(min_x),
+        "min_y": int(min_y),
+        "max_x": int(max_x),
+        "max_y": int(max_y),
+    }
+
+
+def _rects_from_variant_bundle(cluster_output: Dict[str, Any]) -> List[Dict[str, Any]]:
+    variants = cluster_output.get("variant_bundle")
+    if not isinstance(variants, list):
+        return []
+    for variant in variants:
+        if not isinstance(variant, dict):
+            continue
+        rects = _coerce_rects(variant.get("interaction_placements"))
+        if rects:
+            return rects
+    return []
+
+
+def _coerce_rects(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rects: List[Dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            x = int(round(float(item.get("x", 0))))
+            y = int(round(float(item.get("y", 0))))
+            w = int(round(float(item.get("w", 0))))
+            h = int(round(float(item.get("h", 0))))
+        except (TypeError, ValueError):
+            continue
+        if w <= 0 or h <= 0:
+            continue
+        rect = dict(item)
+        rect["x"] = x
+        rect["y"] = y
+        rect["w"] = w
+        rect["h"] = h
+        rects.append(rect)
+    return rects
+
+
+def _coerce_outline_polygons(value: Any) -> List[List[Dict[str, int]]]:
+    if not isinstance(value, list):
+        return []
+    polygons: List[List[Dict[str, int]]] = []
+    for item in value:
+        polygon = _coerce_outline_polygon(item)
+        if polygon:
+            polygons.append(polygon)
+    return polygons
+
+
+def _coerce_outline_polygon(value: Any) -> List[Dict[str, int]]:
+    if not isinstance(value, list):
+        return []
+    polygon: List[Dict[str, int]] = []
+    for point in value:
+        if not isinstance(point, dict):
+            continue
+        try:
+            polygon.append(
+                {
+                    "x": int(round(float(point.get("x", 0)))),
+                    "y": int(round(float(point.get("y", 0)))),
+                }
+            )
+        except (TypeError, ValueError):
+            continue
+    return polygon if len(polygon) >= 3 else []
+
+
+def _compute_local_bbox_from_polygons(
+    polygons: List[List[Dict[str, int]]],
+) -> Dict[str, int]:
+    xs = [point["x"] for polygon in polygons for point in polygon]
+    ys = [point["y"] for polygon in polygons for point in polygon]
+    if not xs or not ys:
+        return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
+    return {
+        "min_x": min(xs),
+        "min_y": min(ys),
+        "max_x": max(xs),
+        "max_y": max(ys),
+    }
 
 
 # ----------------------------
 # Outline mode: envelope (no shapely)
 # ----------------------------
 
-def _staircase_envelope_polygon_ccw(rects: List[Dict[str, Any]]) -> List[Dict[str, int]]:
+
+def _staircase_envelope_polygon_ccw(
+    rects: List[Dict[str, Any]],
+) -> List[Dict[str, int]]:
     cleaned: List[Tuple[int, int, int, int]] = []
     for r in rects:
         if not isinstance(r, dict):
@@ -316,6 +446,7 @@ def _signed_area(points: List[Tuple[int, int]]) -> float:
 # Outline mode: union / buffered_union (shapely)
 # ----------------------------
 
+
 def _outline_polygons_union_shapely(
     rects: List[Dict[str, Any]],
     *,
@@ -344,7 +475,9 @@ def _outline_polygons_union_shapely(
     # If requested, buffer to connect gaps then shrink back
     if gap_fill_mm and gap_fill_mm > 0:
         # join_style=2 keeps corners square-ish
-        geom = geom.buffer(gap_fill_mm, join_style=2, cap_style=2).buffer(-gap_fill_mm, join_style=2, cap_style=2)
+        geom = geom.buffer(gap_fill_mm, join_style=2, cap_style=2).buffer(
+            -gap_fill_mm, join_style=2, cap_style=2
+        )
 
     geoms = []
     if geom.geom_type == "Polygon":
@@ -367,3 +500,119 @@ def _outline_polygons_union_shapely(
         outlines.append([{"x": int(round(px)), "y": int(round(py))} for px, py in pts])
 
     return outlines
+
+
+def _outline_polygons_union_grid(
+    rects: List[Dict[str, Any]],
+) -> List[List[Dict[str, int]]]:
+    cleaned: List[Tuple[int, int, int, int]] = []
+    x_breaks: set[int] = set()
+    y_breaks: set[int] = set()
+
+    for r in rects:
+        if not isinstance(r, dict):
+            continue
+        x1 = int(r.get("x", 0))
+        y1 = int(r.get("y", 0))
+        x2 = x1 + int(r.get("w", 0))
+        y2 = y1 + int(r.get("h", 0))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        cleaned.append((x1, y1, x2, y2))
+        x_breaks.update((x1, x2))
+        y_breaks.update((y1, y2))
+
+    if not cleaned:
+        return []
+
+    xs = sorted(x_breaks)
+    ys = sorted(y_breaks)
+    occupied: set[Tuple[int, int]] = set()
+
+    for ix in range(len(xs) - 1):
+        cx1 = xs[ix]
+        cx2 = xs[ix + 1]
+        if cx2 <= cx1:
+            continue
+        for iy in range(len(ys) - 1):
+            cy1 = ys[iy]
+            cy2 = ys[iy + 1]
+            if cy2 <= cy1:
+                continue
+            for rx1, ry1, rx2, ry2 in cleaned:
+                if rx1 <= cx1 and cx2 <= rx2 and ry1 <= cy1 and cy2 <= ry2:
+                    occupied.add((ix, iy))
+                    break
+
+    edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for ix, iy in sorted(occupied):
+        x1 = xs[ix]
+        x2 = xs[ix + 1]
+        y1 = ys[iy]
+        y2 = ys[iy + 1]
+        if (ix, iy - 1) not in occupied:
+            edges.append(((x1, y1), (x2, y1)))
+        if (ix + 1, iy) not in occupied:
+            edges.append(((x2, y1), (x2, y2)))
+        if (ix, iy + 1) not in occupied:
+            edges.append(((x2, y2), (x1, y2)))
+        if (ix - 1, iy) not in occupied:
+            edges.append(((x1, y2), (x1, y1)))
+
+    loops = _trace_directed_edge_loops(edges)
+    outlines: List[List[Dict[str, int]]] = []
+    for loop in loops:
+        simplified = _simplify_orthogonal(loop)
+        if simplified and simplified[0] == simplified[-1]:
+            simplified = simplified[:-1]
+        if len(simplified) < 3:
+            continue
+        if _signed_area(simplified) < 0:
+            simplified = list(reversed(simplified))
+        outlines.append([{"x": int(x), "y": int(y)} for x, y in simplified])
+
+    outlines.sort(
+        key=lambda poly: (
+            -abs(_signed_area([(p["x"], p["y"]) for p in poly])),
+            poly[0]["x"] if poly else 0,
+            poly[0]["y"] if poly else 0,
+        )
+    )
+    return outlines
+
+
+def _trace_directed_edge_loops(
+    edges: List[Tuple[Tuple[int, int], Tuple[int, int]]],
+) -> List[List[Tuple[int, int]]]:
+    starts: dict[Tuple[int, int], list[Tuple[int, int]]] = {}
+    for start, end in edges:
+        starts.setdefault(start, []).append(end)
+    for ends in starts.values():
+        ends.sort()
+
+    unused = set(edges)
+    loops: List[List[Tuple[int, int]]] = []
+
+    while unused:
+        start, end = min(unused)
+        unused.remove((start, end))
+        loop = [start, end]
+        current = end
+
+        while current != start:
+            next_candidates = [
+                candidate
+                for candidate in starts.get(current, [])
+                if (current, candidate) in unused
+            ]
+            if not next_candidates:
+                break
+            next_point = next_candidates[0]
+            unused.remove((current, next_point))
+            loop.append(next_point)
+            current = next_point
+
+        if len(loop) >= 4 and loop[-1] == start:
+            loops.append(loop)
+
+    return loops

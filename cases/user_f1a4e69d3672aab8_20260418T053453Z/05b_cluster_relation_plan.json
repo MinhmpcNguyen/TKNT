@@ -1,0 +1,430 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "room_type": "living_room",
+  "planner_kind": "seed_concept_generator",
+  "macro_concept": {
+    "concept_id": "concept_05",
+    "concept_family": "zoned",
+    "spatial_character": "living_room_primary_secondary_zoned",
+    "cluster_zone_plan": [
+      {
+        "cluster_id": "main_seating",
+        "semantic_role": "core_function_zone",
+        "role_kind": "social_anchor",
+        "priority": "core",
+        "zone_assignment": "floating_support_zone",
+        "region_candidates": [
+          {
+            "cluster_id": "main_seating",
+            "region_id": "primary_focal_wall_zone",
+            "region_type": "focal_wall_zone",
+            "score": 5.8,
+            "reasons": [
+              "wall_affinity=high",
+              "social_anchor_compatible"
+            ]
+          },
+          {
+            "cluster_id": "main_seating",
+            "region_id": "daylight_biased_zone",
+            "region_type": "daylight_zone",
+            "score": 4.4,
+            "reasons": [
+              "daylight_affinity=high"
+            ]
+          },
+          {
+            "cluster_id": "main_seating",
+            "region_id": "edge_loading_zone",
+            "region_type": "edge_loading_zone",
+            "score": 4.2,
+            "reasons": [
+              "wall_affinity=high"
+            ]
+          }
+        ],
+        "wall_claim": "strong",
+        "center_usage": "primary",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "neutral",
+        "privacy_relation": "privacy_preferred",
+        "placement_bias": "wall_backed",
+        "zone_complement_role": "topology_complement"
+      },
+      {
+        "cluster_id": "media",
+        "semantic_role": "core_function_zone",
+        "role_kind": "media",
+        "priority": "core",
+        "zone_assignment": "primary_focal_wall_zone",
+        "region_candidates": [
+          {
+            "cluster_id": "media",
+            "region_id": "primary_focal_wall_zone",
+            "region_type": "focal_wall_zone",
+            "score": 6.4,
+            "reasons": [
+              "wall_affinity=high",
+              "focal_compatible"
+            ]
+          },
+          {
+            "cluster_id": "media",
+            "region_id": "edge_loading_zone",
+            "region_type": "edge_loading_zone",
+            "score": 4.2,
+            "reasons": [
+              "wall_affinity=high"
+            ]
+          },
+          {
+            "cluster_id": "media",
+            "region_id": "storage_service_edge_zone",
+            "region_type": "storage_service_edge_zone",
+            "score": 4.2,
+            "reasons": [
+              "wall_affinity=high"
+            ]
+          }
+        ],
+        "wall_claim": "medium",
+        "center_usage": "none",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "avoid_window_blocking",
+        "privacy_relation": "neutral",
+        "placement_bias": "balanced",
+        "zone_complement_role": "focal_claim"
+      }
+    ],
+    "allowed_variant_families_by_cluster": {
+      "main_seating": [
+        "open_center",
+        "conversation_facing",
+        "window_oriented"
+      ],
+      "media": [
+        "media_facing",
+        "wall_backed_focal",
+        "focal_media"
+      ]
+    },
+    "critical_object_orientations": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "intents": [
+          "back_to_wall",
+          "face_cluster",
+          "align_with_focal_axis",
+          "front_to_open_space"
+        ],
+        "priority": "high",
+        "reason": "Critical object orientation emitted by macro concept.",
+        "target_cluster_id": "media"
+      },
+      {
+        "cluster_id": "media",
+        "object_id": "tv_console",
+        "intents": [
+          "back_to_wall",
+          "face_cluster",
+          "align_with_focal_axis",
+          "front_to_open_space",
+          "avoid_entry_axis"
+        ],
+        "priority": "high",
+        "reason": "Critical object orientation emitted by macro concept.",
+        "target_cluster_id": "main_seating"
+      }
+    ],
+    "primary_pair_contracts": [
+      {
+        "pair_type": "separate_but_legible",
+        "cluster_a": "main_seating",
+        "cluster_b": "media",
+        "strength": "high",
+        "required": true
+      }
+    ],
+    "topology_policy": {
+      "preserve_entry_landing": true,
+      "preserve_primary_corridor": true,
+      "reserve_center_degree": "very_high",
+      "wall_loading_bias": "zone_specific",
+      "daylight_bias": "primary_support_preferred",
+      "entry_avoidance_strength": "medium",
+      "secondary_zone_placement_bias": "edge_recede",
+      "style_name": "minimal",
+      "style_density_target": "low",
+      "style_visual_balance": "calm"
+    },
+    "macro_constraints": {
+      "keep_open_regions": [
+        {
+          "type": "entry_buffer",
+          "near": "door_1_entry_clearance",
+          "priority": "high"
+        }
+      ],
+      "reserved_regions": [
+        {
+          "region": "door_1_entry_clearance",
+          "reason": "entry landing must stay usable"
+        },
+        {
+          "region": "door_1_to_room_center_corridor",
+          "reason": "primary circulation corridor must stay usable"
+        }
+      ],
+      "protected_topology": [
+        {
+          "region": "door_1_entry_clearance",
+          "zone_type": "entry_landing",
+          "priority": "high",
+          "enforcement": "hard",
+          "max_overlap_ratio": 0.0,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "door_1_to_room_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.05,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "center_openness_core",
+          "zone_type": "center_openness_core",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.1,
+          "applies_to": [
+            "core_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        }
+      ],
+      "cluster_separation_preferences": [],
+      "cluster_alignment_preferences": [
+        {
+          "a": "main_seating",
+          "b": "media",
+          "preference": "legible_primary_pair",
+          "priority": "high"
+        }
+      ]
+    },
+    "concept_readiness_requirements": {
+      "required_publishable_diagnostics": [
+        "circulation_clear",
+        "entry_preserved",
+        "dominant_anchor_correct",
+        "workflow_preserved"
+      ],
+      "required_pair_contracts": [
+        "separate_but_legible"
+      ],
+      "required_center_preservation": "medium",
+      "required_entry_preservation": true
+    },
+    "variant_bias_weights": {
+      "family_match_weight": 1.35,
+      "center_preserve_weight": 1.3499999999999999,
+      "focal_axis_weight": 1.2,
+      "entry_clear_weight": 1.35,
+      "wall_loading_weight": 1.2,
+      "daylight_alignment_weight": 1.2999999999999998,
+      "edge_loading_weight": 1.25,
+      "symmetry_weight": 1.05
+    },
+    "concept_score_prior": {
+      "functionality": 0.93,
+      "naturalness": 0.89,
+      "semantic_coherence": 0.94,
+      "spatial_quality": 0.88
+    },
+    "diversity_signature": "zoned|center=very_high|wall=zone_specific|main_seating:floating_support_zone:primary:strong,media:primary_focal_wall_zone:none:medium"
+  },
+  "cluster_affinities": [
+    {
+      "cluster_id": "main_seating",
+      "prefer": [
+        "wall",
+        "recess_or_edge",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "entry_blocking",
+        "main_path",
+        "center"
+      ],
+      "priority": "high",
+      "reason": "Projection from concept zone assignment."
+    },
+    {
+      "cluster_id": "media",
+      "prefer": [
+        "wall",
+        "recess_or_edge",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "entry_blocking",
+        "main_path",
+        "center",
+        "window_blocking"
+      ],
+      "priority": "medium",
+      "reason": "Projection from concept zone assignment."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "main_seating",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall",
+        "face_cluster",
+        "inward_to_room"
+      ],
+      "target_cluster_id": "media",
+      "priority": "high",
+      "reason": "Projection from concept wall/center/focal policy."
+    },
+    {
+      "cluster_id": "media",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall",
+        "face_cluster",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": "main_seating",
+      "priority": "high",
+      "reason": "Projection from concept wall/center/focal policy."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "main_seating",
+      "object_id": "sofa",
+      "intents": [
+        "back_to_wall",
+        "face_cluster",
+        "align_with_focal_axis",
+        "front_to_open_space"
+      ],
+      "priority": "high",
+      "reason": "Critical object orientation emitted by macro concept.",
+      "target_cluster_id": "media"
+    },
+    {
+      "cluster_id": "media",
+      "object_id": "tv_console",
+      "intents": [
+        "back_to_wall",
+        "face_cluster",
+        "align_with_focal_axis",
+        "front_to_open_space",
+        "avoid_entry_axis"
+      ],
+      "priority": "high",
+      "reason": "Critical object orientation emitted by macro concept.",
+      "target_cluster_id": "main_seating"
+    }
+  ],
+  "allowed_variant_families_by_cluster": {
+    "main_seating": [
+      "open_center",
+      "conversation_facing",
+      "window_oriented"
+    ],
+    "media": [
+      "media_facing",
+      "wall_backed_focal",
+      "focal_media"
+    ]
+  },
+  "variant_bias_weights": {
+    "family_match_weight": 1.35,
+    "center_preserve_weight": 1.3499999999999999,
+    "focal_axis_weight": 1.2,
+    "entry_clear_weight": 1.35,
+    "wall_loading_weight": 1.2,
+    "daylight_alignment_weight": 1.2999999999999998,
+    "edge_loading_weight": 1.25,
+    "symmetry_weight": 1.05
+  },
+  "concept_readiness_requirements": {
+    "required_publishable_diagnostics": [
+      "circulation_clear",
+      "entry_preserved",
+      "dominant_anchor_correct",
+      "workflow_preserved"
+    ],
+    "required_pair_contracts": [
+      "separate_but_legible"
+    ],
+    "required_center_preservation": "medium",
+    "required_entry_preservation": true
+  },
+  "cluster_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "far_if_possible",
+      "priority": "high",
+      "reason": "Projection from primary_pair_contract=separate_but_legible."
+    }
+  ],
+  "cluster_directional_relations": [],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "main_seating",
+        "priority": "high",
+        "reason": "Primary circulation path from entry to core cluster."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1_entry_clearance",
+        "priority": "high",
+        "reason": "Protected by deterministic macro concept policy."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "main_seating",
+    "secondary_cluster_id": "media",
+    "circulation_priority": "high",
+    "center_open_preference": "high",
+    "support_cluster_behavior": "recede",
+    "distribution_mode": "zoned"
+  },
+  "placement_guidelines": [
+    "Follow macro_concept.cluster_zone_plan before applying local repair.",
+    "Preserve entry landing, primary corridor, and declared center openness before support clusters compete for space."
+  ],
+  "notes": [
+    "Generated by deterministic SeedConceptGenerator family=zoned.",
+    "Legacy relation fields are a solver projection of the macro concept, not the planning source of truth."
+  ],
+  "missing": []
+}

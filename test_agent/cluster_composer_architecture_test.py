@@ -33,6 +33,7 @@ _run_verifier_once = _cluster_composer._run_verifier_once
 _seed_local_layout = _cluster_composer._seed_local_layout
 _build_search_seed_states = _cluster_composer._build_search_seed_states
 _generate_compaction_moves = _cluster_composer._generate_compaction_moves
+_infer_cluster_type = _cluster_composer._infer_cluster_type
 _tool_rank = _cluster_composer._tool_rank
 _build_preferred_patches = _cluster_composer_tools._build_preferred_patches
 _extract_grid_mm = _cluster_composer._extract_grid_mm
@@ -248,12 +249,47 @@ def _build_compact_living_anchor_cluster() -> dict[str, Any]:
 
 
 class ClusterComposerArchitectureTest(unittest.TestCase):
+    def test_infer_cluster_type_prefers_structure_over_generic_tag(self) -> None:
+        cluster = {
+            "cluster_id": "main_seating",
+            "tag": "work",
+            "members": [
+                "sofa",
+                "coffee_table",
+                "armchair",
+                "side_table",
+                "floor_lamp",
+            ],
+            "anchors": ["sofa"],
+            "decisions": [
+                {"object_type": "sofa"},
+                {"object_type": "coffee_table"},
+                {"object_type": "armchair"},
+            ],
+        }
+
+        self.assertEqual(_infer_cluster_type(cluster), "living")
+
     def test_extract_grid_mm_uses_shared_layout_policy(self) -> None:
         self.assertEqual(
             _extract_grid_mm({"cluster_rules": {"grid_mm": 400}}),
             GLOBAL_LAYOUT_GRID_MM,
         )
         self.assertEqual(_extract_grid_mm({"cluster_rules": {}}), GLOBAL_LAYOUT_GRID_MM)
+
+    def test_generate_ignores_misleading_tag_for_living_cluster(self) -> None:
+        cluster = _build_compact_living_anchor_cluster()
+        cluster["tag"] = "work"
+
+        result = ClusterComposer().generate(
+            merged_clusters={"clusters": [cluster]},
+            cluster_id="living_zone",
+            description="",
+            special_notes="",
+        )
+
+        self.assertEqual(result["status"], "OK")
+        self.assertGreaterEqual(len(result.get("variant_bundle") or []), 1)
 
     def test_generate_uses_deterministic_controller(self) -> None:
         merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
@@ -278,6 +314,16 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "OK")
         self.assertIn("deterministic", " ".join(result.get("notes") or []).lower())
+        self.assertTrue(result.get("canonical_variant_family"))
+        self.assertTrue(result.get("tight_hull_polygons_mm"))
+        self.assertIn("covered", result.get("family_coverage") or {})
+        self.assertTrue(
+            all(
+                item.get("canonical_variant_family")
+                for item in result.get("variant_bundle") or []
+                if isinstance(item, dict)
+            )
+        )
 
         cluster = _find_cluster(merged, "sleep_area")
         member_ids = {

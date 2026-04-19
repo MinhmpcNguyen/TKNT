@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from math import cos, hypot, radians, sin
 from typing import Any
 
 from layout.orientation_contract import (
-    effective_front_rotation as _effective_front_rotation_contract,
     effective_front_side as _effective_front_side_contract,
     normalize_cardinal_side,
     side_to_vec,
@@ -20,9 +19,89 @@ except Exception:  # pragma: no cover - import guard only
     unary_union = None  # type: ignore[assignment]
 
 
-_WALL_BACK_THRESHOLD_MM = 120.0
-_PERIMETER_THRESHOLD_MM = 140.0
-_MIN_CLUSTER_ALIGNMENT_DOT = 0.1
+_CONTROLLED_REFILL_MAX_REFILLS_TOTAL = 2
+_CONTROLLED_REFILL_MAX_CANDIDATES_PER_OBJECT = 6
+_CONTROLLED_REFILL_MAX_SAFE_ZONES = 8
+_CONTROLLED_REFILL_GRID_MM = 25
+_CONTROLLED_REFILL_MAX_ITERATIONS = 1
+_CONTROLLED_REFILL_MAX_ACCESSORY_FOOTPRINT_RATIO = 0.015
+_CONTROLLED_REFILL_MIN_QUALITY_GAIN = 0.002
+_CONTROLLED_REFILL_ZONE_DEPTH_MM = 900
+_CONTROLLED_REFILL_CLUSTER_GAP_MM = 100
+
+_ACCESSORY_DECOR_CATEGORIES = frozenset(
+    {
+        "accessory",
+        "accessories",
+        "decor",
+        "decorative",
+        "decoration",
+        "soft_decor",
+        "accessory_decor",
+    }
+)
+_ACCESSORY_DECOR_TYPES = frozenset(
+    {
+        "accent_object",
+        "art",
+        "artwork",
+        "cushion",
+        "decor",
+        "decor_object",
+        "decorative_object",
+        "pillow",
+        "plant",
+        "planter",
+        "sculpture",
+        "small_decor",
+        "small_decor_object",
+        "small_rug",
+        "table_decor",
+        "throw",
+        "vase",
+        "wall_art",
+    }
+)
+_FUNCTIONAL_CORE_TYPES = frozenset(
+    {
+        "bathroom_core",
+        "bed",
+        "chair",
+        "desk",
+        "dining_chair",
+        "dining_table",
+        "dresser",
+        "entry_storage",
+        "fridge",
+        "laundry_core",
+        "office_chair",
+        "sectional_sofa",
+        "sink",
+        "sofa",
+        "stove",
+        "tv_console",
+        "wardrobe",
+    }
+)
+_FUNCTIONAL_SUPPORT_TYPES = frozenset(
+    {
+        "armchair",
+        "bench",
+        "bookshelf",
+        "coat_rack",
+        "coffee_table",
+        "floor_lamp",
+        "media_shelf",
+        "nightstand",
+        "ottoman",
+        "pantry",
+        "pet_bed",
+        "shoe_rack",
+        "side_table",
+        "storage_cabinet",
+        "tall_cabinet",
+    }
+)
 
 
 def collect_dropped_inventory(
@@ -138,13 +217,15 @@ def dropped_inventory_payload(
     }
 
 
-def reintroduce_dropped_inventory(
+def controlled_accessory_refill(
     *,
     room_output: dict[str, Any],
     absolute_layout: dict[str, Any],
     cluster_output: dict[str, Any],
     dropped_inventory_by_cluster: dict[str, list[dict[str, Any]]] | None,
-    grid_mm: int = 50,
+    refined_layout_solution: dict[str, Any] | None = None,
+    refill_policy: dict[str, Any] | None = None,
+    grid_mm: int = _CONTROLLED_REFILL_GRID_MM,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     layout = deepcopy(absolute_layout)
     if not isinstance(layout.get("objects"), list):
@@ -156,11 +237,40 @@ def reintroduce_dropped_inventory(
         if isinstance(cluster_id, str) and isinstance(items, list)
     }
     if not inventory:
-        return layout, _reintroduction_summary(inventory, {}, {})
+        return layout, _accessory_refill_summary(
+            original_inventory=inventory,
+            eligible_inventory={},
+            inserted_by_cluster={},
+            remaining_by_cluster={},
+            rejected_by_cluster={},
+            safe_zone_count=0,
+            quality_before=_quality_from_refined_solution(refined_layout_solution),
+            quality_after=_quality_from_refined_solution(refined_layout_solution),
+            notes=[],
+        )
 
     room_polygon = _room_polygon(room_output)
     if room_polygon is None or Polygon is None or unary_union is None:
-        return layout, _reintroduction_summary(inventory, {}, inventory)
+        rejected = {
+            cluster_id: [
+                _rejected_refill_item(item, "room_polygon_unavailable")
+                for item in items
+            ]
+            for cluster_id, items in inventory.items()
+        }
+        return layout, _accessory_refill_summary(
+            original_inventory=inventory,
+            eligible_inventory={},
+            inserted_by_cluster={},
+            remaining_by_cluster=inventory,
+            rejected_by_cluster=rejected,
+            safe_zone_count=0,
+            quality_before=_quality_from_refined_solution(refined_layout_solution),
+            quality_after=_quality_from_refined_solution(refined_layout_solution),
+            notes=[
+                "Controlled Accessory Refill skipped because room geometry is unavailable."
+            ],
+        )
 
     cluster_lookup = _cluster_lookup(cluster_output)
     objects = [
@@ -171,25 +281,40 @@ def reintroduce_dropped_inventory(
         for row in objects
         if isinstance(row.get("object_id"), str) and str(row.get("object_id")).strip()
     }
-    remaining = {
-        cluster_id: [deepcopy(item) for item in items]
-        for cluster_id, items in inventory.items()
-        if items
-    }
+    policy = _normalize_refill_policy(refill_policy, grid_mm=grid_mm)
+    eligible_inventory, rejected_by_cluster = _filter_accessory_refill_inventory(
+        inventory,
+        allow_categories=set(policy["allow_categories"]),
+        room_area_mm2=float(getattr(room_polygon, "area", 0.0)),
+        max_footprint_ratio=float(policy["max_accessory_footprint_ratio"]),
+    )
+    remaining = deepcopy(eligible_inventory)
     inserted_by_cluster: dict[str, list[dict[str, Any]]] = {}
+    quality_before = _quality_from_refined_solution(refined_layout_solution)
+    quality_after = deepcopy(quality_before)
+    notes: list[str] = []
 
-    while True:
-        active_cluster_ids = [
-            cluster_id for cluster_id, items in remaining.items() if items
-        ]
-        if not active_cluster_ids:
-            break
+    safe_zones = _detect_safe_refill_zones(
+        room_polygon=room_polygon,
+        room_output=room_output,
+        objects=objects,
+        cluster_lookup=cluster_lookup,
+        max_safe_zones=int(policy["max_safe_zones"]),
+    )
+    if not safe_zones:
+        notes.append("Controlled Accessory Refill found no low-conflict refill zones.")
 
-        progress = False
+    inserted_count = 0
+    active_cluster_ids = sorted(
+        [cluster_id for cluster_id, items in remaining.items() if items]
+    )
+    for _ in range(int(policy["max_refill_iterations"])):
         for cluster_id in active_cluster_ids:
+            if inserted_count >= int(policy["max_refills_total"]):
+                break
             item = remaining[cluster_id][0]
             cluster_meta = cluster_lookup.get(cluster_id) or {}
-            placed_object = _place_reintroduced_item(
+            placed_object, candidate_score = _place_accessory_refill_item(
                 room_polygon=room_polygon,
                 room_output=room_output,
                 existing_objects=objects,
@@ -197,9 +322,22 @@ def reintroduce_dropped_inventory(
                 cluster_id=cluster_id,
                 cluster_meta=cluster_meta,
                 item=item,
-                grid_mm=grid_mm,
+                safe_zones=safe_zones,
+                grid_mm=int(policy["grid_mm"]),
+                max_candidates=int(policy["max_candidates_per_object"]),
             )
             if placed_object is None:
+                continue
+
+            candidate_quality = _quality_after_accessory_refill(
+                quality_before=quality_after,
+                candidate_score=candidate_score,
+            )
+            if not _strict_refill_accept(
+                quality_before=quality_after,
+                quality_after=candidate_quality,
+                min_quality_gain=float(policy["min_quality_gain_to_accept"]),
+            ):
                 continue
 
             objects.append(placed_object)
@@ -211,33 +349,65 @@ def reintroduce_dropped_inventory(
                     "object_type": str(item.get("object_type") or ""),
                     "rotation_ccw": int(placed_object.get("rotation_ccw") or 0),
                     "bbox": deepcopy(placed_object.get("bbox") or {}),
+                    "reason": str(placed_object.get("refill_reason") or ""),
                 }
             )
-            progress = True
-        if not progress:
-            break
+            quality_after = candidate_quality
+            inserted_count += 1
+        break
 
     layout["objects"] = objects
-    summary = _reintroduction_summary(inventory, inserted_by_cluster, remaining)
-    layout["reintroduced_objects_by_cluster"] = deepcopy(
-        summary["reintroduced_objects_by_cluster"]
+    summary = _accessory_refill_summary(
+        original_inventory=inventory,
+        eligible_inventory=eligible_inventory,
+        inserted_by_cluster=inserted_by_cluster,
+        remaining_by_cluster=remaining,
+        rejected_by_cluster=rejected_by_cluster,
+        safe_zone_count=len(safe_zones),
+        quality_before=quality_before,
+        quality_after=quality_after,
+        notes=notes,
     )
-    layout["remaining_dropped_objects_by_cluster"] = deepcopy(
-        summary["remaining_dropped_objects_by_cluster"]
+    layout["accessory_refill_objects_by_cluster"] = deepcopy(
+        summary["refill_objects_by_cluster"]
     )
-    if summary["inserted_count"] > 0:
+    layout["remaining_accessory_refill_objects_by_cluster"] = deepcopy(
+        summary["remaining_refill_objects_by_cluster"]
+    )
+    if summary["refill_count"] > 0:
         notes = [
             str(item).strip() for item in layout.get("notes") or [] if str(item).strip()
         ]
         note = (
-            "Reintroduced "
-            f"{summary['inserted_count']} deferred object(s) after judge/placer "
-            "using the available free space in the room."
+            "Controlled Accessory Refill added "
+            f"{summary['refill_count']} non-critical accessory object(s) after judge "
+            "without changing functional layout."
         )
         if note not in notes:
             notes.append(note)
         layout["notes"] = notes
     return layout, summary
+
+
+def reintroduce_dropped_inventory(
+    *,
+    room_output: dict[str, Any],
+    absolute_layout: dict[str, Any],
+    cluster_output: dict[str, Any],
+    dropped_inventory_by_cluster: dict[str, list[dict[str, Any]]] | None,
+    refined_layout_solution: dict[str, Any] | None = None,
+    refill_policy: dict[str, Any] | None = None,
+    grid_mm: int = _CONTROLLED_REFILL_GRID_MM,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    return controlled_accessory_refill(
+        room_output=room_output,
+        absolute_layout=absolute_layout,
+        cluster_output=cluster_output,
+        dropped_inventory_by_cluster=dropped_inventory_by_cluster,
+        refined_layout_solution=refined_layout_solution,
+        refill_policy=refill_policy,
+        grid_mm=grid_mm,
+    )
 
 
 def _decision_lookup(
@@ -256,6 +426,502 @@ def _decision_lookup(
             continue
         lookup[(cluster_id, object_type)] = row
     return lookup
+
+
+def _normalize_refill_policy(
+    refill_policy: dict[str, Any] | None,
+    *,
+    grid_mm: int,
+) -> dict[str, Any]:
+    policy = refill_policy if isinstance(refill_policy, dict) else {}
+    allowed_categories = {
+        _normalized_inventory_label(item)
+        for item in policy.get("allow_categories", ["accessory", "decor"])
+        if str(item).strip()
+    }
+    allowed_categories = allowed_categories & _ACCESSORY_DECOR_CATEGORIES
+    if not allowed_categories:
+        allowed_categories = {"accessory", "decor"}
+    return {
+        "allow_categories": allowed_categories,
+        "max_refills_total": _positive_int(
+            policy.get("max_refills_total"),
+            _CONTROLLED_REFILL_MAX_REFILLS_TOTAL,
+        ),
+        "max_candidates_per_object": _positive_int(
+            policy.get("max_candidates_per_object"),
+            _CONTROLLED_REFILL_MAX_CANDIDATES_PER_OBJECT,
+        ),
+        "max_safe_zones": _positive_int(
+            policy.get("max_safe_zones"),
+            _CONTROLLED_REFILL_MAX_SAFE_ZONES,
+        ),
+        "grid_mm": _positive_int(policy.get("grid_mm"), grid_mm),
+        "max_refill_iterations": min(
+            _positive_int(
+                policy.get("max_refill_iterations"),
+                _CONTROLLED_REFILL_MAX_ITERATIONS,
+            ),
+            _CONTROLLED_REFILL_MAX_ITERATIONS,
+        ),
+        "max_accessory_footprint_ratio": _positive_float(
+            policy.get("max_accessory_footprint_ratio"),
+            _CONTROLLED_REFILL_MAX_ACCESSORY_FOOTPRINT_RATIO,
+        ),
+        "min_quality_gain_to_accept": _positive_float(
+            policy.get("min_quality_gain_to_accept"),
+            _CONTROLLED_REFILL_MIN_QUALITY_GAIN,
+        ),
+    }
+
+
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        number = int(value)
+    except Exception:
+        return int(default)
+    return number if number > 0 else int(default)
+
+
+def _positive_float(value: Any, default: float) -> float:
+    try:
+        number = float(value)
+    except Exception:
+        return float(default)
+    return number if number > 0.0 else float(default)
+
+
+def _filter_accessory_refill_inventory(
+    inventory: dict[str, list[dict[str, Any]]],
+    *,
+    allow_categories: set[str],
+    room_area_mm2: float,
+    max_footprint_ratio: float,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    eligible: dict[str, list[dict[str, Any]]] = {}
+    rejected: dict[str, list[dict[str, Any]]] = {}
+    for cluster_id, items in inventory.items():
+        for item in items:
+            rejection_reason = _accessory_refill_rejection_reason(
+                item,
+                allow_categories=allow_categories,
+                room_area_mm2=room_area_mm2,
+                max_footprint_ratio=max_footprint_ratio,
+            )
+            if rejection_reason is None:
+                eligible.setdefault(cluster_id, []).append(deepcopy(item))
+                continue
+            rejected.setdefault(cluster_id, []).append(
+                _rejected_refill_item(item, rejection_reason)
+            )
+    return eligible, rejected
+
+
+def _accessory_refill_rejection_reason(
+    item: Mapping[str, Any],
+    *,
+    allow_categories: set[str],
+    room_area_mm2: float,
+    max_footprint_ratio: float,
+) -> str | None:
+    object_type = _normalized_inventory_label(
+        item.get("object_type") or item.get("category")
+    )
+    category = _normalized_inventory_label(item.get("category"))
+    if object_type in _FUNCTIONAL_CORE_TYPES:
+        return "functional_core_never_refilled"
+    if object_type in _FUNCTIONAL_SUPPORT_TYPES:
+        return "functional_support_never_refilled"
+    if category not in allow_categories and object_type not in _ACCESSORY_DECOR_TYPES:
+        return "not_accessory_or_decor"
+
+    dims_mm = _object_dims_mm(dict(item))
+    if dims_mm is None:
+        return "missing_accessory_dimensions"
+    footprint_ratio = (float(dims_mm[0]) * float(dims_mm[1])) / max(room_area_mm2, 1.0)
+    if footprint_ratio > max_footprint_ratio:
+        return "accessory_footprint_too_large"
+    return None
+
+
+def _normalized_inventory_label(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _rejected_refill_item(item: Mapping[str, Any], reason: str) -> dict[str, Any]:
+    out = deepcopy(dict(item))
+    out["refill_rejected_reason"] = reason
+    return out
+
+
+def _quality_from_refined_solution(
+    refined_layout_solution: dict[str, Any] | None,
+) -> dict[str, float]:
+    raw_quality = (
+        refined_layout_solution.get("quality_after")
+        if isinstance(refined_layout_solution, dict)
+        else None
+    )
+    quality = raw_quality if isinstance(raw_quality, dict) else {}
+    functionality = _quality_float(quality.get("functionality"), 1.0)
+    naturalness = _quality_float(quality.get("naturalness"), 0.92)
+    semantic = _quality_float(quality.get("semantic"), 0.92)
+    spatial = _quality_float(
+        quality.get("spatial")
+        if "spatial" in quality
+        else quality.get("spatial_quality"),
+        1.0,
+    )
+    total = _quality_float(
+        quality.get("total"),
+        (0.35 * functionality)
+        + (0.30 * naturalness)
+        + (0.20 * spatial)
+        + (0.15 * semantic),
+    )
+    return {
+        "functionality": round(functionality, 4),
+        "naturalness": round(naturalness, 4),
+        "semantic": round(semantic, 4),
+        "spatial": round(spatial, 4),
+        "total": round(total, 4),
+    }
+
+
+def _quality_float(value: Any, default: float) -> float:
+    try:
+        number = float(value)
+    except Exception:
+        return float(default)
+    return max(0.0, min(1.0, number))
+
+
+def _quality_after_accessory_refill(
+    *,
+    quality_before: Mapping[str, float],
+    candidate_score: float,
+) -> dict[str, float]:
+    gain = min(0.012, max(_CONTROLLED_REFILL_MIN_QUALITY_GAIN, candidate_score * 0.008))
+    naturalness = min(1.0, float(quality_before.get("naturalness", 0.0)) + gain * 0.45)
+    semantic = min(1.0, float(quality_before.get("semantic", 0.0)) + gain * 0.35)
+    total = min(1.0, float(quality_before.get("total", 0.0)) + gain)
+    return {
+        "functionality": round(float(quality_before.get("functionality", 0.0)), 4),
+        "naturalness": round(naturalness, 4),
+        "semantic": round(semantic, 4),
+        "spatial": round(float(quality_before.get("spatial", 0.0)), 4),
+        "total": round(total, 4),
+    }
+
+
+def _strict_refill_accept(
+    *,
+    quality_before: Mapping[str, float],
+    quality_after: Mapping[str, float],
+    min_quality_gain: float,
+) -> bool:
+    if (
+        float(quality_after.get("total", 0.0))
+        <= float(quality_before.get("total", 0.0)) + min_quality_gain
+    ):
+        return False
+    for key in ("functionality", "spatial", "naturalness"):
+        if float(quality_after.get(key, 0.0)) < float(quality_before.get(key, 0.0)):
+            return False
+    return True
+
+
+def _detect_safe_refill_zones(
+    *,
+    room_polygon: Any,
+    room_output: dict[str, Any],
+    objects: list[dict[str, Any]],
+    cluster_lookup: dict[str, dict[str, Any]],
+    max_safe_zones: int,
+) -> list[dict[str, Any]]:
+    protected_polygons = _protected_refill_polygons(room_output)
+    blockers = _blocked_polygons(room_output, objects)
+    all_blockers = blockers + protected_polygons
+    try:
+        safe_geometry = (
+            room_polygon
+            if not all_blockers
+            else room_polygon.difference(unary_union(all_blockers))
+        )
+    except Exception:
+        safe_geometry = room_polygon
+
+    zones: list[dict[str, Any]] = []
+    affordance_map = _affordance_map(room_output)
+    for row in _mapping_rows(affordance_map.get("wall_anchor_candidates")):
+        _add_refill_zone(
+            zones,
+            room_polygon=room_polygon,
+            safe_geometry=safe_geometry,
+            source_polygon=_polygon_from_rows(row.get("anchor_polygon_ccw")),
+            zone_id=str(row.get("id") or "wall_anchor"),
+            zone_type="wall_anchor",
+            cluster_id=None,
+            score=0.72 + (0.2 * _safe_float(row.get("score"), 0.0)),
+        )
+
+    for row in _mapping_rows(affordance_map.get("daylight_regions")):
+        _add_refill_zone(
+            zones,
+            room_polygon=room_polygon,
+            safe_geometry=safe_geometry,
+            source_polygon=_polygon_from_rows(
+                row.get("near_polygon_ccw") or row.get("mid_polygon_ccw")
+            ),
+            zone_id=str(row.get("id") or "daylight_edge"),
+            zone_type="daylight_edge",
+            cluster_id=None,
+            score=0.64 + (0.16 * _safe_float(row.get("score"), 0.0)),
+        )
+
+    for index, polygon in enumerate(_corner_refill_polygons(room_polygon), start=1):
+        _add_refill_zone(
+            zones,
+            room_polygon=room_polygon,
+            safe_geometry=safe_geometry,
+            source_polygon=polygon,
+            zone_id=f"corner_dead_zone_{index}",
+            zone_type="corner_dead_zone",
+            cluster_id=None,
+            score=0.68,
+        )
+
+    for cluster_id in sorted(cluster_lookup):
+        cluster_bbox = _cluster_bbox(objects, cluster_id)
+        if cluster_bbox is None:
+            continue
+        for index, polygon in enumerate(
+            _cluster_support_refill_polygons(cluster_bbox), start=1
+        ):
+            _add_refill_zone(
+                zones,
+                room_polygon=room_polygon,
+                safe_geometry=safe_geometry,
+                source_polygon=polygon,
+                zone_id=f"{cluster_id}_support_{index}",
+                zone_type="cluster_support_edge",
+                cluster_id=cluster_id,
+                score=0.55,
+            )
+
+    zones = _dedupe_refill_zones(zones)
+    zones.sort(
+        key=lambda row: (
+            float(row.get("score") or 0.0),
+            float(getattr(row.get("polygon"), "area", 0.0)),
+            str(row.get("zone_id") or ""),
+        ),
+        reverse=True,
+    )
+    return zones[:max_safe_zones]
+
+
+def _affordance_map(room_output: Mapping[str, Any]) -> Mapping[str, Any]:
+    affordance = room_output.get("affordance_map")
+    if isinstance(affordance, Mapping):
+        return affordance
+    room = room_output.get("room")
+    if isinstance(room, Mapping) and isinstance(room.get("affordance_map"), Mapping):
+        return room["affordance_map"]
+    return {}
+
+
+def _mapping_rows(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return []
+    return [row for row in value if isinstance(row, Mapping)]
+
+
+def _add_refill_zone(
+    zones: list[dict[str, Any]],
+    *,
+    room_polygon: Any,
+    safe_geometry: Any,
+    source_polygon: Any | None,
+    zone_id: str,
+    zone_type: str,
+    cluster_id: str | None,
+    score: float,
+) -> None:
+    if source_polygon is None:
+        return
+    try:
+        clipped = source_polygon.intersection(safe_geometry).intersection(room_polygon)
+    except Exception:
+        return
+    for polygon in _iter_polygon_geometries(clipped):
+        if float(getattr(polygon, "area", 0.0)) < 10_000.0:
+            continue
+        if _polygon_wall_distance(room_polygon=room_polygon, polygon=polygon) > 500.0:
+            continue
+        zones.append(
+            {
+                "zone_id": zone_id,
+                "zone_type": zone_type,
+                "cluster_id": cluster_id,
+                "score": round(max(0.0, min(1.0, score)), 4),
+                "polygon": polygon,
+            }
+        )
+
+
+def _iter_polygon_geometries(geometry: Any) -> list[Any]:
+    if geometry is None or bool(getattr(geometry, "is_empty", False)):
+        return []
+    if getattr(geometry, "geom_type", "") == "Polygon":
+        return [geometry]
+    geoms = getattr(geometry, "geoms", None)
+    if geoms is None:
+        return []
+    return [row for row in geoms if getattr(row, "geom_type", "") == "Polygon"]
+
+
+def _corner_refill_polygons(room_polygon: Any) -> list[Any]:
+    min_x, min_y, max_x, max_y = room_polygon.bounds
+    depth = float(_CONTROLLED_REFILL_ZONE_DEPTH_MM)
+    boxes = [
+        (min_x, min_y, min_x + depth, min_y + depth),
+        (max_x - depth, min_y, max_x, min_y + depth),
+        (max_x - depth, max_y - depth, max_x, max_y),
+        (min_x, max_y - depth, min_x + depth, max_y),
+    ]
+    polygons: list[Any] = []
+    for left, top, right, bottom in boxes:
+        try:
+            polygons.append(
+                Polygon(
+                    [
+                        (float(left), float(top)),
+                        (float(right), float(top)),
+                        (float(right), float(bottom)),
+                        (float(left), float(bottom)),
+                    ]
+                )
+            )
+        except Exception:
+            continue
+    return polygons
+
+
+def _cluster_support_refill_polygons(cluster_bbox: Mapping[str, int]) -> list[Any]:
+    min_x = int(cluster_bbox["min_x"])
+    min_y = int(cluster_bbox["min_y"])
+    max_x = int(cluster_bbox["max_x"])
+    max_y = int(cluster_bbox["max_y"])
+    gap = _CONTROLLED_REFILL_CLUSTER_GAP_MM
+    depth = _CONTROLLED_REFILL_ZONE_DEPTH_MM
+    boxes = [
+        (min_x - depth - gap, min_y, min_x - gap, max_y),
+        (max_x + gap, min_y, max_x + depth + gap, max_y),
+        (min_x, min_y - depth - gap, max_x, min_y - gap),
+        (min_x, max_y + gap, max_x, max_y + depth + gap),
+    ]
+    polygons: list[Any] = []
+    for left, top, right, bottom in boxes:
+        try:
+            polygons.append(
+                Polygon(
+                    [
+                        (float(left), float(top)),
+                        (float(right), float(top)),
+                        (float(right), float(bottom)),
+                        (float(left), float(bottom)),
+                    ]
+                )
+            )
+        except Exception:
+            continue
+    return polygons
+
+
+def _dedupe_refill_zones(zones: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[int, int, int, int, str]] = set()
+    out: list[dict[str, Any]] = []
+    for zone in zones:
+        polygon = zone.get("polygon")
+        if polygon is None:
+            continue
+        min_x, min_y, max_x, max_y = polygon.bounds
+        key = (
+            int(round(min_x / 25.0)),
+            int(round(min_y / 25.0)),
+            int(round(max_x / 25.0)),
+            int(round(max_y / 25.0)),
+            str(zone.get("zone_type") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(zone)
+    return out
+
+
+def _protected_refill_polygons(room_output: Mapping[str, Any]) -> list[Any]:
+    protected: list[Any] = []
+    affordance_map = _affordance_map(room_output)
+    for key in ("entry_landing_zones", "opening_guards"):
+        for row in _mapping_rows(affordance_map.get(key)):
+            polygon = _polygon_from_rows(row.get("polygon_ccw"))
+            if polygon is not None:
+                protected.append(polygon)
+
+    for key in ("primary_circulation_corridors", "circulation_corridors"):
+        for row in _mapping_rows(affordance_map.get(key)):
+            corridor = _corridor_polygon(row)
+            if corridor is not None:
+                protected.append(corridor)
+
+    for row in _mapping_rows(affordance_map.get("center_openness_regions")):
+        polygon = _polygon_from_rows(row.get("polygon_ccw"))
+        if polygon is None:
+            polygon = _bbox_polygon(row.get("bbox_mm"))
+        if polygon is not None:
+            protected.append(polygon)
+    return protected
+
+
+def _corridor_polygon(row: Mapping[str, Any]) -> Any | None:
+    if LineString is None:
+        return None
+    points = [
+        (float(point.get("x") or 0.0), float(point.get("y") or 0.0))
+        for point in row.get("polyline_mm") or []
+        if isinstance(point, Mapping)
+    ]
+    if len(points) < 2:
+        return None
+    width = max(600.0, _safe_float(row.get("width_mm"), 900.0))
+    try:
+        return LineString(points).buffer(width / 2.0, cap_style=2, join_style=2)
+    except Exception:
+        return None
+
+
+def _bbox_polygon(value: Any) -> Any | None:
+    if not isinstance(value, Mapping) or Polygon is None:
+        return None
+    try:
+        min_x = float(value.get("min_x") or 0.0)
+        min_y = float(value.get("min_y") or 0.0)
+        max_x = float(value.get("max_x") or 0.0)
+        max_y = float(value.get("max_y") or 0.0)
+    except Exception:
+        return None
+    if max_x <= min_x or max_y <= min_y:
+        return None
+    return Polygon([(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)])
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
 
 
 def _cluster_lookup(cluster_output: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -414,7 +1080,7 @@ def _polygon_from_rows(rows: Any) -> Any | None:
         return None
 
 
-def _place_reintroduced_item(
+def _place_accessory_refill_item(
     *,
     room_polygon: Any,
     room_output: dict[str, Any],
@@ -423,129 +1089,330 @@ def _place_reintroduced_item(
     cluster_id: str,
     cluster_meta: dict[str, Any],
     item: dict[str, Any],
+    safe_zones: list[dict[str, Any]],
     grid_mm: int,
-) -> dict[str, Any] | None:
+    max_candidates: int,
+) -> tuple[dict[str, Any] | None, float]:
     dims_mm = _object_dims_mm(item)
     if dims_mm is None:
-        return None
+        return None, 0.0
     source_width, source_height = dims_mm
-    blocked_polygons = _blocked_polygons(room_output, existing_objects)
-    free_regions = _free_regions(room_polygon, blocked_polygons)
-    cluster_bbox = _cluster_bbox(existing_objects, cluster_id)
     object_type = str(
-        item.get("object_type") or item.get("category") or "object"
+        item.get("object_type") or item.get("category") or "accessory"
     ).strip()
     allowed_rotations = _allowed_rotations(cluster_meta, object_type)
     front_side = _cluster_front_side(cluster_meta, object_type)
-    room_center = _room_center(room_polygon)
-    cluster_center = _cluster_center(cluster_bbox)
-    cluster_target = cluster_center or room_center
+    blockers = _blocked_polygons(room_output, existing_objects)
+    protected_polygons = _protected_refill_polygons(room_output)
     best_candidate: dict[str, Any] | None = None
-    best_preference: tuple[float, ...] | None = None
+    best_score = 0.0
+    candidate_count = 0
 
-    for rotation in allowed_rotations:
-        box_width, box_height = (
-            (source_width, source_height)
-            if rotation % 180 == 0
-            else (source_height, source_width)
-        )
-        candidate_origins = _candidate_origins(
-            cluster_bbox=cluster_bbox,
-            free_regions=free_regions,
-            box_width=box_width,
-            box_height=box_height,
-            grid_mm=grid_mm,
-        )
-        for min_x, min_y in candidate_origins:
-            polygon = Polygon(
-                [
-                    (float(min_x), float(min_y)),
-                    (float(min_x + box_width), float(min_y)),
-                    (float(min_x + box_width), float(min_y + box_height)),
-                    (float(min_x), float(min_y + box_height)),
-                ]
+    for zone in _zones_for_accessory_type(safe_zones, object_type, cluster_id):
+        zone_polygon = zone.get("polygon")
+        if zone_polygon is None:
+            continue
+        for rotation in allowed_rotations:
+            box_width, box_height = (
+                (source_width, source_height)
+                if rotation % 180 == 0
+                else (source_height, source_width)
             )
-            if not room_polygon.buffer(1e-6).covers(polygon):
-                continue
-            if _overlaps_blockers(polygon, blocked_polygons):
-                continue
-            item_center = (
-                float(min_x + (box_width / 2.0)),
-                float(min_y + (box_height / 2.0)),
-            )
-            effective_front_rotation = _effective_front_rotation(
-                rotation=rotation,
-                front_side=front_side,
-            )
-            front_side_world = _effective_front_side_contract(
-                base_front=front_side,
-                rotation=rotation,
-            )
-            front_world_vec = side_to_vec(front_side_world)
-            if not _candidate_satisfies_reintroduce_contract(
-                room_polygon=room_polygon,
-                polygon=polygon,
-                effective_front_rotation=effective_front_rotation,
-                item_center=item_center,
-                cluster_bbox=cluster_bbox,
-                cluster_target=cluster_target,
+            origins = _accessory_candidate_origins(
+                zone_polygon=zone_polygon,
                 box_width=box_width,
                 box_height=box_height,
-            ):
-                continue
-            object_id = _next_reintroduced_object_id(existing_ids, object_type)
-            candidate = {
-                "object_id": object_id,
-                "instance_id": object_id,
-                "object_type": object_type,
-                "cluster_id": cluster_id,
-                "rotation_ccw": int(rotation % 360),
-                "bbox": {
-                    "min_x": int(min_x),
-                    "min_y": int(min_y),
-                    "max_x": int(min_x + box_width),
-                    "max_y": int(min_y + box_height),
-                },
-                "polygon_ccw": [
-                    {"x": int(min_x), "y": int(min_y)},
-                    {"x": int(min_x + box_width), "y": int(min_y)},
-                    {"x": int(min_x + box_width), "y": int(min_y + box_height)},
-                    {"x": int(min_x), "y": int(min_y + box_height)},
-                ],
-                "source_rect": {
-                    "x": 0,
-                    "y": 0,
-                    "w": int(source_width),
-                    "h": int(source_height),
-                },
-                "front_world": (
-                    None
-                    if front_world_vec is None
-                    else {"dx": int(front_world_vec[0]), "dy": int(front_world_vec[1])}
-                ),
-                "front_side_world": front_side_world,
-            }
-            preference = _candidate_preference(
-                room_polygon=room_polygon,
-                polygon=polygon,
-                effective_front_rotation=effective_front_rotation,
-                item_center=item_center,
-                cluster_center=cluster_center,
-                target_center=cluster_target,
+                grid_mm=grid_mm,
             )
-            if best_preference is None or preference > best_preference:
-                best_preference = preference
-                best_candidate = candidate
-    return best_candidate
+            for min_x, min_y in origins:
+                if candidate_count >= max_candidates:
+                    break
+                candidate_count += 1
+                polygon = _box_polygon(
+                    min_x=int(min_x),
+                    min_y=int(min_y),
+                    width=int(box_width),
+                    height=int(box_height),
+                )
+                if polygon is None:
+                    continue
+                if not _accessory_candidate_hard_valid(
+                    room_polygon=room_polygon,
+                    zone_polygon=zone_polygon,
+                    polygon=polygon,
+                    blockers=blockers,
+                    protected_polygons=protected_polygons,
+                ):
+                    continue
+                score = _accessory_refill_candidate_score(
+                    room_polygon=room_polygon,
+                    zone=zone,
+                    polygon=polygon,
+                    item=item,
+                )
+                if score <= best_score:
+                    continue
+                front_side_world = _effective_front_side_contract(
+                    base_front=front_side,
+                    rotation=rotation,
+                )
+                front_world_vec = side_to_vec(front_side_world)
+                object_id = _next_accessory_refill_object_id(existing_ids, object_type)
+                best_candidate = {
+                    "object_id": object_id,
+                    "instance_id": object_id,
+                    "object_type": object_type,
+                    "cluster_id": cluster_id,
+                    "rotation_ccw": int(rotation % 360),
+                    "bbox": {
+                        "min_x": int(min_x),
+                        "min_y": int(min_y),
+                        "max_x": int(min_x + box_width),
+                        "max_y": int(min_y + box_height),
+                    },
+                    "polygon_ccw": [
+                        {"x": int(min_x), "y": int(min_y)},
+                        {"x": int(min_x + box_width), "y": int(min_y)},
+                        {"x": int(min_x + box_width), "y": int(min_y + box_height)},
+                        {"x": int(min_x), "y": int(min_y + box_height)},
+                    ],
+                    "source_rect": {
+                        "x": 0,
+                        "y": 0,
+                        "w": int(source_width),
+                        "h": int(source_height),
+                    },
+                    "front_world": (
+                        None
+                        if front_world_vec is None
+                        else {
+                            "dx": int(front_world_vec[0]),
+                            "dy": int(front_world_vec[1]),
+                        }
+                    ),
+                    "front_side_world": front_side_world,
+                    "refill_source": "controlled_accessory_refill",
+                    "refill_zone_id": str(zone.get("zone_id") or ""),
+                    "refill_zone_type": str(zone.get("zone_type") or ""),
+                    "refill_reason": _accessory_refill_reason(zone, score),
+                    "source": "controlled_accessory_refill",
+                }
+                best_score = score
+            if candidate_count >= max_candidates:
+                break
+        if candidate_count >= max_candidates:
+            break
+    return best_candidate, best_score
+
+
+def _zones_for_accessory_type(
+    zones: list[dict[str, Any]],
+    object_type: str,
+    cluster_id: str,
+) -> list[dict[str, Any]]:
+    normalized_type = _normalized_inventory_label(object_type)
+
+    def zone_rank(zone: dict[str, Any]) -> tuple[float, float, str]:
+        zone_type = str(zone.get("zone_type") or "")
+        semantic_bonus = 0.0
+        if normalized_type in {"plant", "planter"} and zone_type == "daylight_edge":
+            semantic_bonus = 0.2
+        elif (
+            normalized_type in {"wall_art", "art", "artwork"}
+            and zone_type == "wall_anchor"
+        ):
+            semantic_bonus = 0.18
+        elif (
+            zone.get("cluster_id") == cluster_id and zone_type == "cluster_support_edge"
+        ):
+            semantic_bonus = 0.12
+        return (
+            float(zone.get("score") or 0.0) + semantic_bonus,
+            float(getattr(zone.get("polygon"), "area", 0.0)),
+            str(zone.get("zone_id") or ""),
+        )
+
+    return sorted(zones, key=zone_rank, reverse=True)
+
+
+def _accessory_candidate_origins(
+    *,
+    zone_polygon: Any,
+    box_width: int,
+    box_height: int,
+    grid_mm: int,
+) -> list[tuple[int, int]]:
+    min_x, min_y, max_x, max_y = zone_polygon.bounds
+    gap = max(0, int(grid_mm))
+    raw = [
+        (min_x + gap, min_y + gap),
+        (max_x - box_width - gap, min_y + gap),
+        (min_x + gap, max_y - box_height - gap),
+        (max_x - box_width - gap, max_y - box_height - gap),
+        (
+            (min_x + max_x - box_width) / 2.0,
+            (min_y + max_y - box_height) / 2.0,
+        ),
+        (
+            (min_x + max_x - box_width) / 2.0,
+            min_y + gap,
+        ),
+    ]
+    seen: set[tuple[int, int]] = set()
+    origins: list[tuple[int, int]] = []
+    for x_pos, y_pos in raw:
+        origin = (
+            _snap_to_grid(int(round(x_pos)), grid_mm),
+            _snap_to_grid(int(round(y_pos)), grid_mm),
+        )
+        if origin in seen:
+            continue
+        seen.add(origin)
+        origins.append(origin)
+    return origins
+
+
+def _box_polygon(*, min_x: int, min_y: int, width: int, height: int) -> Any | None:
+    if Polygon is None:
+        return None
+    try:
+        return Polygon(
+            [
+                (float(min_x), float(min_y)),
+                (float(min_x + width), float(min_y)),
+                (float(min_x + width), float(min_y + height)),
+                (float(min_x), float(min_y + height)),
+            ]
+        )
+    except Exception:
+        return None
+
+
+def _accessory_candidate_hard_valid(
+    *,
+    room_polygon: Any,
+    zone_polygon: Any,
+    polygon: Any,
+    blockers: list[Any],
+    protected_polygons: list[Any],
+) -> bool:
+    try:
+        if not room_polygon.buffer(1e-6).covers(polygon):
+            return False
+        if not zone_polygon.buffer(1.0).covers(polygon):
+            return False
+    except Exception:
+        return False
+    if _overlaps_blockers(polygon, blockers):
+        return False
+    if _overlaps_blockers(polygon, protected_polygons):
+        return False
+    if _polygon_wall_distance(room_polygon=room_polygon, polygon=polygon) > 260.0:
+        return False
+    return True
+
+
+def _accessory_refill_candidate_score(
+    *,
+    room_polygon: Any,
+    zone: Mapping[str, Any],
+    polygon: Any,
+    item: Mapping[str, Any],
+) -> float:
+    zone_type = str(zone.get("zone_type") or "")
+    zone_score = float(zone.get("score") or 0.0)
+    wall_distance = _polygon_wall_distance(room_polygon=room_polygon, polygon=polygon)
+    wall_score = max(0.0, 1.0 - (wall_distance / 260.0))
+    dead_zone_gain = 1.0 if zone_type in {"corner_dead_zone", "wall_anchor"} else 0.74
+    semantic_fit = _accessory_semantic_fit(item, zone_type)
+    clutter_penalty = min(
+        0.35,
+        float(getattr(polygon, "area", 0.0)) / max(float(room_polygon.area), 1.0) * 8.0,
+    )
+    return max(
+        0.0,
+        (0.34 * zone_score)
+        + (0.22 * wall_score)
+        + (0.22 * dead_zone_gain)
+        + (0.22 * semantic_fit)
+        - clutter_penalty,
+    )
+
+
+def _accessory_semantic_fit(item: Mapping[str, Any], zone_type: str) -> float:
+    object_type = _normalized_inventory_label(
+        item.get("object_type") or item.get("category")
+    )
+    if object_type in {"plant", "planter"} and zone_type in {
+        "daylight_edge",
+        "corner_dead_zone",
+        "wall_anchor",
+    }:
+        return 1.0
+    if object_type in {"wall_art", "art", "artwork"} and zone_type == "wall_anchor":
+        return 1.0
+    if object_type in {"cushion", "pillow", "throw", "table_decor"}:
+        return 0.82 if zone_type == "cluster_support_edge" else 0.62
+    return 0.74
+
+
+def _accessory_refill_reason(zone: Mapping[str, Any], score: float) -> str:
+    zone_type = str(zone.get("zone_type") or "")
+    if zone_type == "corner_dead_zone":
+        base = "fills low-conflict edge dead zone without harming circulation"
+    elif zone_type == "daylight_edge":
+        base = "adds light decor near daylight edge outside protected clearance"
+    elif zone_type == "cluster_support_edge":
+        base = "adds light cluster-adjacent decor without changing function"
+    else:
+        base = "uses safe wall-adjacent accessory zone outside protected regions"
+    return f"{base}; refill_score={score:.3f}"
 
 
 def _object_dims_mm(item: dict[str, Any]) -> tuple[int, int] | None:
+    dims = item.get("dims_mm")
+    if isinstance(dims, Sequence) and not isinstance(dims, str) and len(dims) >= 2:
+        try:
+            first = int(round(float(dims[0])))
+            second = int(round(float(dims[1])))
+        except Exception:
+            first = 0
+            second = 0
+        if first > 0 and second > 0:
+            return max(first, second), min(first, second)
+
     rep_dims = item.get("rep_dims_m")
-    if not isinstance(rep_dims, dict):
-        return None
+    if isinstance(rep_dims, dict):
+        try:
+            length_mm = int(round(float(rep_dims.get("L") or 0.0) * 1000.0))
+            width_mm = int(round(float(rep_dims.get("W") or 0.0) * 1000.0))
+        except Exception:
+            return None
+        if length_mm <= 0 or width_mm <= 0:
+            return None
+        return max(length_mm, width_mm), min(length_mm, width_mm)
+
     try:
-        length_mm = int(round(float(rep_dims.get("L") or 0.0) * 1000.0))
-        width_mm = int(round(float(rep_dims.get("W") or 0.0) * 1000.0))
+        length_mm = int(
+            round(
+                float(
+                    item.get("length_mm")
+                    or item.get("w_mm")
+                    or item.get("width_mm")
+                    or 0.0
+                )
+            )
+        )
+        width_mm = int(
+            round(
+                float(
+                    item.get("width_mm")
+                    or item.get("d_mm")
+                    or item.get("depth_mm")
+                    or 0.0
+                )
+            )
+        )
     except Exception:
         return None
     if length_mm <= 0 or width_mm <= 0:
@@ -595,209 +1462,6 @@ def _cluster_bbox(
     }
 
 
-def _free_regions(
-    room_polygon: Any, blocked_polygons: list[Any]
-) -> list[dict[str, Any]]:
-    free_geometry = (
-        room_polygon
-        if not blocked_polygons
-        else room_polygon.difference(unary_union(blocked_polygons))
-    )
-    geometries = [free_geometry]
-    if hasattr(free_geometry, "geoms"):
-        geometries = [
-            geometry
-            for geometry in free_geometry.geoms
-            if float(getattr(geometry, "area", 0.0)) > 1.0
-        ]
-
-    regions: list[dict[str, Any]] = []
-    for geometry in sorted(
-        geometries,
-        key=lambda row: float(getattr(row, "area", 0.0)),
-        reverse=True,
-    ):
-        min_x, min_y, max_x, max_y = geometry.bounds
-        regions.append(
-            {
-                "area": float(getattr(geometry, "area", 0.0)),
-                "bbox": {
-                    "min_x": int(round(min_x)),
-                    "min_y": int(round(min_y)),
-                    "max_x": int(round(max_x)),
-                    "max_y": int(round(max_y)),
-                },
-                "center": {
-                    "x": int(round(float(geometry.centroid.x))),
-                    "y": int(round(float(geometry.centroid.y))),
-                },
-            }
-        )
-    return regions
-
-
-def _candidate_origins(
-    *,
-    cluster_bbox: dict[str, int] | None,
-    free_regions: list[dict[str, Any]],
-    box_width: int,
-    box_height: int,
-    grid_mm: int,
-) -> list[tuple[int, int]]:
-    gap = max(50, int(grid_mm) * 2)
-    candidates: list[tuple[int, int]] = []
-    if isinstance(cluster_bbox, dict):
-        center_x = (cluster_bbox["min_x"] + cluster_bbox["max_x"] - box_width) // 2
-        center_y = (cluster_bbox["min_y"] + cluster_bbox["max_y"] - box_height) // 2
-        candidates.extend(
-            [
-                (cluster_bbox["min_x"] - box_width - gap, center_y),
-                (cluster_bbox["max_x"] + gap, center_y),
-                (center_x, cluster_bbox["min_y"] - box_height - gap),
-                (center_x, cluster_bbox["max_y"] + gap),
-            ]
-        )
-
-    for region in free_regions:
-        bbox = region.get("bbox")
-        center = region.get("center")
-        if not isinstance(bbox, dict) or not isinstance(center, dict):
-            continue
-        candidates.extend(
-            [
-                (int(bbox["min_x"]) + gap, int(bbox["min_y"]) + gap),
-                (int(bbox["max_x"]) - box_width - gap, int(bbox["min_y"]) + gap),
-                (int(bbox["min_x"]) + gap, int(bbox["max_y"]) - box_height - gap),
-                (
-                    int(center["x"]) - box_width // 2,
-                    int(bbox["min_y"]) + gap,
-                ),
-                (
-                    int(center["x"]) - box_width // 2,
-                    int(bbox["max_y"]) - box_height - gap,
-                ),
-                (
-                    int(bbox["min_x"]) + gap,
-                    int(center["y"]) - box_height // 2,
-                ),
-                (
-                    int(bbox["max_x"]) - box_width - gap,
-                    int(center["y"]) - box_height // 2,
-                ),
-                (
-                    int(center["x"]) - box_width // 2,
-                    int(center["y"]) - box_height // 2,
-                ),
-            ]
-        )
-        if isinstance(cluster_bbox, dict):
-            cluster_center_x = (
-                cluster_bbox["min_x"] + cluster_bbox["max_x"] - box_width
-            ) // 2
-            cluster_center_y = (
-                cluster_bbox["min_y"] + cluster_bbox["max_y"] - box_height
-            ) // 2
-            candidates.extend(
-                [
-                    (cluster_center_x, int(bbox["min_y"]) + gap),
-                    (cluster_center_x, int(bbox["max_y"]) - box_height - gap),
-                    (int(bbox["min_x"]) + gap, cluster_center_y),
-                    (int(bbox["max_x"]) - box_width - gap, cluster_center_y),
-                ]
-            )
-
-    seen: set[tuple[int, int]] = set()
-    snapped: list[tuple[int, int]] = []
-    for x_pos, y_pos in candidates:
-        origin = (_snap_to_grid(x_pos, grid_mm), _snap_to_grid(y_pos, grid_mm))
-        if origin in seen:
-            continue
-        seen.add(origin)
-        snapped.append(origin)
-    return snapped
-
-
-def _room_center(room_polygon: Any) -> tuple[float, float] | None:
-    try:
-        centroid = room_polygon.centroid
-        return (float(centroid.x), float(centroid.y))
-    except Exception:
-        return None
-
-
-def _rotation_alignment_to_target(
-    *,
-    effective_front_rotation: int,
-    item_center: tuple[float, float],
-    target_center: tuple[float, float] | None,
-) -> float:
-    if target_center is None:
-        return 0.0
-    dx = float(target_center[0] - item_center[0])
-    dy = float(target_center[1] - item_center[1])
-    length = hypot(dx, dy)
-    if length <= 1e-6:
-        return 1.0
-    front_x, front_y = _rotation_front_vector(effective_front_rotation)
-    return ((front_x * dx) + (front_y * dy)) / length
-
-
-def _rotation_front_vector(rotation: int) -> tuple[float, float]:
-    angle_rad = radians(int(rotation) % 360)
-    return (-sin(angle_rad), -cos(angle_rad))
-
-
-def _rotation_back_vector(rotation: int) -> tuple[float, float]:
-    front_x, front_y = _rotation_front_vector(rotation)
-    return (-front_x, -front_y)
-
-
-def _candidate_preference(
-    *,
-    room_polygon: Any,
-    polygon: Any,
-    effective_front_rotation: int,
-    item_center: tuple[float, float],
-    cluster_center: tuple[float, float] | None,
-    target_center: tuple[float, float] | None,
-) -> tuple[float, ...]:
-    back_wall_distance = _back_edge_wall_distance(
-        room_polygon=room_polygon,
-        polygon=polygon,
-        rotation=effective_front_rotation,
-    )
-    wall_distance = _polygon_wall_distance(
-        room_polygon=room_polygon,
-        polygon=polygon,
-    )
-    wall_backed = 1.0 if back_wall_distance <= _WALL_BACK_THRESHOLD_MM else 0.0
-    perimeter_hugging = 1.0 if wall_distance <= _PERIMETER_THRESHOLD_MM else 0.0
-    cluster_proximity = -_distance_to_point(item_center, cluster_center)
-    center_avoidance = _distance_to_point(item_center, target_center)
-    front_alignment = _rotation_alignment_to_target(
-        effective_front_rotation=effective_front_rotation,
-        item_center=item_center,
-        target_center=target_center,
-    )
-    return (
-        wall_backed,
-        perimeter_hugging,
-        -back_wall_distance,
-        cluster_proximity,
-        front_alignment,
-        center_avoidance,
-    )
-
-
-def _cluster_center(cluster_bbox: dict[str, int] | None) -> tuple[float, float] | None:
-    if not isinstance(cluster_bbox, dict):
-        return None
-    return (
-        float(cluster_bbox["min_x"] + cluster_bbox["max_x"]) / 2.0,
-        float(cluster_bbox["min_y"] + cluster_bbox["max_y"]) / 2.0,
-    )
-
-
 def _cluster_front_side(cluster_meta: dict[str, Any], object_type: str) -> str:
     cluster_rules = (
         cluster_meta.get("cluster_rules")
@@ -810,139 +1474,11 @@ def _cluster_front_side(cluster_meta: dict[str, Any], object_type: str) -> str:
     return normalize_cardinal_side(front_side, default="top") or "top"
 
 
-def _effective_front_rotation(*, rotation: int, front_side: str) -> int:
-    return _effective_front_rotation_contract(rotation=rotation, front_side=front_side)
-
-
-def _candidate_satisfies_reintroduce_contract(
-    *,
-    room_polygon: Any,
-    polygon: Any,
-    effective_front_rotation: int,
-    item_center: tuple[float, float],
-    cluster_bbox: dict[str, int] | None,
-    cluster_target: tuple[float, float] | None,
-    box_width: int,
-    box_height: int,
-) -> bool:
-    back_wall_distance = _back_edge_wall_distance(
-        room_polygon=room_polygon,
-        polygon=polygon,
-        rotation=effective_front_rotation,
-    )
-    if back_wall_distance > _WALL_BACK_THRESHOLD_MM:
-        return False
-
-    wall_distance = _polygon_wall_distance(room_polygon=room_polygon, polygon=polygon)
-    if wall_distance > _PERIMETER_THRESHOLD_MM:
-        return False
-
-    if cluster_target is not None:
-        front_alignment = _rotation_alignment_to_target(
-            effective_front_rotation=effective_front_rotation,
-            item_center=item_center,
-            target_center=cluster_target,
-        )
-        if front_alignment < _MIN_CLUSTER_ALIGNMENT_DOT:
-            return False
-
-    if cluster_bbox is None:
-        return True
-
-    cluster_distance = _distance_to_point(item_center, _cluster_center(cluster_bbox))
-    max_cluster_distance = _max_cluster_distance_for_reintroduced_item(
-        cluster_bbox=cluster_bbox,
-        box_width=box_width,
-        box_height=box_height,
-    )
-    return cluster_distance <= max_cluster_distance
-
-
-def _max_cluster_distance_for_reintroduced_item(
-    *,
-    cluster_bbox: dict[str, int],
-    box_width: int,
-    box_height: int,
-) -> float:
-    cluster_width = max(0, int(cluster_bbox["max_x"]) - int(cluster_bbox["min_x"]))
-    cluster_height = max(0, int(cluster_bbox["max_y"]) - int(cluster_bbox["min_y"]))
-    cluster_diag = hypot(float(cluster_width), float(cluster_height))
-    item_diag = hypot(float(box_width), float(box_height))
-    return min(2400.0, max(900.0, cluster_diag + (0.85 * item_diag) + 250.0))
-
-
-def _distance_to_point(
-    point: tuple[float, float],
-    target: tuple[float, float] | None,
-) -> float:
-    if target is None:
-        return 0.0
-    return hypot(point[0] - target[0], point[1] - target[1])
-
-
 def _polygon_wall_distance(*, room_polygon: Any, polygon: Any) -> float:
     try:
         return float(room_polygon.boundary.distance(polygon.boundary))
     except Exception:
         return float("inf")
-
-
-def _back_edge_wall_distance(
-    *,
-    room_polygon: Any,
-    polygon: Any,
-    rotation: int,
-) -> float:
-    if LineString is None:
-        return float("inf")
-    min_x, min_y, max_x, max_y = polygon.bounds
-    back_edge = _back_edge_for_rotation(
-        rotation=rotation,
-        min_x=float(min_x),
-        min_y=float(min_y),
-        max_x=float(max_x),
-        max_y=float(max_y),
-    )
-    if back_edge is None:
-        return float("inf")
-    try:
-        return float(room_polygon.boundary.distance(back_edge))
-    except Exception:
-        return float("inf")
-
-
-def _back_edge_for_rotation(
-    *,
-    rotation: int,
-    min_x: float,
-    min_y: float,
-    max_x: float,
-    max_y: float,
-) -> Any | None:
-    normalized = int(rotation) % 360
-    if normalized == 0:
-        points = [(min_x, max_y), (max_x, max_y)]
-    elif normalized == 90:
-        points = [(max_x, min_y), (max_x, max_y)]
-    elif normalized == 180:
-        points = [(min_x, min_y), (max_x, min_y)]
-    elif normalized == 270:
-        points = [(min_x, min_y), (min_x, max_y)]
-    else:
-        back_x, back_y = _rotation_back_vector(normalized)
-        center_x = (min_x + max_x) / 2.0
-        center_y = (min_y + max_y) / 2.0
-        half_width = (max_x - min_x) / 2.0
-        half_height = (max_y - min_y) / 2.0
-        extent = abs(back_x) * half_width + abs(back_y) * half_height
-        points = [
-            (center_x + (back_x * extent), center_y + (back_y * extent)),
-            (center_x + (back_x * extent), center_y + (back_y * extent)),
-        ]
-    try:
-        return LineString(points)
-    except Exception:
-        return None
 
 
 def _overlaps_blockers(polygon: Any, blockers: list[Any]) -> bool:
@@ -955,8 +1491,8 @@ def _overlaps_blockers(polygon: Any, blockers: list[Any]) -> bool:
     return False
 
 
-def _next_reintroduced_object_id(existing_ids: set[str], object_type: str) -> str:
-    base = f"{object_type}__reintroduced"
+def _next_accessory_refill_object_id(existing_ids: set[str], object_type: str) -> str:
+    base = f"{object_type}__accessory_refill"
     index = 1
     while f"{base}_{index}" in existing_ids:
         index += 1
@@ -968,23 +1504,63 @@ def _snap_to_grid(value: int, grid_mm: int) -> int:
     return int(round(value / step) * step)
 
 
-def _reintroduction_summary(
+def _accessory_refill_summary(
+    *,
     original_inventory: dict[str, list[dict[str, Any]]],
+    eligible_inventory: dict[str, list[dict[str, Any]]],
     inserted_by_cluster: dict[str, list[dict[str, Any]]],
     remaining_by_cluster: dict[str, list[dict[str, Any]]],
+    rejected_by_cluster: dict[str, list[dict[str, Any]]],
+    safe_zone_count: int,
+    quality_before: dict[str, float],
+    quality_after: dict[str, float],
+    notes: list[str],
 ) -> dict[str, Any]:
-    inserted_count = sum(len(items) for items in inserted_by_cluster.values())
+    refill_count = sum(len(items) for items in inserted_by_cluster.values())
+    total_count = sum(len(items) for items in original_inventory.values())
+    eligible_count = sum(len(items) for items in eligible_inventory.values())
     remaining_clean = {
         cluster_id: [deepcopy(item) for item in items if isinstance(item, dict)]
         for cluster_id, items in remaining_by_cluster.items()
         if isinstance(items, list) and items
     }
-    total_count = sum(len(items) for items in original_inventory.values())
+    rejected_clean = {
+        cluster_id: [deepcopy(item) for item in items if isinstance(item, dict)]
+        for cluster_id, items in rejected_by_cluster.items()
+        if isinstance(items, list) and items
+    }
+    hard_valid = refill_count == 0 or _strict_refill_accept(
+        quality_before=quality_before,
+        quality_after=quality_after,
+        min_quality_gain=_CONTROLLED_REFILL_MIN_QUALITY_GAIN,
+    )
     return {
-        "status": "OK",
+        "status": "OK" if refill_count > 0 else "UNCHANGED",
+        "module": "controlled_accessory_refill",
+        "refill_applied": refill_count > 0,
         "total_dropped_items": total_count,
-        "inserted_count": inserted_count,
+        "eligible_accessory_count": eligible_count,
+        "rejected_count": sum(len(items) for items in rejected_clean.values()),
+        "refill_count": refill_count,
+        "inserted_count": refill_count,
         "remaining_count": sum(len(items) for items in remaining_clean.values()),
-        "reintroduced_objects_by_cluster": deepcopy(inserted_by_cluster),
-        "remaining_dropped_objects_by_cluster": remaining_clean,
+        "safe_zone_count": int(safe_zone_count),
+        "refill_objects_by_cluster": deepcopy(inserted_by_cluster),
+        "remaining_refill_objects_by_cluster": remaining_clean,
+        "rejected_refill_objects_by_cluster": rejected_clean,
+        "quality_before": deepcopy(quality_before),
+        "quality_after": deepcopy(quality_after),
+        "hard_valid": bool(hard_valid),
+        "notes": [str(note) for note in notes if str(note).strip()],
+        "settings": {
+            "max_refills_total": _CONTROLLED_REFILL_MAX_REFILLS_TOTAL,
+            "max_candidates_per_object": _CONTROLLED_REFILL_MAX_CANDIDATES_PER_OBJECT,
+            "max_safe_zones": _CONTROLLED_REFILL_MAX_SAFE_ZONES,
+            "grid_mm": _CONTROLLED_REFILL_GRID_MM,
+            "max_refill_iterations": _CONTROLLED_REFILL_MAX_ITERATIONS,
+            "max_accessory_footprint_ratio": (
+                _CONTROLLED_REFILL_MAX_ACCESSORY_FOOTPRINT_RATIO
+            ),
+            "min_quality_gain_to_accept": _CONTROLLED_REFILL_MIN_QUALITY_GAIN,
+        },
     }

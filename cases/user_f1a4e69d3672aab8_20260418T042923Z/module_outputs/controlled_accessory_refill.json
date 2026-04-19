@@ -1,0 +1,85 @@
+{
+  "status": "UNCHANGED",
+  "module": "controlled_accessory_refill",
+  "refill_applied": false,
+  "total_dropped_items": 2,
+  "eligible_accessory_count": 0,
+  "rejected_count": 2,
+  "refill_count": 0,
+  "inserted_count": 0,
+  "remaining_count": 0,
+  "safe_zone_count": 8,
+  "refill_objects_by_cluster": {},
+  "remaining_refill_objects_by_cluster": {},
+  "rejected_refill_objects_by_cluster": {
+    "pet_or_entry_support": [
+      {
+        "cluster_id": "pet_or_entry_support",
+        "object_type": "shoe_rack",
+        "category": "shoe_rack",
+        "size_tier": "S",
+        "priority": "optional",
+        "rep_dims_m": {
+          "L": 0.66,
+          "W": 0.28,
+          "H": 0.53,
+          "A": 0.18480000000000002,
+          "R": 2.357142857142857,
+          "source_id": "shoe_rack_006"
+        },
+        "rationale": "dropped by utility ranking under clutter and circulation budget",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1,
+        "refill_rejected_reason": "functional_support_never_refilled"
+      }
+    ],
+    "storage_display_support": [
+      {
+        "cluster_id": "storage_display_support",
+        "object_type": "bookshelf",
+        "category": "bookshelf",
+        "size_tier": "S",
+        "priority": "optional",
+        "rep_dims_m": {
+          "L": 0.63,
+          "W": 0.25,
+          "H": 2.22,
+          "A": 0.1575,
+          "R": 2.52,
+          "source_id": "bookshelf_001"
+        },
+        "rationale": "dropped by utility ranking under clutter and circulation budget",
+        "drop_reason": "seed_omission",
+        "drop_attempt": 0,
+        "drop_sequence": 1,
+        "refill_rejected_reason": "functional_support_never_refilled"
+      }
+    ]
+  },
+  "quality_before": {
+    "functionality": 0.357,
+    "naturalness": 0.212,
+    "semantic": 0.611,
+    "spatial": 0.292,
+    "total": 0.339
+  },
+  "quality_after": {
+    "functionality": 0.357,
+    "naturalness": 0.212,
+    "semantic": 0.611,
+    "spatial": 0.292,
+    "total": 0.339
+  },
+  "hard_valid": true,
+  "notes": [],
+  "settings": {
+    "max_refills_total": 2,
+    "max_candidates_per_object": 6,
+    "max_safe_zones": 8,
+    "grid_mm": 25,
+    "max_refill_iterations": 1,
+    "max_accessory_footprint_ratio": 0.015,
+    "min_quality_gain_to_accept": 0.002
+  }
+}

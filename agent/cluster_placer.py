@@ -12,9 +12,9 @@ from typing import Any, Dict, List, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from cluster_placer.tools_v2 import (  # type: ignore
+    CompileAcceptedPhase2Proposal,
     DiagnosePhase2Seed,
     EnumeratePhase2RepairMoves,
-    CompileAcceptedPhase2Proposal,
     EvaluatePhase2Proposal,
 )
 from layout.grid_policy import normalize_layout_grid_mm, normalize_room_context_grid
@@ -484,6 +484,214 @@ def build_phase2_payload(
             if isinstance(variant_row.get("card"), dict):
                 return deepcopy(variant_row["card"])
 
+            def _point_outline(points: Any) -> List[Dict[str, int]]:
+                out: List[Dict[str, int]] = []
+                if not isinstance(points, list):
+                    return out
+                for point in points:
+                    if not isinstance(point, dict):
+                        continue
+                    try:
+                        out.append(
+                            {
+                                "x": int(round(float(point.get("x")))),
+                                "y": int(round(float(point.get("y")))),
+                            }
+                        )
+                    except Exception:
+                        continue
+                return out if len(out) >= 3 else []
+
+            def _polygon_outlines(polygons: Any) -> List[List[Dict[str, int]]]:
+                if not isinstance(polygons, list):
+                    return []
+                out: List[List[Dict[str, int]]] = []
+                for polygon in polygons:
+                    outline = _point_outline(polygon)
+                    if outline:
+                        out.append(outline)
+                return out
+
+            def _bbox_from_variant(
+                variant: Dict[str, Any],
+                rects: List[Dict[str, Any]],
+                outlines: List[List[Dict[str, int]]],
+            ) -> Dict[str, int]:
+                raw_bbox = variant.get("local_bbox_mm")
+                if isinstance(raw_bbox, dict):
+                    try:
+                        if isinstance(raw_bbox.get("min"), list) and isinstance(
+                            raw_bbox.get("max"), list
+                        ):
+                            min_xy = raw_bbox["min"]
+                            max_xy = raw_bbox["max"]
+                            return {
+                                "min_x": int(round(float(min_xy[0]))),
+                                "min_y": int(round(float(min_xy[1]))),
+                                "max_x": int(round(float(max_xy[0]))),
+                                "max_y": int(round(float(max_xy[1]))),
+                            }
+                        return {
+                            "min_x": int(round(float(raw_bbox.get("min_x")))),
+                            "min_y": int(round(float(raw_bbox.get("min_y")))),
+                            "max_x": int(round(float(raw_bbox.get("max_x")))),
+                            "max_y": int(round(float(raw_bbox.get("max_y")))),
+                        }
+                    except Exception:
+                        pass
+
+                xs: List[int] = []
+                ys: List[int] = []
+                for rect in rects:
+                    try:
+                        x = int(round(float(rect.get("x", 0))))
+                        y = int(round(float(rect.get("y", 0))))
+                        w = int(round(float(rect.get("w", 0))))
+                        h = int(round(float(rect.get("h", 0))))
+                    except Exception:
+                        continue
+                    xs.extend([x, x + max(w, 0)])
+                    ys.extend([y, y + max(h, 0)])
+                for outline in outlines:
+                    for point in outline:
+                        xs.append(point["x"])
+                        ys.append(point["y"])
+                if xs and ys:
+                    return {
+                        "min_x": min(xs),
+                        "min_y": min(ys),
+                        "max_x": max(xs),
+                        "max_y": max(ys),
+                    }
+                return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
+
+            def _rects_from_composer_variant(
+                variant: Dict[str, Any],
+            ) -> List[Dict[str, Any]]:
+                placement_ids = {
+                    str(row.get("id") or "")
+                    for row in variant.get("local_placements") or []
+                    if isinstance(row, dict) and str(row.get("id") or "").strip()
+                }
+                rects: List[Dict[str, Any]] = []
+                for row in variant.get("interaction_placements") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    oid = str(row.get("id") or "").strip()
+                    if not oid or oid.startswith("access:"):
+                        continue
+                    if placement_ids and oid not in placement_ids:
+                        continue
+                    try:
+                        w = int(round(float(row.get("w", 0))))
+                        h = int(round(float(row.get("h", 0))))
+                        if w <= 0 or h <= 0:
+                            continue
+                        rects.append(
+                            {
+                                "id": oid,
+                                "x": int(round(float(row.get("x", 0)))),
+                                "y": int(round(float(row.get("y", 0)))),
+                                "w": w,
+                                "h": h,
+                            }
+                        )
+                    except Exception:
+                        continue
+                if rects:
+                    return rects
+
+                base_rect_sizes = {
+                    str(rect.get("id")): rect
+                    for rect in (
+                        (base_card.get("cluster_footprint") or {}).get("rects") or []
+                    )
+                    if isinstance(rect, dict) and isinstance(rect.get("id"), str)
+                }
+                for row in variant.get("local_placements") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    oid = str(row.get("id") or "").strip()
+                    if not oid:
+                        continue
+                    size = base_card.get("object_sizes", {}).get(oid) or {}
+                    source_rect = base_rect_sizes.get(oid) or {}
+                    try:
+                        w = int(round(float(size.get("w_mm", source_rect.get("w", 0)))))
+                        h = int(round(float(size.get("h_mm", source_rect.get("h", 0)))))
+                        if int(row.get("rot", 0)) % 180 == 90:
+                            w, h = h, w
+                        if w <= 0 or h <= 0:
+                            continue
+                        rects.append(
+                            {
+                                "id": oid,
+                                "x": int(round(float(row.get("x", 0)))),
+                                "y": int(round(float(row.get("y", 0)))),
+                                "w": w,
+                                "h": h,
+                            }
+                        )
+                    except Exception:
+                        continue
+                return rects
+
+            def _card_from_composer_variant(
+                variant: Dict[str, Any],
+            ) -> Dict[str, Any] | None:
+                local_placements = variant.get("local_placements")
+                if not isinstance(local_placements, list):
+                    return None
+                rects = _rects_from_composer_variant(variant)
+                if not rects:
+                    return None
+
+                outlines = _polygon_outlines(
+                    variant.get("interaction_hull_polygons_mm")
+                ) or _polygon_outlines(variant.get("tight_hull_polygons_mm"))
+                outline = _point_outline(
+                    variant.get("interaction_hull_polygon_mm")
+                    or variant.get("tight_hull_polygon_mm")
+                )
+                if outline and not outlines:
+                    outlines = [outline]
+                card = deepcopy(base_card)
+                card["local_placements"] = deepcopy(local_placements)
+                if isinstance(variant.get("orientation_meta"), dict):
+                    card["orientation_meta"] = deepcopy(
+                        variant.get("orientation_meta") or {}
+                    )
+                card["cluster_footprint"] = {
+                    "type": "union_of_rects",
+                    "rects": rects,
+                    "local_bbox": _bbox_from_variant(variant, rects, outlines),
+                    "outline_polygons_ccw": outlines,
+                }
+                card["composer_variant"] = {
+                    "variant_id": str(variant.get("variant_id") or ""),
+                    "variant_family": str(variant.get("variant_family") or ""),
+                    "semantic_signature": deepcopy(
+                        variant.get("semantic_signature") or []
+                    ),
+                    "wall_contact_edges": deepcopy(
+                        variant.get("wall_contact_edges") or []
+                    ),
+                    "required_access_zones": deepcopy(
+                        variant.get("required_access_zones") or []
+                    ),
+                    "local_quality": deepcopy(variant.get("local_quality") or {}),
+                }
+                card.pop("available_variants", None)
+                card.pop("variants", None)
+                return card
+
+            if isinstance(variant_row.get("variant_bundle"), list):
+                return None
+            if isinstance(variant_row.get("local_placements"), list):
+                card = _card_from_composer_variant(variant_row)
+                if card is not None:
+                    return card
+
             cluster_payload = variant_row.get("cluster_payload")
             if not isinstance(cluster_payload, dict):
                 if isinstance(variant_row.get("cluster_footprint"), dict):
@@ -530,7 +738,9 @@ def build_phase2_payload(
                 out.append(
                     {
                         "variant_id": variant_id,
-                        "family": str(row.get("family") or ""),
+                        "family": str(
+                            row.get("family") or row.get("variant_family") or ""
+                        ),
                         "priority": float(row.get("priority") or 0.0),
                         "ops": deepcopy(row.get("ops") or []),
                         "signature": row.get("signature"),
@@ -568,7 +778,7 @@ def build_phase2_payload(
                         pass
 
             explicit_variant_rows: List[Dict[str, Any]] = []
-            for key in ("available_variants", "variants"):
+            for key in ("available_variants", "variants", "variant_bundle"):
                 src = None
                 if isinstance(outline_row.get(key), list):
                     src = outline_row.get(key)

@@ -40,6 +40,13 @@ CRITICAL_OBJECT_INTENTS = {
     "front_to_room_center",
     "preserve_front_access",
     "front_to_cluster_center",
+    "in_front_of_anchor",
+    "align_with_anchor_axis",
+    "same_view_side_as_primary_pair",
+    "flank_anchor",
+    "not_behind_anchor_view",
+    "beside_secondary_seat",
+    "same_direction_as_anchor",
 }
 
 FOCAL_OBJECT_INTENTS = {
@@ -2034,6 +2041,89 @@ def _resolve_target_object_world_center(
     return None
 
 
+def _primary_anchor_object_id(cinfo: Dict[str, Any]) -> str | None:
+    anchor_ids = sorted(_cluster_anchor_ids(cinfo))
+    if anchor_ids:
+        return anchor_ids[0]
+    fp = cinfo.get("cluster_footprint") or {}
+    rects = fp.get("rects")
+    if isinstance(rects, list):
+        for row in rects:
+            if isinstance(row, dict):
+                oid = row.get("id")
+                if isinstance(oid, str) and oid:
+                    return oid
+    return None
+
+
+def _reference_object_id_for_orientation_item(
+    *,
+    cid: str,
+    cinfo: Dict[str, Any],
+    item: Dict[str, Any],
+) -> str | None:
+    target_object_id = item.get("target_object_id")
+    target_object_cluster_id = item.get("target_object_cluster_id")
+    if (
+        isinstance(target_object_id, str)
+        and target_object_id
+        and (
+            not isinstance(target_object_cluster_id, str)
+            or target_object_cluster_id == cid
+        )
+    ):
+        return target_object_id
+    return _primary_anchor_object_id(cinfo)
+
+
+def _reference_object_context(
+    *,
+    cid: str,
+    cinfo: Dict[str, Any],
+    tf: Dict[str, Any],
+    item: Dict[str, Any],
+) -> Dict[str, Any]:
+    rot = int(tf.get("rot", 0)) % 360
+    reference_object_id = _reference_object_id_for_orientation_item(
+        cid=cid,
+        cinfo=cinfo,
+        item=item,
+    )
+    center = None
+    front = None
+    axis = None
+    if isinstance(reference_object_id, str) and reference_object_id:
+        center = _object_world_center(cinfo, tf, reference_object_id)
+        front = _object_front_vector(cinfo, reference_object_id, rot)
+        axis = _object_axis_vector(cinfo, reference_object_id, rot)
+    if front is None:
+        front = _cluster_front_vector(cinfo, rot)
+    if axis is None:
+        axis = _cluster_axis_vector(cinfo, rot)
+    return {
+        "object_id": reference_object_id,
+        "center": center,
+        "front": front,
+        "axis": axis,
+    }
+
+
+def _side_score_against_anchor_front(
+    *,
+    anchor_center: Tuple[float, float],
+    anchor_front: Tuple[float, float] | None,
+    object_center: Tuple[float, float],
+) -> Tuple[float | None, float | None]:
+    rel = _vec_from_to(anchor_center, object_center)
+    if rel is None or anchor_front is None:
+        return None, None
+    front = _normalize_vec(anchor_front)
+    if front is None:
+        return None, None
+    lateral = (-front[1], front[0])
+    return _dot_unit(rel, front), _dot_unit(rel, lateral)
+
+
 def _vec_from_to(
     a: Tuple[float, float], b: Tuple[float, float]
 ) -> Tuple[float, float] | None:
@@ -2667,9 +2757,9 @@ def _penalty_back_to_wall(
 
     front_advantage = front_clear - back_clear
     back_distance_penalty = max(0.0, back_clear - desired_back_clear_mm) * 0.55
-    front_advantage_penalty = max(
-        0.0, desired_front_advantage_mm - front_advantage
-    ) * 0.85
+    front_advantage_penalty = (
+        max(0.0, desired_front_advantage_mm - front_advantage) * 0.85
+    )
     reverse_penalty = max(0.0, back_clear - front_clear) * 0.35
 
     penalty = (
@@ -3685,6 +3775,15 @@ def _compute_orientation_penalty(
         cluster_axis = _cluster_axis_vector(cinfo, rot)
         anchor_ids = _cluster_anchor_ids(cinfo)
         weight = _priority_weight(item.get("priority"))
+        reference_ctx = _reference_object_context(
+            cid=cid,
+            cinfo=cinfo,
+            tf=tf,
+            item=item,
+        )
+        anchor_center = reference_ctx.get("center")
+        anchor_front = reference_ctx.get("front")
+        anchor_axis = reference_ctx.get("axis")
 
         intents = item.get("intents")
         if not isinstance(intents, list):
@@ -3728,7 +3827,86 @@ def _compute_orientation_penalty(
                 preferred_target_cluster = None
             resolved_target_cluster_id = None
 
-            if (
+            if intent == "in_front_of_anchor":
+                front_score, _ = _side_score_against_anchor_front(
+                    anchor_center=anchor_center,
+                    anchor_front=anchor_front,
+                    object_center=obj_center,
+                )
+                if front_score is not None:
+                    dot = front_score
+                    local = max(0.0, 0.55 - front_score) * 420.0 * weight
+
+            elif intent == "not_behind_anchor_view":
+                front_score, _ = _side_score_against_anchor_front(
+                    anchor_center=anchor_center,
+                    anchor_front=anchor_front,
+                    object_center=obj_center,
+                )
+                if front_score is not None:
+                    dot = front_score
+                    local = max(0.0, -front_score) * 520.0 * weight
+
+            elif intent == "flank_anchor":
+                front_score, lateral_score = _side_score_against_anchor_front(
+                    anchor_center=anchor_center,
+                    anchor_front=anchor_front,
+                    object_center=obj_center,
+                )
+                if front_score is not None and lateral_score is not None:
+                    dot = abs(lateral_score)
+                    local = (
+                        (max(0.0, 0.55 - abs(lateral_score)) + max(0.0, -front_score))
+                        * 360.0
+                        * weight
+                    )
+
+            elif intent == "align_with_anchor_axis":
+                target_axis = anchor_axis or anchor_front
+                if axis is not None and target_axis is not None:
+                    local, dot = _penalty_parallel(axis, target_axis, 260.0, weight)
+                elif front is not None and target_axis is not None:
+                    local, dot = _penalty_parallel(front, target_axis, 260.0, weight)
+
+            elif intent == "same_direction_as_anchor":
+                target_front = anchor_front
+                if front is not None and target_front is not None:
+                    local, dot = _penalty_parallel(front, target_front, 260.0, weight)
+
+            elif intent == "same_view_side_as_primary_pair":
+                target_cluster_id = item.get("target_cluster_id")
+                if (
+                    isinstance(target_cluster_id, str)
+                    and target_cluster_id in cluster_geoms
+                    and anchor_center is not None
+                ):
+                    target_center = (
+                        float(cluster_geoms[target_cluster_id].centroid.x),
+                        float(cluster_geoms[target_cluster_id].centroid.y),
+                    )
+                    obj_vec = _vec_from_to(anchor_center, obj_center)
+                    target_vec = _vec_from_to(anchor_center, target_center)
+                    if obj_vec is not None and target_vec is not None:
+                        local, dot = _penalty_face(obj_vec, target_vec, 320.0, weight)
+
+            elif intent == "beside_secondary_seat":
+                if isinstance(target_object_id, str):
+                    resolved = _resolve_target_object_world_center(
+                        target_object_id=target_object_id,
+                        object_index=object_index,
+                        cluster_transforms_by_id=cluster_transforms_by_id,
+                        preferred_cluster_id=preferred_target_cluster,
+                    )
+                    if resolved is not None:
+                        target_center, resolved_target_cluster_id = resolved
+                        dist = math.hypot(
+                            float(target_center[0]) - float(obj_center[0]),
+                            float(target_center[1]) - float(obj_center[1]),
+                        )
+                        dot = max(0.0, 1.0 - min(dist / 520.0, 1.0))
+                        local = max(0.0, dist - 260.0) * 0.6 * weight
+
+            elif (
                 intent in {"front_to_open_space", "preserve_front_access"}
                 and front is not None
             ):
@@ -3776,8 +3954,8 @@ def _compute_orientation_penalty(
             elif intent == "back_to_wall" and front is not None:
                 object_blockers = [
                     other_geom
-                    for other_id, other_geom in object_geoms.items()
-                    if other_id != oid
+                    for other_id, other_geom in cluster_geoms.items()
+                    if other_id != cid
                 ] + static_blockers
                 local, dot, open_dbg = _penalty_back_to_wall(
                     point=obj_center,
@@ -5663,6 +5841,400 @@ def MaterializeVariantizedClusters(
     }
 
 
+def _composer_variant_priority(variant: Dict[str, Any], fallback: float) -> float:
+    quality = variant.get("local_quality")
+    if not isinstance(quality, dict):
+        return fallback
+
+    scores: List[float] = []
+    for key in (
+        "functional_score",
+        "naturalness_score",
+        "semantic_coherence_score",
+        "compactness_score",
+    ):
+        try:
+            value = float(quality.get(key))
+        except Exception:
+            continue
+        if 0.0 <= value <= 1.0:
+            scores.append(value)
+    if not scores:
+        return fallback
+    return _clamp(sum(scores) / len(scores), 0.55, 1.08)
+
+
+def _polygon_points_to_outline(points: Any) -> List[Dict[str, int]]:
+    out: List[Dict[str, int]] = []
+    if not isinstance(points, list):
+        return out
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        try:
+            out.append(
+                {
+                    "x": int(round(float(point.get("x")))),
+                    "y": int(round(float(point.get("y")))),
+                }
+            )
+        except Exception:
+            continue
+    return out if len(out) >= 3 else []
+
+
+def _polygon_lists_to_outlines(polygons: Any) -> List[List[Dict[str, int]]]:
+    if not isinstance(polygons, list):
+        return []
+    outlines: List[List[Dict[str, int]]] = []
+    for polygon in polygons:
+        outline = _polygon_points_to_outline(polygon)
+        if outline:
+            outlines.append(outline)
+    return outlines
+
+
+def _signed_area(points: List[Tuple[int, int]]) -> float:
+    if len(points) < 3:
+        return 0.0
+    area = 0.0
+    point_count = len(points)
+    for index in range(point_count):
+        x1, y1 = points[index]
+        x2, y2 = points[(index + 1) % point_count]
+        area += (x1 * y2) - (x2 * y1)
+    return 0.5 * area
+
+
+def _simplify_orthogonal(points: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    out: List[Tuple[int, int]] = []
+    for point in points:
+        if not out or out[-1] != point:
+            out.append(point)
+    if len(out) < 3:
+        return out
+    if out[0] != out[-1]:
+        out.append(out[0])
+
+    def collinear(
+        a: Tuple[int, int],
+        b: Tuple[int, int],
+        c: Tuple[int, int],
+    ) -> bool:
+        return (a[0] == b[0] == c[0]) or (a[1] == b[1] == c[1])
+
+    simplified: List[Tuple[int, int]] = [out[0]]
+    for index in range(1, len(out) - 1):
+        previous = simplified[-1]
+        current = out[index]
+        next_point = out[index + 1]
+        if collinear(previous, current, next_point):
+            continue
+        simplified.append(current)
+    simplified.append(out[-1])
+    return simplified
+
+
+def _trace_directed_edge_loops(
+    edges: List[Tuple[Tuple[int, int], Tuple[int, int]]],
+) -> List[List[Tuple[int, int]]]:
+    starts: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+    for start, end in edges:
+        starts.setdefault(start, []).append(end)
+    for ends in starts.values():
+        ends.sort()
+
+    unused = set(edges)
+    loops: List[List[Tuple[int, int]]] = []
+    while unused:
+        start, end = min(unused)
+        unused.remove((start, end))
+        loop = [start, end]
+        current = end
+        while current != start:
+            next_candidates = [
+                candidate
+                for candidate in starts.get(current, [])
+                if (current, candidate) in unused
+            ]
+            if not next_candidates:
+                break
+            next_point = next_candidates[0]
+            unused.remove((current, next_point))
+            loop.append(next_point)
+            current = next_point
+        if len(loop) >= 4 and loop[-1] == start:
+            loops.append(loop)
+    return loops
+
+
+def _outline_polygons_union_grid(
+    rects: List[Dict[str, Any]],
+) -> List[List[Dict[str, int]]]:
+    cleaned: List[Tuple[int, int, int, int]] = []
+    x_breaks: set[int] = set()
+    y_breaks: set[int] = set()
+    for rect in rects:
+        if not isinstance(rect, dict):
+            continue
+        x1 = int(rect.get("x", 0))
+        y1 = int(rect.get("y", 0))
+        x2 = x1 + int(rect.get("w", 0))
+        y2 = y1 + int(rect.get("h", 0))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        cleaned.append((x1, y1, x2, y2))
+        x_breaks.update((x1, x2))
+        y_breaks.update((y1, y2))
+    if not cleaned:
+        return []
+
+    xs = sorted(x_breaks)
+    ys = sorted(y_breaks)
+    occupied: set[Tuple[int, int]] = set()
+    for ix in range(len(xs) - 1):
+        cx1 = xs[ix]
+        cx2 = xs[ix + 1]
+        if cx2 <= cx1:
+            continue
+        for iy in range(len(ys) - 1):
+            cy1 = ys[iy]
+            cy2 = ys[iy + 1]
+            if cy2 <= cy1:
+                continue
+            for rx1, ry1, rx2, ry2 in cleaned:
+                if rx1 <= cx1 and cx2 <= rx2 and ry1 <= cy1 and cy2 <= ry2:
+                    occupied.add((ix, iy))
+                    break
+
+    edges: List[Tuple[Tuple[int, int], Tuple[int, int]]] = []
+    for ix, iy in sorted(occupied):
+        x1 = xs[ix]
+        x2 = xs[ix + 1]
+        y1 = ys[iy]
+        y2 = ys[iy + 1]
+        if (ix, iy - 1) not in occupied:
+            edges.append(((x1, y1), (x2, y1)))
+        if (ix + 1, iy) not in occupied:
+            edges.append(((x2, y1), (x2, y2)))
+        if (ix, iy + 1) not in occupied:
+            edges.append(((x2, y2), (x1, y2)))
+        if (ix - 1, iy) not in occupied:
+            edges.append(((x1, y2), (x1, y1)))
+
+    outlines: List[List[Dict[str, int]]] = []
+    for loop in _trace_directed_edge_loops(edges):
+        simplified = _simplify_orthogonal(loop)
+        if simplified and simplified[0] == simplified[-1]:
+            simplified = simplified[:-1]
+        if len(simplified) < 3:
+            continue
+        if _signed_area(simplified) < 0:
+            simplified = list(reversed(simplified))
+        outlines.append([{"x": int(x), "y": int(y)} for x, y in simplified])
+    outlines.sort(
+        key=lambda polygon: (
+            -abs(_signed_area([(point["x"], point["y"]) for point in polygon])),
+            polygon[0]["x"] if polygon else 0,
+            polygon[0]["y"] if polygon else 0,
+        )
+    )
+    return outlines
+
+
+def _local_bbox_from_variant_outlines(
+    variant: Dict[str, Any],
+    outlines: List[List[Dict[str, int]]],
+) -> Dict[str, int]:
+    points = [point for outline in outlines for point in outline]
+    return _local_bbox_from_variant(variant, points)
+
+
+def _local_bbox_from_variant(
+    variant: Dict[str, Any],
+    outline: List[Dict[str, int]],
+) -> Dict[str, int]:
+    local_bbox = variant.get("local_bbox_mm")
+    if isinstance(local_bbox, dict):
+        min_value = local_bbox.get("min")
+        max_value = local_bbox.get("max")
+        if (
+            isinstance(min_value, (list, tuple))
+            and isinstance(max_value, (list, tuple))
+            and len(min_value) >= 2
+            and len(max_value) >= 2
+        ):
+            try:
+                return {
+                    "min_x": int(round(float(min_value[0]))),
+                    "min_y": int(round(float(min_value[1]))),
+                    "max_x": int(round(float(max_value[0]))),
+                    "max_y": int(round(float(max_value[1]))),
+                }
+            except Exception:
+                pass
+
+    xs = [int(point["x"]) for point in outline]
+    ys = [int(point["y"]) for point in outline]
+    if xs and ys:
+        return {
+            "min_x": min(xs),
+            "min_y": min(ys),
+            "max_x": max(xs),
+            "max_y": max(ys),
+        }
+    return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
+
+
+def _rects_from_composer_variant(
+    cinfo: Dict[str, Any],
+    variant: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    placement_ids = {
+        str(row.get("id") or "")
+        for row in variant.get("local_placements") or []
+        if isinstance(row, dict) and str(row.get("id") or "").strip()
+    }
+    rects: List[Dict[str, Any]] = []
+    for row in variant.get("interaction_placements") or []:
+        if not isinstance(row, dict):
+            continue
+        oid = str(row.get("id") or "").strip()
+        if not oid or oid.startswith("access:"):
+            continue
+        if placement_ids and oid not in placement_ids:
+            continue
+        try:
+            w = int(round(float(row.get("w", 0))))
+            h = int(round(float(row.get("h", 0))))
+            if w <= 0 or h <= 0:
+                continue
+            rects.append(
+                {
+                    "id": oid,
+                    "x": int(round(float(row.get("x", 0)))),
+                    "y": int(round(float(row.get("y", 0)))),
+                    "w": w,
+                    "h": h,
+                }
+            )
+        except Exception:
+            continue
+    if rects:
+        return rects
+
+    source_rects = {
+        str(rect.get("id")): rect
+        for rect in ((cinfo.get("cluster_footprint") or {}).get("rects") or [])
+        if isinstance(rect, dict) and isinstance(rect.get("id"), str)
+    }
+    for row in variant.get("local_placements") or []:
+        if not isinstance(row, dict):
+            continue
+        oid = str(row.get("id") or "").strip()
+        source_rect = source_rects.get(oid)
+        if not oid or not isinstance(source_rect, dict):
+            continue
+        try:
+            w = int(round(float(source_rect.get("w", 0))))
+            h = int(round(float(source_rect.get("h", 0))))
+            if int(row.get("rot", 0)) % 180 == 90:
+                w, h = h, w
+            if w <= 0 or h <= 0:
+                continue
+            rects.append(
+                {
+                    "id": oid,
+                    "x": int(round(float(row.get("x", 0)))),
+                    "y": int(round(float(row.get("y", 0)))),
+                    "w": w,
+                    "h": h,
+                }
+            )
+        except Exception:
+            continue
+    return rects
+
+
+def _cluster_payload_from_composer_variant(
+    cinfo: Dict[str, Any],
+    variant: Dict[str, Any],
+) -> Dict[str, Any] | None:
+    if not isinstance(variant, dict):
+        return None
+    if variant.get("hard_valid") is False:
+        return None
+
+    rects = _rects_from_composer_variant(cinfo, variant)
+    if not rects:
+        return None
+    outlines = _polygon_lists_to_outlines(variant.get("tight_hull_polygons_mm"))
+    if not outlines:
+        outline = _polygon_points_to_outline(variant.get("tight_hull_polygon_mm"))
+        if outline:
+            outlines = [outline]
+    if not outlines:
+        outlines = _outline_polygons_union_grid(rects)
+    if not outlines:
+        return None
+
+    payload = deepcopy(cinfo)
+    payload["local_placements"] = deepcopy(variant.get("local_placements") or [])
+    payload["cluster_footprint"] = {
+        "type": "union_of_rects",
+        "rects": rects,
+        "local_bbox": _local_bbox_from_variant_outlines(variant, outlines),
+        "outline_polygons_ccw": outlines,
+    }
+    payload["composer_variant"] = {
+        "variant_id": str(variant.get("variant_id") or ""),
+        "variant_family": str(variant.get("variant_family") or "composer"),
+        "semantic_signature": list(variant.get("semantic_signature") or []),
+        "wall_contact_edges": list(variant.get("wall_contact_edges") or []),
+        "required_access_zones": list(variant.get("required_access_zones") or []),
+        "local_quality": deepcopy(variant.get("local_quality") or {}),
+    }
+    if isinstance(variant.get("orientation_meta"), dict):
+        payload["orientation_meta"] = deepcopy(variant.get("orientation_meta") or {})
+    return payload
+
+
+def _composer_variants_for_cluster(
+    *,
+    cinfo: Dict[str, Any],
+    max_variants_per_cluster: int,
+) -> List[Dict[str, Any]]:
+    source = cinfo.get("variant_bundle")
+    if not isinstance(source, list):
+        return []
+
+    out: List[Dict[str, Any]] = []
+    for index, variant in enumerate(source):
+        if len(out) >= max(1, int(max_variants_per_cluster)):
+            break
+        if not isinstance(variant, dict):
+            continue
+        payload = _cluster_payload_from_composer_variant(cinfo, variant)
+        if payload is None:
+            continue
+        variant_id = str(variant.get("variant_id") or "").strip()
+        if not variant_id:
+            variant_id = f"{cinfo.get('cluster_id', 'cluster')}::composer_{index + 1}"
+        family = str(variant.get("variant_family") or "composer").strip() or "composer"
+        out.append(
+            {
+                "variant_id": variant_id,
+                "family": family,
+                "priority": _composer_variant_priority(
+                    variant, max(0.72, 1.0 - (0.035 * index))
+                ),
+                "ops": ["composer_variant"],
+                "payload": payload,
+            }
+        )
+    return out
+
+
 def _generate_generic_variants_for_cluster(
     *,
     cluster_id: str,
@@ -5674,7 +6246,11 @@ def _generate_generic_variants_for_cluster(
     seen: set[str] = set()
 
     def add_variant(
-        payload: Dict[str, Any], family: str, priority: float, ops: List[str]
+        payload: Dict[str, Any],
+        family: str,
+        priority: float,
+        ops: List[str],
+        variant_id: str | None = None,
     ) -> None:
         payload2, _ = _canonicalize_cluster_payload_local_origin(deepcopy(payload))
         sig = _cluster_variant_signature(payload2)
@@ -5683,7 +6259,7 @@ def _generate_generic_variants_for_cluster(
         seen.add(sig)
         variants.append(
             {
-                "variant_id": f"{cluster_id}::{family}",
+                "variant_id": variant_id or f"{cluster_id}::{family}",
                 "family": family,
                 "priority": float(priority),
                 "ops": list(ops),
@@ -5691,6 +6267,21 @@ def _generate_generic_variants_for_cluster(
                 "payload": payload2,
             }
         )
+
+    composer_variants = _composer_variants_for_cluster(
+        cinfo=base_payload,
+        max_variants_per_cluster=max_variants_per_cluster,
+    )
+    for variant in composer_variants:
+        add_variant(
+            variant["payload"],
+            str(variant["family"]),
+            float(variant["priority"]),
+            list(variant["ops"]),
+            variant_id=str(variant["variant_id"]),
+        )
+    if composer_variants:
+        return variants[: max(1, int(max_variants_per_cluster))]
 
     add_variant(base_payload, "base", 1.00, [])
 

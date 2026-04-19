@@ -150,7 +150,7 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
             windows[0]["segment_mm"],
             [{"x": 2000, "y": 0}, {"x": 4000, "y": 0}],
         )
-        self.assertEqual(windows[0]["clearance_mm"], 100)
+        self.assertEqual(windows[0]["clearance_mm"], 150)
 
         obstacle_ids = {
             row["id"]
@@ -158,7 +158,24 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
             if isinstance(row, dict) and isinstance(row.get("id"), str)
         }
         self.assertIn("door_1_swing", obstacle_ids)
+        self.assertIn("door_1_entry_clearance", obstacle_ids)
         self.assertIn("window_1_clearance", obstacle_ids)
+
+        self.assertIn("hard_obstacles", payload)
+        self.assertIn("affordance_map", payload)
+        self.assertIn("topology", payload)
+        self.assertIn("quality_meta", payload)
+        affordance_map = payload["affordance_map"]
+        self.assertGreaterEqual(len(affordance_map["usable_walls"]), 1)
+        self.assertGreaterEqual(len(affordance_map["entry_landing_zones"]), 1)
+        self.assertGreaterEqual(len(affordance_map["circulation_corridors"]), 1)
+        self.assertGreaterEqual(len(affordance_map["daylight_regions"]), 1)
+        self.assertGreaterEqual(len(affordance_map["privacy_regions"]), 1)
+        self.assertGreaterEqual(len(affordance_map["focal_surfaces"]), 1)
+        self.assertEqual(
+            payload["quality_meta"]["settings"]["window_clearance_mm"],
+            150,
+        )
 
         self.assertGreaterEqual(len(payload["notes"]), 2)
         self.assertTrue(any("japandi" in note.lower() for note in payload["notes"]))
@@ -170,7 +187,9 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
         self.assertEqual(parsed["status"], "OK")
         self.assertIn("room", parsed)
         self.assertIn("openings", parsed)
-        self.assertIn("notes", parsed)
+        self.assertIn("affordance_map", parsed)
+        self.assertIn("topology", parsed)
+        self.assertIn("quality_meta", parsed)
 
 
 if __name__ == "__main__":

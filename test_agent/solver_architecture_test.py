@@ -40,14 +40,15 @@ class SolverArchitectureTest(unittest.TestCase):
         orientation_penalty_mm: int = 0,
         critical_orientation_penalty_mm: int = 0,
         focal_orientation_penalty_mm: int = 0,
+        variant_family: str = "base",
         x: int = 0,
         y: int = 0,
         rot: int = 0,
     ) -> Candidate:
         return Candidate(
             cluster_id=cluster_id,
-            variant_id=f"{cluster_id}_base",
-            variant_family="base",
+            variant_id=f"{cluster_id}_{variant_family}",
+            variant_family=variant_family,
             variant_priority=1.0,
             x=x,
             y=y,
@@ -550,6 +551,133 @@ class SolverArchitectureTest(unittest.TestCase):
         self.assertFalse(seed["needed"])
         self.assertFalse(seed["seed_metrics"]["macro_ready"])
 
+    def test_publishable_gate_rejects_hard_valid_macro_bad_solution(self) -> None:
+        candidate = self._make_candidate(
+            "main_seating",
+            variant_family="open_center",
+        )
+        verify = {
+            "hard_valid": True,
+            "acceptable_valid": False,
+            "complete": True,
+            "quality": {
+                "layout_score": 100,
+                "circulation_penalty_mm": 500,
+                "critical_orientation_penalty_mm": 900,
+                "focal_pair_penalty_mm": 700,
+                "circulation_debug": [
+                    {"kind": "center_lane", "penalty_mm": 320},
+                ],
+            },
+            "quality_gate": {
+                "reasons": [
+                    "critical_orientation_penalty_too_high",
+                    "focal_pair_penalty_too_high",
+                    "critical_item_penalty_too_high",
+                ]
+            },
+        }
+        relation_plan = {
+            "macro_concept": {
+                "concept_family": "open_center",
+                "topology_policy": {
+                    "reserve_center_degree": "very_high",
+                    "preserve_entry_landing": True,
+                    "preserve_primary_corridor": True,
+                },
+                "cluster_zone_plan": [
+                    {
+                        "cluster_id": "main_seating",
+                        "priority": "core",
+                        "center_usage": "open_reserved",
+                    }
+                ],
+            }
+        }
+        record = {
+            "hard_valid": True,
+            "selected_variants": [
+                {
+                    "cluster_id": "main_seating",
+                    "variant_id": "main_seating__open_center__01",
+                }
+            ],
+            "diagnostics": _solver._solution_diagnostics(
+                verify=verify,
+                relation_plan=relation_plan,
+                chosen={"main_seating": candidate},
+            ),
+            "verify_summary": {
+                "quality_gate_reasons": verify["quality_gate"]["reasons"],
+            },
+            "_verify": verify,
+        }
+
+        reasons = _solver._solution_publishability_violations(
+            record,
+            relation_plan=relation_plan,
+        )
+
+        self.assertIn("critical_orientation_penalty_too_high", reasons)
+        self.assertIn("focal_pair_penalty_too_high", reasons)
+        self.assertIn("critical_item_penalty_too_high", reasons)
+        self.assertIn("circulation_clear_false", reasons)
+        self.assertIn("center_openness_preserved_false", reasons)
+        self.assertFalse(
+            _solver._is_publishable_solution(record, relation_plan=relation_plan)
+        )
+
+    def test_concept_variant_policy_filters_fallback_and_role_mismatch(self) -> None:
+        relation_plan = {
+            "macro_concept": {
+                "concept_family": "open_center",
+                "cluster_zone_plan": [
+                    {
+                        "cluster_id": "main_seating",
+                        "priority": "core",
+                        "role_kind": "social_anchor",
+                    },
+                    {
+                        "cluster_id": "media",
+                        "priority": "core",
+                        "role_kind": "media",
+                    },
+                ],
+                "allowed_variant_families_by_cluster": {
+                    "main_seating": ["open_center", "conversation_facing"],
+                    "media": ["media_facing"],
+                },
+            }
+        }
+        candidates_by_cluster = {
+            "main_seating": [
+                self._make_candidate("main_seating", variant_family="fallback_generic"),
+                self._make_candidate("main_seating", variant_family="open_center"),
+            ],
+            "media": [
+                self._make_candidate("media", variant_family="conversation_facing"),
+                self._make_candidate("media", variant_family="media_facing"),
+            ],
+        }
+
+        filtered, debug = _solver._filter_candidates_by_concept_variant_policy(
+            candidates_by_cluster,
+            relation_plan,
+        )
+
+        self.assertEqual(
+            [candidate.variant_family for candidate in filtered["main_seating"]],
+            ["open_center"],
+        )
+        self.assertEqual(
+            [candidate.variant_family for candidate in filtered["media"]],
+            ["media_facing"],
+        )
+        self.assertEqual(
+            debug["main_seating"]["policy_drop_reason"],
+            "candidate_pool_retained",
+        )
+
     def test_primary_seed_problem_clusters_limits_to_top_two(self) -> None:
         problem_clusters = _solver._primary_seed_problem_clusters(
             ["media_zone", "seating_zone", "utility_storage"],
@@ -557,6 +685,42 @@ class SolverArchitectureTest(unittest.TestCase):
         )
 
         self.assertEqual(problem_clusters, ["media_zone", "seating_zone"])
+
+    def test_variant_bundle_adapter_keeps_plural_hulls_and_rects(self) -> None:
+        converted = _solver._cluster_payload_from_variant_bundle(
+            {
+                "cluster_id": "main_seating",
+                "variant_bundle": [
+                    {
+                        "variant_id": "main_seating__open_center",
+                        "variant_family": "open_center",
+                        "local_placements": [
+                            {"id": "sofa", "x": 0, "y": 0, "rot": 0}
+                        ],
+                        "interaction_placements": [
+                            {"id": "sofa", "x": 0, "y": 0, "w": 2200, "h": 900}
+                        ],
+                        "tight_hull_polygon_mm": [],
+                        "tight_hull_polygons_mm": [
+                            [
+                                {"x": 0, "y": 0},
+                                {"x": 2200, "y": 0},
+                                {"x": 2200, "y": 900},
+                                {"x": 0, "y": 900},
+                            ]
+                        ],
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNotNone(converted)
+        assert converted is not None
+        _, payload = converted
+        footprint = payload["cluster_footprint"]
+        self.assertEqual(len(footprint["rects"]), 1)
+        self.assertEqual(len(footprint["outline_polygons_ccw"]), 1)
+        self.assertEqual(footprint["local_bbox"]["max_x"], 2200)
 
     def test_primary_seed_candidate_growth_is_tightly_bounded(self) -> None:
         self.assertEqual(_solver._round_candidate_growth_limit(28), 12)

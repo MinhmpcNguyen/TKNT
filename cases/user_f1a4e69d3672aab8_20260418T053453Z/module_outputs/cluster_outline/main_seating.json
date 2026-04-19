@@ -1,0 +1,1382 @@
+{
+  "status": "OK",
+  "cluster_id": "main_seating",
+  "local_frame": {
+    "unit": "mm",
+    "grid_mm": 50,
+    "origin_note": "(0,0) is an arbitrary local origin for this cluster"
+  },
+  "local_placements": [
+    {
+      "id": "armchair",
+      "x": 3600,
+      "y": 1000,
+      "rot": 270
+    },
+    {
+      "id": "coffee_table",
+      "x": 2400,
+      "y": 1950,
+      "rot": 0
+    },
+    {
+      "id": "floor_lamp",
+      "x": 1900,
+      "y": 600,
+      "rot": 0
+    },
+    {
+      "id": "side_table",
+      "x": 0,
+      "y": 1250,
+      "rot": 0
+    },
+    {
+      "id": "sofa",
+      "x": 1050,
+      "y": 950,
+      "rot": 0
+    }
+  ],
+  "cluster_footprint": {
+    "type": "union_of_rects",
+    "rects": [
+      {
+        "id": "armchair",
+        "x": 3600,
+        "y": 1000,
+        "w": 710,
+        "h": 840
+      },
+      {
+        "id": "coffee_table",
+        "x": 2400,
+        "y": 1950,
+        "w": 900,
+        "h": 500
+      },
+      {
+        "id": "floor_lamp",
+        "x": 1900,
+        "y": 600,
+        "w": 350,
+        "h": 320
+      },
+      {
+        "id": "side_table",
+        "x": 0,
+        "y": 1250,
+        "w": 390,
+        "h": 370
+      },
+      {
+        "id": "sofa",
+        "x": 1050,
+        "y": 950,
+        "w": 2060,
+        "h": 960
+      }
+    ],
+    "local_bbox": {
+      "min_x": 0,
+      "min_y": 600,
+      "max_x": 4310,
+      "max_y": 2450
+    },
+    "tight_hull_polygon_mm": [],
+    "tight_hull_polygons_mm": [
+      [
+        {
+          "x": 1050,
+          "y": 950
+        },
+        {
+          "x": 3110,
+          "y": 950
+        },
+        {
+          "x": 3110,
+          "y": 1910
+        },
+        {
+          "x": 1050,
+          "y": 1910
+        }
+      ],
+      [
+        {
+          "x": 3600,
+          "y": 1000
+        },
+        {
+          "x": 4310,
+          "y": 1000
+        },
+        {
+          "x": 4310,
+          "y": 1840
+        },
+        {
+          "x": 3600,
+          "y": 1840
+        }
+      ],
+      [
+        {
+          "x": 2400,
+          "y": 1950
+        },
+        {
+          "x": 3300,
+          "y": 1950
+        },
+        {
+          "x": 3300,
+          "y": 2450
+        },
+        {
+          "x": 2400,
+          "y": 2450
+        }
+      ],
+      [
+        {
+          "x": 0,
+          "y": 1250
+        },
+        {
+          "x": 390,
+          "y": 1250
+        },
+        {
+          "x": 390,
+          "y": 1620
+        },
+        {
+          "x": 0,
+          "y": 1620
+        }
+      ],
+      [
+        {
+          "x": 1900,
+          "y": 600
+        },
+        {
+          "x": 2250,
+          "y": 600
+        },
+        {
+          "x": 2250,
+          "y": 920
+        },
+        {
+          "x": 1900,
+          "y": 920
+        }
+      ]
+    ],
+    "interaction_hull_polygon_mm": [],
+    "interaction_hull_polygons_mm": [],
+    "variant_family": "open_center",
+    "family_fidelity": 1.0,
+    "outline_polygons_ccw": [
+      [
+        {
+          "x": 1900,
+          "y": 920
+        },
+        {
+          "x": 1900,
+          "y": 600
+        },
+        {
+          "x": 2250,
+          "y": 600
+        },
+        {
+          "x": 2250,
+          "y": 920
+        }
+      ],
+      [
+        {
+          "x": 3600,
+          "y": 1840
+        },
+        {
+          "x": 3600,
+          "y": 1000
+        },
+        {
+          "x": 4310,
+          "y": 1000
+        },
+        {
+          "x": 4310,
+          "y": 1840
+        }
+      ],
+      [
+        {
+          "x": 1050,
+          "y": 1910
+        },
+        {
+          "x": 1050,
+          "y": 950
+        },
+        {
+          "x": 3110,
+          "y": 950
+        },
+        {
+          "x": 3110,
+          "y": 1910
+        }
+      ],
+      [
+        {
+          "x": 390,
+          "y": 1620
+        },
+        {
+          "x": 0,
+          "y": 1620
+        },
+        {
+          "x": 0,
+          "y": 1250
+        },
+        {
+          "x": 390,
+          "y": 1250
+        }
+      ],
+      [
+        {
+          "x": 3300,
+          "y": 2450
+        },
+        {
+          "x": 2400,
+          "y": 2450
+        },
+        {
+          "x": 2400,
+          "y": 1950
+        },
+        {
+          "x": 3300,
+          "y": 1950
+        }
+      ]
+    ],
+    "outline_meta": {
+      "mode": "union",
+      "normalized_translation": {
+        "dx": 0,
+        "dy": 0
+      },
+      "gap_fill_mm": 0,
+      "used_shapely": true
+    }
+  },
+  "orientation_meta": {
+    "cluster_front_local": {
+      "dx": 0,
+      "dy": 1
+    },
+    "cluster_effective_front_side": "top",
+    "cluster_axis_local": {
+      "dx": 1,
+      "dy": 0
+    },
+    "important_objects": {
+      "coffee_table": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "armchair": {
+        "front_local": {
+          "dx": 1,
+          "dy": 0
+        },
+        "effective_front_side": "right",
+        "axis_local": {
+          "dx": 0,
+          "dy": 1
+        }
+      },
+      "side_table": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      },
+      "sofa": {
+        "front_local": {
+          "dx": 0,
+          "dy": 1
+        },
+        "effective_front_side": "top",
+        "axis_local": {
+          "dx": 1,
+          "dy": 0
+        }
+      }
+    }
+  },
+  "variant_bundle": [
+    {
+      "variant_id": "main_seating__open_center__01",
+      "variant_family": "open_center",
+      "canonical_variant_family": "open_center",
+      "source_type": "family_native",
+      "family_fidelity": 1.0,
+      "semantic_confidence": 0.944,
+      "fallback_heavy": false,
+      "solver_friendliness": 0.7313364055299539,
+      "semantic_signature": [
+        "open_center",
+        "dominant_anchor",
+        "central_support",
+        "secondary_support",
+        "side_support",
+        "required_access_preserved",
+        "center:light",
+        "hull:(2.346, 0.409, 5)",
+        "wall:armchair:left",
+        "wall:coffee_table:top",
+        "wall:floor_lamp:bottom",
+        "wall:side_table:right",
+        "access_zones:4"
+      ],
+      "local_placements": [
+        {
+          "id": "armchair",
+          "x": 100,
+          "y": 1000,
+          "rot": 0
+        },
+        {
+          "id": "coffee_table",
+          "x": 1150,
+          "y": 1950,
+          "rot": 0
+        },
+        {
+          "id": "floor_lamp",
+          "x": 2200,
+          "y": 600,
+          "rot": 0
+        },
+        {
+          "id": "side_table",
+          "x": 4050,
+          "y": 1250,
+          "rot": 0
+        },
+        {
+          "id": "sofa",
+          "x": 1350,
+          "y": 950,
+          "rot": 0
+        }
+      ],
+      "interaction_placements": [
+        {
+          "id": "armchair",
+          "x": 100,
+          "y": 1000,
+          "w": 840,
+          "h": 710
+        },
+        {
+          "id": "coffee_table",
+          "x": 1150,
+          "y": 1950,
+          "w": 900,
+          "h": 500
+        },
+        {
+          "id": "floor_lamp",
+          "x": 2200,
+          "y": 600,
+          "w": 350,
+          "h": 320
+        },
+        {
+          "id": "side_table",
+          "x": 4050,
+          "y": 1250,
+          "w": 390,
+          "h": 370
+        },
+        {
+          "id": "sofa",
+          "x": 1350,
+          "y": 950,
+          "w": 2060,
+          "h": 960
+        },
+        {
+          "id": "access:coffee_table",
+          "x": 1475,
+          "y": 2450,
+          "w": 250,
+          "h": 250
+        },
+        {
+          "id": "access:armchair",
+          "x": 395,
+          "y": 1710,
+          "w": 250,
+          "h": 250
+        },
+        {
+          "id": "access:side_table",
+          "x": 4195,
+          "y": 1620,
+          "w": 100,
+          "h": 100
+        },
+        {
+          "id": "access:sofa",
+          "x": 2105,
+          "y": 1910,
+          "w": 550,
+          "h": 550
+        }
+      ],
+      "tight_hull_polygon_mm": [],
+      "tight_hull_polygons_mm": [
+        [
+          {
+            "x": 1350,
+            "y": 950
+          },
+          {
+            "x": 3410,
+            "y": 950
+          },
+          {
+            "x": 3410,
+            "y": 1910
+          },
+          {
+            "x": 1350,
+            "y": 1910
+          }
+        ],
+        [
+          {
+            "x": 100,
+            "y": 1000
+          },
+          {
+            "x": 940,
+            "y": 1000
+          },
+          {
+            "x": 940,
+            "y": 1710
+          },
+          {
+            "x": 100,
+            "y": 1710
+          }
+        ],
+        [
+          {
+            "x": 1150,
+            "y": 1950
+          },
+          {
+            "x": 2050,
+            "y": 1950
+          },
+          {
+            "x": 2050,
+            "y": 2450
+          },
+          {
+            "x": 1150,
+            "y": 2450
+          }
+        ],
+        [
+          {
+            "x": 4050,
+            "y": 1250
+          },
+          {
+            "x": 4440,
+            "y": 1250
+          },
+          {
+            "x": 4440,
+            "y": 1620
+          },
+          {
+            "x": 4050,
+            "y": 1620
+          }
+        ],
+        [
+          {
+            "x": 2200,
+            "y": 600
+          },
+          {
+            "x": 2550,
+            "y": 600
+          },
+          {
+            "x": 2550,
+            "y": 920
+          },
+          {
+            "x": 2200,
+            "y": 920
+          }
+        ]
+      ],
+      "interaction_hull_polygon_mm": [],
+      "interaction_hull_polygons_mm": [
+        [
+          {
+            "x": 1350,
+            "y": 950
+          },
+          {
+            "x": 3410,
+            "y": 950
+          },
+          {
+            "x": 3410,
+            "y": 1910
+          },
+          {
+            "x": 2655,
+            "y": 1910
+          },
+          {
+            "x": 2655,
+            "y": 2460
+          },
+          {
+            "x": 2105,
+            "y": 2460
+          },
+          {
+            "x": 2105,
+            "y": 1910
+          },
+          {
+            "x": 1350,
+            "y": 1910
+          }
+        ],
+        [
+          {
+            "x": 100,
+            "y": 1000
+          },
+          {
+            "x": 940,
+            "y": 1000
+          },
+          {
+            "x": 940,
+            "y": 1710
+          },
+          {
+            "x": 645,
+            "y": 1710
+          },
+          {
+            "x": 645,
+            "y": 1960
+          },
+          {
+            "x": 395,
+            "y": 1960
+          },
+          {
+            "x": 395,
+            "y": 1710
+          },
+          {
+            "x": 100,
+            "y": 1710
+          }
+        ],
+        [
+          {
+            "x": 1150,
+            "y": 1950
+          },
+          {
+            "x": 2050,
+            "y": 1950
+          },
+          {
+            "x": 2050,
+            "y": 2450
+          },
+          {
+            "x": 1725,
+            "y": 2450
+          },
+          {
+            "x": 1725,
+            "y": 2700
+          },
+          {
+            "x": 1475,
+            "y": 2700
+          },
+          {
+            "x": 1475,
+            "y": 2450
+          },
+          {
+            "x": 1150,
+            "y": 2450
+          }
+        ],
+        [
+          {
+            "x": 4050,
+            "y": 1250
+          },
+          {
+            "x": 4440,
+            "y": 1250
+          },
+          {
+            "x": 4440,
+            "y": 1620
+          },
+          {
+            "x": 4295,
+            "y": 1620
+          },
+          {
+            "x": 4295,
+            "y": 1720
+          },
+          {
+            "x": 4195,
+            "y": 1720
+          },
+          {
+            "x": 4195,
+            "y": 1620
+          },
+          {
+            "x": 4050,
+            "y": 1620
+          }
+        ],
+        [
+          {
+            "x": 2200,
+            "y": 600
+          },
+          {
+            "x": 2550,
+            "y": 600
+          },
+          {
+            "x": 2550,
+            "y": 920
+          },
+          {
+            "x": 2200,
+            "y": 920
+          }
+        ]
+      ],
+      "family_contract_reasons": [
+        "central support coffee_table outside anchor use band"
+      ],
+      "local_bbox_mm": {
+        "min": [
+          100,
+          600
+        ],
+        "max": [
+          4440,
+          2450
+        ]
+      },
+      "wall_contact_edges": [
+        {
+          "object_id": "armchair",
+          "edge": "left"
+        },
+        {
+          "object_id": "coffee_table",
+          "edge": "top"
+        },
+        {
+          "object_id": "floor_lamp",
+          "edge": "bottom"
+        },
+        {
+          "object_id": "side_table",
+          "edge": "right"
+        }
+      ],
+      "required_access_zones": [
+        {
+          "id": "coffee_table",
+          "x": 1475,
+          "y": 2450,
+          "w": 250,
+          "h": 250,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "armchair",
+          "x": 395,
+          "y": 1710,
+          "w": 250,
+          "h": 250,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "side_table",
+          "x": 4195,
+          "y": 1620,
+          "w": 100,
+          "h": 100,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "sofa",
+          "x": 2105,
+          "y": 1910,
+          "w": 550,
+          "h": 550,
+          "kind": "front_clearance"
+        }
+      ],
+      "local_quality": {
+        "functional_score": 0.9999999999999999,
+        "naturalness_score": 0.36,
+        "semantic_coherence_score": 0.7478672811059908,
+        "compactness_score": 0.09342024142712398,
+        "family_fidelity_score": 1.0,
+        "awkwardness_penalty": 0.0,
+        "solver_friendliness_score": 0.7313364055299539,
+        "split_cluster_penalty": 0.0,
+        "awkward_grouping_penalty": 0.16,
+        "fake_support_penalty": 0.16,
+        "compaction_semantic_penalty": 0.0
+      },
+      "hard_valid": true
+    },
+    {
+      "variant_id": "main_seating__open_center__02",
+      "variant_family": "open_center",
+      "canonical_variant_family": "open_center",
+      "source_type": "family_native",
+      "family_fidelity": 1.0,
+      "semantic_confidence": 1.0,
+      "fallback_heavy": false,
+      "solver_friendliness": 0.7332946635730858,
+      "semantic_signature": [
+        "open_center",
+        "dominant_anchor",
+        "central_support",
+        "secondary_support",
+        "side_support",
+        "required_access_preserved",
+        "center:light",
+        "hull:(2.33, 0.411, 5)",
+        "wall:armchair:right",
+        "wall:coffee_table:top",
+        "wall:floor_lamp:bottom",
+        "wall:side_table:left",
+        "access_zones:4"
+      ],
+      "local_placements": [
+        {
+          "id": "armchair",
+          "x": 3600,
+          "y": 1000,
+          "rot": 270
+        },
+        {
+          "id": "coffee_table",
+          "x": 2400,
+          "y": 1950,
+          "rot": 0
+        },
+        {
+          "id": "floor_lamp",
+          "x": 1900,
+          "y": 600,
+          "rot": 0
+        },
+        {
+          "id": "side_table",
+          "x": 0,
+          "y": 1250,
+          "rot": 0
+        },
+        {
+          "id": "sofa",
+          "x": 1050,
+          "y": 950,
+          "rot": 0
+        }
+      ],
+      "interaction_placements": [
+        {
+          "id": "armchair",
+          "x": 3600,
+          "y": 1000,
+          "w": 710,
+          "h": 840
+        },
+        {
+          "id": "coffee_table",
+          "x": 2400,
+          "y": 1950,
+          "w": 900,
+          "h": 500
+        },
+        {
+          "id": "floor_lamp",
+          "x": 1900,
+          "y": 600,
+          "w": 350,
+          "h": 320
+        },
+        {
+          "id": "side_table",
+          "x": 0,
+          "y": 1250,
+          "w": 390,
+          "h": 370
+        },
+        {
+          "id": "sofa",
+          "x": 1050,
+          "y": 950,
+          "w": 2060,
+          "h": 960
+        },
+        {
+          "id": "access:coffee_table",
+          "x": 2725,
+          "y": 2450,
+          "w": 250,
+          "h": 250
+        },
+        {
+          "id": "access:armchair",
+          "x": 4310,
+          "y": 1295,
+          "w": 250,
+          "h": 250
+        },
+        {
+          "id": "access:side_table",
+          "x": 145,
+          "y": 1620,
+          "w": 100,
+          "h": 100
+        },
+        {
+          "id": "access:sofa",
+          "x": 1805,
+          "y": 1910,
+          "w": 550,
+          "h": 550
+        }
+      ],
+      "tight_hull_polygon_mm": [],
+      "tight_hull_polygons_mm": [
+        [
+          {
+            "x": 1050,
+            "y": 950
+          },
+          {
+            "x": 3110,
+            "y": 950
+          },
+          {
+            "x": 3110,
+            "y": 1910
+          },
+          {
+            "x": 1050,
+            "y": 1910
+          }
+        ],
+        [
+          {
+            "x": 3600,
+            "y": 1000
+          },
+          {
+            "x": 4310,
+            "y": 1000
+          },
+          {
+            "x": 4310,
+            "y": 1840
+          },
+          {
+            "x": 3600,
+            "y": 1840
+          }
+        ],
+        [
+          {
+            "x": 2400,
+            "y": 1950
+          },
+          {
+            "x": 3300,
+            "y": 1950
+          },
+          {
+            "x": 3300,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 2450
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 1250
+          },
+          {
+            "x": 390,
+            "y": 1250
+          },
+          {
+            "x": 390,
+            "y": 1620
+          },
+          {
+            "x": 0,
+            "y": 1620
+          }
+        ],
+        [
+          {
+            "x": 1900,
+            "y": 600
+          },
+          {
+            "x": 2250,
+            "y": 600
+          },
+          {
+            "x": 2250,
+            "y": 920
+          },
+          {
+            "x": 1900,
+            "y": 920
+          }
+        ]
+      ],
+      "interaction_hull_polygon_mm": [],
+      "interaction_hull_polygons_mm": [
+        [
+          {
+            "x": 1050,
+            "y": 950
+          },
+          {
+            "x": 3110,
+            "y": 950
+          },
+          {
+            "x": 3110,
+            "y": 1910
+          },
+          {
+            "x": 2355,
+            "y": 1910
+          },
+          {
+            "x": 2355,
+            "y": 2460
+          },
+          {
+            "x": 1805,
+            "y": 2460
+          },
+          {
+            "x": 1805,
+            "y": 1910
+          },
+          {
+            "x": 1050,
+            "y": 1910
+          }
+        ],
+        [
+          {
+            "x": 3600,
+            "y": 1000
+          },
+          {
+            "x": 4310,
+            "y": 1000
+          },
+          {
+            "x": 4310,
+            "y": 1295
+          },
+          {
+            "x": 4560,
+            "y": 1295
+          },
+          {
+            "x": 4560,
+            "y": 1545
+          },
+          {
+            "x": 4310,
+            "y": 1545
+          },
+          {
+            "x": 4310,
+            "y": 1840
+          },
+          {
+            "x": 3600,
+            "y": 1840
+          }
+        ],
+        [
+          {
+            "x": 2400,
+            "y": 1950
+          },
+          {
+            "x": 3300,
+            "y": 1950
+          },
+          {
+            "x": 3300,
+            "y": 2450
+          },
+          {
+            "x": 2975,
+            "y": 2450
+          },
+          {
+            "x": 2975,
+            "y": 2700
+          },
+          {
+            "x": 2725,
+            "y": 2700
+          },
+          {
+            "x": 2725,
+            "y": 2450
+          },
+          {
+            "x": 2400,
+            "y": 2450
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 1250
+          },
+          {
+            "x": 390,
+            "y": 1250
+          },
+          {
+            "x": 390,
+            "y": 1620
+          },
+          {
+            "x": 245,
+            "y": 1620
+          },
+          {
+            "x": 245,
+            "y": 1720
+          },
+          {
+            "x": 145,
+            "y": 1720
+          },
+          {
+            "x": 145,
+            "y": 1620
+          },
+          {
+            "x": 0,
+            "y": 1620
+          }
+        ],
+        [
+          {
+            "x": 1900,
+            "y": 600
+          },
+          {
+            "x": 2250,
+            "y": 600
+          },
+          {
+            "x": 2250,
+            "y": 920
+          },
+          {
+            "x": 1900,
+            "y": 920
+          }
+        ]
+      ],
+      "family_contract_reasons": [
+        "family contract passed"
+      ],
+      "local_bbox_mm": {
+        "min": [
+          0,
+          600
+        ],
+        "max": [
+          4310,
+          2450
+        ]
+      },
+      "wall_contact_edges": [
+        {
+          "object_id": "armchair",
+          "edge": "right"
+        },
+        {
+          "object_id": "coffee_table",
+          "edge": "top"
+        },
+        {
+          "object_id": "floor_lamp",
+          "edge": "bottom"
+        },
+        {
+          "object_id": "side_table",
+          "edge": "left"
+        }
+      ],
+      "required_access_zones": [
+        {
+          "id": "coffee_table",
+          "x": 2725,
+          "y": 2450,
+          "w": 250,
+          "h": 250,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "armchair",
+          "x": 4310,
+          "y": 1295,
+          "w": 250,
+          "h": 250,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "side_table",
+          "x": 145,
+          "y": 1620,
+          "w": 100,
+          "h": 100,
+          "kind": "front_clearance"
+        },
+        {
+          "id": "sofa",
+          "x": 1805,
+          "y": 1910,
+          "w": 550,
+          "h": 550,
+          "kind": "front_clearance"
+        }
+      ],
+      "local_quality": {
+        "functional_score": 0.9999999999999999,
+        "naturalness_score": 0.36,
+        "semantic_coherence_score": 0.8314589327146171,
+        "compactness_score": 0.0934388723865845,
+        "family_fidelity_score": 1.0,
+        "awkwardness_penalty": 0.0,
+        "solver_friendliness_score": 0.7332946635730858,
+        "split_cluster_penalty": 0.0,
+        "awkward_grouping_penalty": 0.0,
+        "fake_support_penalty": 0.0,
+        "compaction_semantic_penalty": 0.0
+      },
+      "hard_valid": true
+    }
+  ],
+  "canonical_variant_id": "main_seating__open_center__02",
+  "canonical_variant_family": "open_center",
+  "variant_summary": {
+    "variant_count": 2,
+    "families": {
+      "open_center": 2
+    },
+    "fallback_variant_count": 0,
+    "best_semantic_coherence_score": 0.8315
+  },
+  "family_coverage": {
+    "requested": [
+      "media_facing",
+      "conversation_facing",
+      "window_oriented",
+      "open_center"
+    ],
+    "covered": [
+      "open_center"
+    ],
+    "missing": [
+      "conversation_facing",
+      "media_facing",
+      "window_oriented"
+    ]
+  },
+  "tight_hull_polygon_mm": [],
+  "tight_hull_polygons_mm": [
+    [
+      {
+        "x": 1050,
+        "y": 950
+      },
+      {
+        "x": 3110,
+        "y": 950
+      },
+      {
+        "x": 3110,
+        "y": 1910
+      },
+      {
+        "x": 1050,
+        "y": 1910
+      }
+    ],
+    [
+      {
+        "x": 3600,
+        "y": 1000
+      },
+      {
+        "x": 4310,
+        "y": 1000
+      },
+      {
+        "x": 4310,
+        "y": 1840
+      },
+      {
+        "x": 3600,
+        "y": 1840
+      }
+    ],
+    [
+      {
+        "x": 2400,
+        "y": 1950
+      },
+      {
+        "x": 3300,
+        "y": 1950
+      },
+      {
+        "x": 3300,
+        "y": 2450
+      },
+      {
+        "x": 2400,
+        "y": 2450
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 1250
+      },
+      {
+        "x": 390,
+        "y": 1250
+      },
+      {
+        "x": 390,
+        "y": 1620
+      },
+      {
+        "x": 0,
+        "y": 1620
+      }
+    ],
+    [
+      {
+        "x": 1900,
+        "y": 600
+      },
+      {
+        "x": 2250,
+        "y": 600
+      },
+      {
+        "x": 2250,
+        "y": 920
+      },
+      {
+        "x": 1900,
+        "y": 920
+      }
+    ]
+  ],
+  "interaction_hull_polygon_mm": [],
+  "interaction_hull_polygons_mm": [],
+  "variant_family": "open_center",
+  "source_type": "family_native",
+  "family_fidelity": 1.0,
+  "semantic_confidence": 1.0,
+  "fallback_heavy": false,
+  "solver_friendliness": 0.7332946635730858,
+  "family_contract_reasons": [
+    "family contract passed"
+  ],
+  "conflicts": [],
+  "notes": [
+    "ClusterComposer used deterministic semantic archetypes instead of an LLM.",
+    "Kept 2 diverse local variants for macro solving."
+  ],
+  "missing": []
+}

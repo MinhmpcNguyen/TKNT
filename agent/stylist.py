@@ -18,6 +18,10 @@ from stylist.deterministic_layout import (
     build_deterministic_stylist_payload,
 )
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
+from stylist.style_policy import (
+    compile_style_policy as compile_layout_style_policy,
+    final_style_plan_from_surface_payload,
+)
 from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,25 @@ def stylist_model_name_for_variant(variant_index: int) -> str:
 class Stylist:
     system_prompt: str = SYSTEM_PROMPT
     prompt_template: str = STYLIST_PROMPT
+
+    def compile_style_policy(
+        self,
+        *,
+        room_type: str,
+        brief_text: str,
+        room_model_json: dict[str, Any] | None = None,
+        semantic_program_rules: dict[str, Any] | None = None,
+        use_llm: bool = True,
+        model_name: str | None = None,
+    ) -> dict[str, Any]:
+        return compile_layout_style_policy(
+            room_type=room_type,
+            brief_text=brief_text,
+            room_model_json=room_model_json,
+            semantic_program_rules=semantic_program_rules,
+            use_llm=use_llm,
+            model_name=model_name,
+        )
 
     def generate_style_plan(
         self,
@@ -317,6 +340,7 @@ def _build_style_context(
         "room_type": _extract_room_type(layout_json),
         "requested_style": _extract_requested_style(user_context_json, layout_json),
         "style_tags": _extract_style_tags(user_context_json, layout_json),
+        "style_policy": _extract_style_policy(user_context_json, layout_json),
         "notes": notes[:8],
         "room_id": room_info.get("room_id") or room.get("room_id") or "room_1",
         "door_ids": [
@@ -397,6 +421,30 @@ def _extract_requested_style(
             return style.strip()
 
     return ""
+
+
+def _extract_style_policy(
+    user_context_json: dict[str, Any] | None,
+    layout_json: dict[str, Any],
+) -> dict[str, Any] | None:
+    if isinstance(user_context_json, dict):
+        style_policy = user_context_json.get("style_policy")
+        if isinstance(style_policy, dict):
+            return deepcopy(style_policy)
+        user_input = user_context_json.get("user_input")
+        if isinstance(user_input, dict):
+            style_policy = user_input.get("style_policy")
+            if isinstance(style_policy, dict):
+                return deepcopy(style_policy)
+    style_policy = layout_json.get("style_policy")
+    if isinstance(style_policy, dict):
+        return deepcopy(style_policy)
+    meta = layout_json.get("meta")
+    if isinstance(meta, dict):
+        style_policy = meta.get("style_policy")
+        if isinstance(style_policy, dict):
+            return deepcopy(style_policy)
+    return None
 
 
 def _build_locked_style_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -648,6 +696,12 @@ def _apply_style_plan(
                 combined_notes.append(note.strip())
         out["notes"] = combined_notes[:6]
 
+    style_policy = style_context.get("style_policy")
+    out["final_style_plan"] = final_style_plan_from_surface_payload(
+        style_policy=style_policy if isinstance(style_policy, dict) else None,
+        style_plan=style_plan if isinstance(style_plan, dict) else {},
+        styled_payload=out,
+    )
     return out
 
 

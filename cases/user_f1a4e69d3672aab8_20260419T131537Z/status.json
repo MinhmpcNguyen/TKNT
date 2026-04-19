@@ -1,0 +1,48 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260419T131537Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-19T13:19:32.157540+00:00",
+  "error": "1 validation error for ClusterComposerOutput\nvariant_bundle.0.orientation_meta\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'cluster_front_local': {...': {'dx': 1, 'dy': 0}}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-19T13:15:37.283180+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-19T13:16:28.137020+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-19T13:19:31.238478+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-19T13:19:31.338540+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "1 validation error for ClusterComposerOutput\nvariant_bundle.0.orientation_meta\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'cluster_front_local': {...': {'dx': 1, 'dy': 0}}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden",
+      "updated_at_utc": "2026-04-19T13:19:32.157540+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": "1 validation error for ClusterComposerOutput\nvariant_bundle.0.orientation_meta\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'cluster_front_local': {...': {'dx': 1, 'dy': 0}}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden"
+    }
+  ]
+}

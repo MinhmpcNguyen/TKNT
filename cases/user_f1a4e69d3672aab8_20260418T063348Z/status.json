@@ -1,0 +1,48 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260418T063348Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-18T06:34:10.420285+00:00",
+  "error": "name '_placement_front_side' is not defined",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-18T06:33:48.929946+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-18T06:34:09.339408+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-18T06:34:09.454918+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-18T06:34:09.561416+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "name '_placement_front_side' is not defined",
+      "updated_at_utc": "2026-04-18T06:34:10.420285+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": "name '_placement_front_side' is not defined"
+    }
+  ]
+}

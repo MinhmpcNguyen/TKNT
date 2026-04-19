@@ -97,6 +97,12 @@ INPUT ROOM MODEL JSON:
 INPUT CLUSTERS JSON:
 {CLUSTERS_JSON}
 
+If `semantic_layout_program` is present in INPUT CLUSTERS JSON, treat it as the
+canonical semantic plan from the upstream Semantic Layout Planner. Use its active
+clusters, zone claims, macro relation intents, and controlled degradation as the
+primary semantic source. Only add post-seed orientation and sparse macro repair
+signals that are consistent with that program.
+
 USER DESCRIPTION:
 {DESCRIPTION}
 

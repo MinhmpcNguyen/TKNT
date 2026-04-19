@@ -12,6 +12,42 @@ if str(REPO_ROOT) not in sys.path:
 from cluster_composer.outline import compute_cluster_outline
 
 
+def test_compute_cluster_outline_uses_variant_bundle_rects() -> None:
+    payload = {
+        "status": "OK",
+        "cluster_id": "main_seating",
+        "local_frame": {"grid_mm": 50},
+        "local_placements": [{"id": "sofa", "x": 0, "y": 0, "rot": 0}],
+        "cluster_footprint": {"type": "union_of_rects", "rects": []},
+        "variant_bundle": [
+            {
+                "variant_id": "main_seating__open_center",
+                "variant_family": "open_center",
+                "local_placements": [{"id": "sofa", "x": 0, "y": 0, "rot": 0}],
+                "interaction_placements": [
+                    {"id": "sofa", "x": 0, "y": 0, "w": 2200, "h": 900}
+                ],
+                "tight_hull_polygon_mm": [],
+                "tight_hull_polygons_mm": [
+                    [
+                        {"x": 0, "y": 0},
+                        {"x": 2200, "y": 0},
+                        {"x": 2200, "y": 900},
+                        {"x": 0, "y": 900},
+                    ]
+                ],
+            }
+        ],
+    }
+
+    result = compute_cluster_outline(payload)
+
+    footprint = result["cluster_footprint"]
+    assert len(footprint["rects"]) == 1
+    assert footprint["local_bbox"]["max_x"] == 2200
+    assert footprint["outline_polygons_ccw"]
+
+
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text())
 

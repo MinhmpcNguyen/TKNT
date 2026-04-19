@@ -32,8 +32,10 @@ import argparse
 import importlib.util
 import json
 import logging
+import math
 import os
 from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,6 +64,144 @@ _WALL_ANCHOR_TOKENS = ("wall", "top", "bottom", "left", "right", "edge", "recess
 _CENTER_ANCHOR_TOKENS = ("center", "quadrant")
 _WINDOW_ANCHOR_TOKENS = ("window",)
 _ENTRY_ANCHOR_TOKENS = ("entry", "door")
+
+DEFAULT_GRID_MM = 50
+DEFAULT_MAX_CONCEPTS = 5
+DEFAULT_MAX_VARIANTS_PER_CLUSTER = 6
+DEFAULT_MAX_POSE_CANDIDATES_PER_VARIANT = 40
+DEFAULT_MAX_POSE_CANDIDATES_PER_CLUSTER = 120
+DEFAULT_MAX_TOTAL_BINARY_CANDIDATES = 1200
+DEFAULT_MAX_FEASIBLE_SOLUTIONS_PER_CONCEPT = 12
+DEFAULT_MAX_CROSS_CONCEPT_FINALISTS = 20
+DEFAULT_SOLVER_TIME_LIMIT_SEC_PER_CONCEPT = 8.0
+DEFAULT_SOLVER_TOTAL_TIME_LIMIT_SEC = 40.0
+DEFAULT_MAX_DEGRADATION_ROUNDS = 3
+
+QUALITY_WEIGHTS = {
+    "functionality": 0.32,
+    "naturalness": 0.24,
+    "semantic": 0.24,
+    "spatial": 0.20,
+}
+
+PUBLISHABLE_BLOCKING_QUALITY_REASONS = frozenset(
+    {
+        "critical_orientation_penalty_too_high",
+        "focal_pair_penalty_too_high",
+        "critical_item_penalty_too_high",
+    }
+)
+
+GENERIC_VARIANT_FAMILIES = frozenset(
+    {
+        "base",
+        "mirror_x",
+        "mirror_y",
+        "mirror_xy",
+        "front_flip",
+        "front_flip_mirror_x",
+        "front_flip_mirror_y",
+        "composer",
+        "variant",
+    }
+)
+
+SEMANTIC_VARIANT_FAMILIES = frozenset(
+    {
+        "open_center",
+        "perimeter_facing",
+        "conversation_facing",
+        "media_facing",
+        "wall_backed_focal",
+        "focal_media",
+        "focal_axis",
+        "focal_wall",
+        "window_oriented",
+        "daylight_work",
+        "work_core",
+        "workflow",
+        "storage_wall",
+        "edge_storage",
+        "perimeter_storage",
+        "support_edge",
+        "fallback_generic",
+    }
+)
+
+ROLE_VARIANT_FAMILY_ALLOWLISTS = {
+    "social_anchor": frozenset(
+        {
+            "open_center",
+            "perimeter_facing",
+            "conversation_facing",
+            "social_anchor",
+            "social",
+            "inward_facing",
+        }
+    ),
+    "lounge": frozenset(
+        {
+            "open_center",
+            "perimeter_facing",
+            "conversation_facing",
+            "social_anchor",
+            "social",
+            "inward_facing",
+        }
+    ),
+    "media": frozenset(
+        {
+            "media_facing",
+            "wall_backed_focal",
+            "focal_media",
+            "focal_axis",
+            "focal_wall",
+            "media",
+        }
+    ),
+    "focal": frozenset(
+        {
+            "media_facing",
+            "wall_backed_focal",
+            "focal_media",
+            "focal_axis",
+            "focal_wall",
+            "media",
+        }
+    ),
+    "work": frozenset(
+        {
+            "daylight_work",
+            "work_core",
+            "window_oriented",
+            "workflow",
+            "workstation",
+            "desk",
+        }
+    ),
+    "workflow": frozenset(
+        {
+            "daylight_work",
+            "work_core",
+            "window_oriented",
+            "workflow",
+            "workstation",
+            "desk",
+        }
+    ),
+    "storage": frozenset(
+        {
+            "storage_wall",
+            "wall_storage",
+            "edge_storage",
+            "perimeter_storage",
+            "storage",
+            "edge_weighted",
+        }
+    ),
+}
+
+STRICT_ROLE_KINDS = frozenset({"focal", "media", "work", "workflow"})
 
 
 @dataclass(frozen=True)
@@ -96,11 +236,12 @@ class Candidate:
 @dataclass(frozen=True)
 class MacroClusterSolver:
     tools_path: str = ""
-    max_variants_per_cluster: int = 8
-    initial_candidates_per_cluster: int = 40
-    max_rounds: int = 4
-    time_limit_s: float = 20.0
+    max_variants_per_cluster: int = DEFAULT_MAX_VARIANTS_PER_CLUSTER
+    initial_candidates_per_cluster: int = DEFAULT_MAX_POSE_CANDIDATES_PER_VARIANT
+    max_rounds: int = DEFAULT_MAX_DEGRADATION_ROUNDS
+    time_limit_s: float = DEFAULT_SOLVER_TIME_LIMIT_SEC_PER_CONCEPT
     num_workers: int = 8
+    max_feasible_solutions_per_concept: int = DEFAULT_MAX_FEASIBLE_SOLUTIONS_PER_CONCEPT
 
     def generate(
         self,
@@ -124,6 +265,26 @@ class MacroClusterSolver:
             max_rounds=self.max_rounds,
             time_limit_s=self.time_limit_s,
             num_workers=self.num_workers,
+            max_feasible_solutions_per_concept=self.max_feasible_solutions_per_concept,
+        )
+
+    def generate_bundle(
+        self,
+        payload: dict[str, Any],
+        *,
+        grid_mm: int = DEFAULT_GRID_MM,
+    ) -> dict[str, Any]:
+        tools_path = self.tools_path or _default_tools_path()
+        return solve_global_layout_bundle(
+            payload=payload,
+            grid_mm=grid_mm,
+            tools_path=tools_path,
+            max_variants_per_cluster=self.max_variants_per_cluster,
+            initial_candidates_per_cluster=self.initial_candidates_per_cluster,
+            max_rounds=self.max_rounds,
+            time_limit_s=self.time_limit_s,
+            num_workers=self.num_workers,
+            max_feasible_solutions_per_concept=self.max_feasible_solutions_per_concept,
         )
 
 
@@ -324,6 +485,1101 @@ def _verify_macro_ready(verify: Mapping[str, Any] | None) -> bool:
     return not any(reason in blocking for reason in reasons)
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _penalty_score(penalty_mm: Any, scale_mm: float) -> float:
+    penalty = max(0.0, _as_float(penalty_mm))
+    return _clamp_score(1.0 / (1.0 + (penalty / max(1.0, scale_mm))))
+
+
+def _quality_dict(verify: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(verify, Mapping):
+        return {}
+    quality = verify.get("quality")
+    return quality if isinstance(quality, Mapping) else {}
+
+
+def _summary_dict(verify: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(verify, Mapping):
+        return {}
+    summary = verify.get("summary")
+    return summary if isinstance(summary, Mapping) else {}
+
+
+def _concept_from_relation_plan(
+    relation_plan: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if not isinstance(relation_plan, Mapping):
+        return {}
+    concept = relation_plan.get("macro_concept")
+    return concept if isinstance(concept, Mapping) else {}
+
+
+def _concept_id_from_relation_plan(relation_plan: Mapping[str, Any] | None) -> str:
+    concept = _concept_from_relation_plan(relation_plan)
+    for key in ("concept_id", "id", "concept_family"):
+        value = str(concept.get(key) or "").strip()
+        if value:
+            return value
+    if isinstance(relation_plan, Mapping):
+        value = str(relation_plan.get("concept_id") or "").strip()
+        if value:
+            return value
+    return "concept_01"
+
+
+def _concept_prior_score(relation_plan: Mapping[str, Any] | None) -> float:
+    concept = _concept_from_relation_plan(relation_plan)
+    value = _as_float(concept.get("concept_score_prior"), 0.78)
+    if value > 1.0:
+        value /= 100.0
+    return _clamp_score(value)
+
+
+def _center_openness_strength(relation_plan: Mapping[str, Any] | None) -> str:
+    concept = _concept_from_relation_plan(relation_plan)
+    topology_policy = concept.get("topology_policy")
+    if isinstance(topology_policy, Mapping):
+        strength = str(topology_policy.get("reserve_center_degree") or "").strip()
+        if strength:
+            return strength
+    if isinstance(relation_plan, Mapping):
+        intent = relation_plan.get("layout_intent_profile")
+        if isinstance(intent, Mapping):
+            return str(intent.get("center_open_preference") or "").strip()
+    return ""
+
+
+def _normalized_policy_token(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _concept_family_from_relation_plan(relation_plan: Mapping[str, Any] | None) -> str:
+    concept = _concept_from_relation_plan(relation_plan)
+    return _normalized_policy_token(concept.get("concept_family"))
+
+
+def _center_openness_is_strong(relation_plan: Mapping[str, Any] | None) -> bool:
+    return _normalized_policy_token(_center_openness_strength(relation_plan)) in {
+        "high",
+        "very_high",
+    }
+
+
+def _center_openness_is_very_high(relation_plan: Mapping[str, Any] | None) -> bool:
+    return _normalized_policy_token(_center_openness_strength(relation_plan)) == (
+        "very_high"
+    )
+
+
+def _cluster_zone_plan_by_id(
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, Mapping[str, Any]]:
+    concept = _concept_from_relation_plan(relation_plan)
+    zone_plan = concept.get("cluster_zone_plan")
+    if not isinstance(zone_plan, list):
+        return {}
+    out: dict[str, Mapping[str, Any]] = {}
+    for row in zone_plan:
+        if not isinstance(row, Mapping):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if cluster_id:
+            out[cluster_id] = row
+    return out
+
+
+def _cluster_role_kind(
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> str:
+    row = _cluster_zone_plan_by_id(relation_plan).get(cluster_id, {})
+    explicit = _normalized_policy_token(
+        row.get("role_kind")
+        or row.get("cluster_role_kind")
+        or row.get("role")
+        or row.get("cluster_role")
+    )
+    if explicit:
+        return explicit
+    tokens = " ".join(
+        str(value or "")
+        for value in (
+            cluster_id,
+            row.get("semantic_role"),
+            row.get("zone_assignment"),
+            row.get("priority"),
+        )
+    ).lower()
+    if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
+        return "social_anchor"
+    if any(token in tokens for token in ("tv", "media", "screen", "fireplace")):
+        return "media"
+    if any(token in tokens for token in ("desk", "work", "office", "study")):
+        return "work"
+    if any(token in tokens for token in ("storage", "cabinet", "shelf", "wardrobe")):
+        return "storage"
+    if any(token in tokens for token in ("focal", "feature_wall")):
+        return "focal"
+    return "support"
+
+
+def _cluster_priority_kind(
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> str:
+    row = _cluster_zone_plan_by_id(relation_plan).get(cluster_id, {})
+    priority = _normalized_policy_token(row.get("priority"))
+    if priority in {"core", "support", "optional"}:
+        return priority
+    role_kind = _cluster_role_kind(relation_plan, cluster_id)
+    if role_kind in {"social_anchor", "media", "focal", "sleep"}:
+        return "core"
+    if role_kind in {"work", "storage"}:
+        return "support"
+    return "support"
+
+
+def _cluster_is_core_or_protected(
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> bool:
+    if cluster_id in {
+        _extract_layout_primary_cluster_id(
+            dict(relation_plan) if isinstance(relation_plan, dict) else None
+        ),
+        _extract_layout_secondary_cluster_id(
+            dict(relation_plan) if isinstance(relation_plan, dict) else None
+        ),
+    }:
+        return True
+    return _cluster_priority_kind(relation_plan, cluster_id) == "core"
+
+
+def _explicit_allowed_variant_families_by_cluster(
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, set[str]]:
+    containers: list[Any] = []
+    if isinstance(relation_plan, Mapping):
+        containers.append(relation_plan.get("allowed_variant_families_by_cluster"))
+        policy = relation_plan.get("variant_family_policy")
+        if isinstance(policy, Mapping):
+            containers.append(policy.get("allowed_variant_families_by_cluster"))
+            containers.append(policy.get("allowed_by_cluster"))
+    concept = _concept_from_relation_plan(relation_plan)
+    containers.append(concept.get("allowed_variant_families_by_cluster"))
+    policy = concept.get("variant_family_policy")
+    if isinstance(policy, Mapping):
+        containers.append(policy.get("allowed_variant_families_by_cluster"))
+        containers.append(policy.get("allowed_by_cluster"))
+
+    out: dict[str, set[str]] = {}
+    for container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for cluster_id_raw, raw_value in container.items():
+            cluster_id = str(cluster_id_raw or "").strip()
+            if not cluster_id:
+                continue
+            values: Any
+            if isinstance(raw_value, Mapping):
+                values = (
+                    raw_value.get("families")
+                    or raw_value.get("allowed")
+                    or raw_value.get("variant_families")
+                )
+            else:
+                values = raw_value
+            if isinstance(values, str):
+                families = {_normalized_policy_token(values)}
+            elif isinstance(values, Sequence):
+                families = {
+                    _normalized_policy_token(value)
+                    for value in values
+                    if _normalized_policy_token(value)
+                }
+            else:
+                families = set()
+            if families:
+                out.setdefault(cluster_id, set()).update(families)
+    return out
+
+
+def _concept_allows_fallback_generic(
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> bool:
+    explicit = _explicit_allowed_variant_families_by_cluster(relation_plan).get(
+        cluster_id,
+        set(),
+    )
+    if "fallback_generic" in explicit:
+        return True
+    concept = _concept_from_relation_plan(relation_plan)
+    for key in (
+        "allow_fallback_generic",
+        "fallback_generic_allowed",
+        "allow_generic_fallback",
+    ):
+        value = concept.get(key)
+        if isinstance(value, bool):
+            return value
+    policy = concept.get("variant_family_policy")
+    if isinstance(policy, Mapping):
+        for key in (
+            "allow_fallback_generic",
+            "fallback_generic_allowed",
+            "allow_generic_fallback",
+        ):
+            value = policy.get(key)
+            if isinstance(value, bool):
+                return value
+    return False
+
+
+def _role_allowed_variant_families(role_kind: str) -> set[str]:
+    normalized = _normalized_policy_token(role_kind)
+    return set(ROLE_VARIANT_FAMILY_ALLOWLISTS.get(normalized, frozenset()))
+
+
+def _variant_family_compatibility_score(
+    *,
+    concept_family: str,
+    role_kind: str,
+    variant_family: str,
+) -> float:
+    concept = _normalized_policy_token(concept_family)
+    role = _normalized_policy_token(role_kind)
+    family = _normalized_policy_token(variant_family)
+    if family == "fallback_generic":
+        return -1.2 if role in {"social_anchor", "media", "focal", "work"} else -0.7
+    if family in GENERIC_VARIANT_FAMILIES:
+        return 0.0
+
+    role_allowed = _role_allowed_variant_families(role)
+    score = 0.0
+    if role_allowed:
+        score += 0.75 if family in role_allowed else -0.65
+
+    if concept == "open_center":
+        if role in {"social_anchor", "lounge"} and family in {
+            "open_center",
+            "perimeter_facing",
+            "conversation_facing",
+        }:
+            score += 0.8
+        elif role in {"media", "focal"} and family in {
+            "media_facing",
+            "wall_backed_focal",
+            "focal_media",
+        }:
+            score += 0.45
+        elif family in {"storage_wall", "edge_storage", "perimeter_storage"}:
+            score += 0.25
+    elif concept == "focal_axis":
+        if role in {"media", "focal"} and family in {
+            "media_facing",
+            "wall_backed_focal",
+            "focal_media",
+            "focal_axis",
+        }:
+            score += 0.9
+        elif role in {"social_anchor", "lounge"} and family in {
+            "conversation_facing",
+            "perimeter_facing",
+        }:
+            score += 0.35
+    elif concept == "daylight_oriented":
+        if role in {"work", "workflow"} and family in {
+            "daylight_work",
+            "work_core",
+            "window_oriented",
+        }:
+            score += 0.95
+        elif family == "window_oriented":
+            score += 0.35
+    elif concept == "edge_weighted":
+        if family in {"storage_wall", "edge_storage", "perimeter_storage"}:
+            score += 0.65
+        elif family in {"open_center", "conversation_facing"}:
+            score -= 0.25
+    elif concept == "zoned":
+        if role_allowed and family in role_allowed:
+            score += 0.35
+    return max(-1.5, min(1.5, score))
+
+
+def _variant_family_allowed_for_cluster(
+    *,
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+    variant_family: str,
+    semantic_families_available: bool,
+) -> bool:
+    family = _normalized_policy_token(variant_family)
+    if not family:
+        return True
+    if family == "fallback_generic":
+        return _concept_allows_fallback_generic(relation_plan, cluster_id)
+
+    explicit = _explicit_allowed_variant_families_by_cluster(relation_plan).get(
+        cluster_id,
+        set(),
+    )
+    if explicit:
+        return family in explicit
+
+    role_kind = _cluster_role_kind(relation_plan, cluster_id)
+    role_allowed = _role_allowed_variant_families(role_kind)
+    if role_allowed and family in role_allowed:
+        return True
+    if _normalized_policy_token(role_kind) in STRICT_ROLE_KINDS:
+        return False
+    if family in GENERIC_VARIANT_FAMILIES:
+        return not semantic_families_available
+    if role_allowed:
+        return False
+    return True
+
+
+def _filter_candidates_by_concept_variant_policy(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, list[Candidate]]:
+    out: dict[str, list[Candidate]] = {}
+    for cluster_id, candidates in candidates_by_cluster.items():
+        semantic_families_available = any(
+            _normalized_policy_token(candidate.variant_family)
+            in SEMANTIC_VARIANT_FAMILIES
+            for candidate in candidates
+        )
+        out[cluster_id] = [
+            candidate
+            for candidate in candidates
+            if _variant_family_allowed_for_cluster(
+                relation_plan=relation_plan,
+                cluster_id=cluster_id,
+                variant_family=candidate.variant_family,
+                semantic_families_available=semantic_families_available,
+            )
+        ]
+    return out
+
+
+def _filter_variant_bundle_rows_for_concept(
+    *,
+    cluster_id: str,
+    rows: Any,
+    relation_plan: Mapping[str, Any] | None,
+) -> Any:
+    if not isinstance(rows, list):
+        return rows
+    variant_rows = [row for row in rows if isinstance(row, Mapping)]
+    if not variant_rows:
+        return rows
+    semantic_families_available = any(
+        _normalized_policy_token(row.get("variant_family")) in SEMANTIC_VARIANT_FAMILIES
+        for row in variant_rows
+    )
+    filtered = [
+        dict(row)
+        for row in variant_rows
+        if _variant_family_allowed_for_cluster(
+            relation_plan=relation_plan,
+            cluster_id=cluster_id,
+            variant_family=str(row.get("variant_family") or ""),
+            semantic_families_available=semantic_families_available,
+        )
+    ]
+    return filtered or rows
+
+
+def _filter_clusters_outlines_by_concept_variant_policy(
+    clusters_outlines: Any,
+    relation_plan: Mapping[str, Any] | None,
+) -> Any:
+    if isinstance(clusters_outlines, dict):
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            out = dict(clusters_outlines)
+            out_clusters = []
+            for item in clusters:
+                if not isinstance(item, dict):
+                    out_clusters.append(item)
+                    continue
+                cluster_id = str(item.get("cluster_id") or "").strip()
+                next_item = dict(item)
+                next_item["variant_bundle"] = _filter_variant_bundle_rows_for_concept(
+                    cluster_id=cluster_id,
+                    rows=item.get("variant_bundle"),
+                    relation_plan=relation_plan,
+                )
+                out_clusters.append(next_item)
+            out["clusters"] = out_clusters
+            return out
+
+        out: dict[str, Any] = {}
+        for cluster_id, payload in clusters_outlines.items():
+            if not isinstance(payload, dict):
+                out[cluster_id] = payload
+                continue
+            next_payload = dict(payload)
+            next_payload["variant_bundle"] = _filter_variant_bundle_rows_for_concept(
+                cluster_id=str(cluster_id),
+                rows=payload.get("variant_bundle"),
+                relation_plan=relation_plan,
+            )
+            out[cluster_id] = next_payload
+        return out
+
+    if isinstance(clusters_outlines, list):
+        out_list = []
+        for item in clusters_outlines:
+            if not isinstance(item, dict):
+                out_list.append(item)
+                continue
+            cluster_id = str(item.get("cluster_id") or "").strip()
+            next_item = dict(item)
+            next_item["variant_bundle"] = _filter_variant_bundle_rows_for_concept(
+                cluster_id=cluster_id,
+                rows=item.get("variant_bundle"),
+                relation_plan=relation_plan,
+            )
+            out_list.append(next_item)
+        return out_list
+
+    return clusters_outlines
+
+
+def _filter_protected_topology_candidates(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, list[Candidate]]:
+    if not _center_openness_is_strong(relation_plan):
+        return candidates_by_cluster
+    profiles, _adjacency = _build_cluster_macro_profiles(
+        dict(relation_plan) if isinstance(relation_plan, dict) else None,
+        cluster_ids=list(candidates_by_cluster.keys()),
+    )
+    out: dict[str, list[Candidate]] = {}
+    for cluster_id, candidates in candidates_by_cluster.items():
+        profile = profiles.get(cluster_id, {})
+        filtered = list(candidates)
+        if _cluster_avoids_center(profile):
+            non_center = [
+                candidate
+                for candidate in filtered
+                if not _anchor_kind_is_center(candidate.anchor_kind)
+            ]
+            if non_center:
+                filtered = non_center
+        if _cluster_avoids_entry(profile):
+            non_entry = [
+                candidate
+                for candidate in filtered
+                if not _anchor_kind_is_entry(candidate.anchor_kind)
+            ]
+            if non_entry:
+                filtered = non_entry
+        out[cluster_id] = filtered
+    return out
+
+
+def _solution_signature(
+    cluster_transforms: Sequence[dict[str, Any]],
+    selected_variants: Sequence[dict[str, str]],
+) -> str:
+    variant_pairs = sorted(
+        (
+            str(item.get("cluster_id") or ""),
+            str(item.get("variant_id") or ""),
+        )
+        for item in selected_variants
+        if isinstance(item, dict)
+    )
+    transform_pairs = sorted(
+        (
+            str(item.get("cluster_id") or ""),
+            _as_int(item.get("x")),
+            _as_int(item.get("y")),
+            _as_int(item.get("rot")) % 360,
+        )
+        for item in cluster_transforms
+        if isinstance(item, dict)
+    )
+    return json.dumps(
+        {"variants": variant_pairs, "transforms": transform_pairs},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _dominant_anchor_correct(
+    *,
+    relation_plan: Mapping[str, Any] | None,
+    chosen: Mapping[str, Candidate],
+) -> bool:
+    primary_cluster_id = _extract_layout_primary_cluster_id(
+        dict(relation_plan) if isinstance(relation_plan, dict) else None
+    )
+    if primary_cluster_id is None:
+        return True
+    candidate = chosen.get(primary_cluster_id)
+    if candidate is None:
+        return False
+    profiles, _adjacency = _build_cluster_macro_profiles(
+        dict(relation_plan) if isinstance(relation_plan, dict) else None,
+        cluster_ids=[primary_cluster_id],
+    )
+    profile = profiles.get(primary_cluster_id, {})
+    if _cluster_prefers_wall(profile):
+        return _anchor_kind_is_wall_pinned(candidate.anchor_kind)
+    if _cluster_prefers_center(profile):
+        return _anchor_kind_is_center(candidate.anchor_kind)
+    return True
+
+
+def _cluster_rows_from_verify(
+    verify: Mapping[str, Any] | None,
+) -> dict[str, Mapping[str, Any]]:
+    if not isinstance(verify, Mapping):
+        return {}
+    rows_src = None
+    materialized = verify.get("materialized_layout")
+    if isinstance(materialized, Mapping):
+        rows_src = materialized.get("clusters")
+    if rows_src is None:
+        rows_src = verify.get("clusters")
+    if not isinstance(rows_src, Sequence) or isinstance(rows_src, str):
+        return {}
+    out: dict[str, Mapping[str, Any]] = {}
+    for row in rows_src:
+        if not isinstance(row, Mapping):
+            continue
+        cid = str(row.get("cluster_id") or "").strip()
+        if cid:
+            out[cid] = row
+    return out
+
+
+def _vector_tuple(value: Mapping[str, Any] | None) -> tuple[float, float] | None:
+    if not isinstance(value, Mapping):
+        return None
+    dx = value.get("dx")
+    dy = value.get("dy")
+    try:
+        x = float(dx)
+        y = float(dy)
+    except (TypeError, ValueError):
+        return None
+    norm = math.hypot(x, y)
+    if norm <= 1e-6:
+        return None
+    return (x / norm, y / norm)
+
+
+def _cluster_center_tuple(row: Mapping[str, Any] | None) -> tuple[float, float] | None:
+    if not isinstance(row, Mapping):
+        return None
+    center = row.get("world_center")
+    if isinstance(center, Mapping):
+        try:
+            return (float(center.get("x")), float(center.get("y")))
+        except (TypeError, ValueError):
+            return None
+    bbox = row.get("bbox")
+    if isinstance(bbox, Mapping):
+        try:
+            min_x = float(bbox.get("min_x"))
+            max_x = float(bbox.get("max_x"))
+            min_y = float(bbox.get("min_y"))
+            max_y = float(bbox.get("max_y"))
+            return ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _normalized_direction(
+    a: tuple[float, float], b: tuple[float, float]
+) -> tuple[float, float] | None:
+    dx = float(b[0] - a[0])
+    dy = float(b[1] - a[1])
+    norm = math.hypot(dx, dy)
+    if norm <= 1e-6:
+        return None
+    return (dx / norm, dy / norm)
+
+
+def _dot(a: tuple[float, float] | None, b: tuple[float, float] | None) -> float:
+    if a is None or b is None:
+        return 0.0
+    return float(a[0] * b[0] + a[1] * b[1])
+
+
+def _viewing_pairs_from_relation_plan(
+    relation_plan: Mapping[str, Any] | None,
+) -> list[tuple[str, str, str]]:
+    if not isinstance(relation_plan, Mapping):
+        return []
+    pairs: list[tuple[str, str, str]] = []
+    for row in relation_plan.get("cluster_directional_relations") or []:
+        if not isinstance(row, Mapping):
+            continue
+        relation = str(row.get("relation") or "").strip().lower()
+        if relation not in {"face_each_other", "access_faces_other"}:
+            continue
+        a = str(row.get("a") or "").strip()
+        b = str(row.get("b") or "").strip()
+        if a and b:
+            pairs.append((a, b, relation))
+    layout_intent = relation_plan.get("layout_intent_profile") or {}
+    primary = str(layout_intent.get("primary_cluster_id") or "").strip()
+    secondary = str(layout_intent.get("secondary_cluster_id") or "").strip()
+    focus_mode = str(layout_intent.get("focus_mode") or "").strip().lower()
+    if primary and secondary and focus_mode in {"viewing", "mixed"}:
+        if not any({primary, secondary} == {a, b} for a, b, _ in pairs):
+            pairs.append(
+                (
+                    primary,
+                    secondary,
+                    "face_each_other"
+                    if focus_mode == "viewing"
+                    else "access_faces_other",
+                )
+            )
+    return pairs
+
+
+def _pair_alignment_signals(
+    *,
+    verify: Mapping[str, Any] | None,
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    pairs = _viewing_pairs_from_relation_plan(relation_plan)
+    if not pairs:
+        return {
+            "pair_axis_ok": True,
+            "primary_front_ok": True,
+            "pair_alignment_score": 1.0,
+            "primary_front_score": 1.0,
+            "required": False,
+        }
+    rows = _cluster_rows_from_verify(verify)
+    primary_cluster_id = _extract_layout_primary_cluster_id(
+        dict(relation_plan) if isinstance(relation_plan, dict) else None
+    )
+    pair_scores: list[float] = []
+    primary_scores: list[float] = []
+    for left, right, relation in pairs:
+        left_row = rows.get(left)
+        right_row = rows.get(right)
+        if left_row is None or right_row is None:
+            continue
+        left_center = _cluster_center_tuple(left_row)
+        right_center = _cluster_center_tuple(right_row)
+        left_front = _vector_tuple(left_row.get("front_world"))
+        right_front = _vector_tuple(right_row.get("front_world"))
+        if left_center is None or right_center is None:
+            continue
+        forward = _normalized_direction(left_center, right_center)
+        backward = None if forward is None else (-forward[0], -forward[1])
+        left_score = max(-1.0, min(1.0, _dot(left_front, forward)))
+        right_score = max(-1.0, min(1.0, _dot(right_front, backward)))
+        if relation == "face_each_other":
+            pair_scores.append((left_score + right_score) / 2.0)
+        else:
+            pair_scores.append(left_score)
+        if primary_cluster_id:
+            if left == primary_cluster_id:
+                primary_scores.append(left_score)
+            elif right == primary_cluster_id:
+                primary_scores.append(right_score)
+    if not pair_scores:
+        return {
+            "pair_axis_ok": True,
+            "primary_front_ok": True,
+            "pair_alignment_score": 1.0,
+            "primary_front_score": 1.0,
+            "required": bool(pairs),
+        }
+    pair_alignment_score = max(0.0, min(1.0, (min(pair_scores) + 1.0) / 2.0))
+    if primary_scores:
+        primary_front_score = max(
+            0.0, min(1.0, (sum(primary_scores) / len(primary_scores) + 1.0) / 2.0)
+        )
+    else:
+        primary_front_score = pair_alignment_score
+    return {
+        "pair_axis_ok": pair_alignment_score >= 0.72,
+        "primary_front_ok": primary_front_score >= 0.70,
+        "pair_alignment_score": pair_alignment_score,
+        "primary_front_score": primary_front_score,
+        "required": bool(pairs),
+    }
+
+
+def _solution_diagnostics(
+    *,
+    verify: Mapping[str, Any] | None,
+    relation_plan: Mapping[str, Any] | None,
+    chosen: Mapping[str, Candidate],
+) -> dict[str, bool]:
+    quality = _quality_dict(verify)
+    circulation_penalty = _as_int(quality.get("circulation_penalty_mm"))
+    critical_penalty = _as_int(quality.get("critical_orientation_penalty_mm"))
+    center_strength = _center_openness_strength(relation_plan)
+    center_is_strong = center_strength in {"high", "very_high"}
+    center_ok_threshold = 120 if center_is_strong else 260
+    pair_signals = _pair_alignment_signals(
+        verify=verify,
+        relation_plan=relation_plan,
+    )
+    workflow_ok = critical_penalty <= 220
+    if pair_signals.get("required"):
+        workflow_ok = workflow_ok and bool(pair_signals.get("pair_axis_ok"))
+    return {
+        "circulation_clear": circulation_penalty <= 80,
+        "entry_preserved": circulation_penalty <= 120,
+        "center_openness_preserved": circulation_penalty <= center_ok_threshold,
+        "dominant_anchor_correct": _dominant_anchor_correct(
+            relation_plan=relation_plan,
+            chosen=chosen,
+        ),
+        "primary_pair_axis_aligned": bool(pair_signals.get("pair_axis_ok")),
+        "anchor_front_matches_pair_direction": bool(
+            pair_signals.get("primary_front_ok")
+        ),
+        "workflow_preserved": workflow_ok,
+    }
+
+
+def _quality_gate_reasons_from_verify(
+    verify: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(verify, Mapping):
+        return []
+    quality_gate = verify.get("quality_gate")
+    if not isinstance(quality_gate, Mapping):
+        return []
+    return [
+        str(reason or "")
+        for reason in (quality_gate.get("reasons") or [])
+        if str(reason or "").strip()
+    ]
+
+
+def _quality_gate_reasons_from_solution(solution: Mapping[str, Any]) -> list[str]:
+    verify = solution.get("_verify")
+    if isinstance(verify, Mapping):
+        reasons = _quality_gate_reasons_from_verify(verify)
+        if reasons:
+            return reasons
+    summary = solution.get("verify_summary")
+    if not isinstance(summary, Mapping):
+        return []
+    return [
+        str(reason or "")
+        for reason in (summary.get("quality_gate_reasons") or [])
+        if str(reason or "").strip()
+    ]
+
+
+def _selected_variant_looks_like_family(
+    selected_variant: Mapping[str, Any],
+    family: str,
+) -> bool:
+    family_token = _normalized_policy_token(family)
+    variant_family = _normalized_policy_token(selected_variant.get("variant_family"))
+    variant_id = _normalized_policy_token(selected_variant.get("variant_id"))
+    return variant_family == family_token or family_token in variant_id
+
+
+def _protected_topology_violations_from_verify(
+    verify: Mapping[str, Any] | None,
+    relation_plan: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(verify, Mapping):
+        return []
+    quality = _quality_dict(verify)
+    circulation_debug = quality.get("circulation_debug")
+    if not isinstance(circulation_debug, list):
+        return []
+
+    concept = _concept_from_relation_plan(relation_plan)
+    topology_policy = concept.get("topology_policy")
+    preserve_entry = True
+    preserve_corridor = True
+    if isinstance(topology_policy, Mapping):
+        preserve_entry = bool(topology_policy.get("preserve_entry_landing", True))
+        preserve_corridor = bool(topology_policy.get("preserve_primary_corridor", True))
+
+    violations: list[str] = []
+    for item in circulation_debug:
+        if not isinstance(item, Mapping):
+            continue
+        penalty = _as_int(item.get("penalty_mm"))
+        if penalty <= 0:
+            continue
+        kind = str(item.get("kind") or "").strip()
+        if kind == "entry_buffer" and preserve_entry:
+            violations.append("entry_landing_zone_blocked")
+        elif kind == "main_path" and preserve_corridor:
+            violations.append("primary_circulation_corridor_blocked")
+        elif kind == "center_lane" and _center_openness_is_very_high(relation_plan):
+            violations.append("center_openness_region_blocked")
+    return sorted(set(violations))
+
+
+def _solution_publishability_violations(
+    solution: Mapping[str, Any],
+    *,
+    relation_plan: Mapping[str, Any] | None,
+) -> list[str]:
+    violations: list[str] = []
+    if not bool(solution.get("hard_valid")):
+        violations.append("not_hard_valid")
+
+    gate_reasons = set(_quality_gate_reasons_from_solution(solution))
+    violations.extend(sorted(gate_reasons & PUBLISHABLE_BLOCKING_QUALITY_REASONS))
+
+    diagnostics_raw = solution.get("diagnostics")
+    diagnostics = diagnostics_raw if isinstance(diagnostics_raw, Mapping) else {}
+    for key in ("circulation_clear", "entry_preserved", "workflow_preserved"):
+        if diagnostics.get(key) is False:
+            violations.append(f"{key}_false")
+    if diagnostics.get("dominant_anchor_correct") is False:
+        violations.append("dominant_anchor_correct_false")
+    if diagnostics.get("primary_pair_axis_aligned") is False:
+        violations.append("primary_pair_axis_aligned_false")
+    if diagnostics.get("anchor_front_matches_pair_direction") is False:
+        violations.append("anchor_front_matches_pair_direction_false")
+    if (
+        _center_openness_is_strong(relation_plan)
+        and diagnostics.get("center_openness_preserved") is False
+    ):
+        violations.append("center_openness_preserved_false")
+
+    verify = solution.get("_verify")
+    if isinstance(verify, Mapping):
+        violations.extend(
+            _protected_topology_violations_from_verify(verify, relation_plan)
+        )
+
+    selected_variants = [
+        item
+        for item in (solution.get("selected_variants") or [])
+        if isinstance(item, Mapping)
+    ]
+    for item in selected_variants:
+        cluster_id = str(item.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        if not _selected_variant_looks_like_family(item, "fallback_generic"):
+            continue
+        if _concept_allows_fallback_generic(relation_plan, cluster_id):
+            continue
+        if _cluster_is_core_or_protected(relation_plan, cluster_id):
+            violations.append("fallback_generic_core_variant")
+
+    return sorted(set(violations))
+
+
+def _is_publishable_solution(
+    solution: Mapping[str, Any],
+    *,
+    relation_plan: Mapping[str, Any] | None,
+) -> bool:
+    return not _solution_publishability_violations(
+        solution,
+        relation_plan=relation_plan,
+    )
+
+
+def _global_quality_scores(
+    *,
+    verify: Mapping[str, Any] | None,
+    relation_plan: Mapping[str, Any] | None,
+    chosen: Mapping[str, Candidate],
+) -> dict[str, float]:
+    quality = _quality_dict(verify)
+    summary = _summary_dict(verify)
+
+    circulation = _as_int(quality.get("circulation_penalty_mm"))
+    tight_gap = _as_int(quality.get("tight_gap_penalty_mm"))
+    affinity = _as_int(quality.get("affinity_penalty_mm"))
+    relation = _as_int(quality.get("relation_penalty_mm"))
+    spread = _as_int(quality.get("spread_penalty_mm"))
+    orientation = _as_int(quality.get("orientation_penalty_mm"))
+    critical = _as_int(quality.get("critical_orientation_penalty_mm"))
+    focal = _as_int(quality.get("focal_pair_penalty_mm"))
+    macro = _as_int(quality.get("macro_penalty_mm"))
+    micro = _as_int(quality.get("micro_penalty_mm"))
+
+    density = _as_float(quality.get("density_ratio"), 0.28)
+    target_density = _style_target_density_ratio(relation_plan)
+    density_score = _clamp_score(1.0 - (abs(density - target_density) / 0.32))
+    min_gap = summary.get("min_cluster_gap_mm")
+    gap_score = 0.72 if min_gap is None else _clamp_score(_as_float(min_gap) / 450.0)
+
+    diagnostics = _solution_diagnostics(
+        verify=verify,
+        relation_plan=relation_plan,
+        chosen=chosen,
+    )
+    pair_signals = _pair_alignment_signals(
+        verify=verify,
+        relation_plan=relation_plan,
+    )
+    dominant_anchor_score = 1.0 if diagnostics["dominant_anchor_correct"] else 0.05
+    workflow_score = 1.0 if diagnostics["workflow_preserved"] else 0.05
+    center_score = 1.0 if diagnostics["center_openness_preserved"] else 0.25
+    pair_alignment_score = _clamp_score(
+        float(pair_signals.get("pair_alignment_score") or 0.0)
+    )
+    primary_front_score = _clamp_score(
+        float(pair_signals.get("primary_front_score") or 0.0)
+    )
+    concept_family = _concept_family_from_relation_plan(relation_plan)
+    compatibility_values = [
+        _variant_family_compatibility_score(
+            concept_family=concept_family,
+            role_kind=_cluster_role_kind(relation_plan, cluster_id),
+            variant_family=candidate.variant_family,
+        )
+        for cluster_id, candidate in chosen.items()
+    ]
+    compatibility_score = _clamp_score(
+        0.5 + (sum(compatibility_values) / max(1, len(compatibility_values))) / 2.4
+    )
+    gate_reasons = set(_quality_gate_reasons_from_verify(verify))
+    primary_pair_ok = ("focal_pair_penalty_too_high" not in gate_reasons) and bool(
+        pair_signals.get("pair_axis_ok")
+    )
+    critical_items_ok = "critical_item_penalty_too_high" not in gate_reasons
+
+    functionality = (
+        0.30 * _penalty_score(circulation, 420.0)
+        + 0.18 * _penalty_score(tight_gap, 520.0)
+        + 0.20 * _penalty_score(critical, 220.0)
+        + 0.12 * _penalty_score(micro, 520.0)
+        + 0.10 * gap_score
+        + 0.10 * workflow_score
+    )
+    naturalness = (
+        0.22 * _penalty_score(affinity, 520.0)
+        + 0.18 * _penalty_score(spread, 680.0)
+        + 0.16 * _penalty_score(orientation, 760.0)
+        + 0.10 * _penalty_score(macro, 900.0)
+        + 0.11 * density_score
+        + 0.11 * dominant_anchor_score
+        + 0.06 * pair_alignment_score
+        + 0.06 * primary_front_score
+    )
+    semantic = (
+        0.13 * _penalty_score(relation, 520.0)
+        + 0.10 * _penalty_score(affinity, 520.0)
+        + 0.14 * _penalty_score(critical, 220.0)
+        + 0.14 * _penalty_score(focal, 220.0)
+        + 0.10 * dominant_anchor_score
+        + 0.08 * compatibility_score
+        + 0.08 * workflow_score
+        + 0.05 * center_score
+        + 0.10 * pair_alignment_score
+        + 0.06 * primary_front_score
+        + 0.02 * (1.0 if primary_pair_ok else 0.0)
+        + 0.00 * (1.0 if critical_items_ok else 0.0)
+    )
+    spatial = (
+        0.18 * _penalty_score(tight_gap, 520.0)
+        + 0.16 * _penalty_score(spread, 680.0)
+        + 0.16 * _penalty_score(circulation, 500.0)
+        + 0.14 * density_score
+        + 0.14 * gap_score
+        + 0.14 * center_score
+        + 0.08 * pair_alignment_score
+    )
+
+    if not (isinstance(verify, Mapping) and bool(verify.get("hard_valid"))):
+        functionality *= 0.35
+        semantic *= 0.45
+        spatial *= 0.45
+
+    if pair_signals.get("required") and not pair_signals.get("pair_axis_ok"):
+        semantic *= 0.52
+        naturalness *= 0.72
+    if pair_signals.get("required") and not pair_signals.get("primary_front_ok"):
+        semantic *= 0.78
+
+    quality_weights = _style_quality_weights(relation_plan)
+    total = (
+        quality_weights["functionality"] * functionality
+        + quality_weights["naturalness"] * naturalness
+        + quality_weights["semantic"] * semantic
+        + quality_weights["spatial"] * spatial
+    )
+    return {
+        "functionality_score": round(_clamp_score(functionality), 3),
+        "naturalness_score": round(_clamp_score(naturalness), 3),
+        "semantic_coherence_score": round(_clamp_score(semantic), 3),
+        "spatial_quality_score": round(_clamp_score(spatial), 3),
+        "total_score": round(_clamp_score(total), 3),
+    }
+
+
+def _style_target_density_ratio(relation_plan: Mapping[str, Any] | None) -> float:
+    concept = _concept_from_relation_plan(relation_plan)
+    topology_policy = concept.get("topology_policy")
+    if not isinstance(topology_policy, Mapping):
+        return 0.28
+    text = str(topology_policy.get("style_density_target") or "").lower()
+    if "low" in text:
+        return 0.24
+    if "medium_high" in text or "high" in text:
+        return 0.34
+    if "medium" in text:
+        return 0.31
+    return 0.28
+
+
+def _style_quality_weights(relation_plan: Mapping[str, Any] | None) -> dict[str, float]:
+    weights = dict(QUALITY_WEIGHTS)
+    concept = _concept_from_relation_plan(relation_plan)
+    topology_policy = concept.get("topology_policy")
+    if not isinstance(topology_policy, Mapping):
+        return weights
+    reserve_center = str(topology_policy.get("reserve_center_degree") or "")
+    if reserve_center in {"high", "very_high"}:
+        weights["naturalness"] += 0.03
+        weights["spatial"] += 0.03
+        weights["functionality"] -= 0.03
+        weights["semantic"] -= 0.03
+    visual_balance = str(topology_policy.get("style_visual_balance") or "")
+    if visual_balance in {"formal", "calm"}:
+        weights["semantic"] += 0.02
+        weights["naturalness"] += 0.02
+        weights["functionality"] -= 0.02
+        weights["spatial"] -= 0.02
+    total = sum(weights.values()) or 1.0
+    return {key: value / total for key, value in weights.items()}
+
+
 def _normalized_text_set(values: Any) -> set[str]:
     out: set[str] = set()
     if not isinstance(values, list):
@@ -413,7 +1669,7 @@ def _viewing_contract_pairs(
     secondary_cluster_id = _extract_layout_secondary_cluster_id(relation_plan)
     layout_intent = relation_plan.get("layout_intent_profile") or {}
     focus_mode = str(layout_intent.get("focus_mode") or "").strip().lower()
-    if focus_mode == "viewing":
+    if focus_mode in {"viewing", "mixed"}:
         pair = _normalized_cluster_pair(
             primary_cluster_id or "",
             secondary_cluster_id or "",
@@ -425,7 +1681,7 @@ def _viewing_contract_pairs(
         if not isinstance(row, dict):
             continue
         relation = str(row.get("relation") or "").strip().lower()
-        if relation != "face_each_other":
+        if relation not in {"face_each_other", "access_faces_other"}:
             continue
         pair = _normalized_cluster_pair(
             str(row.get("a") or ""),
@@ -506,6 +1762,11 @@ def _build_cluster_macro_profiles(
         slot["prefer"].update(_normalized_text_set(row.get("prefer")))
         slot["avoid"].update(_normalized_text_set(row.get("avoid")))
 
+    _apply_macro_concept_profiles(
+        relation_plan,
+        profiles=profiles,
+    )
+
     for row in relation_plan.get("cluster_orientations") or []:
         if not isinstance(row, dict):
             continue
@@ -551,6 +1812,67 @@ def _build_cluster_macro_profiles(
             * _relation_priority_weight(row.get("priority")),
         )
     return profiles, adjacency
+
+
+def _apply_macro_concept_profiles(
+    relation_plan: dict[str, Any],
+    *,
+    profiles: dict[str, dict[str, set[str]]],
+) -> None:
+    macro_concept = relation_plan.get("macro_concept")
+    if not isinstance(macro_concept, dict):
+        return
+
+    topology_policy = macro_concept.get("topology_policy")
+    reserve_center = False
+    if isinstance(topology_policy, dict):
+        reserve_center = str(
+            topology_policy.get("reserve_center_degree") or ""
+        ).strip() in {"high", "very_high"}
+
+    zone_plan = macro_concept.get("cluster_zone_plan")
+    if not isinstance(zone_plan, list):
+        return
+
+    for row in zone_plan:
+        if not isinstance(row, dict):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        profile = profiles.get(cluster_id)
+        if profile is None:
+            continue
+
+        zone_assignment = str(row.get("zone_assignment") or "").strip()
+        wall_claim = str(row.get("wall_claim") or "").strip()
+        center_usage = str(row.get("center_usage") or "").strip()
+        entry_relation = str(row.get("entry_relation") or "").strip()
+        daylight_relation = str(row.get("daylight_relation") or "").strip()
+
+        if wall_claim in {"strong", "medium"} or any(
+            token in zone_assignment for token in ("wall", "edge", "storage")
+        ):
+            profile["prefer"].update({"wall", "recess_or_edge"})
+            profile["intents"].add("back_to_wall")
+        if wall_claim == "strong":
+            profile["prefer"].add("long_wall")
+            profile["intents"].add("axis_parallel_wall")
+        if "daylight" in zone_assignment or daylight_relation in {
+            "claim_daylight",
+            "daylight_preferred",
+        }:
+            profile["prefer"].add("window_side")
+        if daylight_relation == "avoid_window_blocking":
+            profile["avoid"].add("window_blocking")
+        if (
+            "private" in zone_assignment
+            or entry_relation == "avoid_direct_entry_conflict"
+        ):
+            profile["prefer"].add("far_from_entry")
+            profile["avoid"].add("entry_blocking")
+        if reserve_center or center_usage in {"none", "open_reserved"}:
+            profile["avoid"].add("center")
+        elif center_usage in {"partial", "primary"}:
+            profile["prefer"].add("center")
 
 
 def _cluster_prefers_wall(profile: Mapping[str, set[str]]) -> bool:
@@ -804,6 +2126,24 @@ def _candidate_macro_bonus(
     return bonus
 
 
+def _candidate_variant_family_bonus(
+    candidate: Candidate,
+    *,
+    relation_plan: Mapping[str, Any] | None,
+) -> int:
+    compatibility = _variant_family_compatibility_score(
+        concept_family=_concept_family_from_relation_plan(relation_plan),
+        role_kind=_cluster_role_kind(relation_plan, candidate.cluster_id),
+        variant_family=candidate.variant_family,
+    )
+    scale = (
+        2400
+        if _cluster_is_core_or_protected(relation_plan, candidate.cluster_id)
+        else 1300
+    )
+    return int(round(compatibility * scale))
+
+
 def _has_orientation_sensitive_wall_contract(profile: Mapping[str, set[str]]) -> bool:
     intents = set(profile.get("intents") or set())
     return bool(
@@ -949,6 +2289,9 @@ def _prepare_round_candidates(
                 candidate,
                 profile=profile,
                 is_root_cluster=is_root_cluster,
+            ) + _candidate_variant_family_bonus(
+                candidate,
+                relation_plan=relation_plan,
             )
 
     prioritized: dict[str, list[Candidate]] = {}
@@ -1410,6 +2753,14 @@ def _augment_with_relaxed_candidates(
         extra_candidates,
         cluster_allowed_rotations,
     )
+    extra_candidates = _filter_candidates_by_concept_variant_policy(
+        extra_candidates,
+        relation_plan,
+    )
+    extra_candidates = _filter_protected_topology_candidates(
+        extra_candidates,
+        relation_plan,
+    )
 
     merged: dict[str, list[Candidate]] = {}
     merged_order = _merge_cluster_order(
@@ -1433,6 +2784,32 @@ def _dedupe_candidates(cands: Iterable[Candidate]) -> list[Candidate]:
     ordered = list(best.values())
     ordered.sort(key=lambda x: (-_candidate_score(x), x.variant_id, x.rot, x.x, x.y))
     return ordered
+
+
+def _cap_candidate_search_space(
+    candidates_by_cluster: dict[str, list[Candidate]],
+    *,
+    max_per_cluster: int = DEFAULT_MAX_POSE_CANDIDATES_PER_CLUSTER,
+    max_total: int = DEFAULT_MAX_TOTAL_BINARY_CANDIDATES,
+) -> dict[str, list[Candidate]]:
+    capped = {
+        cluster_id: _dedupe_candidates(candidates)[: max(1, int(max_per_cluster))]
+        for cluster_id, candidates in candidates_by_cluster.items()
+    }
+    while sum(len(candidates) for candidates in capped.values()) > max(
+        1, int(max_total)
+    ):
+        largest_cluster_id = max(
+            capped,
+            key=lambda cluster_id: (
+                len(capped[cluster_id]),
+                cluster_id,
+            ),
+        )
+        if len(capped[largest_cluster_id]) <= 1:
+            break
+        capped[largest_cluster_id] = capped[largest_cluster_id][:-1]
+    return capped
 
 
 def _build_candidate_geometries(
@@ -1624,6 +3001,196 @@ def _selected_from_solver(
     return transforms, variants, chosen
 
 
+def _iter_materialized_cluster_rows(clusters_outlines: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if isinstance(clusters_outlines, dict):
+        clusters = clusters_outlines.get("clusters")
+        if isinstance(clusters, list):
+            return [dict(item) for item in clusters if isinstance(item, Mapping)]
+        for cluster_id, payload in clusters_outlines.items():
+            if not isinstance(payload, Mapping):
+                continue
+            row = dict(payload)
+            row.setdefault("cluster_id", str(cluster_id))
+            rows.append(row)
+        return rows
+    if isinstance(clusters_outlines, list):
+        return [dict(item) for item in clusters_outlines if isinstance(item, Mapping)]
+    return rows
+
+
+def _parse_vec2_any(value: Any) -> tuple[float, float] | None:
+    if isinstance(value, Mapping):
+        dx = value.get("dx")
+        dy = value.get("dy")
+    elif isinstance(value, Sequence) and not isinstance(value, str) and len(value) == 2:
+        dx, dy = value[0], value[1]
+    else:
+        return None
+    try:
+        x = float(dx)
+        y = float(dy)
+    except (TypeError, ValueError):
+        return None
+    norm = math.hypot(x, y)
+    if norm <= 1e-6:
+        return None
+    return (x / norm, y / norm)
+
+
+def _rotate_vec_ccw_90s(vec: tuple[float, float], rot: int) -> tuple[float, float]:
+    x, y = float(vec[0]), float(vec[1])
+    r = int(rot or 0) % 360
+    if r == 0:
+        return (x, y)
+    if r == 90:
+        return (-y, x)
+    if r == 180:
+        return (-x, -y)
+    if r == 270:
+        return (y, -x)
+    return (x, y)
+
+
+def _rotate_point_ccw_90s_local(x: float, y: float, rot: int) -> tuple[float, float]:
+    r = int(rot or 0) % 360
+    if r == 0:
+        return (x, y)
+    if r == 90:
+        return (-y, x)
+    if r == 180:
+        return (-x, -y)
+    if r == 270:
+        return (y, -x)
+    return (x, y)
+
+
+def _cluster_local_bbox(
+    payload: Mapping[str, Any],
+) -> tuple[float, float, float, float] | None:
+    fp = payload.get("cluster_footprint")
+    if isinstance(fp, Mapping):
+        bbox = fp.get("local_bbox")
+        if isinstance(bbox, Mapping):
+            try:
+                return (
+                    float(bbox.get("min_x")),
+                    float(bbox.get("min_y")),
+                    float(bbox.get("max_x")),
+                    float(bbox.get("max_y")),
+                )
+            except (TypeError, ValueError):
+                pass
+        rects = fp.get("rects")
+        if isinstance(rects, Sequence) and not isinstance(rects, str):
+            xs: list[float] = []
+            ys: list[float] = []
+            for rect in rects:
+                if not isinstance(rect, Mapping):
+                    continue
+                try:
+                    x = float(rect.get("x", 0))
+                    y = float(rect.get("y", 0))
+                    w = float(rect.get("w", 0))
+                    h = float(rect.get("h", 0))
+                except (TypeError, ValueError):
+                    continue
+                xs.extend([x, x + max(w, 0.0)])
+                ys.extend([y, y + max(h, 0.0)])
+            if xs and ys:
+                return (min(xs), min(ys), max(xs), max(ys))
+    outlines = payload.get("outline_polygons_ccw")
+    if isinstance(outlines, Sequence) and not isinstance(outlines, str):
+        xs: list[float] = []
+        ys: list[float] = []
+        for poly in outlines:
+            if not isinstance(poly, Sequence) or isinstance(poly, str):
+                continue
+            for point in poly:
+                if not isinstance(point, Mapping):
+                    continue
+                try:
+                    xs.append(float(point.get("x")))
+                    ys.append(float(point.get("y")))
+                except (TypeError, ValueError):
+                    continue
+        if xs and ys:
+            return (min(xs), min(ys), max(xs), max(ys))
+    return None
+
+
+def _materialize_cluster_rows_from_selected_layout(
+    *,
+    clusters_outlines: Any,
+    cluster_transforms: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    payloads = {
+        str(row.get("cluster_id") or ""): row
+        for row in _iter_materialized_cluster_rows(clusters_outlines)
+        if isinstance(row, Mapping) and str(row.get("cluster_id") or "").strip()
+    }
+    rows: list[dict[str, Any]] = []
+    for transform in cluster_transforms:
+        if not isinstance(transform, Mapping):
+            continue
+        cluster_id = str(transform.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        payload = payloads.get(cluster_id)
+        if not isinstance(payload, Mapping):
+            continue
+        try:
+            tx = float(transform.get("x", 0))
+            ty = float(transform.get("y", 0))
+            rot = int(transform.get("rot", 0)) % 360
+        except (TypeError, ValueError):
+            continue
+        orientation_meta = payload.get("orientation_meta")
+        orientation_meta = (
+            orientation_meta if isinstance(orientation_meta, Mapping) else {}
+        )
+        front_local = _parse_vec2_any(
+            orientation_meta.get("cluster_front_local")
+            or orientation_meta.get("front_local")
+        )
+        front_world = None
+        if front_local is not None:
+            vec = _rotate_vec_ccw_90s(front_local, rot)
+            front_world = {"dx": round(vec[0], 6), "dy": round(vec[1], 6)}
+        bbox_local = _cluster_local_bbox(payload)
+        bbox_world = None
+        world_center = None
+        if bbox_local is not None:
+            min_x, min_y, max_x, max_y = bbox_local
+            corners = [
+                _rotate_point_ccw_90s_local(min_x, min_y, rot),
+                _rotate_point_ccw_90s_local(max_x, min_y, rot),
+                _rotate_point_ccw_90s_local(max_x, max_y, rot),
+                _rotate_point_ccw_90s_local(min_x, max_y, rot),
+            ]
+            xs = [tx + pt[0] for pt in corners]
+            ys = [ty + pt[1] for pt in corners]
+            bbox_world = {
+                "min_x": min(xs),
+                "min_y": min(ys),
+                "max_x": max(xs),
+                "max_y": max(ys),
+            }
+            world_center = {
+                "x": (bbox_world["min_x"] + bbox_world["max_x"]) / 2.0,
+                "y": (bbox_world["min_y"] + bbox_world["max_y"]) / 2.0,
+            }
+        rows.append(
+            {
+                "cluster_id": cluster_id,
+                "front_world": front_world,
+                "bbox": bbox_world,
+                "world_center": world_center,
+            }
+        )
+    return rows
+
+
 def _verify_complete(
     tools: Any,
     *,
@@ -1640,7 +3207,7 @@ def _verify_complete(
         clusters_outlines=clusters_outlines,
         selected_variants={x["cluster_id"]: x["variant_id"] for x in selected_variants},
     )
-    return verify(
+    result = verify(
         room_model=room_model,
         clusters_outlines=mat,
         cluster_transforms=cluster_transforms,
@@ -1649,6 +3216,17 @@ def _verify_complete(
         relation_plan=relation_plan,
         return_debug=False,
     )
+    if isinstance(result, Mapping) and not isinstance(
+        result.get("materialized_layout"), Mapping
+    ):
+        result = dict(result)
+        result["materialized_layout"] = {
+            "clusters": _materialize_cluster_rows_from_selected_layout(
+                clusters_outlines=mat,
+                cluster_transforms=cluster_transforms,
+            )
+        }
+    return result
 
 
 def _neighborhood_offsets(grid_mm: int) -> list[tuple[int, int]]:
@@ -1689,7 +3267,23 @@ def _expand_problem_clusters(
     if variants_info.get("result") == "OK":
         for row in variants_info.get("clusters") or []:
             cid = str(row.get("cluster_id") or "")
-            vids = [str(v.get("variant_id") or "") for v in (row.get("variants") or [])]
+            raw_variants = [
+                v for v in (row.get("variants") or []) if isinstance(v, Mapping)
+            ]
+            semantic_families_available = any(
+                _normalized_policy_token(v.get("family")) in SEMANTIC_VARIANT_FAMILIES
+                for v in raw_variants
+            )
+            vids = [
+                str(v.get("variant_id") or "")
+                for v in raw_variants
+                if _variant_family_allowed_for_cluster(
+                    relation_plan=relation_plan,
+                    cluster_id=cid,
+                    variant_family=str(v.get("family") or ""),
+                    semantic_families_available=semantic_families_available,
+                )
+            ]
             variant_ids_by_cluster[cid] = [v for v in vids if v]
 
     for cid in problematic_cluster_ids:
@@ -1698,7 +3292,12 @@ def _expand_problem_clusters(
             continue
         existing = {c.key for c in new_map.get(cid, [])}
         proposals: list[Candidate] = []
-        variant_ids = variant_ids_by_cluster.get(cid) or [current.variant_id]
+        if cid in variant_ids_by_cluster:
+            variant_ids = variant_ids_by_cluster[cid]
+        else:
+            variant_ids = [current.variant_id]
+        if not variant_ids:
+            continue
         allowed_rots = (cluster_allowed_rotations or {}).get(cid) or {0, 90, 180, 270}
         for variant_id in variant_ids[: min(4, len(variant_ids))]:
             for rot in tuple(r for r in (0, 90, 180, 270) if r in allowed_rots):
@@ -1899,6 +3498,160 @@ def _solve_one_round(
     return transforms, selected_variants, chosen, verify
 
 
+def _solve_solution_pool_one_round(
+    *,
+    tools: Any,
+    room_model: Any,
+    clusters_outlines: Any,
+    relation_plan: Any,
+    grid_mm: int,
+    candidates_by_cluster: dict[str, list[Candidate]],
+    cluster_order: Sequence[str],
+    variant_payload_lookup: dict[str, dict[str, dict[str, Any]]],
+    time_limit_s: float,
+    num_workers: int,
+    candidate_bonus_by_key: Mapping[tuple[str, str, int, int, int], int] | None = None,
+    max_solutions: int = DEFAULT_MAX_FEASIBLE_SOLUTIONS_PER_CONCEPT,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    candidate_geoms = _build_candidate_geometries(
+        tools,
+        variant_payload_lookup=variant_payload_lookup,
+        candidates_by_cluster=candidates_by_cluster,
+    )
+    incompatible, pair_bonus = _build_pair_terms(
+        tools,
+        room_model=room_model,
+        clusters_outlines=clusters_outlines,
+        relation_plan=relation_plan,
+        grid_mm=grid_mm,
+        candidates_by_cluster=candidates_by_cluster,
+        candidate_geoms=candidate_geoms,
+        cluster_order=cluster_order,
+    )
+
+    model = cp_model.CpModel()
+    xvars: dict[tuple[str, int], cp_model.IntVar] = {}
+    ordered_pick_vars: list[cp_model.IntVar] = []
+    ordered_cluster_ids = _ordered_cluster_ids(
+        candidates_by_cluster,
+        cluster_order=cluster_order,
+    )
+    for cid in ordered_cluster_ids:
+        cands = candidates_by_cluster[cid]
+        vars_for_cluster = []
+        for index, _cand in enumerate(cands):
+            var = model.NewBoolVar(f"pick[{cid},{index}]")
+            xvars[(cid, index)] = var
+            vars_for_cluster.append(var)
+        model.AddExactlyOne(vars_for_cluster)
+        ordered_pick_vars.extend(vars_for_cluster)
+
+    for a_key, b_key in sorted(incompatible):
+        model.Add(xvars[a_key] + xvars[b_key] <= 1)
+
+    objective_terms: list[Any] = []
+    for cid in ordered_cluster_ids:
+        for index, cand in enumerate(candidates_by_cluster[cid]):
+            objective_terms.append(
+                _candidate_effective_score(cand, candidate_bonus_by_key)
+                * xvars[(cid, index)]
+            )
+
+    for (a_key, b_key), bonus in pair_bonus.items():
+        za = xvars[a_key]
+        zb = xvars[b_key]
+        z = model.NewBoolVar(f"pair[{a_key[0]},{a_key[1]}|{b_key[0]},{b_key[1]}]")
+        model.Add(z <= za)
+        model.Add(z <= zb)
+        model.Add(z >= za + zb - 1)
+        objective_terms.append(int(bonus) * z)
+
+    model.Maximize(sum(objective_terms))
+
+    add_decision_strategy = getattr(model, "AddDecisionStrategy", None)
+    choose_first = getattr(cp_model, "CHOOSE_FIRST", None)
+    select_max_value = getattr(cp_model, "SELECT_MAX_VALUE", None)
+    if (
+        callable(add_decision_strategy)
+        and choose_first is not None
+        and select_max_value is not None
+        and ordered_pick_vars
+    ):
+        add_decision_strategy(ordered_pick_vars, choose_first, select_max_value)
+
+    pool: list[dict[str, Any]] = []
+    seen_signatures: set[str] = set()
+    statuses: list[str] = []
+    solve_limit = max(1, int(max_solutions))
+    per_solve_time = max(0.5, float(time_limit_s) / max(1, min(solve_limit, 4)))
+
+    for _idx in range(solve_limit):
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = per_solve_time
+        solver.parameters.num_search_workers = int(max(1, num_workers))
+        solver.parameters.random_seed = 42
+
+        status = solver.Solve(model)
+        status_name = (
+            solver.StatusName(status)
+            if callable(getattr(solver, "StatusName", None))
+            else str(status)
+        )
+        statuses.append(status_name)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            break
+
+        selected_keys: list[tuple[str, int]] = []
+        for cid in ordered_cluster_ids:
+            for index, _cand in enumerate(candidates_by_cluster[cid]):
+                key = (cid, index)
+                if solver.Value(xvars[key]) == 1:
+                    selected_keys.append(key)
+                    break
+
+        if len(selected_keys) != len(ordered_cluster_ids):
+            break
+
+        transforms, selected_variants, chosen = _selected_from_solver(
+            candidates_by_cluster,
+            xvars,
+            solver,
+        )
+        signature = _solution_signature(transforms, selected_variants)
+        if signature not in seen_signatures:
+            verify = _verify_complete(
+                tools,
+                room_model=room_model,
+                clusters_outlines=clusters_outlines,
+                relation_plan=relation_plan,
+                grid_mm=grid_mm,
+                cluster_transforms=transforms,
+                selected_variants=selected_variants,
+            )
+            if bool(verify.get("hard_valid")) and bool(verify.get("complete")):
+                pool.append(
+                    {
+                        "cluster_transforms": transforms,
+                        "selected_variants": selected_variants,
+                        "chosen": chosen,
+                        "verify": verify,
+                        "objective_value": int(round(solver.ObjectiveValue())),
+                        "signature": signature,
+                    }
+                )
+                seen_signatures.add(signature)
+
+        model.Add(sum(xvars[key] for key in selected_keys) <= len(selected_keys) - 1)
+
+    debug = {
+        "incompatible_pair_count": len(incompatible),
+        "pair_bonus_count": len(pair_bonus),
+        "solver_statuses": statuses,
+        "pool_size": len(pool),
+    }
+    return pool, debug
+
+
 def _filter_unsat_input_clusters(
     *,
     clusters_outlines: dict[str, Any] | list[Any],
@@ -2089,6 +3842,18 @@ def _filter_cluster_ids_from_outlines(
     return clusters_outlines
 
 
+def _cluster_can_be_skipped_without_candidates(
+    *,
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> bool:
+    if not isinstance(relation_plan, Mapping):
+        return True
+    if _cluster_is_core_or_protected(relation_plan, cluster_id):
+        return False
+    return _cluster_priority_kind(relation_plan, cluster_id) in {"support", "optional"}
+
+
 def _skip_clusters_without_candidates(
     *,
     clusters_outlines: dict[str, Any] | list[Any],
@@ -2107,7 +3872,13 @@ def _skip_clusters_without_candidates(
     list[str],
 ]:
     skipped_ids = sorted(
-        cid for cid, candidates in candidates_by_cluster.items() if not candidates
+        cid
+        for cid, candidates in candidates_by_cluster.items()
+        if not candidates
+        and _cluster_can_be_skipped_without_candidates(
+            relation_plan=relation_plan,
+            cluster_id=cid,
+        )
     )
     if not skipped_ids:
         return (
@@ -2271,6 +4042,10 @@ def _build_placer_seed(
                 "face_window",
                 "critical_orientation_penalty",
                 "focal_pair_penalty",
+                "anchor_front_matches_pair_direction",
+                "primary_pair_axis_aligned",
+                "support_band_consistency",
+                "secondary_seat_faces_cluster",
             ],
             "allowed_edit_levels": [
                 "cluster_variant",
@@ -2288,6 +4063,137 @@ def _build_placer_seed(
     }
 
 
+def _solution_record_from_pool_entry(
+    *,
+    pool_entry: Mapping[str, Any],
+    relation_plan: Mapping[str, Any] | None,
+    solution_index: int,
+) -> dict[str, Any]:
+    chosen_raw = pool_entry.get("chosen")
+    chosen = chosen_raw if isinstance(chosen_raw, Mapping) else {}
+    verify_raw = pool_entry.get("verify")
+    verify = verify_raw if isinstance(verify_raw, Mapping) else {}
+    cluster_transforms = [
+        dict(item)
+        for item in pool_entry.get("cluster_transforms", [])
+        if isinstance(item, dict)
+    ]
+    selected_variants = [
+        dict(item)
+        for item in pool_entry.get("selected_variants", [])
+        if isinstance(item, dict)
+    ]
+    quality = _global_quality_scores(
+        verify=verify,
+        relation_plan=relation_plan,
+        chosen=chosen,
+    )
+    diagnostics = _solution_diagnostics(
+        verify=verify,
+        relation_plan=relation_plan,
+        chosen=chosen,
+    )
+    record = {
+        "solution_id": f"sol_{solution_index:02d}",
+        "quality_rank": solution_index,
+        "hard_valid": bool(verify.get("hard_valid")),
+        "selected_variants": selected_variants,
+        "cluster_transforms": cluster_transforms,
+        "global_quality": quality,
+        "diagnostics": diagnostics,
+        "verify_summary": {
+            "state_signature": str(verify.get("state_signature") or ""),
+            "layout_score": _as_int(_quality_dict(verify).get("layout_score")),
+            "macro_penalty_mm": _as_int(_quality_dict(verify).get("macro_penalty_mm")),
+            "micro_penalty_mm": _as_int(_quality_dict(verify).get("micro_penalty_mm")),
+            "quality_gate_reasons": list(
+                (verify.get("quality_gate") or {}).get("reasons") or []
+            )
+            if isinstance(verify.get("quality_gate"), Mapping)
+            else [],
+        },
+        "_rank_key": (
+            quality["total_score"],
+            quality["functionality_score"],
+            quality["semantic_coherence_score"],
+            _as_int(pool_entry.get("objective_value")),
+        ),
+        "_verify": dict(verify),
+        "_chosen": dict(chosen),
+        "_signature": str(pool_entry.get("signature") or ""),
+    }
+    violations = _solution_publishability_violations(
+        record,
+        relation_plan=relation_plan,
+    )
+    record["publishable"] = not violations
+    record["publishability_reasons"] = violations
+    return record
+
+
+def _rank_solution_records(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    def rank_tuple(item: Mapping[str, Any]) -> tuple[Any, ...]:
+        explicit = item.get("_rank_key")
+        if explicit:
+            return tuple(explicit)
+        quality = item.get("global_quality")
+        quality_map = quality if isinstance(quality, Mapping) else {}
+        diagnostics = item.get("diagnostics")
+        diagnostics_map = diagnostics if isinstance(diagnostics, Mapping) else {}
+        return (
+            _as_float(quality_map.get("total_score")),
+            _as_float(quality_map.get("functionality_score")),
+            _as_float(quality_map.get("semantic_coherence_score")),
+            1 if diagnostics_map.get("dominant_anchor_correct") else 0,
+        )
+
+    ranked = sorted(
+        records,
+        key=lambda item: (
+            bool(item.get("hard_valid")),
+            rank_tuple(item),
+            -_as_int((item.get("verify_summary") or {}).get("macro_penalty_mm")),
+            -_as_int((item.get("verify_summary") or {}).get("micro_penalty_mm")),
+        ),
+        reverse=True,
+    )
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in ranked:
+        signature = str(item.get("_signature") or "")
+        if signature and signature in seen:
+            continue
+        if signature:
+            seen.add(signature)
+        clean = {
+            key: value
+            for key, value in item.items()
+            if key not in {"_rank_key", "_verify", "_chosen", "_signature"}
+        }
+        clean["quality_rank"] = len(out) + 1
+        clean["solution_id"] = f"sol_{len(out) + 1:02d}"
+        out.append(clean)
+    return out
+
+
+def _best_solution_debug_record(
+    records: Sequence[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Candidate]]:
+    if not records:
+        return None, {}
+    ranked = sorted(
+        records,
+        key=lambda item: tuple(item.get("_rank_key") or ()),
+        reverse=True,
+    )
+    best = ranked[0]
+    verify_raw = best.get("_verify")
+    chosen_raw = best.get("_chosen")
+    verify = verify_raw if isinstance(verify_raw, dict) else None
+    chosen = chosen_raw if isinstance(chosen_raw, dict) else {}
+    return verify, chosen
+
+
 def solve_layout(
     *,
     room_model: Any,
@@ -2296,11 +4202,12 @@ def solve_layout(
     cluster_constraints: Any | None = None,
     grid_mm: int,
     tools_path: str | os.PathLike[str],
-    max_variants_per_cluster: int = 8,
-    initial_candidates_per_cluster: int = 40,
-    max_rounds: int = 4,
-    time_limit_s: float = 20.0,
+    max_variants_per_cluster: int = DEFAULT_MAX_VARIANTS_PER_CLUSTER,
+    initial_candidates_per_cluster: int = DEFAULT_MAX_POSE_CANDIDATES_PER_VARIANT,
+    max_rounds: int = DEFAULT_MAX_DEGRADATION_ROUNDS,
+    time_limit_s: float = DEFAULT_SOLVER_TIME_LIMIT_SEC_PER_CONCEPT,
     num_workers: int = 8,
+    max_feasible_solutions_per_concept: int = DEFAULT_MAX_FEASIBLE_SOLUTIONS_PER_CONCEPT,
 ) -> dict[str, Any]:
     (
         clusters_outlines,
@@ -2325,6 +4232,10 @@ def solve_layout(
         cluster_constraints_n,
     )
     cluster_allowed_rots = _cluster_allowed_rotations(cluster_constraints_n)
+    clusters_c = _filter_clusters_outlines_by_concept_variant_policy(
+        clusters_c,
+        relation_plan_aug,
+    )
 
     variant_payload_lookup = _build_variant_payload_lookup(
         tools,
@@ -2343,6 +4254,14 @@ def solve_layout(
     candidates_by_cluster = _filter_candidates_by_allowed_rotations(
         candidates_by_cluster,
         cluster_allowed_rots,
+    )
+    candidates_by_cluster = _filter_candidates_by_concept_variant_policy(
+        candidates_by_cluster,
+        relation_plan_aug,
+    )
+    candidates_by_cluster = _filter_protected_topology_candidates(
+        candidates_by_cluster,
+        relation_plan_aug,
     )
     (
         clusters_c,
@@ -2369,6 +4288,50 @@ def solve_layout(
         candidates_by_cluster,
         cluster_order=cluster_order,
     )
+    required_clusters_without_candidates = [
+        cluster_id
+        for cluster_id in cluster_ids
+        if not candidates_by_cluster.get(cluster_id)
+    ]
+    if required_clusters_without_candidates:
+        return {
+            "status": "UNSAT",
+            "selected_concept_id": _concept_id_from_relation_plan(relation_plan_aug),
+            "solutions": [],
+            "best_solution_id": None,
+            "grid_mm": grid_mm,
+            "cluster_transforms": [],
+            "selected_variants": [],
+            "global_quality": {},
+            "diagnostics": {},
+            "degradation_applied": [],
+            "missing": [],
+            "conflicts": [
+                "Required clusters have no concept-compatible hard-valid candidates."
+            ],
+            "notes": [
+                "Candidate generation rejected all variants for required clusters: "
+                f"{required_clusters_without_candidates}",
+            ],
+            "skipped_clusters": skipped_candidate_clusters,
+            "placer_seed": {
+                "phase": "macro_blocked",
+                "ready": False,
+                "needed": False,
+                "reason": "required_clusters_without_candidates",
+                "required_clusters_without_candidates": (
+                    required_clusters_without_candidates
+                ),
+            },
+            "solver_debug": {
+                "candidate_counts": {
+                    cid: len(vals) for cid, vals in candidates_by_cluster.items()
+                },
+                "cluster_constraints_summary": _cluster_constraints_summary(
+                    cluster_constraints_n
+                ),
+            },
+        }
     if not cluster_ids:
         notes = ["No candidates were generated."]
         if skipped_candidate_clusters:
@@ -2392,14 +4355,15 @@ def solve_layout(
             },
         }
 
+    solution_records: list[dict[str, Any]] = []
     best_verify: dict[str, Any] | None = None
     best_transforms: list[dict[str, Any]] = []
     best_variants: list[dict[str, str]] = []
-    best_score = -(10**18)
-    best_rank_key: tuple[int, ...] | None = None
+    best_chosen: dict[str, Candidate] = {}
     used_relaxed_candidate_expansion = False
     infeasible_candidate_set = False
     wall_pin_focus = True
+    solver_pool_debug: list[dict[str, Any]] = []
     root_strategy_debug: dict[str, Any] = {
         "root_cluster_id": _select_root_cluster_id(
             candidates_by_cluster,
@@ -2414,6 +4378,7 @@ def solve_layout(
     current_candidates = {
         cid: list(vals) for cid, vals in candidates_by_cluster.items()
     }
+    current_candidates = _cap_candidate_search_space(current_candidates)
 
     for round_idx in range(max_rounds):
         logger.info(
@@ -2432,7 +4397,7 @@ def solve_layout(
         )
         root_strategy_debug = round_strategy
         try:
-            transforms, selected_variants, chosen, verify = _solve_one_round(
+            pool, pool_debug = _solve_solution_pool_one_round(
                 tools=tools,
                 room_model=room_model_c,
                 clusters_outlines=clusters_c,
@@ -2444,6 +4409,16 @@ def solve_layout(
                 time_limit_s=time_limit_s,
                 num_workers=num_workers,
                 candidate_bonus_by_key=candidate_bonus_by_key,
+                max_solutions=max_feasible_solutions_per_concept,
+            )
+            solver_pool_debug.append(
+                {
+                    "round": round_idx + 1,
+                    **pool_debug,
+                    "candidate_counts": {
+                        cid: len(vals) for cid, vals in round_candidates.items()
+                    },
+                }
             )
         except RuntimeError as exc:
             if bool(round_strategy.get("used_wall_pin_focus")):
@@ -2466,6 +4441,7 @@ def solve_layout(
                         base_candidate_limit=initial_candidates_per_cluster,
                         cluster_order=cluster_ids,
                     )
+                    current_candidates = _cap_candidate_search_space(current_candidates)
                     used_relaxed_candidate_expansion = True
                     continue
                 logger.warning(
@@ -2493,82 +4469,94 @@ def solve_layout(
                     base_candidate_limit=initial_candidates_per_cluster,
                     cluster_order=cluster_ids,
                 )
+                current_candidates = _cap_candidate_search_space(current_candidates)
                 used_relaxed_candidate_expansion = True
                 continue
             logger.warning("Solver exact solve remained infeasible: %s", exc)
             infeasible_candidate_set = True
             break
 
-        q = verify.get("quality") or {}
-        score = int(q.get("layout_score") or 0)
-        rank_key = _verify_rank_key(verify)
-        if (
-            best_verify is None
-            or best_rank_key is None
-            or rank_key > best_rank_key
-            or (rank_key == best_rank_key and score > best_score)
-        ):
-            best_verify = verify
-            best_rank_key = rank_key
-            best_score = score
-            best_transforms = transforms
-            best_variants = selected_variants
+        if not pool:
+            if not used_relaxed_candidate_expansion:
+                logger.info(
+                    "Solver found no complete hard-valid solution at round %s/%s; "
+                    "expanding candidates with relaxed macro pairwise hints.",
+                    round_idx + 1,
+                    max_rounds,
+                )
+                current_candidates = _augment_with_relaxed_candidates(
+                    tools,
+                    room_model=room_model_c,
+                    clusters_outlines=clusters_c,
+                    relation_plan=relation_plan_aug,
+                    grid_mm=grid_mm,
+                    current_candidates=current_candidates,
+                    cluster_allowed_rotations=cluster_allowed_rots,
+                    max_variants_per_cluster=max_variants_per_cluster,
+                    base_candidate_limit=initial_candidates_per_cluster,
+                    cluster_order=cluster_ids,
+                )
+                current_candidates = _cap_candidate_search_space(current_candidates)
+                used_relaxed_candidate_expansion = True
+                continue
+            infeasible_candidate_set = True
+            break
 
-        if bool(verify.get("acceptable_valid")):
+        for entry in pool:
+            solution_records.append(
+                _solution_record_from_pool_entry(
+                    pool_entry=entry,
+                    relation_plan=relation_plan_aug,
+                    solution_index=len(solution_records) + 1,
+                )
+            )
+
+        best_round_records = sorted(
+            solution_records,
+            key=lambda item: tuple(item.get("_rank_key") or ()),
+            reverse=True,
+        )
+        if best_round_records:
+            best_record = best_round_records[0]
+            best_verify_raw = best_record.get("_verify")
+            best_chosen_raw = best_record.get("_chosen")
+            best_verify = best_verify_raw if isinstance(best_verify_raw, dict) else None
+            best_chosen = best_chosen_raw if isinstance(best_chosen_raw, dict) else {}
+            best_transforms = [
+                dict(item)
+                for item in best_record.get("cluster_transforms", [])
+                if isinstance(item, dict)
+            ]
+            best_variants = [
+                dict(item)
+                for item in best_record.get("selected_variants", [])
+                if isinstance(item, dict)
+            ]
+
+        publishable_records = [
+            item
+            for item in solution_records
+            if _is_publishable_solution(item, relation_plan=relation_plan_aug)
+        ]
+        if (
+            publishable_records
+            and len(solution_records) >= max_feasible_solutions_per_concept
+        ):
             logger.info(
-                "Solver found acceptable layout at round %s/%s with layout_score=%s",
+                "Solver collected %s feasible solutions including %s publishable "
+                "solutions at round %s/%s.",
+                len(solution_records),
+                len(publishable_records),
                 round_idx + 1,
                 max_rounds,
-                score,
             )
-            candidate_counts = {
-                cid: len(vals) for cid, vals in current_candidates.items()
-            }
-            return {
-                "status": "OK",
-                "grid_mm": grid_mm,
-                "cluster_transforms": transforms,
-                "selected_variants": selected_variants,
-                "notes": [
-                    *(
-                        [
-                            "Skipped clusters without hard-valid candidates: "
-                            f"{skipped_candidate_clusters}"
-                        ]
-                        if skipped_candidate_clusters
-                        else []
-                    ),
-                    "Solved with finite-pose CP-SAT over enumerated candidates.",
-                    f"macro_root_cluster={round_strategy.get('root_cluster_id')}",
-                    f"root_wall_pin_focus_used={bool(round_strategy.get('used_wall_pin_focus'))}",
-                    f"layout_score={score}",
-                    f"state_signature={verify.get('state_signature')}",
-                    f"round={round_idx + 1}/{max_rounds}",
-                ],
-                "skipped_clusters": skipped_candidate_clusters,
-                "placer_seed": _build_placer_seed(
-                    tools,
-                    clusters_outlines=clusters_c,
-                    relation_plan_used=relation_plan_aug,
-                    cluster_constraints_used=cluster_constraints_n,
-                    grid_mm=grid_mm,
-                    cluster_transforms=transforms,
-                    selected_variants=selected_variants,
-                    verify=verify,
-                    solver_status="OK",
-                    candidate_counts=candidate_counts,
-                ),
-                "solver_debug": {
-                    "verify": verify,
-                    "candidate_counts": candidate_counts,
-                    "macro_strategy": round_strategy,
-                    "cluster_constraints_summary": _cluster_constraints_summary(
-                        cluster_constraints_n
-                    ),
-                },
-            }
+            break
 
-        repair = verify.get("repair_guidance") or {}
+        repair = (
+            best_verify.get("repair_guidance") if isinstance(best_verify, dict) else {}
+        )
+        if not isinstance(repair, Mapping):
+            repair = {}
         problem_clusters = [
             x.get("cluster_id")
             for x in (repair.get("prioritized_clusters") or [])
@@ -2593,7 +4581,7 @@ def solve_layout(
             relation_plan=relation_plan_aug,
             grid_mm=grid_mm,
             candidates_by_cluster=current_candidates,
-            chosen=chosen,
+            chosen=best_chosen,
             problematic_cluster_ids=problem_clusters,
             max_variants_per_cluster=max_variants_per_cluster,
             cluster_allowed_rotations=cluster_allowed_rots,
@@ -2606,9 +4594,173 @@ def solve_layout(
             current_candidates[cid] = _dedupe_candidates(vals)[
                 : _expanded_candidate_limit(initial_candidates_per_cluster)
             ]
+        current_candidates = _cap_candidate_search_space(current_candidates)
+
+    publishable_solution_records = [
+        item
+        for item in solution_records
+        if _is_publishable_solution(item, relation_plan=relation_plan_aug)
+    ]
+    ranked_solutions = _rank_solution_records(publishable_solution_records)[
+        :DEFAULT_MAX_CROSS_CONCEPT_FINALISTS
+    ]
+    all_ranked_solutions = _rank_solution_records(solution_records)[
+        :DEFAULT_MAX_CROSS_CONCEPT_FINALISTS
+    ]
+    if ranked_solutions:
+        best_solution = ranked_solutions[0]
+        best_solution_id = str(best_solution.get("solution_id") or "sol_01")
+        best_transforms = [
+            dict(item)
+            for item in best_solution.get("cluster_transforms", [])
+            if isinstance(item, dict)
+        ]
+        best_variants = [
+            dict(item)
+            for item in best_solution.get("selected_variants", [])
+            if isinstance(item, dict)
+        ]
+        best_signature = _solution_signature(best_transforms, best_variants)
+        for record in solution_records:
+            if str(record.get("_signature") or "") != best_signature:
+                continue
+            best_verify_raw = record.get("_verify")
+            best_chosen_raw = record.get("_chosen")
+            best_verify = best_verify_raw if isinstance(best_verify_raw, dict) else None
+            best_chosen = best_chosen_raw if isinstance(best_chosen_raw, dict) else {}
+            break
+        candidate_counts = {cid: len(vals) for cid, vals in current_candidates.items()}
+        status = "OK"
+        degradation_applied = (
+            [
+                {
+                    "type": "skip_clusters_without_candidates",
+                    "cluster_ids": skipped_candidate_clusters,
+                }
+            ]
+            if skipped_candidate_clusters
+            else []
+        )
+        return {
+            "status": status,
+            "selected_concept_id": _concept_id_from_relation_plan(relation_plan_aug),
+            "solutions": ranked_solutions,
+            "best_solution_id": best_solution_id,
+            "grid_mm": grid_mm,
+            "cluster_transforms": best_transforms,
+            "selected_variants": best_variants,
+            "global_quality": best_solution.get("global_quality") or {},
+            "diagnostics": best_solution.get("diagnostics") or {},
+            "degradation_applied": degradation_applied,
+            "missing": [],
+            "conflicts": [],
+            "notes": [
+                *(
+                    [
+                        "Skipped clusters without hard-valid candidates: "
+                        f"{skipped_candidate_clusters}"
+                    ]
+                    if skipped_candidate_clusters
+                    else []
+                ),
+                "Solved with quality-aware finite-pose CP-SAT over enumerated candidates.",
+                "Filtered hard-valid solutions through the publishable gate before reranking.",
+                f"macro_root_cluster={root_strategy_debug.get('root_cluster_id')}",
+                f"root_wall_pin_focus_used={bool(root_strategy_debug.get('used_wall_pin_focus'))}",
+                f"solution_pool_size={len(ranked_solutions)}",
+            ],
+            "skipped_clusters": skipped_candidate_clusters,
+            "placer_seed": _build_placer_seed(
+                tools,
+                clusters_outlines=clusters_c,
+                relation_plan_used=relation_plan_aug,
+                cluster_constraints_used=cluster_constraints_n,
+                grid_mm=grid_mm,
+                cluster_transforms=best_transforms,
+                selected_variants=best_variants,
+                verify=best_verify,
+                solver_status=status,
+                candidate_counts=candidate_counts,
+            ),
+            "solver_debug": {
+                "best_verify": best_verify,
+                "candidate_counts": candidate_counts,
+                "macro_strategy": root_strategy_debug,
+                "solution_pool_debug": solver_pool_debug,
+                "unpublishable_solution_count": max(
+                    0,
+                    len(solution_records) - len(publishable_solution_records),
+                ),
+                "cluster_constraints_summary": _cluster_constraints_summary(
+                    cluster_constraints_n
+                ),
+            },
+        }
+
+    if all_ranked_solutions:
+        candidate_counts = {cid: len(vals) for cid, vals in current_candidates.items()}
+        reject_reasons = sorted(
+            {
+                reason
+                for item in solution_records
+                for reason in _solution_publishability_violations(
+                    item,
+                    relation_plan=relation_plan_aug,
+                )
+            }
+        )
+        notes = [
+            "Found complete hard-valid layouts, but none passed the publishable gate.",
+            "Returning HARD_VALID_BUT_UNACCEPTABLE instead of publishing a macro-bad layout.",
+            f"publishability_reasons={json.dumps(reject_reasons, ensure_ascii=False)}",
+            f"macro_root_cluster={root_strategy_debug.get('root_cluster_id')}",
+            f"root_wall_pin_focus_used={bool(root_strategy_debug.get('used_wall_pin_focus'))}",
+            f"hard_valid_solution_pool_size={len(all_ranked_solutions)}",
+        ]
+        return {
+            "status": "HARD_VALID_BUT_UNACCEPTABLE",
+            "selected_concept_id": _concept_id_from_relation_plan(relation_plan_aug),
+            "solutions": [],
+            "best_solution_id": None,
+            "grid_mm": grid_mm,
+            "cluster_transforms": [],
+            "selected_variants": [],
+            "global_quality": {},
+            "diagnostics": {},
+            "degradation_applied": [],
+            "missing": [],
+            "conflicts": notes,
+            "notes": notes,
+            "skipped_clusters": skipped_candidate_clusters,
+            "placer_seed": _build_placer_seed(
+                tools,
+                clusters_outlines=clusters_c,
+                relation_plan_used=relation_plan_aug,
+                cluster_constraints_used=cluster_constraints_n,
+                grid_mm=grid_mm,
+                cluster_transforms=best_transforms,
+                selected_variants=best_variants,
+                verify=best_verify,
+                solver_status="HARD_VALID_BUT_UNACCEPTABLE",
+                candidate_counts=candidate_counts,
+            ),
+            "solver_debug": {
+                "best_verify": best_verify,
+                "best_transforms": best_transforms,
+                "best_selected_variants": best_variants,
+                "candidate_counts": candidate_counts,
+                "macro_strategy": root_strategy_debug,
+                "solution_pool_debug": solver_pool_debug,
+                "unpublishable_solutions": all_ranked_solutions,
+                "publishability_reasons": reject_reasons,
+                "cluster_constraints_summary": _cluster_constraints_summary(
+                    cluster_constraints_n
+                ),
+            },
+        }
 
     notes = [
-        "No acceptable-valid solution found within the finite candidate space.",
+        "No complete hard-valid solution found within the finite candidate space.",
     ]
     if infeasible_candidate_set:
         notes.insert(
@@ -2627,13 +4779,23 @@ def solve_layout(
         reasons = (best_verify.get("quality_gate") or {}).get("reasons") or []
         notes.append(f"quality_gate_reasons={json.dumps(reasons, ensure_ascii=False)}")
         notes.append(f"state_signature={best_verify.get('state_signature')}")
-        notes.append(f"best_layout_score={best_score}")
+        notes.append(
+            f"best_layout_score={_as_int(_quality_dict(best_verify).get('layout_score'))}"
+        )
     candidate_counts = {cid: len(vals) for cid, vals in current_candidates.items()}
     return {
         "status": "UNSAT",
+        "selected_concept_id": _concept_id_from_relation_plan(relation_plan_aug),
+        "solutions": [],
+        "best_solution_id": None,
         "grid_mm": grid_mm,
         "cluster_transforms": [],
         "selected_variants": [],
+        "global_quality": {},
+        "diagnostics": {},
+        "degradation_applied": [],
+        "missing": [],
+        "conflicts": notes,
         "notes": [
             *(
                 [
@@ -2664,9 +4826,556 @@ def solve_layout(
             "best_selected_variants": best_variants,
             "candidate_counts": candidate_counts,
             "macro_strategy": root_strategy_debug,
+            "solution_pool_debug": solver_pool_debug,
             "cluster_constraints_summary": _cluster_constraints_summary(
                 cluster_constraints_n
             ),
+        },
+    }
+
+
+def _normalize_point_list(points: Any) -> list[dict[str, int]]:
+    out: list[dict[str, int]] = []
+    if not isinstance(points, list):
+        return out
+    for point in points:
+        try:
+            if isinstance(point, Mapping):
+                x = point.get("x")
+                y = point.get("y")
+            elif isinstance(point, (list, tuple)) and len(point) >= 2:
+                x = point[0]
+                y = point[1]
+            else:
+                continue
+            out.append({"x": int(round(float(x))), "y": int(round(float(y)))})
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _normalize_polygon_list(polygons: Any) -> list[list[dict[str, int]]]:
+    if not isinstance(polygons, list):
+        return []
+    out: list[list[dict[str, int]]] = []
+    for polygon in polygons:
+        normalized = _normalize_point_list(polygon)
+        if normalized:
+            out.append(normalized)
+    return out
+
+
+def _normalize_room_model_for_tools(room_model: Mapping[str, Any]) -> dict[str, Any]:
+    out = dict(room_model)
+    room = out.get("room")
+    if isinstance(room, Mapping) and isinstance(room.get("polygon_ccw"), list):
+        return out
+
+    polygon = _normalize_point_list(
+        room_model.get("polygon_mm") or room_model.get("polygon_ccw")
+    )
+    if polygon:
+        out["room"] = {
+            **(dict(room) if isinstance(room, Mapping) else {}),
+            "polygon_ccw": polygon,
+        }
+    return out
+
+
+def _cluster_payload_from_variant_bundle(
+    row: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    cluster_id = str(row.get("cluster_id") or "").strip()
+    variants = row.get("variant_bundle")
+    if not cluster_id or not isinstance(variants, list) or not variants:
+        return None
+    first_variant = next((item for item in variants if isinstance(item, dict)), None)
+    if first_variant is None:
+        return None
+
+    outline_polygons = _normalize_polygon_list(
+        first_variant.get("interaction_hull_polygons_mm")
+    ) or _normalize_polygon_list(first_variant.get("tight_hull_polygons_mm"))
+    outline = _normalize_point_list(
+        first_variant.get("interaction_hull_polygon_mm")
+        or first_variant.get("tight_hull_polygon_mm")
+    )
+    if outline and not outline_polygons:
+        outline_polygons = [outline]
+    rects = [
+        dict(item)
+        for item in first_variant.get("interaction_placements")
+        or first_variant.get("local_placements")
+        or []
+        if isinstance(item, Mapping)
+    ]
+    if not outline_polygons and not rects:
+        return None
+    xs = [
+        point["x"]
+        for polygon in outline_polygons
+        for point in polygon
+        if isinstance(point, Mapping)
+    ]
+    ys = [
+        point["y"]
+        for polygon in outline_polygons
+        for point in polygon
+        if isinstance(point, Mapping)
+    ]
+    if not xs or not ys:
+        xs = []
+        ys = []
+        for rect in rects:
+            try:
+                x = int(round(float(rect.get("x", 0))))
+                y = int(round(float(rect.get("y", 0))))
+                w = int(round(float(rect.get("w", 0))))
+                h = int(round(float(rect.get("h", 0))))
+            except (TypeError, ValueError):
+                continue
+            xs.extend([x, x + max(w, 0)])
+            ys.extend([y, y + max(h, 0)])
+    if not xs or not ys:
+        return None
+    payload = {
+        "status": "OK",
+        "cluster_id": cluster_id,
+        "local_frame": {
+            "unit": "mm",
+            "grid_mm": DEFAULT_GRID_MM,
+            "origin_note": "(0,0) is an arbitrary local origin for this cluster",
+        },
+        "local_placements": deepcopy(first_variant.get("local_placements") or []),
+        "cluster_footprint": {
+            "type": "union_of_rects",
+            "rects": [],
+            "local_bbox": {
+                "min_x": min(xs),
+                "min_y": min(ys),
+                "max_x": max(xs),
+                "max_y": max(ys),
+            },
+            "outline_polygons_ccw": outline_polygons,
+        },
+        "variant_bundle": [dict(item) for item in variants if isinstance(item, dict)],
+        "notes": [],
+        "missing": [],
+        "conflicts": [],
+    }
+    return cluster_id, payload
+
+
+def _clusters_outlines_from_variant_bundles(
+    cluster_variant_bundles: Any,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if not isinstance(cluster_variant_bundles, list):
+        return out
+    for row in cluster_variant_bundles:
+        if not isinstance(row, Mapping):
+            continue
+        converted = _cluster_payload_from_variant_bundle(row)
+        if converted is None:
+            continue
+        cluster_id, payload = converted
+        out[cluster_id] = payload
+    return out
+
+
+def _relation_plan_for_macro_concept(
+    *,
+    concept: Mapping[str, Any],
+    room_model: Mapping[str, Any],
+    semantic_layout_program: Mapping[str, Any],
+) -> dict[str, Any]:
+    explicit = concept.get("solver_relation_plan")
+    if isinstance(explicit, dict):
+        out = dict(explicit)
+        out["macro_concept"] = {
+            key: value
+            for key, value in concept.items()
+            if key != "solver_relation_plan"
+        }
+        return out
+
+    relation_keys = {
+        "cluster_affinities",
+        "cluster_orientations",
+        "object_orientations",
+        "cluster_relations",
+        "cluster_directional_relations",
+        "circulation_plan",
+        "layout_intent_profile",
+    }
+    if any(key in concept for key in relation_keys):
+        out = {
+            key: deepcopy(concept.get(key)) for key in relation_keys if key in concept
+        }
+        out["status"] = "OK"
+        out["macro_concept"] = {
+            key: value for key, value in concept.items() if key not in relation_keys
+        }
+        return out
+
+    from agent.seed_concept_generator import solver_plan_from_concept
+
+    return solver_plan_from_concept(
+        concept=dict(concept),
+        room_model_json=dict(room_model),
+        room_type=str(semantic_layout_program.get("room_type") or ""),
+    )
+
+
+def _macro_concepts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    bundle = payload.get("macro_concept_bundle")
+    if not isinstance(bundle, Mapping):
+        return []
+    concepts = bundle.get("concepts")
+    if not isinstance(concepts, list):
+        return []
+    out = [dict(item) for item in concepts if isinstance(item, Mapping)]
+    return out[:DEFAULT_MAX_CONCEPTS]
+
+
+def _inventory_cluster_constraints(payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    inventory = payload.get("inventory_decision_program")
+    if isinstance(inventory, Mapping) and isinstance(inventory.get("clusters"), list):
+        return dict(inventory)
+    semantic = payload.get("semantic_layout_program")
+    if isinstance(semantic, Mapping) and isinstance(semantic.get("clusters"), list):
+        return dict(semantic)
+    return None
+
+
+def _primary_cluster_ids_from_concepts(
+    concepts: Sequence[Mapping[str, Any]],
+) -> set[str]:
+    protected: set[str] = set()
+    for concept in concepts:
+        for row in concept.get("cluster_zone_plan") or []:
+            if not isinstance(row, Mapping):
+                continue
+            role = str(row.get("role") or row.get("cluster_role") or "").lower()
+            claim = str(row.get("anchor_role") or row.get("wall_claim") or "").lower()
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            if cluster_id and (
+                "primary" in role
+                or "dominant" in role
+                or "anchor" in role
+                or claim == "strong"
+            ):
+                protected.add(cluster_id)
+    return protected
+
+
+def _controlled_degradation_candidates(
+    *,
+    payload: Mapping[str, Any],
+    concepts: Sequence[Mapping[str, Any]],
+    available_cluster_ids: Sequence[str],
+) -> list[str]:
+    protected = _primary_cluster_ids_from_concepts(concepts)
+    scores: dict[str, tuple[int, str]] = {}
+
+    def consider(cluster_id: str, marker: str, priority: int) -> None:
+        clean_id = str(cluster_id or "").strip()
+        if (
+            not clean_id
+            or clean_id in protected
+            or clean_id not in available_cluster_ids
+        ):
+            return
+        current = scores.get(clean_id)
+        item = (priority, marker)
+        if current is None or item > current:
+            scores[clean_id] = item
+
+    semantic = payload.get("semantic_layout_program")
+    if isinstance(semantic, Mapping):
+        for row in semantic.get("active_clusters") or []:
+            if not isinstance(row, Mapping):
+                continue
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            text = json.dumps(row, sort_keys=True).lower()
+            if "optional" in text:
+                consider(cluster_id, "semantic_optional", 30)
+            elif "support" in text:
+                consider(cluster_id, "semantic_support", 20)
+            elif "low" in text:
+                consider(cluster_id, "semantic_low_priority", 10)
+
+    inventory = payload.get("inventory_decision_program")
+    if isinstance(inventory, Mapping):
+        for row in inventory.get("cluster_decisions") or []:
+            if not isinstance(row, Mapping):
+                continue
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            text = json.dumps(row, sort_keys=True).lower()
+            if "optional" in text:
+                consider(cluster_id, "inventory_optional", 30)
+            elif "support" in text:
+                consider(cluster_id, "inventory_support", 20)
+            elif "low" in text:
+                consider(cluster_id, "inventory_low_priority", 10)
+
+    return [
+        cluster_id
+        for cluster_id, _score in sorted(
+            scores.items(),
+            key=lambda item: (-item[1][0], item[0]),
+        )
+    ]
+
+
+def solve_global_layout_bundle(
+    *,
+    payload: dict[str, Any],
+    grid_mm: int,
+    tools_path: str | os.PathLike[str],
+    max_variants_per_cluster: int = DEFAULT_MAX_VARIANTS_PER_CLUSTER,
+    initial_candidates_per_cluster: int = DEFAULT_MAX_POSE_CANDIDATES_PER_VARIANT,
+    max_rounds: int = DEFAULT_MAX_DEGRADATION_ROUNDS,
+    time_limit_s: float = DEFAULT_SOLVER_TIME_LIMIT_SEC_PER_CONCEPT,
+    num_workers: int = 8,
+    max_feasible_solutions_per_concept: int = DEFAULT_MAX_FEASIBLE_SOLUTIONS_PER_CONCEPT,
+) -> dict[str, Any]:
+    required = [
+        "room_model",
+        "semantic_layout_program",
+        "cluster_variant_bundles",
+        "macro_concept_bundle",
+    ]
+    missing = [key for key in required if key not in payload]
+    if missing:
+        return {
+            "status": "UNSAT",
+            "selected_concept_id": None,
+            "solutions": [],
+            "best_solution_id": None,
+            "degradation_applied": [],
+            "missing": missing,
+            "conflicts": [],
+            "notes": ["Missing required solver input."],
+        }
+
+    room_model_raw = payload.get("room_model")
+    semantic_raw = payload.get("semantic_layout_program")
+    if not isinstance(room_model_raw, Mapping) or not isinstance(semantic_raw, Mapping):
+        return {
+            "status": "UNSAT",
+            "selected_concept_id": None,
+            "solutions": [],
+            "best_solution_id": None,
+            "degradation_applied": [],
+            "missing": [],
+            "conflicts": ["room_model and semantic_layout_program must be objects"],
+            "notes": [],
+        }
+
+    room_model = _normalize_room_model_for_tools(room_model_raw)
+    concepts = _macro_concepts(payload)
+    if not concepts:
+        return {
+            "status": "UNSAT",
+            "selected_concept_id": None,
+            "solutions": [],
+            "best_solution_id": None,
+            "degradation_applied": [],
+            "missing": ["macro_concept_bundle.concepts"],
+            "conflicts": [],
+            "notes": ["No macro concepts were provided."],
+        }
+
+    base_clusters = _clusters_outlines_from_variant_bundles(
+        payload.get("cluster_variant_bundles")
+    )
+    if not base_clusters:
+        return {
+            "status": "UNSAT",
+            "selected_concept_id": None,
+            "solutions": [],
+            "best_solution_id": None,
+            "degradation_applied": [],
+            "missing": ["cluster_variant_bundles"],
+            "conflicts": [],
+            "notes": ["No hard-valid cluster variant bundles were usable."],
+        }
+
+    available_cluster_ids = list(base_clusters.keys())
+    degradation_order = _controlled_degradation_candidates(
+        payload=payload,
+        concepts=concepts,
+        available_cluster_ids=available_cluster_ids,
+    )
+    applied_degradations: list[dict[str, Any]] = []
+    dropped_ids: set[str] = set()
+    concept_outputs: list[dict[str, Any]] = []
+    all_solutions: list[dict[str, Any]] = []
+    hard_valid_unacceptable_count = 0
+
+    for degradation_round in range(max(1, int(max_rounds)) + 1):
+        clusters_for_round = _filter_cluster_ids_from_outlines(
+            base_clusters, dropped_ids
+        )
+        for concept in concepts:
+            relation_plan = _relation_plan_for_macro_concept(
+                concept=concept,
+                room_model=room_model,
+                semantic_layout_program=semantic_raw,
+            )
+            relation_plan = _filter_relation_plan_clusters(relation_plan, dropped_ids)
+            if relation_plan is None:
+                continue
+            concept_result = solve_layout(
+                room_model=room_model,
+                clusters_outlines=clusters_for_round,
+                relation_plan=relation_plan,
+                cluster_constraints=_inventory_cluster_constraints(payload),
+                grid_mm=int(grid_mm or DEFAULT_GRID_MM),
+                tools_path=tools_path,
+                max_variants_per_cluster=max_variants_per_cluster,
+                initial_candidates_per_cluster=initial_candidates_per_cluster,
+                max_rounds=max_rounds,
+                time_limit_s=time_limit_s,
+                num_workers=num_workers,
+                max_feasible_solutions_per_concept=max_feasible_solutions_per_concept,
+            )
+            concept_outputs.append(concept_result)
+            if str(concept_result.get("status") or "") == (
+                "HARD_VALID_BUT_UNACCEPTABLE"
+            ):
+                debug = concept_result.get("solver_debug")
+                debug_map = debug if isinstance(debug, Mapping) else {}
+                hard_valid_unacceptable_count += max(
+                    1,
+                    len(debug_map.get("unpublishable_solutions") or []),
+                )
+            concept_id = str(concept_result.get("selected_concept_id") or "")
+            for solution in concept_result.get("solutions") or []:
+                if not isinstance(solution, dict):
+                    continue
+                if not bool(solution.get("publishable", True)):
+                    continue
+                enriched = dict(solution)
+                enriched["concept_id"] = concept_id
+                enriched["degradation_applied"] = list(applied_degradations)
+                all_solutions.append(enriched)
+
+        if all_solutions:
+            break
+        if degradation_round >= max(0, int(max_rounds)):
+            break
+        next_drop = next(
+            (
+                cluster_id
+                for cluster_id in degradation_order
+                if cluster_id not in dropped_ids
+            ),
+            None,
+        )
+        if next_drop is None:
+            break
+        dropped_ids.add(next_drop)
+        applied_degradations.append(
+            {
+                "round": degradation_round + 1,
+                "type": "drop_optional_or_support_cluster",
+                "cluster_ids": [next_drop],
+            }
+        )
+
+    ranked = _rank_solution_records(all_solutions)[:DEFAULT_MAX_CROSS_CONCEPT_FINALISTS]
+    if ranked:
+        best_solution = ranked[0]
+        selected_concept_id = str(best_solution.get("concept_id") or "")
+        return {
+            "status": "OK",
+            "selected_concept_id": selected_concept_id,
+            "solutions": ranked,
+            "best_solution_id": best_solution.get("solution_id"),
+            "cluster_transforms": best_solution.get("cluster_transforms") or [],
+            "selected_variants": best_solution.get("selected_variants") or [],
+            "global_quality": best_solution.get("global_quality") or {},
+            "diagnostics": best_solution.get("diagnostics") or {},
+            "degradation_applied": applied_degradations,
+            "missing": [],
+            "conflicts": [],
+            "notes": [
+                "Compared publishable solution pools across macro concepts.",
+                f"concepts_evaluated={len(concepts)}",
+                f"solution_pool_size={len(ranked)}",
+            ],
+            "solver_debug": {
+                "concept_statuses": [
+                    {
+                        "concept_id": item.get("selected_concept_id"),
+                        "status": item.get("status"),
+                        "solution_count": len(item.get("solutions") or []),
+                    }
+                    for item in concept_outputs
+                ],
+            },
+        }
+
+    if hard_valid_unacceptable_count > 0:
+        return {
+            "status": "HARD_VALID_BUT_UNACCEPTABLE",
+            "selected_concept_id": None,
+            "solutions": [],
+            "best_solution_id": None,
+            "cluster_transforms": [],
+            "selected_variants": [],
+            "global_quality": {},
+            "diagnostics": {},
+            "degradation_applied": applied_degradations,
+            "missing": [],
+            "conflicts": [
+                "Hard-valid solution pools existed, but none passed the publishable gate."
+            ],
+            "notes": [
+                "Degradation rounds were attempted before returning non-publishable status.",
+                f"concepts_evaluated={len(concepts)}",
+                f"hard_valid_unacceptable_count={hard_valid_unacceptable_count}",
+            ],
+            "solver_debug": {
+                "concept_statuses": [
+                    {
+                        "concept_id": item.get("selected_concept_id"),
+                        "status": item.get("status"),
+                        "solution_count": len(item.get("solutions") or []),
+                    }
+                    for item in concept_outputs
+                ],
+            },
+        }
+
+    return {
+        "status": "UNSAT",
+        "selected_concept_id": None,
+        "solutions": [],
+        "best_solution_id": None,
+        "cluster_transforms": [],
+        "selected_variants": [],
+        "global_quality": {},
+        "diagnostics": {},
+        "degradation_applied": applied_degradations,
+        "missing": [],
+        "conflicts": [
+            "No hard-valid solution found across the provided macro concepts."
+        ],
+        "notes": [
+            "Exact finite-pose search exhausted the available concept candidate pools."
+        ],
+        "solver_debug": {
+            "concept_statuses": [
+                {
+                    "concept_id": item.get("selected_concept_id"),
+                    "status": item.get("status"),
+                    "solution_count": len(item.get("solutions") or []),
+                }
+                for item in concept_outputs
+            ],
         },
     }
 

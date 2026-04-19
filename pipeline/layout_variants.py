@@ -378,6 +378,7 @@ def select_distinct_final_gallery_candidates(
                 "rank": rank,
                 "state_signature": state_signature,
                 "macro_layout_signature": macro_signature,
+                "source_key": _gallery_source_key(raw_candidate, candidate),
             }
         )
 
@@ -389,13 +390,16 @@ def select_distinct_final_gallery_candidates(
     selected_layouts: list[dict[str, Any]] = []
     selected_entry_indices: set[int] = set()
     seen_macro_signatures: set[str] = set()
-    for entry in ranked_entries:
+    target_count = max(0, int(max_variants))
+
+    def _append_entry(entry: dict[str, Any], mode: str) -> bool:
         candidate = entry.get("candidate")
         if not isinstance(candidate, _VariantCandidate):
-            continue
+            return False
+        original_index = int(entry.get("original_index") or 0)
+        if original_index in selected_entry_indices:
+            return False
         macro_signature = str(entry.get("macro_layout_signature") or "").strip()
-        if macro_signature and macro_signature in seen_macro_signatures:
-            continue
         if any(
             _is_near_duplicate_layout(
                 candidate.absolute_layout,
@@ -404,34 +408,78 @@ def select_distinct_final_gallery_candidates(
             )
             for layout in selected_layouts
         ):
-            continue
+            return False
         raw = deepcopy(entry.get("raw") or {})
         raw["state_signature"] = str(entry.get("state_signature") or "")
         raw["macro_layout_signature"] = macro_signature
-        raw["gallery_selection_mode"] = "distinct"
+        raw["gallery_selection_mode"] = mode
         selected.append(raw)
         selected_layouts.append(candidate.absolute_layout)
-        selected_entry_indices.add(int(entry.get("original_index") or 0))
+        selected_entry_indices.add(original_index)
         if macro_signature:
             seen_macro_signatures.add(macro_signature)
-        if len(selected) >= max(0, int(max_variants)):
-            return selected
+        return True
 
+    # Pass 1: keep the best materially distinct candidate per source bucket first.
+    best_by_source: dict[str, dict[str, Any]] = {}
     for entry in ranked_entries:
+        source_key = str(entry.get("source_key") or "").strip()
+        bucket = source_key or f"__idx__{int(entry.get('original_index') or 0)}"
+        if bucket not in best_by_source:
+            best_by_source[bucket] = entry
+    for entry in best_by_source.values():
+        if len(selected) >= target_count:
+            return selected
+        _append_entry(entry, "source_bucket")
+
+    # Pass 2: add more unique macro layouts even from the same source family.
+    for entry in ranked_entries:
+        if len(selected) >= target_count:
+            return selected
+        macro_signature = str(entry.get("macro_layout_signature") or "").strip()
+        if macro_signature and macro_signature in seen_macro_signatures:
+            continue
+        _append_entry(entry, "distinct")
+
+    # Conservative backfill: allow same-source candidates if they are still materially different.
+    for entry in ranked_entries:
+        if len(selected) >= target_count:
+            break
         original_index = int(entry.get("original_index") or 0)
         if original_index in selected_entry_indices:
             continue
-        raw = deepcopy(entry.get("raw") or {})
-        raw["state_signature"] = str(entry.get("state_signature") or "")
-        raw["macro_layout_signature"] = str(
-            entry.get("macro_layout_signature") or ""
-        ).strip()
-        raw["gallery_selection_mode"] = "backfill"
-        selected.append(raw)
-        selected_entry_indices.add(original_index)
-        if len(selected) >= max(0, int(max_variants)):
-            break
+        candidate = entry.get("candidate")
+        if not isinstance(candidate, _VariantCandidate):
+            continue
+        min_distance = (
+            min(
+                _layout_distance_score(
+                    candidate.absolute_layout,
+                    layout,
+                    include_reintroduced=False,
+                )
+                for layout in selected_layouts
+            )
+            if selected_layouts
+            else 999999
+        )
+        if min_distance < 1000:
+            continue
+        _append_entry(entry, "conservative_backfill")
     return selected
+
+
+def _gallery_source_key(
+    raw_candidate: dict[str, Any], candidate: _VariantCandidate
+) -> str:
+    for key in ("source", "reason", "family"):
+        value = raw_candidate.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for value in (candidate.source, candidate.reason, candidate.family):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def build_final_layout_variants_payload(
@@ -563,12 +611,17 @@ def _extract_candidate_coverage_fields(
             ),
         )
     )
-    gallery_eligible = bool(
-        absolute_layout.get(
-            "gallery_eligible",
-            coverage.get("gallery_eligible", complete and hard_valid and acceptable),
+    gallery_eligible = (
+        bool(
+            absolute_layout.get(
+                "gallery_eligible",
+                coverage.get(
+                    "gallery_eligible", complete and hard_valid and acceptable
+                ),
+            )
         )
-    ) and acceptable
+        and acceptable
+    )
     coverage_ratio = float(
         absolute_layout.get(
             "coverage_ratio",
@@ -1086,7 +1139,7 @@ def _macro_region_signature(
 
 def _is_reintroduced_layout_object(item: dict[str, Any]) -> bool:
     object_id = str(item.get("object_id") or item.get("instance_id") or "").strip()
-    return "__reintroduced_" in object_id
+    return "__reintroduced_" in object_id or "__accessory_refill_" in object_id
 
 
 def _layout_identity_key(item: dict[str, Any]) -> str:

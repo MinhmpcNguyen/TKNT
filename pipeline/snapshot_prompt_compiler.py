@@ -1373,6 +1373,8 @@ def _type_label(value: str | None) -> str:
 
 def _canonicalize_object_type(value: str | None) -> str:
     lowered = (value or "object").strip().lower()
+    if "__accessory_refill_" in lowered:
+        return lowered.split("__accessory_refill_", 1)[0]
     if "__reintroduced_" in lowered:
         return lowered.split("__reintroduced_", 1)[0]
     if lowered == "storage_cabin":

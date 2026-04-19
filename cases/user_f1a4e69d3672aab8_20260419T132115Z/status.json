@@ -1,0 +1,48 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260419T132115Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-19T13:25:12.399859+00:00",
+  "error": "cluster composer could not produce a valid primary bundle",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-19T13:21:15.981518+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-19T13:21:17.984797+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-19T13:25:10.646755+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-19T13:25:10.743102+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "cluster composer could not produce a valid primary bundle",
+      "updated_at_utc": "2026-04-19T13:25:12.399859+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "cluster composer could not produce a valid primary bundle"
+    }
+  ]
+}

@@ -18,12 +18,15 @@ from agent.cluster_composer import (
 )
 from agent.cluster_forge import ClusterForge
 from agent.cluster_placer import build_phase2_payload
-from agent.cluster_relation_planner import ClusterRelationPlanner
 from agent.phase2_controller import (
     Phase2Controller,
     build_phase2_preview_candidate,
 )
 from agent.room_interpreter import RoomInterpreter
+from agent.seed_concept_generator import (
+    SeedConceptGenerator,
+    solver_plan_from_concept,
+)
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist, stylist_model_name_for_variant
 from agent.tier_count_director import TierCountDirector
@@ -39,9 +42,9 @@ from pipeline.compose_feedback import (
 from pipeline.dropped_inventory import (
     collect_dropped_inventory,
     collect_seed_omitted_inventory,
+    controlled_accessory_refill,
     dropped_inventory_payload,
     merge_dropped_inventory,
-    reintroduce_dropped_inventory,
 )
 from pipeline.layout_eligibility import annotate_layout_coverage
 from pipeline.layout_variants import select_distinct_final_gallery_candidates
@@ -53,12 +56,10 @@ from pipeline.manual_placements import (
     merge_manual_placements_into_styled_output,
     prepare_input_payload_for_manual_placements,
 )
-from pipeline.seed_variant_policy import (
-    apply_seed_variant_policy,
-    build_seed_variant_briefs,
-)
+from stylist.style_policy import decor_refill_policy, extract_style_policy
 
 logger = logging.getLogger(__name__)
+ClusterRelationPlanner = SeedConceptGenerator
 _PRIMARY_SEED_CACHE_VERSION = "v1"
 _PRIMARY_SEED_LAYOUT_CACHE: dict[str, dict[str, Any]] = {}
 _LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
@@ -144,6 +145,23 @@ class CasePaths:
     def clusters_dir(self) -> Path:
         return self.root / "clusters"
 
+    @property
+    def module_outputs_dir(self) -> Path:
+        return self.root / "module_outputs"
+
+    @property
+    def module_io_manifest(self) -> Path:
+        return self.root / "module_io_manifest.json"
+
+    def module_output(self, module_name: str) -> Path:
+        return self.module_outputs_dir / f"{module_name}.json"
+
+    def module_cluster_composer(self, cluster_id: str) -> Path:
+        return self.module_outputs_dir / "cluster_composer" / f"{cluster_id}.json"
+
+    def module_cluster_outline(self, cluster_id: str) -> Path:
+        return self.module_outputs_dir / "cluster_outline" / f"{cluster_id}.json"
+
     def cluster_composer(self, cluster_id: str) -> Path:
         return self.clusters_dir / f"cluster_composer_{cluster_id}.json"
 
@@ -179,8 +197,8 @@ class CasePaths:
         return self.root / "07_absolute_layout.json"
 
     @property
-    def reintroduced_objects(self) -> Path:
-        return self.root / "07b_reintroduced_objects.json"
+    def accessory_refill(self) -> Path:
+        return self.root / "07b_accessory_refill.json"
 
     @property
     def stylist(self) -> Path:
@@ -197,6 +215,184 @@ class CasePaths:
     @property
     def meta(self) -> Path:
         return self.root / "case_meta.json"
+
+
+@dataclass(frozen=True)
+class OrchestratorModuleSpec:
+    name: str
+    implementation: str
+    inputs: tuple[str, ...]
+    output: str
+    output_artifact: str
+    legacy_artifact: str | None = None
+
+
+ORCHESTRATOR_MODULE_SPECS: tuple[OrchestratorModuleSpec, ...] = (
+    OrchestratorModuleSpec(
+        name="room_interpreter",
+        implementation="agent.room_interpreter.RoomInterpreter.generate",
+        inputs=("prepared_input_payload", "description", "special_notes"),
+        output="room model with normalized geometry, openings, room metadata, notes, and conflicts",
+        output_artifact="module_outputs/room_interpreter.json",
+        legacy_artifact="01_room_interpreter.json",
+    ),
+    OrchestratorModuleSpec(
+        name="stylist_style_policy",
+        implementation="agent.stylist.Stylist.compile_style_policy",
+        inputs=("room_type", "planning_guidance_text", "room_output"),
+        output="style policy used by cluster planning and accessory refill",
+        output_artifact="module_outputs/stylist_style_policy.json",
+    ),
+    OrchestratorModuleSpec(
+        name="cluster_forge",
+        implementation="agent.cluster_forge.ClusterForge.generate",
+        inputs=(
+            "room_type",
+            "planning_guidance_text",
+            "room_output",
+            "inventory_catalog",
+            "style_policy",
+        ),
+        output="semantic layout program and cluster definitions with members, anchors, and constraints",
+        output_artifact="module_outputs/cluster_forge.json",
+        legacy_artifact="02_cluster_forge.json",
+    ),
+    OrchestratorModuleSpec(
+        name="tier_count_director",
+        implementation="agent.tier_count_director.TierCountDirector.generate",
+        inputs=(
+            "planning_guidance_text",
+            "room_output",
+            "prepared_input_payload",
+            "cluster_output",
+        ),
+        output="inventory tier/count decisions per cluster",
+        output_artifact="module_outputs/tier_count_director.json",
+        legacy_artifact="03_tier_count.json",
+    ),
+    OrchestratorModuleSpec(
+        name="cluster_output_merger",
+        implementation="cluster_composer.merge.merge_cluster_outputs",
+        inputs=("cluster_output", "tier_output"),
+        output="merged cluster payload combining semantic clusters and tier/count decisions",
+        output_artifact="module_outputs/cluster_output_merger.json",
+        legacy_artifact="04_cluster_merged.json",
+    ),
+    OrchestratorModuleSpec(
+        name="cluster_composer",
+        implementation="agent.cluster_composer.ClusterComposer.generate",
+        inputs=("merged_output", "cluster_id", "planning_guidance_text"),
+        output="relative object layout for each cluster",
+        output_artifact="module_outputs/cluster_composer/<cluster_id>.json",
+        legacy_artifact="clusters/cluster_composer_<cluster_id>.json",
+    ),
+    OrchestratorModuleSpec(
+        name="cluster_outline",
+        implementation="cluster_composer.outline.compute_cluster_outline",
+        inputs=("cluster_composer_output",),
+        output="outline/envelope payload for each composed cluster",
+        output_artifact="module_outputs/cluster_outline/<cluster_id>.json",
+        legacy_artifact="clusters/cluster_outline_<cluster_id>.json",
+    ),
+    OrchestratorModuleSpec(
+        name="cluster_outline_bundle",
+        implementation="pipeline.orchestrator._compose_variant_bundle_from_tier_output",
+        inputs=("cluster_outline outputs by cluster",),
+        output="all cluster outlines keyed by cluster_id",
+        output_artifact="module_outputs/cluster_outline_bundle.json",
+        legacy_artifact="05_cluster_outlines.json",
+    ),
+    OrchestratorModuleSpec(
+        name="seed_concept_generator",
+        implementation="agent.seed_concept_generator.SeedConceptGenerator.generate_bundle",
+        inputs=("room_output", "seed-aware planner cluster context", "target_count"),
+        output="macro concepts and solver relation plans for layout variants",
+        output_artifact="module_outputs/seed_concept_generator.json",
+        legacy_artifact="05c_seed_relation_plans.json",
+    ),
+    OrchestratorModuleSpec(
+        name="seed_concept_relation_plan",
+        implementation="agent.seed_concept_generator.solver_plan_from_concept",
+        inputs=("macro_concept", "room_output"),
+        output="canonical relation plan consumed by MacroClusterSolver",
+        output_artifact="module_outputs/seed_concept_relation_plan.json",
+        legacy_artifact="05b_cluster_relation_plan.json",
+    ),
+    OrchestratorModuleSpec(
+        name="macro_cluster_solver",
+        implementation="agent.solver.solver.MacroClusterSolver.generate",
+        inputs=(
+            "room_output",
+            "cluster_outlines",
+            "relation_plan",
+            "cluster_output",
+            "GLOBAL_LAYOUT_GRID_MM",
+        ),
+        output="absolute macro placement solution for cluster outlines",
+        output_artifact="module_outputs/macro_cluster_solver.json",
+        legacy_artifact="06a_cluster_solver.json",
+    ),
+    OrchestratorModuleSpec(
+        name="macro_cluster_solver_dropped_inventory",
+        implementation="pipeline.dropped_inventory.dropped_inventory_payload",
+        inputs=("dropped_inventory_by_cluster",),
+        output="dropped or omitted inventory details scoped by cluster",
+        output_artifact="module_outputs/macro_cluster_solver_dropped_inventory.json",
+        legacy_artifact="06b_solver_dropped_inventory.json",
+    ),
+    OrchestratorModuleSpec(
+        name="phase2_controller",
+        implementation="agent.phase2_controller.Phase2Controller.generate",
+        inputs=(
+            "room_output",
+            "merged_output",
+            "cluster_outlines",
+            "relation_plan",
+            "solver_output",
+            "cluster_output",
+        ),
+        output="phase-2 refinement result, including proposal, evaluation, and absolute layout",
+        output_artifact="module_outputs/phase2_controller.json",
+    ),
+    OrchestratorModuleSpec(
+        name="controlled_accessory_refill",
+        implementation="pipeline.dropped_inventory.controlled_accessory_refill",
+        inputs=(
+            "room_output",
+            "absolute_layout",
+            "cluster_output",
+            "dropped_inventory_by_cluster",
+            "refill_policy",
+        ),
+        output="accessory refill summary and updated absolute layout when eligible",
+        output_artifact="module_outputs/controlled_accessory_refill.json",
+        legacy_artifact="07b_accessory_refill.json",
+    ),
+    OrchestratorModuleSpec(
+        name="absolute_layout",
+        implementation="agent.phase2_controller.Phase2Controller.generate:absolute_layout",
+        inputs=("phase2_controller output", "manual_placements"),
+        output="canonical absolute layout consumed by Stylist",
+        output_artifact="module_outputs/absolute_layout.json",
+        legacy_artifact="07_absolute_layout.json",
+    ),
+    OrchestratorModuleSpec(
+        name="stylist",
+        implementation="agent.stylist.Stylist.generate_style_plan/apply_style_plan",
+        inputs=("absolute_layout", "stylist_user_context", "tenant_id"),
+        output="styled result with selected inventory/assets/material/style metadata",
+        output_artifact="module_outputs/stylist.json",
+        legacy_artifact="08_stylist.json",
+    ),
+    OrchestratorModuleSpec(
+        name="layout_variants",
+        implementation="pipeline.layout_variants.select_distinct_final_gallery_candidates",
+        inputs=("final styled candidates", "target_final_count"),
+        output="final selectable gallery variants",
+        output_artifact="module_outputs/layout_variants.json",
+        legacy_artifact="09_layout_variants.json",
+    ),
+)
 
 
 def _build_primary_guidance_text(
@@ -735,6 +931,9 @@ def run_case(
     case_root.mkdir(parents=True, exist_ok=True)
     paths = CasePaths(case_id=case_id, root=case_root)
     paths.clusters_dir.mkdir(parents=True, exist_ok=True)
+    paths.module_outputs_dir.mkdir(parents=True, exist_ok=True)
+    (paths.module_outputs_dir / "cluster_composer").mkdir(parents=True, exist_ok=True)
+    (paths.module_outputs_dir / "cluster_outline").mkdir(parents=True, exist_ok=True)
 
     _write_json(
         paths.meta,
@@ -744,6 +943,7 @@ def run_case(
             "created_at_utc": _now_utc_iso(),
         },
     )
+    _write_module_io_manifest(paths)
     _update_status(paths, "room_interpreter")
 
     # 1) RoomInterpreter
@@ -754,7 +954,12 @@ def run_case(
         special_notes=special_notes,
     ).model_dump()
     room_output = _strip_raw_text(room_output)
-    _write_json(paths.room_interpreter, room_output)
+    _write_module_json(
+        paths,
+        "room_interpreter",
+        room_output,
+        legacy_path=paths.room_interpreter,
+    )
     guidance_text = _build_primary_guidance_text(
         room_output=room_output,
         input_payload=prepared_input_payload,
@@ -787,11 +992,21 @@ def run_case(
         if isinstance(prepared_input_payload, dict)
         else {},
     }
+    style_policy = stylist.compile_style_policy(
+        room_type=room_type,
+        brief_text=planning_guidance_text,
+        room_model_json=room_output,
+    )
+    stylist_user_context["style_policy"] = style_policy
+    _write_module_json(paths, "stylist_style_policy", style_policy)
     _update_status(paths, "cluster_forge")
     cluster_output = cluster_forge.generate(
         room_type,
         description=planning_guidance_text or None,
         special_notes=None,
+        room_model_json=room_output,
+        inventory_catalog=_extract_inventory_catalog(prepared_input_payload),
+        style_policy_json=style_policy,
     ).model_dump()
     cluster_output = _strip_raw_text(cluster_output)
     cluster_output = augment_cluster_forge_with_manual_placements(
@@ -805,7 +1020,12 @@ def run_case(
     if speed_split_notes:
         logger.info("Fast mode split clusters before tier count: %s", speed_split_notes)
     _log_cluster_forge_output(cluster_output, context="primary")
-    _write_json(paths.cluster_forge, cluster_output)
+    _write_module_json(
+        paths,
+        "cluster_forge",
+        cluster_output,
+        legacy_path=paths.cluster_forge,
+    )
 
     _update_status(paths, "tier_count")
     tier_output = tier_count.generate(
@@ -821,7 +1041,12 @@ def run_case(
         manual_placements,
         clusters_json=cluster_output,
     )
-    _write_json(paths.tier_count, tier_output)
+    _write_module_json(
+        paths,
+        "tier_count_director",
+        tier_output,
+        legacy_path=paths.tier_count,
+    )
 
     _update_status(
         paths,
@@ -890,7 +1115,12 @@ def run_case(
             progress_total=total,
         ),
     )
-    _write_json(paths.seed_relation_plans, seed_relation_plans)
+    _write_module_json(
+        paths,
+        "seed_concept_generator",
+        seed_relation_plans,
+        legacy_path=paths.seed_relation_plans,
+    )
     if not planned_bundles:
         _update_status(
             paths,
@@ -996,7 +1226,7 @@ def run_case(
         )
         if judged_bundle is None:
             continue
-        judged_bundle = _reintroduce_judged_variant_bundle(
+        judged_bundle = _refill_judged_variant_accessories(
             bundle=judged_bundle,
             room_output=room_output,
             variant_index=variant_index,
@@ -1013,10 +1243,11 @@ def run_case(
                 target_final_count,
             )
             + (
-                f" Reintroduced {int((judged_bundle.get('reintroduction_summary') or {}).get('inserted_count') or 0)} dropped object(s)."
+                " Controlled Accessory Refill added "
+                f"{int((judged_bundle.get('accessory_refill_summary') or {}).get('refill_count') or 0)} decor/accessory object(s)."
                 if int(
-                    (judged_bundle.get("reintroduction_summary") or {}).get(
-                        "inserted_count"
+                    (judged_bundle.get("accessory_refill_summary") or {}).get(
+                        "refill_count"
                     )
                     or 0
                 )
@@ -1105,7 +1336,12 @@ def run_case(
         final_gallery_candidates,
         status="OK",
     )
-    _write_json(paths.layout_variants, layout_variants)
+    _write_module_json(
+        paths,
+        "layout_variants",
+        layout_variants,
+        legacy_path=paths.layout_variants,
+    )
     payload_variants = layout_variants.get("variants")
     if not isinstance(payload_variants, list) or not payload_variants:
         _update_status(
@@ -1149,7 +1385,12 @@ def run_case(
         or final_gallery_candidates[0].get("reason")
         or "Primary canonical variant selected from the final layout set."
     )
-    _write_json(paths.stylist, canonical_styled_output)
+    _write_module_json(
+        paths,
+        "stylist",
+        canonical_styled_output,
+        legacy_path=paths.stylist,
+    )
     _write_canonical_branch_artifacts(
         paths=paths,
         bundle=canonical_bundle,
@@ -1213,6 +1454,29 @@ def _extract_tenant_id_from_payload(input_payload: dict[str, Any]) -> str | None
         tenant_id = user_input.get("tenant_id")
         if isinstance(tenant_id, str) and tenant_id.strip():
             return tenant_id.strip()
+    return None
+
+
+def _extract_inventory_catalog(
+    input_payload: dict[str, Any],
+) -> list[dict[str, Any]] | None:
+    for key in ("inventory_catalog", "inventory", "inventory_items"):
+        value = input_payload.get(key)
+        if isinstance(value, list):
+            return [dict(item) for item in value if isinstance(item, dict)]
+
+    user_input = input_payload.get("user_input")
+    if isinstance(user_input, dict):
+        for key in ("inventory_catalog", "inventory", "inventory_items"):
+            value = user_input.get(key)
+            if isinstance(value, list):
+                return [dict(item) for item in value if isinstance(item, dict)]
+
+    constraints = input_payload.get("constraints")
+    if isinstance(constraints, dict):
+        value = constraints.get("inventory_catalog")
+        if isinstance(value, list):
+            return [dict(item) for item in value if isinstance(item, dict)]
     return None
 
 
@@ -1376,6 +1640,9 @@ def _run_intent_branch_candidate(
             room_type,
             description=branch_guidance or None,
             special_notes=None,
+            room_model_json=room_output,
+            inventory_catalog=_extract_inventory_catalog(prepared_input_payload),
+            style_policy_json=extract_style_policy(stylist_user_context_json),
         ).model_dump()
         cluster_output = _strip_raw_text(cluster_output)
         cluster_output = augment_cluster_forge_with_manual_placements(
@@ -1941,7 +2208,7 @@ def _build_seed_aware_planner_clusters_json(
         planner_clusters[cluster_id] = {**deepcopy(outline), "seed_state": seed_state}
         seed_clusters.append({"cluster_id": cluster_id, **seed_state})
 
-    return {
+    payload = {
         "clusters": planner_clusters,
         "seed_layout_state": {
             "notes": [
@@ -1964,6 +2231,14 @@ def _build_seed_aware_planner_clusters_json(
             solver_output=solver_output if isinstance(solver_output, dict) else {},
         ),
     }
+    cluster_output = bundle.get("cluster_output")
+    if isinstance(cluster_output, dict) and isinstance(
+        cluster_output.get("semantic_layout_program"), dict
+    ):
+        payload["semantic_layout_program"] = deepcopy(
+            cluster_output["semantic_layout_program"]
+        )
+    return payload
 
 
 def _planner_seed_relation_plan(room_output: dict[str, Any]) -> dict[str, Any]:
@@ -2024,44 +2299,52 @@ def _plan_seed_variant_bundles(
         bundle=bundle,
         solver_output=solver_output if isinstance(solver_output, dict) else None,
     )
-    briefs = build_seed_variant_briefs(target_count)
+    macro_concept_bundle = relation_planner.generate_bundle(
+        room_model_json=room_output,
+        clusters_json=planner_clusters_json,
+        target_count=target_count,
+    )
     planned_bundles: list[dict[str, Any]] = []
     payload_variants: list[dict[str, Any]] = []
-    total = len(briefs)
-    for index, brief in enumerate(briefs, start=1):
+    concepts = [
+        concept
+        for concept in macro_concept_bundle.get("concepts", [])
+        if isinstance(concept, dict)
+    ]
+    total = len(concepts)
+    for index, concept in enumerate(concepts, start=1):
+        concept_family = str(concept.get("concept_family") or f"concept_{index}")
         if on_progress is not None:
             on_progress(
                 index - 1,
                 total,
-                f"Planning layout concept {index}/{total}: {brief.source}.",
+                f"Planning layout concept {index}/{total}: {concept_family}.",
             )
-        relation_plan = relation_planner.generate(
+        relation_plan = solver_plan_from_concept(
+            concept=concept,
             room_model_json=room_output,
-            clusters_json=planner_clusters_json,
-            description=guidance_text,
-            special_notes=brief.special_notes,
-            model_name=brief.model_name,
+            room_type=str(macro_concept_bundle.get("room_type") or ""),
         )
         relation_plan = _strip_raw_text(relation_plan)
-        relation_plan = apply_seed_variant_policy(
-            relation_plan=relation_plan,
-            planner_clusters_json=planner_clusters_json,
-            brief=brief,
-        )
         planned_bundle = deepcopy(bundle)
         planned_bundle["relation_plan"] = relation_plan
-        planned_bundle["source"] = brief.source
-        planned_bundle["reason"] = brief.reason
-        planned_bundle["planner_model_name"] = brief.model_name
+        planned_bundle["macro_concept"] = deepcopy(concept)
+        planned_bundle["source"] = concept_family
+        planned_bundle["reason"] = str(
+            concept.get("spatial_character")
+            or "Deterministic topology-aware macro concept."
+        )
+        planned_bundle["planner_model_name"] = "deterministic"
         planned_bundle["seed_index"] = index
         planned_bundles.append(planned_bundle)
         payload_variants.append(
             {
                 "variant_id": f"plan_{index}",
                 "label": f"Intent {index}",
-                "source": brief.source,
-                "planner_model_name": brief.model_name,
-                "reason": brief.reason,
+                "source": concept_family,
+                "planner_model_name": "deterministic",
+                "reason": planned_bundle["reason"],
+                "macro_concept": deepcopy(concept),
                 "relation_plan": deepcopy(relation_plan),
             }
         )
@@ -2069,13 +2352,12 @@ def _plan_seed_variant_bundles(
             on_progress(
                 index,
                 total,
-                f"Planning layout concept {index}/{total}: {brief.source} ready.",
+                f"Planning layout concept {index}/{total}: {concept_family} ready.",
             )
-    return planned_bundles, {
-        "status": "OK",
-        "seed_context": deepcopy(planner_clusters_json),
-        "variants": payload_variants,
-    }
+    macro_concept_bundle["seed_context"] = deepcopy(planner_clusters_json)
+    macro_concept_bundle["variants"] = payload_variants
+    macro_concept_bundle["guidance_summary"] = guidance_text[:1200]
+    return planned_bundles, dict(macro_concept_bundle)
 
 
 def _style_variant_user_context(
@@ -2115,6 +2397,8 @@ def _solver_feasibility_allows_backoff(feasibility: dict[str, Any]) -> bool:
     offenders = feasibility.get("offenders")
     if not isinstance(offenders, list) or not offenders:
         return False
+    if _solver_feasibility_requires_semantic_recompose(feasibility):
+        return False
     reasons = {
         str(item.get("reason") or "").strip()
         for item in offenders
@@ -2124,6 +2408,48 @@ def _solver_feasibility_allows_backoff(feasibility: dict[str, Any]) -> bool:
         "SOLVER_EXACT_ASSIGNMENT_UNSAT",
         "SOLVER_HAS_NO_HARD_VALID_CANDIDATES",
     }
+
+
+def _solver_feasibility_requires_semantic_recompose(
+    feasibility: dict[str, Any],
+) -> bool:
+    offenders = feasibility.get("offenders")
+    if not isinstance(offenders, list):
+        return False
+    for offender in offenders:
+        if not isinstance(offender, dict):
+            continue
+        reason = str(offender.get("reason") or "").strip()
+        placer_seed_reason = str(offender.get("placer_seed_reason") or "").strip()
+        if reason == "SOLVER_CONCEPT_POLICY_EMPTY_POOL":
+            return True
+        before_count = offender.get("candidate_count_before_policy")
+        after_count = offender.get("candidate_count_after_policy")
+        if (
+            placer_seed_reason == "required_clusters_without_candidates"
+            and isinstance(before_count, int)
+            and before_count > 0
+            and after_count == 0
+        ):
+            return True
+    return False
+
+
+def _solver_feasibility_offender_ids(feasibility: dict[str, Any]) -> list[str]:
+    offenders = feasibility.get("offenders")
+    if not isinstance(offenders, list):
+        return []
+    cluster_ids: list[str] = []
+    seen: set[str] = set()
+    for offender in offenders:
+        if not isinstance(offender, dict):
+            continue
+        cluster_id = str(offender.get("cluster_id") or "").strip()
+        if not cluster_id or cluster_id in seen:
+            continue
+        cluster_ids.append(cluster_id)
+        seen.add(cluster_id)
+    return cluster_ids
 
 
 def _solver_parallel_limit(target_final_count: int) -> int:
@@ -2272,42 +2598,76 @@ def _build_solver_seed_relation_plan(
 def _write_bundle_stage_artifacts(paths: CasePaths, bundle: dict[str, Any]) -> None:
     cluster_output = bundle.get("cluster_output")
     if isinstance(cluster_output, dict):
-        _write_json(paths.cluster_forge, cluster_output)
+        _write_module_json(
+            paths,
+            "cluster_forge",
+            cluster_output,
+            legacy_path=paths.cluster_forge,
+        )
 
     tier_output = bundle.get("tier_output")
     if isinstance(tier_output, dict):
-        _write_json(paths.tier_count, tier_output)
+        _write_module_json(
+            paths,
+            "tier_count_director",
+            tier_output,
+            legacy_path=paths.tier_count,
+        )
 
     merged_output = bundle.get("merged_output")
     if isinstance(merged_output, dict):
-        _write_json(paths.cluster_merged, merged_output)
+        _write_module_json(
+            paths,
+            "cluster_output_merger",
+            merged_output,
+            legacy_path=paths.cluster_merged,
+        )
 
     cluster_results = bundle.get("cluster_results")
     if isinstance(cluster_results, dict):
         for cluster_id, cluster_result in cluster_results.items():
             if isinstance(cluster_id, str) and isinstance(cluster_result, dict):
                 _write_json(paths.cluster_composer(cluster_id), cluster_result)
+                _write_json(paths.module_cluster_composer(cluster_id), cluster_result)
 
     cluster_outlines = bundle.get("cluster_outlines")
     if isinstance(cluster_outlines, dict):
         for cluster_id, outline in cluster_outlines.items():
             if isinstance(cluster_id, str) and isinstance(outline, dict):
                 _write_json(paths.cluster_outline(cluster_id), outline)
-        _write_json(paths.cluster_outlines_all, cluster_outlines)
+                _write_json(paths.module_cluster_outline(cluster_id), outline)
+        _write_module_json(
+            paths,
+            "cluster_outline_bundle",
+            cluster_outlines,
+            legacy_path=paths.cluster_outlines_all,
+        )
 
     relation_plan = bundle.get("relation_plan")
     if isinstance(relation_plan, dict):
-        _write_json(paths.cluster_relation_plan, relation_plan)
+        _write_module_json(
+            paths,
+            "seed_concept_relation_plan",
+            relation_plan,
+            legacy_path=paths.cluster_relation_plan,
+        )
 
     solver_output = bundle.get("solver_output")
     if isinstance(solver_output, dict):
-        _write_json(paths.cluster_solver, solver_output)
+        _write_module_json(
+            paths,
+            "macro_cluster_solver",
+            solver_output,
+            legacy_path=paths.cluster_solver,
+        )
 
     dropped_inventory = bundle.get("dropped_inventory_by_cluster")
     if isinstance(dropped_inventory, dict):
-        _write_json(
-            paths.solver_dropped_inventory,
+        _write_module_json(
+            paths,
+            "macro_cluster_solver_dropped_inventory",
             dropped_inventory_payload(dropped_inventory),
+            legacy_path=paths.solver_dropped_inventory,
         )
 
 
@@ -2386,6 +2746,115 @@ def _remap_cluster_geometry_bundle(
         cluster_outlines=cluster_outlines,
     )
     return remapped_bundle
+
+
+def _semantic_recompose_cluster_bundle(
+    *,
+    room_output: dict[str, Any],
+    guidance_text: str,
+    composer: ClusterComposer,
+    feasibility: dict[str, Any],
+    previous_bundle: dict[str, Any],
+) -> dict[str, Any] | None:
+    cluster_output = previous_bundle.get("cluster_output")
+    tier_output = previous_bundle.get("tier_output")
+    previous_cluster_results = previous_bundle.get("cluster_results")
+    previous_cluster_outlines = previous_bundle.get("cluster_outlines")
+    if not isinstance(cluster_output, dict):
+        return None
+    if not isinstance(tier_output, dict):
+        return None
+    if not isinstance(previous_cluster_results, dict):
+        return None
+    if not isinstance(previous_cluster_outlines, dict):
+        return None
+
+    offender_ids = set(_solver_feasibility_offender_ids(feasibility))
+    if not offender_ids:
+        return None
+
+    merged_output = merge_cluster_outputs(cluster_output, tier_output)
+    merged_output = _strip_raw_text(merged_output)
+    special_notes = _semantic_recompose_notes(feasibility)
+
+    cluster_results: dict[str, Any] = {}
+    cluster_outlines: dict[str, Any] = {}
+    for cluster in merged_output.get("clusters", []):
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+
+        previous_result = previous_cluster_results.get(cluster_id)
+        previous_outline = previous_cluster_outlines.get(cluster_id)
+        should_recompose = cluster_id in offender_ids or not isinstance(
+            previous_result,
+            dict,
+        )
+        if should_recompose:
+            cluster_result = composer.generate(
+                merged_clusters=merged_output,
+                cluster_id=cluster_id,
+                description=guidance_text,
+                special_notes=special_notes,
+            )
+            cluster_result = _strip_raw_text(cluster_result)
+        else:
+            cluster_result = deepcopy(previous_result)
+
+        if not isinstance(cluster_result, dict):
+            return None
+
+        cluster_results[cluster_id] = cluster_result
+        if should_recompose or not isinstance(previous_outline, dict):
+            cluster_outlines[cluster_id] = _strip_raw_text(
+                compute_cluster_outline(cluster_result)
+            )
+        else:
+            cluster_outlines[cluster_id] = deepcopy(previous_outline)
+
+    if not cluster_results:
+        return None
+
+    recomposed_bundle = deepcopy(previous_bundle)
+    recomposed_bundle["merged_output"] = merged_output
+    recomposed_bundle["cluster_results"] = cluster_results
+    recomposed_bundle["cluster_outlines"] = cluster_outlines
+    recomposed_bundle["compose_feasibility"] = evaluate_composed_cluster_feasibility(
+        room_output=room_output,
+        merged_output=merged_output,
+        cluster_results=cluster_results,
+        cluster_outlines=cluster_outlines,
+    )
+    recomposed_bundle["notes"] = _collect_unique_notes(
+        previous_bundle.get("notes"),
+        [
+            "Recomposed semantic cluster variants after concept policy emptied the solver candidate pool."
+        ],
+    )
+    return recomposed_bundle
+
+
+def _semantic_recompose_notes(feasibility: dict[str, Any]) -> str:
+    lines = [
+        "Solver feedback: regenerate semantic variants for these clusters.",
+        "Do not shrink/drop furniture for this feedback; preserve the requested inventory unless the cluster itself is invalid.",
+        "The macro solver had hard-valid candidates before concept-family policy, but policy removed the compatible pool or left required clusters without candidates.",
+    ]
+    for offender in feasibility.get("offenders") or []:
+        if not isinstance(offender, dict):
+            continue
+        cluster_id = str(offender.get("cluster_id") or "").strip()
+        reason = str(offender.get("reason") or "").strip()
+        before_count = offender.get("candidate_count_before_policy")
+        after_count = offender.get("candidate_count_after_policy")
+        if not cluster_id:
+            continue
+        lines.append(
+            f"{cluster_id}: {reason}; before_policy={before_count}; after_policy={after_count}."
+        )
+    return "\n".join(lines)
 
 
 def _build_layout_variants_payload_from_final_candidates(
@@ -2475,7 +2944,7 @@ def _bundle_signature(bundle: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
-def _reintroduce_judged_variant_bundle(
+def _refill_judged_variant_accessories(
     *,
     bundle: dict[str, Any],
     room_output: dict[str, Any],
@@ -2491,23 +2960,35 @@ def _reintroduce_judged_variant_bundle(
     if not isinstance(dropped_inventory, dict) or not dropped_inventory:
         return bundle
 
-    updated_layout, reintroduction_summary = reintroduce_dropped_inventory(
+    phase2_result = bundle.get("phase2_result")
+    refined_layout_solution = (
+        phase2_result.get("refined_layout_solution")
+        if isinstance(phase2_result, dict)
+        else None
+    )
+    updated_layout, refill_summary = controlled_accessory_refill(
         room_output=room_output,
         absolute_layout=absolute_layout,
         cluster_output=cluster_output,
         dropped_inventory_by_cluster=dropped_inventory,
-        grid_mm=GLOBAL_LAYOUT_GRID_MM,
+        refined_layout_solution=(
+            refined_layout_solution
+            if isinstance(refined_layout_solution, dict)
+            else None
+        ),
+        refill_policy=decor_refill_policy(extract_style_policy(cluster_output)),
+        grid_mm=25,
     )
     updated_bundle = deepcopy(bundle)
     updated_bundle["absolute_layout"] = updated_layout
-    updated_bundle["reintroduction_summary"] = reintroduction_summary
-    inserted_count = int(reintroduction_summary.get("inserted_count") or 0)
-    if inserted_count > 0:
+    updated_bundle["accessory_refill_summary"] = refill_summary
+    refill_count = int(refill_summary.get("refill_count") or 0)
+    if refill_count > 0:
         updated_bundle["notes"] = _collect_unique_notes(
             updated_bundle.get("notes"),
             [
-                "Post-judge refill reintroduced "
-                f"{inserted_count} deferred object(s) into final layout {variant_index}."
+                "Controlled Accessory Refill added "
+                f"{refill_count} decor/accessory object(s) to final layout {variant_index}."
             ],
         )
     return updated_bundle
@@ -2757,11 +3238,11 @@ def _solve_planned_variant_bundle(
     max_attempts: int = 8,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any] | None:
-    _ = guidance_text
     max_attempts = _solver_attempt_limit(max_attempts)
     try:
         current_bundle = deepcopy(bundle)
         feedback_notes = list(current_bundle.get("notes") or [])
+        semantic_recompose_used = False
         dropped_inventory_by_cluster = merge_dropped_inventory(
             deepcopy(current_bundle.get("dropped_inventory_by_cluster") or {}),
             collect_seed_omitted_inventory(
@@ -2852,6 +3333,62 @@ def _solve_planned_variant_bundle(
                     f"{_attempt}/{max_attempts}: offending clusters "
                     f"{', '.join(offender_ids) if offender_ids else 'unknown'}.",
                 )
+
+            if _solver_feasibility_requires_semantic_recompose(solver_feasibility):
+                if semantic_recompose_used:
+                    if on_progress is not None:
+                        on_progress(
+                            _attempt,
+                            max_attempts,
+                            f"solver attempt {_attempt}/{max_attempts}: semantic candidate pool stayed empty after recompose; stopping this concept.",
+                        )
+                    break
+
+                recomposed_bundle = _semantic_recompose_cluster_bundle(
+                    room_output=room_output,
+                    guidance_text=guidance_text,
+                    composer=composer,
+                    feasibility=solver_feasibility,
+                    previous_bundle=current_bundle,
+                )
+                if recomposed_bundle is None:
+                    if on_progress is not None:
+                        on_progress(
+                            _attempt,
+                            max_attempts,
+                            f"solver attempt {_attempt}/{max_attempts}: semantic recompose could not rebuild the offending clusters.",
+                        )
+                    break
+
+                semantic_recompose_used = True
+                current_bundle["merged_output"] = recomposed_bundle.get("merged_output")
+                current_bundle["cluster_results"] = recomposed_bundle.get(
+                    "cluster_results"
+                )
+                current_bundle["cluster_outlines"] = recomposed_bundle.get(
+                    "cluster_outlines"
+                )
+                current_bundle["compose_feasibility"] = recomposed_bundle.get(
+                    "compose_feasibility"
+                )
+                feedback_notes = _collect_unique_notes(
+                    feedback_notes,
+                    recomposed_bundle.get("notes"),
+                    solver_output.get("notes")
+                    if isinstance(solver_output, dict)
+                    else [],
+                )
+                current_bundle["notes"] = list(feedback_notes)
+                current_bundle["dropped_inventory_by_cluster"] = deepcopy(
+                    dropped_inventory_by_cluster
+                )
+                if on_progress is not None:
+                    on_progress(
+                        _attempt,
+                        max_attempts,
+                        f"solver attempt {_attempt}/{max_attempts}: recomposed semantic variants for concept-policy empty candidate pools.",
+                    )
+                continue
 
             if not _solver_feasibility_allows_backoff(solver_feasibility):
                 if on_progress is not None:
@@ -3041,6 +3578,17 @@ def _seek_feasible_bundle_from_tier_output(
         )
         if on_progress is not None:
             on_progress(attempt, max_attempts, message)
+
+        if feedback_stage == "solver_probe" and not _solver_feasibility_allows_backoff(
+            active_feedback
+        ):
+            if on_progress is not None:
+                on_progress(
+                    attempt,
+                    max_attempts,
+                    f"{feedback_stage} attempt {attempt}/{max_attempts}: stopping without shrink/drop because this solver failure needs semantic recompose.",
+                )
+            break
 
         current_tier_output, backoff_notes, changed = apply_compose_backoff(
             tier_output=current_tier_output,
@@ -3749,54 +4297,99 @@ def _write_canonical_branch_artifacts(
 ) -> None:
     cluster_output = bundle.get("cluster_output")
     if isinstance(cluster_output, dict):
-        _write_json(paths.cluster_forge, cluster_output)
+        _write_module_json(
+            paths,
+            "cluster_forge",
+            cluster_output,
+            legacy_path=paths.cluster_forge,
+        )
 
     tier_output = bundle.get("tier_output")
     if isinstance(tier_output, dict):
-        _write_json(paths.tier_count, tier_output)
+        _write_module_json(
+            paths,
+            "tier_count_director",
+            tier_output,
+            legacy_path=paths.tier_count,
+        )
 
     merged_output = bundle.get("merged_output")
     if isinstance(merged_output, dict):
-        _write_json(paths.cluster_merged, merged_output)
+        _write_module_json(
+            paths,
+            "cluster_output_merger",
+            merged_output,
+            legacy_path=paths.cluster_merged,
+        )
 
     cluster_results = bundle.get("cluster_results")
     if isinstance(cluster_results, dict):
         for cluster_id, cluster_result in cluster_results.items():
             if isinstance(cluster_id, str) and isinstance(cluster_result, dict):
                 _write_json(paths.cluster_composer(cluster_id), cluster_result)
+                _write_json(paths.module_cluster_composer(cluster_id), cluster_result)
 
     cluster_outlines = bundle.get("cluster_outlines")
     if isinstance(cluster_outlines, dict):
         for cluster_id, outline in cluster_outlines.items():
             if isinstance(cluster_id, str) and isinstance(outline, dict):
                 _write_json(paths.cluster_outline(cluster_id), outline)
-        _write_json(paths.cluster_outlines_all, cluster_outlines)
+                _write_json(paths.module_cluster_outline(cluster_id), outline)
+        _write_module_json(
+            paths,
+            "cluster_outline_bundle",
+            cluster_outlines,
+            legacy_path=paths.cluster_outlines_all,
+        )
 
     relation_plan = bundle.get("relation_plan")
     if isinstance(relation_plan, dict):
-        _write_json(paths.cluster_relation_plan, relation_plan)
+        _write_module_json(
+            paths,
+            "seed_concept_relation_plan",
+            relation_plan,
+            legacy_path=paths.cluster_relation_plan,
+        )
 
     solver_output = bundle.get("solver_output")
     if isinstance(solver_output, dict):
-        _write_json(paths.cluster_solver, solver_output)
+        _write_module_json(
+            paths,
+            "macro_cluster_solver",
+            solver_output,
+            legacy_path=paths.cluster_solver,
+        )
 
     dropped_inventory = bundle.get("dropped_inventory_by_cluster")
     if isinstance(dropped_inventory, dict):
-        _write_json(
-            paths.solver_dropped_inventory,
+        _write_module_json(
+            paths,
+            "macro_cluster_solver_dropped_inventory",
             dropped_inventory_payload(dropped_inventory),
+            legacy_path=paths.solver_dropped_inventory,
         )
 
     phase2_result = bundle.get("phase2_result")
     if isinstance(phase2_result, dict):
         placer_output = _strip_raw_text(phase2_result.get("proposal") or {})
+        _write_module_json(paths, "phase2_controller", phase2_result)
         _write_json(paths.cluster_placer, placer_output)
 
-    _write_json(paths.absolute_layout, absolute_layout)
-    reintroduction_summary = bundle.get("reintroduction_summary")
-    if isinstance(reintroduction_summary, dict):
-        _write_json(paths.reintroduced_objects, reintroduction_summary)
-    _write_json(paths.stylist, styled_output)
+    _write_module_json(
+        paths,
+        "absolute_layout",
+        absolute_layout,
+        legacy_path=paths.absolute_layout,
+    )
+    accessory_refill_summary = bundle.get("accessory_refill_summary")
+    if isinstance(accessory_refill_summary, dict):
+        _write_module_json(
+            paths,
+            "controlled_accessory_refill",
+            accessory_refill_summary,
+            legacy_path=paths.accessory_refill,
+        )
+    _write_module_json(paths, "stylist", styled_output, legacy_path=paths.stylist)
 
 
 def _strip_raw_text(payload: Any) -> Any:
@@ -3880,6 +4473,41 @@ def _write_json(path: Path, payload: Any) -> None:
     temp_path = path.with_suffix(f"{path.suffix}.tmp")
     temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     temp_path.replace(path)
+
+
+def _write_module_json(
+    paths: CasePaths,
+    module_name: str,
+    payload: Any,
+    *,
+    legacy_path: Path | None = None,
+) -> None:
+    _write_json(paths.module_output(module_name), payload)
+    if legacy_path is not None:
+        _write_json(legacy_path, payload)
+
+
+def _write_module_io_manifest(paths: CasePaths) -> None:
+    _write_json(paths.module_io_manifest, _module_io_manifest_payload(paths))
+
+
+def _module_io_manifest_payload(paths: CasePaths) -> dict[str, Any]:
+    return {
+        "case_id": paths.case_id,
+        "scope": "pipeline.orchestrator.run_case",
+        "generated_at_utc": _now_utc_iso(),
+        "modules": [
+            {
+                "module": spec.name,
+                "implementation": spec.implementation,
+                "inputs": list(spec.inputs),
+                "output": spec.output,
+                "output_artifact": spec.output_artifact,
+                "legacy_artifact": spec.legacy_artifact,
+            }
+            for spec in ORCHESTRATOR_MODULE_SPECS
+        ],
+    }
 
 
 def _update_status(

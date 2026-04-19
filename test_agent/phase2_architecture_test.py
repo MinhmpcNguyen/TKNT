@@ -1095,6 +1095,116 @@ class Phase2ArchitectureTest(unittest.TestCase):
         )
         self.assertIsInstance(first_variant.get("card"), dict)
 
+    def test_build_phase2_payload_hydrates_variant_bundle_geometry(self) -> None:
+        room = {
+            "room": {
+                "polygon_ccw": [
+                    {"x": 0, "y": 0},
+                    {"x": 5000, "y": 0},
+                    {"x": 5000, "y": 4000},
+                    {"x": 0, "y": 4000},
+                ]
+            },
+            "openings": {},
+            "obstacles": [],
+        }
+        clusters = {
+            "clusters": [
+                {
+                    "cluster_id": "conversation",
+                    "tag": "conversation",
+                    "members": ["chair", "table"],
+                    "decisions": [
+                        {"id": "chair", "rep_dims_m": {"w": 1.0, "h": 0.8}},
+                        {"id": "table", "rep_dims_m": {"w": 0.8, "h": 0.6}},
+                    ],
+                }
+            ]
+        }
+        variant_id = "conversation__variant__01"
+        outlines = {
+            "conversation": {
+                "status": "OK",
+                "cluster_id": "conversation",
+                "local_placements": [],
+                "cluster_footprint": {
+                    "type": "union_of_rects",
+                    "rects": [],
+                    "local_bbox": {
+                        "min_x": 0,
+                        "min_y": 0,
+                        "max_x": 0,
+                        "max_y": 0,
+                    },
+                },
+                "variant_bundle": [
+                    {
+                        "variant_id": variant_id,
+                        "variant_family": "conversation_facing",
+                        "local_placements": [
+                            {"id": "chair", "x": 100, "y": 100, "rot": 0},
+                            {"id": "table", "x": 1300, "y": 100, "rot": 0},
+                        ],
+                        "interaction_placements": [
+                            {"id": "chair", "x": 100, "y": 100, "w": 1000, "h": 800},
+                            {"id": "table", "x": 1300, "y": 100, "w": 800, "h": 600},
+                            {
+                                "id": "access:chair",
+                                "x": 100,
+                                "y": 900,
+                                "w": 300,
+                                "h": 300,
+                            },
+                        ],
+                        "interaction_hull_polygon_mm": [
+                            {"x": 100, "y": 100},
+                            {"x": 2100, "y": 100},
+                            {"x": 2100, "y": 900},
+                            {"x": 100, "y": 900},
+                        ],
+                        "local_bbox_mm": {"min": [100, 100], "max": [2100, 900]},
+                        "hard_valid": True,
+                    }
+                ],
+            }
+        }
+        solver = {
+            "status": "OK",
+            "solver_debug": {
+                "best_transforms": [
+                    {"cluster_id": "conversation", "x": 500, "y": 500, "rot": 0}
+                ],
+                "best_selected_variants": [
+                    {"cluster_id": "conversation", "variant_id": variant_id}
+                ],
+                "best_verify": {"hard_valid": True, "complete": True},
+            },
+        }
+
+        payload = build_phase2_payload(
+            room_01=room,
+            clusters_04=clusters,
+            outlines_05=outlines,
+            relation_05b={},
+            placer_06=solver,
+            cluster_constraints=None,
+        )
+        card = payload["cluster_cards"][0]
+        variant = card["available_variants"][0]
+        rects = ((variant.get("card") or {}).get("cluster_footprint") or {}).get(
+            "rects"
+        )
+        compiled = CompileAcceptedPhase2Proposal(
+            payload=payload,
+            repair=make_no_improvement_repair(payload),
+        )
+
+        self.assertEqual(variant["variant_id"], variant_id)
+        self.assertEqual(variant["family"], "conversation_facing")
+        self.assertEqual(len(rects), 2)
+        self.assertEqual(compiled["status"], "OK")
+        self.assertEqual(len(compiled["objects"]), 2)
+
     def test_postsolve_orientation_snap_prefers_object_move_when_it_improves(
         self,
     ) -> None:

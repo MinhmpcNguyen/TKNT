@@ -127,22 +127,53 @@ def evaluate_solver_cluster_feasibility(
         for cluster_id in (solver_output.get("skipped_clusters") or [])
         if str(cluster_id).strip()
     ]
-    skipped_lookup = set(skipped_clusters)
-    candidate_counts = solver_output.get("solver_debug", {}).get("candidate_counts")
-    if not isinstance(candidate_counts, dict):
-        candidate_counts = {}
+    solver_debug = _solver_debug(solver_output)
+    candidate_counts = _solver_count_map(solver_debug, "candidate_counts")
+    before_policy_counts = _solver_count_map(
+        solver_debug,
+        "candidate_counts_before_policy",
+    )
+    after_policy_counts = _solver_count_map(
+        solver_debug,
+        "candidate_counts_after_policy",
+    )
+    placer_seed = solver_output.get("placer_seed")
+    if not isinstance(placer_seed, dict):
+        placer_seed = {}
+    placer_seed_reason = str(placer_seed.get("reason") or "").strip()
+    conflicts = _solver_text_list(solver_output.get("conflicts"))
+    blocked_clusters = {
+        *skipped_clusters,
+        *_solver_text_list(placer_seed.get("required_clusters_without_candidates")),
+    }
 
     offenders: list[dict[str, Any]] = []
     for cluster in _clusters(merged_output):
         cluster_id = str(cluster.get("cluster_id") or "").strip()
-        if not cluster_id or cluster_id not in skipped_lookup:
+        if not cluster_id or cluster_id not in blocked_clusters:
             continue
+        before_count = _solver_cluster_count(before_policy_counts, cluster_id)
+        after_count = _solver_cluster_count(after_policy_counts, cluster_id)
+        candidate_count = _solver_cluster_count(candidate_counts, cluster_id)
         offenders.append(
             {
                 "cluster_id": cluster_id,
-                "reason": "SOLVER_HAS_NO_HARD_VALID_CANDIDATES",
-                "candidate_count": int(candidate_counts.get(cluster_id) or 0),
-                "solver_status": str(solver_output.get("status") or "").strip().upper(),
+                "reason": _solver_cluster_failure_reason(
+                    before_count=before_count,
+                    after_count=after_count,
+                    candidate_count=candidate_count,
+                    default_reason="SOLVER_HAS_NO_HARD_VALID_CANDIDATES",
+                ),
+                "candidate_count": _known_solver_count(
+                    candidate_count,
+                    after_count,
+                    before_count,
+                ),
+                "candidate_count_before_policy": before_count,
+                "candidate_count_after_policy": after_count,
+                "solver_status": solver_status,
+                "placer_seed_reason": placer_seed_reason,
+                "conflicts": conflicts,
             }
         )
 
@@ -160,12 +191,28 @@ def evaluate_solver_cluster_feasibility(
             solver_output=solver_output,
             candidate_counts=candidate_counts,
         ):
+            before_count = _solver_cluster_count(before_policy_counts, cluster_id)
+            after_count = _solver_cluster_count(after_policy_counts, cluster_id)
+            candidate_count = _solver_cluster_count(candidate_counts, cluster_id)
             offenders.append(
                 {
                     "cluster_id": cluster_id,
-                    "reason": "SOLVER_EXACT_ASSIGNMENT_UNSAT",
-                    "candidate_count": int(candidate_counts.get(cluster_id) or 0),
+                    "reason": _solver_cluster_failure_reason(
+                        before_count=before_count,
+                        after_count=after_count,
+                        candidate_count=candidate_count,
+                        default_reason="SOLVER_EXACT_ASSIGNMENT_UNSAT",
+                    ),
+                    "candidate_count": _known_solver_count(
+                        candidate_count,
+                        after_count,
+                        before_count,
+                    ),
+                    "candidate_count_before_policy": before_count,
+                    "candidate_count_after_policy": after_count,
                     "solver_status": solver_status,
+                    "placer_seed_reason": placer_seed_reason,
+                    "conflicts": conflicts,
                 }
             )
 
@@ -176,6 +223,73 @@ def evaluate_solver_cluster_feasibility(
         "skipped_clusters": skipped_clusters,
         "offenders": offenders,
     }
+
+
+def _solver_debug(solver_output: dict[str, Any]) -> dict[str, Any]:
+    solver_debug = solver_output.get("solver_debug")
+    return solver_debug if isinstance(solver_debug, dict) else {}
+
+
+def _solver_count_map(
+    solver_debug: dict[str, Any],
+    key: str,
+) -> dict[str, int | None]:
+    raw = solver_debug.get(key)
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(cluster_id).strip(): _coerce_int_count(value)
+        for cluster_id, value in raw.items()
+        if str(cluster_id).strip()
+    }
+
+
+def _solver_cluster_count(
+    counts: dict[str, int | None],
+    cluster_id: str,
+) -> int | None:
+    return counts.get(cluster_id)
+
+
+def _known_solver_count(*counts: int | None) -> int:
+    for count in counts:
+        if count is not None:
+            return max(0, int(count))
+    return 0
+
+
+def _coerce_int_count(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _solver_text_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _solver_cluster_failure_reason(
+    *,
+    before_count: int | None,
+    after_count: int | None,
+    candidate_count: int | None,
+    default_reason: str,
+) -> str:
+    if before_count is not None and before_count > 0 and after_count == 0:
+        return "SOLVER_CONCEPT_POLICY_EMPTY_POOL"
+    if before_count == 0:
+        return "SOLVER_HAS_NO_HARD_VALID_CANDIDATES"
+    if before_count is None and after_count == 0 and candidate_count == 0:
+        return "SOLVER_HAS_NO_HARD_VALID_CANDIDATES"
+    return default_reason
 
 
 def _solver_output_has_complete_hard_valid_layout(

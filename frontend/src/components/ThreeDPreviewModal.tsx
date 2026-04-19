@@ -53,7 +53,7 @@ type ObjectVisualDiagnostic = {
 };
 
 const MM_TO_M = 0.001;
-const REINTRODUCED_ASSET_ID_PATTERN = /__reintroduced(?:_\d+)?$/i;
+const REFILL_ASSET_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
 
 function defaultHeightMm(type: string): number {
   const t = type.toLowerCase();
@@ -80,7 +80,7 @@ function normalizeRenderAssetId(value: unknown): string | null {
   if (!raw) {
     return null;
   }
-  const normalized = raw.replace(REINTRODUCED_ASSET_ID_PATTERN, '').trim();
+  const normalized = raw.replace(REFILL_ASSET_ID_PATTERN, '').trim();
   return normalized || raw;
 }
 
