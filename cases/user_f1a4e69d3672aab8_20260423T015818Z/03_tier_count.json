@@ -1,0 +1,436 @@
+{
+  "status": "OK",
+  "room_type": "living_room",
+  "cluster_decisions": [
+    {
+      "cluster_id": "main_seating",
+      "decision_status": "active",
+      "selected_bundles": [
+        {
+          "bundle_id": "main_seating_bundle",
+          "preserve_level": "highest",
+          "bundle_class": "indispensable",
+          "objects": [
+            {
+              "object_type": "coffee_table",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "support",
+              "decision_reason": "high completeness utility under clutter budget",
+              "utility_score": 10.448,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 4.2,
+                "completeness": 1.1,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.202,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.95,
+                "protected_bonus": 0.9,
+                "space_surplus_bonus": 0.0,
+                "total": 10.448
+              }
+            },
+            {
+              "object_type": "armchair",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "secondary_support",
+              "decision_reason": "positive utility after room-fit and circulation penalties",
+              "utility_score": 7.888,
+              "utility_breakdown": {
+                "function": 2.1,
+                "semantic": 4.2,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.212,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.55,
+                "protected_bonus": 0.0,
+                "space_surplus_bonus": 0.0,
+                "total": 7.888
+              }
+            },
+            {
+              "object_type": "side_table",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "support",
+              "decision_reason": "high completeness utility under clutter budget",
+              "utility_score": 9.055,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 4.2,
+                "completeness": 1.1,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.065,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.32,
+                "protected_bonus": 0.0,
+                "space_surplus_bonus": 0.0,
+                "total": 9.055
+              }
+            },
+            {
+              "object_type": "floor_lamp",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "support",
+              "decision_reason": "positive utility after room-fit and circulation penalties",
+              "utility_score": 8.11,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 4.2,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.04,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.0,
+                "space_surplus_bonus": 0.0,
+                "total": 8.11
+              }
+            },
+            {
+              "object_type": "sofa",
+              "quantity": 1,
+              "size_tier": "M",
+              "role": "dominant_anchor",
+              "decision_reason": "highest functional utility and semantic anchor value",
+              "utility_score": 10.203,
+              "utility_breakdown": {
+                "function": 5.6,
+                "semantic": 5.0,
+                "completeness": 0.45,
+                "roomfit": -0.8,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.797,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": 0.0,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.9,
+                "space_surplus_bonus": 0.0,
+                "total": 10.203
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cluster_id": "media",
+      "decision_status": "active",
+      "selected_bundles": [
+        {
+          "bundle_id": "media_bundle",
+          "preserve_level": "highest",
+          "bundle_class": "indispensable",
+          "objects": [
+            {
+              "object_type": "tv_console",
+              "quantity": 1,
+              "size_tier": "M",
+              "role": "dominant_anchor",
+              "decision_reason": "highest functional utility and semantic anchor value",
+              "utility_score": 13.065,
+              "utility_breakdown": {
+                "function": 5.6,
+                "semantic": 5.0,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.135,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": 0.0,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.9,
+                "space_surplus_bonus": 0.0,
+                "total": 13.065
+              }
+            },
+            {
+              "object_type": "media_shelf",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "support",
+              "decision_reason": "positive utility after room-fit and circulation penalties",
+              "utility_score": 7.167,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 3.0,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 0.15,
+                "circulation_penalty": 0.103,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.32,
+                "protected_bonus": 0.0,
+                "space_surplus_bonus": 0.0,
+                "total": 7.167
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "global_density_policy": {
+    "target_density": "low",
+    "clutter_budget_level": "low",
+    "center_openness_preserved": true,
+    "style_policy_applied": true
+  },
+  "capacity_model": {
+    "available_area_m2": 21.72,
+    "target_density": "low",
+    "density_ratio": 0.27879999999999994,
+    "wall_capacity_m2": 6.0,
+    "floating_capacity_m2": 3.4752,
+    "center_openness_budget_m2": 6.298800000000001,
+    "circulation_budget_m2": 4.343999999999999,
+    "clutter_budget_m2": 6.055535999999998,
+    "entry_conflict_sensitivity": "high",
+    "center_openness_weight": "very_high",
+    "circulation_penalty_weight": "very_high",
+    "semantic_core_preserve_weight": "very_high",
+    "signals": {
+      "usable_wall_segments": 0,
+      "floating_zone_candidates": 1,
+      "center_openness_regions": 1,
+      "primary_circulation_corridors": 0,
+      "entry_landing_zones": 1
+    },
+    "style_policy": {
+      "style_name": "minimal",
+      "layout_policy": {
+        "target_density": "low",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "balanced",
+        "symmetry_bias": "medium",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "low_to_medium",
+        "material_weight_bias": "light",
+        "visual_balance_bias": "calm"
+      }
+    }
+  },
+  "decision_summary": {
+    "selected_object_count": 7,
+    "dropped_object_types": [],
+    "estimated_footprint_mm2": 4272700,
+    "estimated_circulation_pressure": 0.4
+  },
+  "degradation_ready_order": [
+    "drop support",
+    "shrink sofa tier"
+  ],
+  "missing": [],
+  "conflicts": [],
+  "confidence": 0.86,
+  "notes": [
+    "Tier Count used deterministic utility, capacity, and bundle-preserving rules.",
+    "No pose, macro placement, cluster composition, or LLM step was used.",
+    "Output is synchronized for the object-level anchor-first solver handoff."
+  ],
+  "decisions": [
+    {
+      "object_type": "coffee_table",
+      "category": "coffee_table",
+      "cluster_id": "main_seating",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "highest",
+      "bundle_id": "main_seating_bundle",
+      "role": "support",
+      "semantic_support_role": "frontal_support",
+      "band_intent": "front_band",
+      "protected": true,
+      "droppable": false,
+      "rationale": "high completeness utility under clutter budget",
+      "utility_score": 10.448,
+      "rep_dims_m": {
+        "L": 0.9,
+        "W": 0.5,
+        "H": 0.44,
+        "A": 0.45,
+        "R": 1.8,
+        "source_id": "coffee_table_006"
+      }
+    },
+    {
+      "object_type": "armchair",
+      "category": "armchair",
+      "cluster_id": "main_seating",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "highest",
+      "bundle_id": "main_seating_bundle",
+      "role": "secondary_support",
+      "semantic_support_role": "secondary_seat",
+      "band_intent": "flank_band",
+      "protected": false,
+      "droppable": false,
+      "rationale": "positive utility after room-fit and circulation penalties",
+      "utility_score": 7.888,
+      "rep_dims_m": {
+        "L": 0.84,
+        "W": 0.71,
+        "H": 0.85,
+        "A": 0.5963999999999999,
+        "R": 1.1830985915492958,
+        "source_id": "armchair_007"
+      }
+    },
+    {
+      "object_type": "side_table",
+      "category": "side_table",
+      "cluster_id": "main_seating",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "highest",
+      "bundle_id": "main_seating_bundle",
+      "role": "support",
+      "semantic_support_role": "side_support",
+      "band_intent": "beside_base",
+      "protected": false,
+      "droppable": false,
+      "rationale": "high completeness utility under clutter budget",
+      "utility_score": 9.055,
+      "rep_dims_m": {
+        "L": 0.39,
+        "W": 0.37,
+        "H": 0.58,
+        "A": 0.1443,
+        "R": 1.0540540540540542,
+        "source_id": "side_table_007"
+      }
+    },
+    {
+      "object_type": "floor_lamp",
+      "category": "floor_lamp",
+      "cluster_id": "main_seating",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "highest",
+      "bundle_id": "main_seating_bundle",
+      "role": "support",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": false,
+      "droppable": false,
+      "rationale": "positive utility after room-fit and circulation penalties",
+      "utility_score": 8.11,
+      "rep_dims_m": {
+        "L": 0.35,
+        "W": 0.32,
+        "H": 1.51,
+        "A": 0.11199999999999999,
+        "R": 1.09375,
+        "source_id": "floor_lamp_004"
+      }
+    },
+    {
+      "object_type": "sofa",
+      "category": "sofa",
+      "cluster_id": "main_seating",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "preserve_level": "highest",
+      "bundle_id": "main_seating_bundle",
+      "role": "dominant_anchor",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": true,
+      "droppable": false,
+      "rationale": "highest functional utility and semantic anchor value",
+      "utility_score": 10.203,
+      "rep_dims_m": {
+        "L": 2.06,
+        "W": 0.96,
+        "H": 0.86,
+        "A": 1.9776,
+        "R": 2.1458333333333335,
+        "source_id": "sofa_001"
+      }
+    },
+    {
+      "object_type": "tv_console",
+      "category": "tv_console",
+      "cluster_id": "media",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "preserve_level": "highest",
+      "bundle_id": "media_bundle",
+      "role": "dominant_anchor",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": true,
+      "droppable": false,
+      "rationale": "highest functional utility and semantic anchor value",
+      "utility_score": 13.065,
+      "rep_dims_m": {
+        "L": 1.59,
+        "W": 0.46,
+        "H": 0.4,
+        "A": 0.7314,
+        "R": 3.4565217391304346,
+        "source_id": "tv_console_011"
+      }
+    },
+    {
+      "object_type": "media_shelf",
+      "category": "media_shelf",
+      "cluster_id": "media",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "highest",
+      "bundle_id": "media_bundle",
+      "role": "support",
+      "semantic_support_role": "wall_support",
+      "band_intent": "wall_band",
+      "protected": false,
+      "droppable": false,
+      "rationale": "positive utility after room-fit and circulation penalties",
+      "utility_score": 7.167,
+      "rep_dims_m": {
+        "L": 0.87,
+        "W": 0.3,
+        "H": 1.36,
+        "A": 0.261,
+        "R": 2.9,
+        "source_id": "media_shelf_003"
+      }
+    }
+  ],
+  "assumptions": [
+    "Deterministic tier-count policy applied from semantic bundles, room capacity, and utility scores.",
+    "User notes suggest a clutter-light layout, so optional items start conservative.",
+    "Estimated available room area is 21.72 m2.",
+    "Style policy adjusted density, clutter, and decor utility without overriding required functional anchors."
+  ],
+  "global_notes": [
+    "TierCountDirector used deterministic rules instead of an LLM.",
+    "Utility scoring considered the requested style: modern.",
+    "Initial furnishing mode: minimal."
+  ],
+  "budget_valid": true
+}

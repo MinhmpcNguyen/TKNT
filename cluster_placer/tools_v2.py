@@ -647,6 +647,7 @@ def materialize_phase2_state(
                 "cluster_id": cid,
                 "variant_id": variant_id,
                 "object_id": oid,
+                "cluster_rot": crot,
                 "rotation_ccw": object_rot,
                 "local_rect": {
                     "x": int(round(float(rect.get("x", 0)))),
@@ -1267,6 +1268,59 @@ def _cluster_intents_by_id(payload: Dict[str, Any]) -> Dict[str, set[str]]:
             if text:
                 slot.add(text)
 
+    def _targeted_object_nudge_offsets(
+        cluster_id: str, object_id: str, intents: set[str]
+    ) -> list[tuple[int, int]]:
+        obj = object_state_by_key.get((cluster_id, object_id))
+        if not isinstance(obj, dict):
+            return []
+        cluster_rot = int(obj.get("cluster_rot") or obj.get("rotation_ccw") or 0)
+        relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
+        reference_object = _reference_object_for_enum(
+            cluster_id=cluster_id,
+            object_id=object_id,
+            relation_target=relation_target,
+        )
+        if not isinstance(reference_object, dict):
+            return []
+        reference_front = parse_vec2(reference_object.get("front_world"))
+        if reference_front is None:
+            return []
+        obj_center = (
+            float((obj.get("world_center") or {}).get("x") or 0.0),
+            float((obj.get("world_center") or {}).get("y") or 0.0),
+        )
+        ref_center = (
+            float((reference_object.get("world_center") or {}).get("x") or 0.0),
+            float((reference_object.get("world_center") or {}).get("y") or 0.0),
+        )
+        world_vectors: list[tuple[float, float] | None] = []
+        if intents & {"not_behind_anchor_view", "in_front_of_anchor"}:
+            rel_vec = _vec_from_to(ref_center, obj_center)
+            raw_dot = _dot(reference_front, rel_vec)
+            signed = (
+                0.0
+                if raw_dot is None
+                else raw_dot * _distance_between_points(ref_center, obj_center)
+            )
+            threshold = 120.0 if "in_front_of_anchor" in intents else 0.0
+            if signed < threshold:
+                world_vectors.append(reference_front)
+        seen: set[tuple[int, int]] = set()
+        out: list[tuple[int, int]] = []
+        for vector in world_vectors:
+            local_dir = _world_vector_to_local(cluster_rot, vector)
+            if local_dir is None:
+                continue
+            for dx, dy in _offsets_from_vector(
+                local_dir[0], local_dir[1], include_far_steps=False
+            ):
+                if (dx, dy) == (0, 0) or (dx, dy) in seen:
+                    continue
+                seen.add((dx, dy))
+                out.append((dx, dy))
+        return out[:4]
+
     for row in relation_plan.get("object_orientations") or []:
         if not isinstance(row, dict):
             continue
@@ -1369,7 +1423,7 @@ def _cluster_preference_profile(
                     slot["prefer"].add("recess_or_edge")
 
         if (
-            focus_mode == "viewing"
+            focus_mode in {"viewing", "mixed"}
             and isinstance(primary_cluster_id, str)
             and primary_cluster_id
             and isinstance(secondary_cluster_id, str)
@@ -1390,7 +1444,8 @@ def _cluster_preference_profile(
     for row in relation_plan.get("cluster_directional_relations") or []:
         if not isinstance(row, dict):
             continue
-        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+        relation = str(row.get("relation") or "").strip().lower()
+        if relation not in {"face_each_other", "access_faces_other"}:
             continue
         a = row.get("a")
         b = row.get("b")
@@ -1402,6 +1457,34 @@ def _cluster_preference_profile(
             slot_a["viewing_partner"] = b
         if not slot_b.get("viewing_partner"):
             slot_b["viewing_partner"] = a
+
+    for row in relation_plan.get("anchor_pairs") or []:
+        if not isinstance(row, dict):
+            continue
+        pair_type = str(row.get("pair_type") or "").strip().lower()
+        if pair_type not in {
+            "face_each_other",
+            "supports_use_axis",
+            "access_faces_other",
+        }:
+            continue
+        a = str(row.get("cluster_a") or "").strip()
+        b = str(row.get("cluster_b") or "").strip()
+        if not a or not b or a == b:
+            continue
+        slot_a = _slot(a)
+        slot_b = _slot(b)
+        if not slot_a.get("viewing_partner"):
+            slot_a["viewing_partner"] = b
+        if not slot_b.get("viewing_partner"):
+            slot_b["viewing_partner"] = a
+        if not slot_a.get("viewing_role"):
+            slot_a["viewing_role"] = "primary"
+        if not slot_b.get("viewing_role"):
+            slot_b["viewing_role"] = "secondary"
+        if pair_type in {"supports_use_axis", "access_faces_other"}:
+            slot_a["intents"].add("access_to_open_space")
+            slot_b["intents"].add("access_to_open_space")
 
     return out
 
@@ -1426,7 +1509,7 @@ def _viewing_cluster_pairs(payload: Dict[str, Any]) -> list[tuple[str, str]]:
             layout_intent.get("secondary_cluster_id") or ""
         ).strip()
         if (
-            focus_mode == "viewing"
+            focus_mode in {"viewing", "mixed"}
             and primary_cluster_id
             and secondary_cluster_id
             and primary_cluster_id != secondary_cluster_id
@@ -1436,13 +1519,69 @@ def _viewing_cluster_pairs(payload: Dict[str, Any]) -> list[tuple[str, str]]:
     for row in relation_plan.get("cluster_directional_relations") or []:
         if not isinstance(row, dict):
             continue
-        if str(row.get("relation") or "").strip().lower() != "face_each_other":
+        relation = str(row.get("relation") or "").strip().lower()
+        if relation not in {"face_each_other", "access_faces_other"}:
             continue
         a = str(row.get("a") or "").strip()
         b = str(row.get("b") or "").strip()
         _append_pair(a, b)
 
+    for row in relation_plan.get("anchor_pairs") or []:
+        if not isinstance(row, dict):
+            continue
+        pair_type = str(row.get("pair_type") or "").strip().lower()
+        if pair_type not in {
+            "face_each_other",
+            "supports_use_axis",
+            "access_faces_other",
+        }:
+            continue
+        a = str(row.get("cluster_a") or "").strip()
+        b = str(row.get("cluster_b") or "").strip()
+        _append_pair(a, b)
+
     return pairs
+
+
+def _anchor_layout_hints_by_cluster(
+    payload: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    hints = relation_plan.get("anchor_layout_hints_by_cluster") or {}
+    if not isinstance(hints, dict):
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for cluster_id, row in hints.items():
+        if isinstance(cluster_id, str) and isinstance(row, dict):
+            out[cluster_id] = deepcopy(row)
+    return out
+
+
+def _cluster_anchor_state(
+    *,
+    cluster_id: str,
+    state_objects: List[Dict[str, Any]],
+    cluster_state_by_id: Dict[str, Dict[str, Any]],
+    anchor_hints_by_cluster: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any] | None:
+    hint = anchor_hints_by_cluster.get(cluster_id) or {}
+    dominant_anchor_id = str(hint.get("dominant_anchor_object_id") or "").strip()
+    if dominant_anchor_id:
+        for row in state_objects:
+            if (
+                str(row.get("cluster_id") or "") == cluster_id
+                and str(row.get("object_id") or "") == dominant_anchor_id
+            ):
+                return row
+    cluster = cluster_state_by_id.get(cluster_id) or {}
+    anchor_ids = _cluster_anchor_ids_from_state_cluster(cluster)
+    for row in state_objects:
+        if (
+            str(row.get("cluster_id") or "") == cluster_id
+            and str(row.get("object_id") or "") in anchor_ids
+        ):
+            return row
+    return None
 
 
 def _anchor_contract_cluster_ids(payload: Dict[str, Any]) -> set[str]:
@@ -2796,6 +2935,12 @@ def _build_metrics(
             "score": int(score.get("score") or 0),
             "penalties": deepcopy(score.get("penalties") or {}),
             "hard_violation_count": int(score.get("hard_violation_count") or 0),
+            "quality_gate_result": str(
+                ((score.get("quality_gate") or {}).get("result") or "PASS")
+            ),
+            "quality_gate_reasons": deepcopy(
+                ((score.get("quality_gate") or {}).get("reasons") or [])
+            ),
         },
         "goal_alignment_summary": _build_goal_alignment_summary(payload, score),
         "cluster_internal_constraint_fidelity": [
@@ -3209,6 +3354,7 @@ def score_phase2_state(
     cluster_state_by_id = {
         str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
     }
+    anchor_hints_by_cluster = _anchor_layout_hints_by_cluster(payload)
 
     # object-level generic access/open-space score
     for idx, row in enumerate(state.get("objects") or []):
@@ -3276,6 +3422,45 @@ def score_phase2_state(
             if fallback_match is None:
                 fallback_match = row
         return fallback_match
+
+    def _reference_anchor_or_target_object(
+        *,
+        cluster_id: str,
+        object_id: str,
+        target_object_id: str,
+        target_object_cluster_id: str | None,
+    ) -> Dict[str, Any] | None:
+        target_object = _resolve_relation_target_object(
+            cluster_id=cluster_id,
+            object_id=object_id,
+            target_object_id=target_object_id,
+            target_object_cluster_id=target_object_cluster_id,
+        )
+        if isinstance(target_object, dict):
+            return target_object
+        hint = anchor_hints_by_cluster.get(cluster_id) or {}
+        hinted_target_cluster_id = str(hint.get("target_cluster_id") or "").strip()
+        if hinted_target_cluster_id and hinted_target_cluster_id != cluster_id:
+            target_anchor = _cluster_anchor_state(
+                cluster_id=hinted_target_cluster_id,
+                state_objects=state_objects,
+                cluster_state_by_id=cluster_state_by_id,
+                anchor_hints_by_cluster=anchor_hints_by_cluster,
+            )
+            if isinstance(target_anchor, dict):
+                return target_anchor
+        anchor_row = _cluster_anchor_state(
+            cluster_id=cluster_id,
+            state_objects=state_objects,
+            cluster_state_by_id=cluster_state_by_id,
+            anchor_hints_by_cluster=anchor_hints_by_cluster,
+        )
+        if (
+            isinstance(anchor_row, dict)
+            and str(anchor_row.get("object_id") or "") != object_id
+        ):
+            return anchor_row
+        return None
 
     # relation-plan specific object intents
     for item in relation_plan.get("object_orientations") or []:
@@ -3380,6 +3565,78 @@ def score_phase2_state(
                     dot = _dot(front_world, desired_vec)
                     weight = 860.0 if intent == "face_object" else 780.0
                     pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * weight
+            elif intent in {
+                "same_direction_as_anchor",
+                "same_view_side_as_primary_pair",
+            }:
+                reference_object = _reference_anchor_or_target_object(
+                    cluster_id=cid,
+                    object_id=oid,
+                    target_object_id=target_object_id,
+                    target_object_cluster_id=target_object_cluster_id
+                    if isinstance(target_object_cluster_id, str)
+                    else None,
+                )
+                if isinstance(reference_object, dict):
+                    resolved_target_cluster_id = str(
+                        reference_object.get("cluster_id") or ""
+                    ).strip()
+                    reference_front = parse_vec2(reference_object.get("front_world"))
+                    dot = _dot(front_world, reference_front)
+                    weight = (
+                        680.0 if intent == "same_view_side_as_primary_pair" else 560.0
+                    )
+                    pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * weight
+            elif intent == "align_with_anchor_axis":
+                reference_object = _reference_anchor_or_target_object(
+                    cluster_id=cid,
+                    object_id=oid,
+                    target_object_id=target_object_id,
+                    target_object_cluster_id=target_object_cluster_id
+                    if isinstance(target_object_cluster_id, str)
+                    else None,
+                )
+                if isinstance(reference_object, dict):
+                    resolved_target_cluster_id = str(
+                        reference_object.get("cluster_id") or ""
+                    ).strip()
+                    reference_axis = parse_vec2(
+                        reference_object.get("axis_world")
+                    ) or parse_vec2(reference_object.get("front_world"))
+                    current_axis = parse_vec2(target.get("axis_world")) or front_world
+                    raw_dot = _dot(current_axis, reference_axis)
+                    dot = None if raw_dot is None else abs(raw_dot)
+                    pen = max(0.0, 1.0 - (dot if dot is not None else -1.0)) * 520.0
+            elif intent in {"not_behind_anchor_view", "in_front_of_anchor"}:
+                reference_object = _reference_anchor_or_target_object(
+                    cluster_id=cid,
+                    object_id=oid,
+                    target_object_id=target_object_id,
+                    target_object_cluster_id=target_object_cluster_id
+                    if isinstance(target_object_cluster_id, str)
+                    else None,
+                )
+                if isinstance(reference_object, dict):
+                    resolved_target_cluster_id = str(
+                        reference_object.get("cluster_id") or ""
+                    ).strip()
+                    reference_center = (
+                        float(
+                            (reference_object.get("world_center") or {}).get("x") or 0.0
+                        ),
+                        float(
+                            (reference_object.get("world_center") or {}).get("y") or 0.0
+                        ),
+                    )
+                    reference_front = parse_vec2(reference_object.get("front_world"))
+                    rel_vec = _vec_from_to(reference_center, center)
+                    raw_dot = _dot(reference_front, rel_vec)
+                    dist_mm = _distance_between_points(reference_center, center)
+                    signed_offset_mm = 0.0 if raw_dot is None else raw_dot * dist_mm
+                    threshold_mm = 120.0 if intent == "in_front_of_anchor" else 0.0
+                    pen = max(0.0, threshold_mm - signed_offset_mm) * 1.25
+                    dot = raw_dot
+                    back_dbg = {"signed_offset_mm": int(round(signed_offset_mm))}
             if pen > 0:
                 object_penalty[(cid, oid)] = object_penalty.get((cid, oid), 0.0) + pen
                 cluster_penalty[cid] = cluster_penalty.get(cid, 0.0) + pen
@@ -3669,6 +3926,32 @@ def score_phase2_state(
         for (cid, oid), score in sorted(object_penalty.items(), key=lambda kv: -kv[1])
     ]
 
+    critical_orientation_rows = [
+        row
+        for row in orientation_debug
+        if isinstance(row, dict)
+        and int(row.get("penalty_mm") or 0) >= 300
+        and str(row.get("kind") or "")
+        in {"cluster_directional_relation", "cluster_orientation", "object_orientation"}
+    ]
+    focal_pair_rows = [
+        row
+        for row in orientation_debug
+        if isinstance(row, dict)
+        and int(row.get("penalty_mm") or 0) >= 220
+        and (
+            str(row.get("relation") or "") in {"face_each_other", "access_faces_other"}
+            or str(row.get("kind") or "") == "cluster_directional_relation"
+        )
+    ]
+    quality_gate_reasons: List[str] = []
+    if not bool(state.get("hard_valid")):
+        quality_gate_reasons.append("hard_validity_failed")
+    if critical_orientation_rows:
+        quality_gate_reasons.append("critical_orientation_penalty_too_high")
+    if focal_pair_rows:
+        quality_gate_reasons.append("focal_pair_penalty_too_high")
+
     return {
         "hard_valid": bool(state.get("hard_valid")),
         "hard_violation_count": len(state.get("hard_violations") or []),
@@ -3693,6 +3976,12 @@ def score_phase2_state(
             key: deepcopy(value)
             for key, value in global_layout_metrics.items()
             if key != "cluster_penalty"
+        },
+        "quality_gate": {
+            "result": "PASS"
+            if bool(state.get("hard_valid")) and not quality_gate_reasons
+            else "REVISE",
+            "reasons": quality_gate_reasons,
         },
     }
 
@@ -3785,6 +4074,7 @@ def EnumeratePhase2RepairMoves(
         (payload.get("room_context") or {}).get("grid_mm")
     )
     cluster_preferences = _cluster_preference_profile(payload)
+    anchor_hints_by_cluster = _anchor_layout_hints_by_cluster(payload)
     cluster_state_by_id = {
         str(row.get("cluster_id") or ""): row for row in state.get("clusters") or []
     }
@@ -3821,11 +4111,19 @@ def EnumeratePhase2RepairMoves(
     orientation_debug = score.get("orientation_debug") or []
     viewing_orientation_pressure = any(
         isinstance(row, dict)
-        and int(row.get("penalty_mm") or 0) >= 300
+        and int(row.get("penalty_mm") or 0) >= 220
         and (
             str(row.get("kind") or "") == "cluster_directional_relation"
-            or str(row.get("relation") or "") == "face_each_other"
-            or str(row.get("intent") or "") == "face_object"
+            or str(row.get("relation") or "")
+            in {"face_each_other", "access_faces_other"}
+            or str(row.get("intent") or "")
+            in {
+                "face_object",
+                "same_view_side_as_primary_pair",
+                "same_direction_as_anchor",
+                "not_behind_anchor_view",
+                "align_with_anchor_axis",
+            }
         )
         for row in orientation_debug
     )
@@ -4231,6 +4529,13 @@ def EnumeratePhase2RepairMoves(
         "back_to_wall",
     }
     facing_intents = {"face_object", "face_away_from_object"}
+    support_axis_intents = {
+        "same_direction_as_anchor",
+        "same_view_side_as_primary_pair",
+        "align_with_anchor_axis",
+        "not_behind_anchor_view",
+        "in_front_of_anchor",
+    }
     relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
     relation_object_intents: dict[tuple[str, str], set[str]] = {}
     relation_object_targets: dict[tuple[str, str], dict[str, str]] = {}
@@ -4332,6 +4637,44 @@ def EnumeratePhase2RepairMoves(
             return None
         return normalize_vec(rotate_vec_ccw_90s(vector, (-int(cluster_rot or 0)) % 360))
 
+    def _cluster_anchor_state_for_enum(cluster_id: str) -> dict[str, Any] | None:
+        return _cluster_anchor_state(
+            cluster_id=cluster_id,
+            state_objects=state_objects,
+            cluster_state_by_id=cluster_state_by_id,
+            anchor_hints_by_cluster=anchor_hints_by_cluster,
+        )
+
+    def _reference_object_for_enum(
+        *,
+        cluster_id: str,
+        object_id: str,
+        relation_target: dict[str, str] | None,
+    ) -> dict[str, Any] | None:
+        relation_target = relation_target or {}
+        target_object_id = str(relation_target.get("target_object_id") or "").strip()
+        target_object_cluster_id = (
+            str(relation_target.get("target_object_cluster_id") or "").strip() or None
+        )
+        target_object = _resolve_relation_target_object(
+            cluster_id=cluster_id,
+            object_id=object_id,
+            target_object_id=target_object_id,
+            target_object_cluster_id=target_object_cluster_id,
+        )
+        if isinstance(target_object, dict):
+            return target_object
+        hint = anchor_hints_by_cluster.get(cluster_id) or {}
+        hinted_target_cluster_id = str(hint.get("target_cluster_id") or "").strip()
+        if hinted_target_cluster_id and hinted_target_cluster_id != cluster_id:
+            ref = _cluster_anchor_state_for_enum(hinted_target_cluster_id)
+            if isinstance(ref, dict):
+                return ref
+        ref = _cluster_anchor_state_for_enum(cluster_id)
+        if isinstance(ref, dict) and str(ref.get("object_id") or "") != object_id:
+            return ref
+        return None
+
     def _front_override_dirs(
         cluster_id: str, object_id: str, intents: set[str]
     ) -> list[tuple[float, float]]:
@@ -4342,7 +4685,7 @@ def EnumeratePhase2RepairMoves(
             float((obj.get("world_center") or {}).get("x") or 0.0),
             float((obj.get("world_center") or {}).get("y") or 0.0),
         )
-        cluster_rot = int(obj.get("rotation_ccw") or 0)
+        cluster_rot = int(obj.get("cluster_rot") or obj.get("rotation_ccw") or 0)
         blockers = _scoring_object_blockers(
             state, object_index_by_key.get((cluster_id, object_id), -1)
         )
@@ -4361,8 +4704,8 @@ def EnumeratePhase2RepairMoves(
             world_targets.append(best_dir)
         if "back_to_wall" in intents:
             world_targets.append(_nearest_wall_inward_dir(center, room_poly))
+        relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
         if intents & {"face_object", "face_away_from_object"}:
-            relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
             target = _resolve_relation_target_object(
                 cluster_id=cluster_id,
                 object_id=object_id,
@@ -4383,6 +4726,33 @@ def EnumeratePhase2RepairMoves(
                     world_targets.append((-target_vector[0], -target_vector[1]))
                 else:
                     world_targets.append(target_vector)
+
+        if intents & {
+            "same_direction_as_anchor",
+            "same_view_side_as_primary_pair",
+            "align_with_anchor_axis",
+            "not_behind_anchor_view",
+            "in_front_of_anchor",
+        }:
+            reference_object = _reference_object_for_enum(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                relation_target=relation_target,
+            )
+            if isinstance(reference_object, dict):
+                reference_front = parse_vec2(reference_object.get("front_world"))
+                reference_axis = (
+                    parse_vec2(reference_object.get("axis_world")) or reference_front
+                )
+                if intents & {
+                    "same_direction_as_anchor",
+                    "same_view_side_as_primary_pair",
+                    "not_behind_anchor_view",
+                    "in_front_of_anchor",
+                }:
+                    world_targets.append(reference_front)
+                if "align_with_anchor_axis" in intents:
+                    world_targets.append(reference_axis)
 
         out: list[tuple[float, float]] = []
         seen_dirs: set[tuple[float, float]] = set()
@@ -4409,7 +4779,7 @@ def EnumeratePhase2RepairMoves(
             for intent in (row.get("intents") or [])
             if str(intent).strip()
         }
-        if intents & (front_access_intents | facing_intents):
+        if intents & (front_access_intents | facing_intents | support_axis_intents):
             _register_object_key(cid, oid, intents)
             relation_object_targets[(cid, oid)] = {
                 "target_object_id": str(row.get("target_object_id") or "").strip(),
@@ -4461,11 +4831,15 @@ def EnumeratePhase2RepairMoves(
         planner_priority = bool(relation_object_intents.get((cid, oid)))
         protected_anchor_object = oid in protected_anchor_ids_by_cluster.get(cid, set())
         if viewing_orientation_pressure and not (
-            effective_intents & (front_access_intents | facing_intents) or spacing_rows
+            effective_intents
+            & (front_access_intents | facing_intents | support_axis_intents)
+            or spacing_rows
         ):
             continue
 
-        if effective_intents & (front_access_intents | facing_intents):
+        if effective_intents & (
+            front_access_intents | facing_intents | support_axis_intents
+        ):
             if not protected_anchor_object:
                 for rot in (90, 180, 270):
                     _append_object_move(
@@ -4548,11 +4922,29 @@ def EnumeratePhase2RepairMoves(
                     priority_index=priority_index,
                 )
         allow_nudges = (
-            bool(effective_intents & front_access_intents)
+            bool(effective_intents & (front_access_intents | support_axis_intents))
             or bool(spacing_rows)
             or (not viewing_orientation_pressure and not dominant_intents)
         )
         if allow_nudges:
+            for dx, dy in _targeted_object_nudge_offsets(cid, oid, effective_intents):
+                _append_object_move(
+                    cluster_id=cid,
+                    object_id=oid,
+                    proposal={
+                        "object_repairs": [
+                            {
+                                "cluster_id": cid,
+                                "object_id": oid,
+                                "op": "nudge_object",
+                                "params": {"dx": dx, "dy": dy},
+                            }
+                        ]
+                    },
+                    reason=f"Try an anchor-relative nudge for {cid}.{oid}",
+                    planner_priority=True,
+                    priority_index=priority_index,
+                )
             for dx, dy in (
                 (GLOBAL_LAYOUT_GRID_MM, 0),
                 (-GLOBAL_LAYOUT_GRID_MM, 0),

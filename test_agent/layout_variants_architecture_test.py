@@ -159,7 +159,7 @@ class LayoutVariantsArchitectureTest(unittest.TestCase):
 
         self.assertEqual(selected[0]["source"], "intent_branch:intent_2")
 
-    def test_select_distinct_final_gallery_candidates_backfills_after_distinct_pass(
+    def test_select_distinct_final_gallery_candidates_skips_macro_backfill(
         self,
     ) -> None:
         room = {
@@ -231,13 +231,11 @@ class LayoutVariantsArchitectureTest(unittest.TestCase):
             max_variants=5,
         )
 
-        self.assertEqual(len(selected), 4)
+        self.assertEqual(len(selected), 2)
         self.assertEqual(selected[0]["source"], "seed_stable")
         self.assertEqual(selected[1]["source"], "seed_distinct")
         self.assertEqual(selected[0]["gallery_selection_mode"], "distinct")
         self.assertEqual(selected[1]["gallery_selection_mode"], "distinct")
-        self.assertEqual(selected[2]["gallery_selection_mode"], "backfill")
-        self.assertEqual(selected[3]["gallery_selection_mode"], "backfill")
         self.assertIn("state_signature", selected[0])
         self.assertIn("macro_layout_signature", selected[0])
 

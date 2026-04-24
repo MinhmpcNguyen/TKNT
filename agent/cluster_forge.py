@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 
 from agent.semantic_layout_planner import (
@@ -324,6 +325,14 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
             cluster_id=cluster_id if isinstance(cluster_id, str) else "",
             cluster=cluster,
         )
+        _finalize_object_level_solver_contract(
+            payload=payload,
+            room_type=room_type,
+            cluster_id=cluster_id if isinstance(cluster_id, str) else "",
+            cluster=cluster,
+        )
+    payload.setdefault("planner_kind", "semantic_cluster_program")
+    payload.setdefault("layout_flow", "object_level_anchor_first")
     return payload
 
 
@@ -733,6 +742,153 @@ def _normalize_facing_front_token(value: object) -> str | None:
     if token in {"top", "bottom", "left", "right"}:
         return token
     return None
+
+
+def _finalize_object_level_solver_contract(
+    *,
+    payload: dict[str, object],
+    room_type: str,
+    cluster_id: str,
+    cluster: dict[str, object],
+) -> None:
+    members = _coerce_str_list(cluster.get("members"))
+    if not members:
+        return
+    rules = cluster.get("cluster_rules")
+    if not isinstance(rules, dict):
+        rules = {}
+        cluster["cluster_rules"] = rules
+
+    dominant_anchor_candidates = _coerce_str_list(
+        rules.get("dominant_anchor_candidates")
+    )
+    anchors = [
+        anchor
+        for anchor in _coerce_str_list(cluster.get("anchors"))
+        if anchor in members
+    ]
+    if not anchors and dominant_anchor_candidates:
+        anchors = [dominant_anchor_candidates[0]]
+        cluster["anchors"] = anchors
+
+    semantic_placements = rules.get("semantic_placements")
+    if not isinstance(semantic_placements, list):
+        semantic_placements = []
+        rules["semantic_placements"] = semantic_placements
+
+    anchor_policy = rules.get("anchor_first_policy")
+    if not isinstance(anchor_policy, dict):
+        anchor_policy = {}
+        rules["anchor_first_policy"] = anchor_policy
+
+    dominant_anchor_id = str(
+        anchor_policy.get("dominant_anchor_id")
+        or (anchors[0] if anchors else "")
+        or (dominant_anchor_candidates[0] if dominant_anchor_candidates else "")
+    ).strip()
+    if dominant_anchor_id and dominant_anchor_id in members:
+        anchor_policy["dominant_anchor_id"] = dominant_anchor_id
+
+    filtered_candidates = [
+        candidate for candidate in dominant_anchor_candidates if candidate in members
+    ]
+    if not filtered_candidates and dominant_anchor_id:
+        filtered_candidates = [dominant_anchor_id]
+    rules["dominant_anchor_candidates"] = filtered_candidates
+    anchor_policy["dominant_anchor_candidates"] = filtered_candidates
+
+    placement_order = [
+        item
+        for item in _coerce_str_list(anchor_policy.get("placement_order"))
+        if item in members
+    ]
+    if dominant_anchor_id:
+        placement_order = [
+            item for item in placement_order if item != dominant_anchor_id
+        ]
+        placement_order.insert(0, dominant_anchor_id)
+    for member in members:
+        if member not in placement_order:
+            placement_order.append(member)
+    anchor_policy["placement_order"] = placement_order
+
+    support_chain: list[dict[str, object]] = []
+    for row in semantic_placements:
+        if not isinstance(row, Mapping):
+            continue
+        object_id = row.get("id")
+        relative_to = row.get("relative_to")
+        if not isinstance(object_id, str) or object_id not in members:
+            continue
+        if not isinstance(relative_to, str) or relative_to not in members:
+            continue
+        record = {
+            "object_id": object_id,
+            "relative_to": relative_to,
+            "support_role": str(row.get("support_role") or "").strip().lower(),
+            "band_intent": str(row.get("band_intent") or "").strip().lower(),
+            "orientation": str(row.get("orientation") or "").strip().lower(),
+            "kind": str(row.get("kind") or "").strip().lower(),
+        }
+        support_chain.append(record)
+    anchor_policy["support_chain"] = support_chain
+
+    protected_ids = [
+        item
+        for item in _coerce_str_list(anchor_policy.get("protected_ids"))
+        if item in members
+    ]
+    if dominant_anchor_id and dominant_anchor_id not in protected_ids:
+        protected_ids.insert(0, dominant_anchor_id)
+    for row in support_chain:
+        support_role = str(row.get("support_role") or "")
+        band_intent = str(row.get("band_intent") or "")
+        object_id = str(row.get("object_id") or "")
+        if not object_id:
+            continue
+        if support_role == "frontal_support" or band_intent == "front_band":
+            if object_id not in protected_ids:
+                protected_ids.append(object_id)
+    anchor_policy["protected_ids"] = _unique_str_list(protected_ids)
+
+    droppable_ids = [
+        item
+        for item in _coerce_str_list(anchor_policy.get("droppable_ids"))
+        if item in members and item not in protected_ids
+    ]
+    anchor_policy["droppable_ids"] = _unique_str_list(droppable_ids)
+
+    object_solver_policy = rules.get("object_solver_policy")
+    if not isinstance(object_solver_policy, dict):
+        object_solver_policy = {}
+    object_solver_policy.update(
+        {
+            "enabled": True,
+            "layout_flow": "object_level_anchor_first",
+            "solve_level": "object",
+            "anchor_first": True,
+            "support_strategy": "relative_to_graph",
+            "local_cluster_composer_enabled": False,
+            "cluster_outline_enabled": False,
+            "phase2_controller_enabled": False,
+            "degrade_inside_solver": True,
+            "room_type": room_type,
+            "cluster_id": cluster_id,
+        }
+    )
+    rules["object_solver_policy"] = object_solver_policy
+
+    cluster["object_level_contract"] = {
+        "dominant_anchor_id": anchor_policy.get("dominant_anchor_id"),
+        "dominant_anchor_candidates": deepcopy(
+            anchor_policy.get("dominant_anchor_candidates") or []
+        ),
+        "placement_order": deepcopy(anchor_policy.get("placement_order") or []),
+        "protected_ids": deepcopy(anchor_policy.get("protected_ids") or []),
+        "droppable_ids": deepcopy(anchor_policy.get("droppable_ids") or []),
+        "support_edge_count": len(support_chain),
+        "solver_mode": "object_level_anchor_first",
+    }
 
 
 def _object_prefers_explicit_facing(object_id: str) -> bool:
@@ -1746,7 +1902,7 @@ def _apply_semantic_layout_intents(
                         gap_min=100,
                         gap_max=350,
                         proximity="loose",
-                        orientation=_semantic_orientation_for_member(member),
+                        orientation="face_base",
                     )
                     continue
 
@@ -1873,7 +2029,13 @@ def _normalize_semantic_orientation(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     token = value.strip().lower()
-    if token in {"face_base", "same_direction"}:
+    if token in {
+        "back_to_wall",
+        "face_base",
+        "face_cluster",
+        "front_to_open_space",
+        "same_direction",
+    }:
         return token
     return None
 

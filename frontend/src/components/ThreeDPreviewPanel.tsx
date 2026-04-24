@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  fetchRenderPresets,
   renderSnapshotImage,
+  type SnapshotImageEditOperation,
+  type SnapshotImagePresetOption,
+  type SnapshotImagePresetSelection,
+  type SnapshotImagePresets,
   type SnapshotImageRenderApiResponse,
   type SnapshotImageRenderResult,
 } from '../api';
@@ -11,11 +16,13 @@ import {
   buildThreeSnapshotArtifact,
   type SnapshotOpeningRecord,
   type SnapshotObjectRecord,
+  type ThreeSnapshotArtifact,
   type ThreeSnapshotRenderState,
+  type VisibleSnapshotObject,
 } from '../utils/threeSnapshot';
 import { buildLayoutReferenceImageDataUrl } from '../utils/layoutReferenceImage';
 import {
-  planRotationToYawRad,
+  resolvePlanObjectYawRad,
   yawRadToPlanRotationDeg,
 } from '../utils/planOrientation';
 import {
@@ -43,6 +50,9 @@ type RenderObject = {
   colorHex: string;
   material?: string | null;
   rotationCcw?: number;
+  frontWorld?: unknown;
+  frontSideWorld?: unknown;
+  frontSideLocal?: unknown;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   placeOn?: { method: string; targetId?: string | null } | null;
   draggable?: boolean;
@@ -59,6 +69,9 @@ type ObjectVisualDiagnostic = {
   rawAssetId: string | null;
   resolvedAssetId: string | null;
   reintroduced: boolean;
+  modelUrl?: string | null;
+  previewRotationOffsetDeg?: number | null;
+  finalDescriptorRotationDeg?: number | null;
   status:
     | 'glb_loading'
     | 'glb_loaded'
@@ -70,6 +83,8 @@ type ObjectVisualDiagnostic = {
     | 'proxy_model_load_error';
   reason: string;
 };
+
+type RenderPresetGroupName = 'styles' | 'lights' | 'sceneries';
 
 const MM_TO_M = 0.001;
 const SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD = 0.5;
@@ -197,6 +212,141 @@ function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
 }
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Unable to read the reference image.'));
+    };
+    reader.onerror = () => reject(new Error('Unable to read the reference image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function firstPresetKey(
+  presets: SnapshotImagePresets | null,
+  groupName: RenderPresetGroupName,
+  preferred: string
+): string {
+  const group = presets?.[groupName] ?? {};
+  if (preferred && group[preferred]) {
+    return preferred;
+  }
+  return Object.keys(group)[0] ?? '';
+}
+
+function optionLabel(rawKey: string): string {
+  return rawKey
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function visibleObjectName(object: VisibleSnapshotObject | null): string {
+  if (!object) {
+    return 'object';
+  }
+  return object.type.replace(/_/g, ' ');
+}
+
+function visibleObjectLabel(object: VisibleSnapshotObject): string {
+  return `${visibleObjectName(object)} - ${object.id}`;
+}
+
+function hasPresetSelection(selection: SnapshotImagePresetSelection): boolean {
+  return Boolean(selection.style || selection.lighting || selection.scenery);
+}
+
+type RenderPresetSelectorProps = {
+  title: string;
+  group: Record<string, SnapshotImagePresetOption>;
+  value: string | null | undefined;
+  disabled: boolean;
+  onChange: (value: string | null) => void;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+  compact?: boolean;
+};
+
+function RenderPresetSelector({
+  title,
+  group,
+  value,
+  disabled,
+  onChange,
+  allowEmpty = false,
+  emptyLabel = 'No change',
+  compact = false,
+}: RenderPresetSelectorProps): React.ReactElement {
+  const entries = Object.entries(group);
+  const className = compact
+    ? 'reference-preset-group compact'
+    : 'reference-preset-group';
+
+  return (
+    <fieldset className={className}>
+      <legend>{title}</legend>
+      <div className="reference-preset-options">
+        {allowEmpty ? (
+          <button
+            type="button"
+            className={!value ? 'reference-preset-card selected' : 'reference-preset-card'}
+            disabled={disabled}
+            aria-pressed={!value}
+            onClick={() => onChange(null)}
+          >
+            <span className="reference-preset-image is-empty">
+              <span>{emptyLabel}</span>
+            </span>
+            <span className="reference-preset-label">{emptyLabel}</span>
+          </button>
+        ) : null}
+        {entries.length === 0 && !allowEmpty ? (
+          <div className="reference-preset-card disabled">
+            <span className="reference-preset-image is-empty">
+              <span>Loading</span>
+            </span>
+            <span className="reference-preset-label">{title}</span>
+          </div>
+        ) : null}
+        {entries.map(([key, option]) => {
+          const label = option.label || optionLabel(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              className={
+                value === key ? 'reference-preset-card selected' : 'reference-preset-card'
+              }
+              disabled={disabled}
+              aria-pressed={value === key}
+              onClick={() => onChange(key)}
+            >
+              {option.reference_image ? (
+                <img
+                  className="reference-preset-image"
+                  src={option.reference_image}
+                  alt={`${label} reference`}
+                  loading="lazy"
+                  draggable={false}
+                />
+              ) : (
+                <span className="reference-preset-image is-empty">
+                  <span>No image</span>
+                </span>
+              )}
+              <span className="reference-preset-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 export const ThreeDPreviewPanel: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
@@ -242,6 +392,29 @@ export const ThreeDPreviewPanel: React.FC = () => {
     useState<SnapshotImageRenderResult | null>(null);
   const [savedRenderId, setSavedRenderId] = useState<string | null>(null);
   const [renderPrompt, setRenderPrompt] = useState('');
+  const [renderPresets, setRenderPresets] =
+    useState<SnapshotImagePresets | null>(null);
+  const [presetSelection, setPresetSelection] =
+    useState<SnapshotImagePresetSelection>({
+      style: 'modern',
+      lighting: 'daylight_1',
+      scenery: 'none',
+    });
+  const [lastRenderedSnapshot, setLastRenderedSnapshot] =
+    useState<ThreeSnapshotArtifact | null>(null);
+  const [lastRenderedSnapshotImageDataUrl, setLastRenderedSnapshotImageDataUrl] =
+    useState<string | null>(null);
+  const [editSelectedObjectId, setEditSelectedObjectId] = useState<string>('');
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+  const [targetColor, setTargetColor] = useState('#c8a26a');
+  const [replaceEnabled, setReplaceEnabled] = useState(false);
+  const [colorEnabled, setColorEnabled] = useState(false);
+  const [editPresetSelection, setEditPresetSelection] =
+    useState<SnapshotImagePresetSelection>({
+      style: null,
+      lighting: null,
+      scenery: null,
+    });
   const [objectVisualDiagnostics, setObjectVisualDiagnostics] = useState<
     Record<string, ObjectVisualDiagnostic>
   >({});
@@ -273,6 +446,33 @@ export const ThreeDPreviewPanel: React.FC = () => {
     renderStateRef.current.selectedWallId = selectedWallId;
     renderStateRef.current.editMode = editMode;
   }, [editMode, selectedId, selectedVariantId, selectedWallId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRenderPresets()
+      .then((presets) => {
+        if (cancelled) return;
+        setRenderPresets(presets);
+        setPresetSelection((current) => ({
+          style: firstPresetKey(presets, 'styles', current.style ?? 'modern'),
+          lighting: firstPresetKey(presets, 'lights', current.lighting ?? 'daylight_1'),
+          scenery: firstPresetKey(presets, 'sceneries', current.scenery ?? 'none'),
+        }));
+      })
+      .catch((presetError) => {
+        if (cancelled) return;
+        setRenderStatus({
+          tone: 'error',
+          text:
+            presetError instanceof Error
+              ? presetError.message
+              : 'Failed to load image presets.',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const objects: RenderObject[] = useMemo(() => {
     const out: RenderObject[] = [];
@@ -322,6 +522,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           obj.assetId ??
           obj.object_id ??
           null;
+        const frontWorld = placement?.front_world ?? obj.front_world ?? null;
+        const frontSideWorld = placement?.front_side_world ?? obj.front_side_world ?? null;
+        const frontSideLocal = placement?.front_side_local ?? obj.front_side_local ?? null;
         out.push({
           id,
           assetId: normalizeRenderAssetId(rawAssetId) ?? null,
@@ -330,6 +533,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           colorHex: String(obj.color_hex ?? '#cfcac2'),
           material: obj.material ?? null,
           rotationCcw,
+          frontWorld,
+          frontSideWorld,
+          frontSideLocal,
           bbox: { minX, minY, maxX, maxY },
           placeOn,
           draggable:
@@ -354,6 +560,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           colorHex: p.color_hex ?? '#cfcac2',
           material: null,
           rotationCcw: Number(p.rotation_deg ?? 0),
+          frontWorld: p.front_world ?? null,
+          frontSideWorld: p.front_side_world ?? null,
+          frontSideLocal: p.front_side_local ?? null,
           bbox,
           placeOn: { method: 'floor', targetId: 'floor' },
           draggable: p.constraint_mode !== 'locked',
@@ -378,6 +587,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
         colorHex: placement.color_hex ?? '#cfcac2',
         material: null,
         rotationCcw: Number(placement.rotation_deg ?? 0),
+        frontWorld: placement.front_world ?? null,
+        frontSideWorld: placement.front_side_world ?? null,
+        frontSideLocal: placement.front_side_local ?? null,
         bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
         draggable: placement.constraint_mode !== 'locked',
@@ -434,6 +646,41 @@ export const ThreeDPreviewPanel: React.FC = () => {
     [objectVisualDiagnostics]
   );
 
+  const glbObjects = useMemo(
+    () =>
+      Object.values(objectVisualDiagnostics)
+        .filter((item) => item.status === 'glb_loading' || item.status === 'glb_loaded')
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [objectVisualDiagnostics]
+  );
+
+  const lastVisibleObjects = lastRenderedSnapshot?.visibleObjects ?? [];
+  const visibleObjectById = useMemo(
+    () => new Map(lastVisibleObjects.map((object) => [object.id, object])),
+    [lastVisibleObjects]
+  );
+  const effectiveEditObject =
+    visibleObjectById.get(editSelectedObjectId) ??
+    (lastVisibleObjects.length > 0 ? lastVisibleObjects[0] : null);
+  const selectedObjectIsEditable = Boolean(
+    selectedId && visibleObjectById.has(selectedId)
+  );
+  const editPresetActive = hasPresetSelection(editPresetSelection);
+  const hasEditOperation =
+    (replaceEnabled && replacementFile !== null && effectiveEditObject !== null) ||
+    (colorEnabled && effectiveEditObject !== null) ||
+    editPresetActive;
+
+  useEffect(() => {
+    if (selectedId && visibleObjectById.has(selectedId)) {
+      setEditSelectedObjectId(selectedId);
+      return;
+    }
+    if (!editSelectedObjectId && lastVisibleObjects.length > 0) {
+      setEditSelectedObjectId(lastVisibleObjects[0].id);
+    }
+  }, [editSelectedObjectId, lastVisibleObjects, selectedId, visibleObjectById]);
+
   useEffect(() => {
     const nextDiagnostics = Object.fromEntries(
       resolvedObjects.map((obj) => {
@@ -460,6 +707,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
             rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
             resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
             reintroduced: Boolean(obj.reintroduced),
+            modelUrl: modelResolution?.descriptor?.url ?? null,
+            previewRotationOffsetDeg: null,
+            finalDescriptorRotationDeg: modelResolution?.descriptor?.rotationDeg ?? null,
             status,
             reason,
           } satisfies ObjectVisualDiagnostic,
@@ -560,7 +810,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
     setIsRenderingImage(true);
     setRenderStatus({
       tone: 'neutral',
-      text: 'Capturing the current view and sending it to OpenRouter Gemini...',
+      text: 'Capturing the current view and sending it to Nano Banana...',
     });
 
     const hiddenNodes: Array<{ visible: boolean; node: { visible: boolean } }> = [];
@@ -597,9 +847,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
           snapshotImageDataUrl,
           layoutReferenceImageDataUrl,
           userPrompt: renderPrompt,
+          renderMode: 'generate',
+          presetSelection,
         }
       );
       setRenderedSnapshotImage(renderResult.render);
+      setLastRenderedSnapshot(snapshotArtifact);
+      setLastRenderedSnapshotImageDataUrl(snapshotImageDataUrl);
+      setEditSelectedObjectId(snapshotArtifact.visibleObjects[0]?.id ?? '');
       if (renderResult.saved_render) {
         upsertSavedRender(renderResult.saved_render);
         setSavedRenderId(renderResult.saved_render.id);
@@ -624,6 +879,83 @@ export const ThreeDPreviewPanel: React.FC = () => {
       }
       controlsRef.current?.update?.();
       renderer.render(scene, camera);
+      setIsRenderingImage(false);
+    }
+  }
+
+  async function handleEditSnapshotImage(): Promise<void> {
+    if (!renderedSnapshotImage || !lastRenderedSnapshot || !lastRenderedSnapshotImageDataUrl) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'Generate an image before applying edits.',
+      });
+      return;
+    }
+    if (!hasEditOperation) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'Choose at least one edit operation.',
+      });
+      return;
+    }
+    if ((replaceEnabled || colorEnabled) && !effectiveEditObject) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'Choose a visible object from the generated image.',
+      });
+      return;
+    }
+
+    setIsRenderingImage(true);
+    setRenderStatus({
+      tone: 'neutral',
+      text: 'Applying the requested edit with Nano Banana...',
+    });
+
+    try {
+      const editOperations: SnapshotImageEditOperation[] = [];
+      if (effectiveEditObject && (replaceEnabled || colorEnabled)) {
+        const replacementImageDataUrl =
+          replaceEnabled && replacementFile ? await fileToDataUrl(replacementFile) : null;
+        editOperations.push({
+          object_id: effectiveEditObject.id,
+          object_name: visibleObjectName(effectiveEditObject),
+          replacement_image_data_url: replacementImageDataUrl,
+          target_color: colorEnabled ? targetColor : null,
+        });
+      }
+
+      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
+        {
+          snapshotPayload: lastRenderedSnapshot as unknown as Record<string, unknown>,
+          snapshotImageDataUrl: lastRenderedSnapshotImageDataUrl,
+          editSourceImageDataUrl: renderedSnapshotImage.image.data_url,
+          userPrompt: renderPrompt,
+          renderMode: 'edit',
+          presetSelection: editPresetSelection,
+          editOperations,
+        }
+      );
+      setRenderedSnapshotImage(renderResult.render);
+      if (renderResult.saved_render) {
+        upsertSavedRender(renderResult.saved_render);
+        setSavedRenderId(renderResult.saved_render.id);
+      } else {
+        setSavedRenderId(null);
+      }
+      setRenderStatus({
+        tone: 'success',
+        text: `Edited image with ${renderResult.render.models.image_model_name}.`,
+      });
+    } catch (editError) {
+      setRenderStatus({
+        tone: 'error',
+        text:
+          editError instanceof Error
+            ? editError.message
+            : 'Failed to edit the generated image.',
+      });
+    } finally {
       setIsRenderingImage(false);
     }
   }
@@ -1277,8 +1609,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
           let pxMm = cxMm;
           let pyMm = cyMm;
           // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
-          // Proxies and GLBs both share the same plan-rotation convention.
-          let rotY = planRotationToYawRad(rotCcwDeg);
+          // Prefer the same explicit front metadata that drives the 2D white marker.
+          let rotY = resolvePlanObjectYawRad({
+            rotationDeg: rotCcwDeg,
+            frontWorld: obj.frontWorld,
+            frontSideWorld: obj.frontSideWorld,
+            frontSideLocal: obj.frontSideLocal,
+          });
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
             if (mount) {
@@ -1415,6 +1752,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
                       resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
                       reintroduced: Boolean(obj.reintroduced),
                     }),
+                    modelUrl: descriptorForPanel.url,
+                    previewRotationOffsetDeg:
+                      previewOverride.applied?.rotationDegOffset ?? 0,
+                    finalDescriptorRotationDeg: descriptorForPanel.rotationDeg,
                     status: 'glb_loaded',
                     reason: previewOverride.applied
                       ? `Loaded GLB with preview override for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
@@ -1971,6 +2312,44 @@ export const ThreeDPreviewPanel: React.FC = () => {
             </div>
           ) : null}
           <div className="three-panel-prompt">
+            <div className="reference-preset-stack">
+              <RenderPresetSelector
+                title="Style"
+                group={renderPresets?.styles ?? {}}
+                value={presetSelection.style}
+                disabled={isRenderingImage || !renderPresets}
+                onChange={(value) =>
+                  setPresetSelection((current) => ({
+                    ...current,
+                    style: value,
+                  }))
+                }
+              />
+              <RenderPresetSelector
+                title="Lighting"
+                group={renderPresets?.lights ?? {}}
+                value={presetSelection.lighting}
+                disabled={isRenderingImage || !renderPresets}
+                onChange={(value) =>
+                  setPresetSelection((current) => ({
+                    ...current,
+                    lighting: value,
+                  }))
+                }
+              />
+              <RenderPresetSelector
+                title="Scenery"
+                group={renderPresets?.sceneries ?? {}}
+                value={presetSelection.scenery}
+                disabled={isRenderingImage || !renderPresets}
+                onChange={(value) =>
+                  setPresetSelection((current) => ({
+                    ...current,
+                    scenery: value,
+                  }))
+                }
+              />
+            </div>
             <label htmlFor="three-render-prompt">Image Prompt</label>
             <textarea
               id="three-render-prompt"
@@ -1982,8 +2361,122 @@ export const ThreeDPreviewPanel: React.FC = () => {
               onChange={(event) => setRenderPrompt(event.target.value)}
             />
             <div className="three-panel-prompt-note">
-              The current 3D view is captured as the structural source image. Floor grid lines are removed before sending it to Gemini.
+              The current 3D view is captured as the structural source image. Floor grid lines are removed before sending it to Nano Banana.
             </div>
+            {renderedSnapshotImage ? (
+              <div className="three-edit-controls">
+                <div className="three-edit-object-field">
+                  <label>
+                    Object
+                    <select
+                      disabled={isRenderingImage || lastVisibleObjects.length === 0}
+                      value={effectiveEditObject?.id ?? ''}
+                      onChange={(event) => setEditSelectedObjectId(event.target.value)}
+                    >
+                      {lastVisibleObjects.map((object) => (
+                        <option key={object.id} value={object.id}>
+                          {visibleObjectLabel(object)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="reference-preset-stack compact">
+                  <RenderPresetSelector
+                    title="Edit Style"
+                    group={renderPresets?.styles ?? {}}
+                    value={editPresetSelection.style}
+                    disabled={isRenderingImage || !renderPresets}
+                    allowEmpty
+                    emptyLabel="No change"
+                    compact
+                    onChange={(value) =>
+                      setEditPresetSelection((current) => ({
+                        ...current,
+                        style: value,
+                      }))
+                    }
+                  />
+                  <RenderPresetSelector
+                    title="Edit Lighting"
+                    group={renderPresets?.lights ?? {}}
+                    value={editPresetSelection.lighting}
+                    disabled={isRenderingImage || !renderPresets}
+                    allowEmpty
+                    emptyLabel="No change"
+                    compact
+                    onChange={(value) =>
+                      setEditPresetSelection((current) => ({
+                        ...current,
+                        lighting: value,
+                      }))
+                    }
+                  />
+                  <RenderPresetSelector
+                    title="Edit Scenery"
+                    group={renderPresets?.sceneries ?? {}}
+                    value={editPresetSelection.scenery}
+                    disabled={isRenderingImage || !renderPresets}
+                    allowEmpty
+                    emptyLabel="No change"
+                    compact
+                    onChange={(value) =>
+                      setEditPresetSelection((current) => ({
+                        ...current,
+                        scenery: value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="three-edit-row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={replaceEnabled}
+                      onChange={(event) => setReplaceEnabled(event.target.checked)}
+                    />
+                    Replace
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={!replaceEnabled || isRenderingImage}
+                    onChange={(event) => {
+                      setReplacementFile(event.target.files?.[0] ?? null);
+                    }}
+                  />
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={colorEnabled}
+                      onChange={(event) => setColorEnabled(event.target.checked)}
+                    />
+                    Color
+                  </label>
+                  <input
+                    type="color"
+                    disabled={!colorEnabled || isRenderingImage}
+                    value={targetColor}
+                    onChange={(event) => setTargetColor(event.target.value)}
+                    aria-label="Target color"
+                  />
+                  <button
+                    className="ghost"
+                    disabled={isRenderingImage || !hasEditOperation}
+                    onClick={() => {
+                      void handleEditSnapshotImage();
+                    }}
+                  >
+                    {isRenderingImage ? 'Editing...' : 'Apply Edit'}
+                  </button>
+                </div>
+                {selectedId && !selectedObjectIsEditable ? (
+                  <div className="three-panel-prompt-note">
+                    Selected 3D object is not visible in this generated image.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="three-panel-hint">
             Click-drag to orbit. Click an object to select it, or click a wall to adjust its opacity.
@@ -2003,7 +2496,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           </div>
         ) : null}
       </div>
-      {reintroducedObjects.length > 0 || proxyObjects.length > 0 ? (
+      {reintroducedObjects.length > 0 || proxyObjects.length > 0 || glbObjects.length > 0 ? (
         <div className="three-debug-grid">
           {reintroducedObjects.length > 0 ? (
             <div className="three-debug-card">
@@ -2021,6 +2514,38 @@ export const ThreeDPreviewPanel: React.FC = () => {
                     {item.clusterId ? <span>cluster: {item.clusterId}</span> : null}
                   </div>
                 ))}
+              </div>
+            </div>
+          ) : null}
+          {glbObjects.length > 0 ? (
+            <div className="three-debug-card">
+              <div className="three-debug-title">Loaded GLBs ({glbObjects.length})</div>
+              <div className="three-debug-list">
+                {glbObjects.map((item) => {
+                  const modelName = item.modelUrl?.split('/').pop() ?? 'n/a';
+                  const offsetLabel =
+                    typeof item.previewRotationOffsetDeg === 'number'
+                      ? `${Math.round(item.previewRotationOffsetDeg)}deg`
+                      : 'pending';
+                  const finalRotationLabel =
+                    typeof item.finalDescriptorRotationDeg === 'number'
+                      ? `${Math.round(item.finalDescriptorRotationDeg)}deg`
+                      : 'n/a';
+                  return (
+                    <div key={item.objectId} className="three-debug-item">
+                      <strong>{item.label}</strong>
+                      <span>
+                        raw: {item.rawAssetId ?? 'n/a'} | inventory:{' '}
+                        {item.resolvedAssetId ?? 'not matched'}
+                      </span>
+                      <span>
+                        model: {modelName} | offset: {offsetLabel} | final rot:{' '}
+                        {finalRotationLabel}
+                      </span>
+                      <span>{item.reason}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -2058,7 +2583,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
               </div>
             </div>
             <div className="three-render-chip-row">
-              <span className="three-render-chip">OpenRouter Gemini</span>
+              <span className="three-render-chip">Gemini API Nano Banana</span>
+              <span className="three-render-chip fallback">
+                {renderedSnapshotImage.request.render_mode === 'edit' ? 'Edit' : 'Generate'}
+              </span>
               {savedRenderId ? (
                 <span className="three-render-chip fallback">
                   Saved to account: {savedRenderId}
@@ -2081,7 +2609,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
               </div>
               <div className="three-render-section">
                 <strong>System Prompt Source</strong>
-                <p>Gemini system prompt + original user prompt + current 3D layout image.</p>
+                <p>Nano Banana system prompt + preset prompt + source image.</p>
               </div>
               {renderedSnapshotImage.request.layout_reference_enabled ? (
                 <div className="three-render-section">

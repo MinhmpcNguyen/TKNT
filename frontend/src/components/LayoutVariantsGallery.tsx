@@ -1,10 +1,6 @@
 import React from 'react';
 import { LayoutVariant, Point } from '../types';
 import { useEditorStore } from '../store';
-import {
-  isCardinalPlanRotation,
-  normalizePlanRotationDeg,
-} from '../utils/planOrientation';
 
 type PreviewRect = {
   kind: 'rect';
@@ -25,6 +21,11 @@ type PreviewLine = {
   x2: number;
   y2: number;
   strokeWidth: number;
+};
+
+type PreviewFrontVector = {
+  dx: number;
+  dy: number;
 };
 
 type PreviewScene = {
@@ -67,7 +68,9 @@ export const LayoutVariantsGallery: React.FC = () => {
         {layoutVariants.map((variant) => {
           const scene = buildPreviewScene(variant);
           const isSelected = variant.variant_id === selectedVariantId;
-          const isEligible = variant.gallery_eligible ?? variant.hard_valid;
+          const hasBlockingIssues = variantHasBlockingFunctionalIssues(variant);
+          const isEligible =
+            !hasBlockingIssues && (variant.gallery_eligible ?? variant.hard_valid);
           const badgeLabel =
             variant.complete === false ? 'Incomplete' : isEligible ? 'Valid' : 'Needs review';
           return (
@@ -143,6 +146,34 @@ export const LayoutVariantsGallery: React.FC = () => {
     </section>
   );
 };
+
+function variantHasBlockingFunctionalIssues(variant: LayoutVariant): boolean {
+  const verifySummary = getVariantVerifySummary(variant);
+  const blockingCount = Number(verifySummary?.blocking_issue_count ?? 0);
+  if (Number.isFinite(blockingCount) && blockingCount > 0) {
+    return true;
+  }
+  return hasNonEmptyIssueList(verifySummary?.blocking_protected_region_issues);
+}
+
+function getVariantVerifySummary(variant: LayoutVariant): Record<string, unknown> | null {
+  const direct = variant.absolute_layout?.solver_debug;
+  if (direct && typeof direct === 'object') {
+    const verifySummary = (direct as { verify_summary?: unknown }).verify_summary;
+    if (verifySummary && typeof verifySummary === 'object') {
+      return verifySummary as Record<string, unknown>;
+    }
+  }
+  const fallback = variant.absolute_layout?.verify_summary;
+  if (fallback && typeof fallback === 'object') {
+    return fallback as Record<string, unknown>;
+  }
+  return null;
+}
+
+function hasNonEmptyIssueList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
 
 function buildPreviewScene(variant: LayoutVariant): PreviewScene {
   const room = variant.styled_result?.room ?? {};
@@ -326,7 +357,7 @@ function buildObjectPreviewShapes(
   const id = String(objectRow?.instance_id ?? `obj_${index}`);
   const color = String(objectRow?.color_hex ?? '#cfcac2');
   const category = String(objectRow?.object_type ?? objectRow?.category ?? '').trim();
-  const rotationDeg = Number(objectRow?.rotation_ccw ?? objectRow?.rotation_deg ?? 0);
+  const frontWorld = normalizePreviewFrontWorld(objectRow?.front_world);
   if (isCurtainLike(category)) {
     const matchedWindow = findNearestPreviewWindow(
       {
@@ -397,7 +428,7 @@ function buildObjectPreviewShapes(
     minY,
     maxX,
     maxY,
-    rotationDeg,
+    frontWorld,
   });
   if (frontMarker) {
     shapes.push(frontMarker);
@@ -411,18 +442,18 @@ function buildFrontMarkerShape(params: {
   minY: number;
   maxX: number;
   maxY: number;
-  rotationDeg: number;
+  frontWorld: PreviewFrontVector | null;
 }): PreviewLine | null {
-  const { id, minX, minY, maxX, maxY, rotationDeg } = params;
-  if (!isCardinalPlanRotation(rotationDeg)) {
+  const { id, minX, minY, maxX, maxY, frontWorld } = params;
+  const frontSide = dominantPreviewFrontSide(frontWorld);
+  if (!frontSide) {
     return null;
   }
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
   const insetX = Math.max(50, Math.min(width * 0.16, 120));
   const insetY = Math.max(50, Math.min(height * 0.16, 120));
-  const normalized = normalizePlanRotationDeg(rotationDeg);
-  if (normalized === 0) {
+  if (frontSide === 'top') {
     const y = minY + insetY;
     return {
       kind: 'line',
@@ -435,7 +466,7 @@ function buildFrontMarkerShape(params: {
       strokeWidth: 52,
     };
   }
-  if (normalized === 90) {
+  if (frontSide === 'right') {
     const x = maxX - insetX;
     return {
       kind: 'line',
@@ -448,7 +479,7 @@ function buildFrontMarkerShape(params: {
       strokeWidth: 52,
     };
   }
-  if (normalized === 180) {
+  if (frontSide === 'bottom') {
     const y = maxY - insetY;
     return {
       kind: 'line',
@@ -461,7 +492,7 @@ function buildFrontMarkerShape(params: {
       strokeWidth: 52,
     };
   }
-  if (normalized === 270) {
+  if (frontSide === 'left') {
     const x = minX + insetX;
     return {
       kind: 'line',
@@ -475,6 +506,34 @@ function buildFrontMarkerShape(params: {
     };
   }
   return null;
+}
+
+function normalizePreviewFrontWorld(value: unknown): PreviewFrontVector | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const raw = value as { dx?: unknown; dy?: unknown };
+  const dx = Number(raw.dx);
+  const dy = Number(raw.dy);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return null;
+  }
+  if (Math.hypot(dx, dy) <= 1e-6) {
+    return null;
+  }
+  return { dx, dy };
+}
+
+function dominantPreviewFrontSide(
+  frontWorld: PreviewFrontVector | null,
+): 'top' | 'right' | 'bottom' | 'left' | null {
+  if (!frontWorld) {
+    return null;
+  }
+  if (Math.abs(frontWorld.dx) >= Math.abs(frontWorld.dy)) {
+    return frontWorld.dx >= 0 ? 'right' : 'left';
+  }
+  return frontWorld.dy >= 0 ? 'bottom' : 'top';
 }
 
 type PreviewWindow = {

@@ -6,6 +6,8 @@ from typing import Any
 
 from layout.orientation_contract import (
     effective_front_side as _effective_front_side_contract,
+)
+from layout.orientation_contract import (
     normalize_cardinal_side,
     side_to_vec,
 )
@@ -102,6 +104,14 @@ _FUNCTIONAL_SUPPORT_TYPES = frozenset(
         "tall_cabinet",
     }
 )
+
+
+def _layout_objects(absolute_layout: Mapping[str, Any]) -> list[dict[str, Any]]:
+    for key in ("objects", "object_placements", "placements"):
+        value = absolute_layout.get(key)
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            return [deepcopy(row) for row in value if isinstance(row, Mapping)]
+    return []
 
 
 def collect_dropped_inventory(
@@ -228,8 +238,7 @@ def controlled_accessory_refill(
     grid_mm: int = _CONTROLLED_REFILL_GRID_MM,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     layout = deepcopy(absolute_layout)
-    if not isinstance(layout.get("objects"), list):
-        layout["objects"] = []
+    layout["objects"] = _layout_objects(layout)
 
     inventory = {
         str(cluster_id): [deepcopy(item) for item in items if isinstance(item, dict)]
@@ -268,7 +277,7 @@ def controlled_accessory_refill(
             quality_before=_quality_from_refined_solution(refined_layout_solution),
             quality_after=_quality_from_refined_solution(refined_layout_solution),
             notes=[
-                "Controlled Accessory Refill skipped because room geometry is unavailable."
+                "Controlled Accessory Refill skipped because room geometry is unavailable for object-level layout."
             ],
         )
 

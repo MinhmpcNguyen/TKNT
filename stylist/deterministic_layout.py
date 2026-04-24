@@ -81,7 +81,7 @@ ANCHOR_PRIORITY: dict[str, tuple[str, ...]] = {
         "printer",
         "desktop_pc",
     ),
-    "tv_console": ("tv", "speaker", "smart_speaker"),
+    "tv_console": ("speaker", "smart_speaker"),
     "dresser": ("mirror", "decor"),
     "side_table": ("table_lamp", "plant", "decor", "vase", "smart_speaker", "speaker"),
     "console_table": ("mirror", "decor", "table_lamp", "plant", "vase"),
@@ -283,6 +283,11 @@ def build_deterministic_stylist_payload(
         status = "NEED_INFO"
         missing.append("room.polygon_ccw")
 
+    objects, validation = _validate_styled_objects(
+        room_rect=room_rect,
+        objects=existing_rows + generated_rows,
+    )
+
     return {
         "status": status,
         "room": {
@@ -297,7 +302,8 @@ def build_deterministic_stylist_payload(
                 "windows": window_opening_colors,
             },
         },
-        "objects": existing_rows + generated_rows,
+        "objects": objects,
+        "validation": validation,
         "notes": [
             "Accessory placement used deterministic support rules and fixed 50 mm spacing."
         ],
@@ -437,6 +443,7 @@ def _build_existing_objects(
                 "color_hex": DEFAULT_OBJECT_COLOR,
                 "material": _fallback_material(object_type),
                 "place_on": None,
+                "collision_layer": "floor_solid",
             }
         )
         supports.append(
@@ -582,12 +589,22 @@ def _select_anchor_candidates(
     for item_type in ordered:
         if item_type in STRUCTURAL_SKIP_TYPES:
             continue
+        if _is_disallowed_anchor_attachment(anchor=anchor, item_type=item_type):
+            continue
         if not _is_supported_item_type(item_type):
             continue
         selected.append(item_type)
         if len(selected) >= limit:
             break
     return selected
+
+
+def _is_disallowed_anchor_attachment(*, anchor: str, item_type: str) -> bool:
+    normalized_anchor = anchor.strip().lower()
+    normalized_item_type = item_type.strip().lower()
+    if normalized_item_type != "tv":
+        return False
+    return normalized_anchor == "tv_console"
 
 
 def _ordered_candidates(
@@ -1277,8 +1294,120 @@ def _make_generated_object(
             "target_instance_id": target_instance_id,
             "method": method,
         },
+        "collision_layer": _collision_layer_for_object(
+            item_type=item_type,
+            method=method,
+            target_instance_id=target_instance_id,
+        ),
         "meta_height_mm": profile.height_mm,
     }
+
+
+def _collision_layer_for_object(
+    *,
+    item_type: str,
+    method: Literal["on_top", "hang_on", "floor"],
+    target_instance_id: str,
+) -> str:
+    lowered = item_type.strip().lower()
+    if method == "on_top":
+        return "surface_child"
+    if method == "hang_on":
+        if target_instance_id == "ceiling" or lowered in CEILING_MOUNTED_TYPES:
+            return "ceiling"
+        return "wall_mounted"
+    if lowered in UNDERLAY_TYPES:
+        return "floor_underlay"
+    return "floor_solid"
+
+
+def _validate_styled_objects(
+    *,
+    room_rect: _Rect,
+    objects: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, str]] = []
+    floor_solids: list[tuple[str, _Rect, str]] = []
+
+    for row in objects:
+        if not isinstance(row, dict):
+            continue
+        rect = _rect_from_bbox(row.get("bbox"))
+        if rect is None:
+            kept.append(row)
+            continue
+        layer = str(row.get("collision_layer") or "floor_solid")
+        object_type = str(row.get("object_type") or "")
+        instance_id = str(row.get("instance_id") or object_type)
+        source = str(row.get("source") or "")
+
+        if layer == "floor_underlay":
+            fitted = _fit_rect_within_bounds(
+                rect=rect,
+                min_x=room_rect.min_x,
+                max_x=room_rect.max_x,
+                min_y=room_rect.min_y,
+                max_y=room_rect.max_y,
+            )
+            next_row = dict(row)
+            next_row["bbox"] = fitted.to_bbox()
+            next_row["polygon_ccw"] = fitted.to_polygon()
+            kept.append(next_row)
+            continue
+
+        if layer == "floor_solid":
+            if any(
+                _rects_overlap_local(rect, other_rect)
+                for _, other_rect, _ in floor_solids
+            ):
+                if source == "inventory":
+                    dropped.append(
+                        {
+                            "instance_id": instance_id,
+                            "reason": "floor_solid_overlap",
+                        }
+                    )
+                    continue
+            floor_solids.append((instance_id, rect, object_type))
+
+        if layer == "wall_mounted" and object_type in OPENING_MOUNTED_TYPES:
+            if any(
+                _rect_overlap_ratio_local(rect, other_rect) > 0.15
+                for _, other_rect, _ in floor_solids
+            ):
+                dropped.append(
+                    {
+                        "instance_id": instance_id,
+                        "reason": "opening_mount_over_floor_solid",
+                    }
+                )
+                continue
+
+        kept.append(row)
+
+    return kept, {
+        "collision_model": "layer_aware_v1",
+        "dropped_objects": dropped,
+    }
+
+
+def _rects_overlap_local(left: _Rect, right: _Rect) -> bool:
+    return (
+        left.min_x < right.max_x
+        and left.max_x > right.min_x
+        and left.min_y < right.max_y
+        and left.max_y > right.min_y
+    )
+
+
+def _rect_overlap_ratio_local(left: _Rect, right: _Rect) -> float:
+    overlap_x = max(0, min(left.max_x, right.max_x) - max(left.min_x, right.min_x))
+    overlap_y = max(0, min(left.max_y, right.max_y) - max(left.min_y, right.min_y))
+    overlap_area = overlap_x * overlap_y
+    if overlap_area <= 0:
+        return 0.0
+    return overlap_area / max(1, min(left.area, right.area))
 
 
 def _profile_for_type(

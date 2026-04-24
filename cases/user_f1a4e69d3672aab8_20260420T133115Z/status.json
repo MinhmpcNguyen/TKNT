@@ -1,0 +1,600 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260420T133115Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-20T13:35:21.324684+00:00",
+  "error": "solver could not produce any feasible concept-guided layouts",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-20T13:31:15.128362+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-20T13:31:18.066718+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-20T13:31:48.918719+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-20T13:31:49.013636+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 1/1",
+      "updated_at_utc": "2026-04-20T13:31:52.745427+00:00",
+      "progress_current": 1,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-04-20T13:31:52.745751+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: daylight_oriented.",
+      "updated_at_utc": "2026-04-20T13:31:52.747416+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 1/5: daylight_oriented ready.",
+      "updated_at_utc": "2026-04-20T13:31:52.749141+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: open_center.",
+      "updated_at_utc": "2026-04-20T13:31:52.749568+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 2/5: open_center ready.",
+      "updated_at_utc": "2026-04-20T13:31:52.751595+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: focal_axis.",
+      "updated_at_utc": "2026-04-20T13:31:52.752000+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 3/5: focal_axis ready.",
+      "updated_at_utc": "2026-04-20T13:31:52.753741+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: edge_weighted.",
+      "updated_at_utc": "2026-04-20T13:31:52.754010+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 4/5: edge_weighted ready.",
+      "updated_at_utc": "2026-04-20T13:31:52.755631+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 5/5: zoned.",
+      "updated_at_utc": "2026-04-20T13:31:52.755894+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concept 5/5: zoned ready.",
+      "updated_at_utc": "2026-04-20T13:31:52.757475+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 5/5",
+      "updated_at_utc": "2026-04-20T13:31:52.786203+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 0/5",
+      "updated_at_utc": "2026-04-20T13:31:52.786793+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 1/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:31:52.788743+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 1/8: offending clusters media.",
+      "updated_at_utc": "2026-04-20T13:32:03.100739+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 1/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:32:03.103428+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 2/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:03.103838+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 2/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:32:15.753949+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 2/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:32:15.756497+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 3/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:15.756909+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 3/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:32:25.112749+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 3/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:32:25.115697+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 4/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:25.116084+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solver attempt 4/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:32:33.460445+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 1/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:33.462472+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 1/8: offending clusters media.",
+      "updated_at_utc": "2026-04-20T13:32:43.275305+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 1/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:32:43.278753+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 2/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:43.279260+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 2/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:32:57.319549+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 2/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:32:57.322272+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 3/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:32:57.324641+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 3/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:33:07.556958+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 3/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:33:07.559865+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 4/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:07.560417+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solver attempt 4/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:33:16.370643+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 1/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:16.372965+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 1/8: offending clusters media.",
+      "updated_at_utc": "2026-04-20T13:33:26.111922+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 1/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:33:26.114981+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 2/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:26.115557+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 2/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:33:40.034237+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 2/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:33:40.037155+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 3/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:40.037968+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 3/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:33:50.074932+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 3/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:33:50.077618+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 4/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:50.078219+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solver attempt 4/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:33:58.772798+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 1/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:33:58.775599+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 1/8: offending clusters media.",
+      "updated_at_utc": "2026-04-20T13:34:08.556589+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 1/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:34:08.559993+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 2/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:34:08.560553+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 2/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:34:22.512852+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 2/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:34:22.515522+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 3/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:34:22.516081+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 3/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:34:32.781635+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 3/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:34:32.784357+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 4/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:34:32.784791+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solver attempt 4/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:34:41.429577+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 1/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:34:41.431823+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 1/8: offending clusters media.",
+      "updated_at_utc": "2026-04-20T13:34:50.836121+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 1/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:34:50.839302+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 2/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:34:50.840125+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 2/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:35:03.332027+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 2/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:35:03.334714+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 3/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:35:03.335219+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 3/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:35:12.790953+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 3/8: resized or reduced furniture, then remapped cluster outlines.",
+      "updated_at_utc": "2026-04-20T13:35:12.793822+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 4/8: evaluating this concept-guided macro layout.",
+      "updated_at_utc": "2026-04-20T13:35:12.794342+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solver attempt 4/8: offending clusters main_seating, media.",
+      "updated_at_utc": "2026-04-20T13:35:21.323727+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "solver could not produce any feasible concept-guided layouts",
+      "updated_at_utc": "2026-04-20T13:35:21.324684+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "solver could not produce any feasible concept-guided layouts"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage, Group, Circle, Text } from 'react-konva';
 import { useEditorStore } from '../store';
 import { clamp, polygonBounds, toCanvas, fromCanvas } from '../utils/geometry';
-import { Door, InventoryItem, Placement, Point, Window } from '../types';
+import { DirectionVector, Door, InventoryItem, Placement, Point, Window } from '../types';
 import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
@@ -32,6 +32,31 @@ function frontMarkerPoints(
     default:
       return [-lineHalf, -depth / 2 + inset, lineHalf, -depth / 2 + inset];
   }
+}
+
+function frontWorldToCanvasLocalSide(
+  frontWorld: DirectionVector | null | undefined,
+  rotationDeg: number,
+): 'top' | 'bottom' | 'left' | 'right' | null {
+  if (!frontWorld) {
+    return null;
+  }
+  const dx = Number(frontWorld.dx);
+  const dy = Number(frontWorld.dy);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return null;
+  }
+  const radians = (((rotationDeg % 360) + 360) % 360 * Math.PI) / 180;
+  const targetX = dx;
+  const targetY = -dy;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const localX = cos * targetX + sin * targetY;
+  const localY = -sin * targetX + cos * targetY;
+  if (Math.abs(localX) >= Math.abs(localY)) {
+    return localX >= 0 ? 'right' : 'left';
+  }
+  return localY >= 0 ? 'bottom' : 'top';
 }
 
 export const Canvas2D: React.FC = () => {
@@ -536,11 +561,10 @@ export const Canvas2D: React.FC = () => {
     if (!design) return null;
     const placements = design.placements.map((placement, index) => ({ placement, index }));
     placements.sort((a, b) => {
-      const aFloor = isFloorCovering(a.placement.category);
-      const bFloor = isFloorCovering(b.placement.category);
-      if (aFloor && !bFloor) return -1;
-      if (!aFloor && bFloor) return 1;
-      if (aFloor && bFloor) {
+      const aLayer = placementLayer(a.placement);
+      const bLayer = placementLayer(b.placement);
+      if (aLayer !== bLayer) return aLayer - bLayer;
+      if (aLayer === 0) {
         const areaA = a.placement.footprint_mm.w * a.placement.footprint_mm.d;
         const areaB = b.placement.footprint_mm.w * b.placement.footprint_mm.d;
         if (areaA !== areaB) return areaB - areaA;
@@ -551,13 +575,15 @@ export const Canvas2D: React.FC = () => {
       const isLocked = placement.constraint_mode === 'locked';
       const isCurtain = isCurtainLike(placement.category);
       const isMirror = isMirrorLike(placement.category);
+      const isWallMounted = isWallMountedLike(placement);
+      const isCeilingMounted = isCeilingMountedLike(placement);
       const matchedWindow = isCurtain
         ? findNearestWindowForPlacement(
             placement.position_mm,
             floorplan?.openings.windows ?? [],
           )
         : null;
-      const matchedWall = isMirror && placement.place_on?.method === 'hang_on'
+      const matchedWall = isWallMounted && placement.place_on?.method === 'hang_on'
         ? snapToWall(
             placement.position_mm,
             Math.max(
@@ -578,7 +604,10 @@ export const Canvas2D: React.FC = () => {
       const showInlineLabel = true;
       const showHoverTag = false;
       const tagText = labelText;
-      const frontSide = placement.front_side_local ?? 'top';
+      const frontSide =
+        frontWorldToCanvasLocalSide(placement.front_world, placement.rotation_deg) ??
+        placement.front_side_local ??
+        'top';
       const frontPoints = frontMarkerPoints(w, d, frontSide);
       const baseSize = Math.max(0, Math.min(w, d));
       const maxLabelWidth = Math.max(0, w - 10);
@@ -719,17 +748,17 @@ export const Canvas2D: React.FC = () => {
         );
       }
 
-      if (isMirror && matchedWall) {
+      if (isWallMounted && matchedWall) {
         const start = toCanvasPoint(matchedWall.start);
         const end = toCanvasPoint(matchedWall.end);
         const mid = {
           x: (start.x + end.x) / 2,
           y: (start.y + end.y) / 2,
         };
-        const mirrorStrokeWidth = clamp(
+        const wallItemStrokeWidth = clamp(
           placement.footprint_mm.d * scale,
           6,
-          12,
+          isMirror ? 12 : 10,
         );
         return (
           <Group
@@ -754,23 +783,23 @@ export const Canvas2D: React.FC = () => {
             <Line
               points={[start.x, start.y, end.x, end.y]}
               stroke={stroke}
-              strokeWidth={mirrorStrokeWidth + (isSelected ? 3 : 1)}
+              strokeWidth={wallItemStrokeWidth + (isSelected ? 3 : 1)}
               opacity={0.2}
               lineCap="round"
               listening={false}
             />
             <Line
               points={[start.x, start.y, end.x, end.y]}
-              stroke={placement.color_hex || '#dfe6ec'}
-              strokeWidth={mirrorStrokeWidth}
+              stroke={placement.color_hex || (isMirror ? '#dfe6ec' : '#b48a63')}
+              strokeWidth={wallItemStrokeWidth}
               opacity={0.96}
               lineCap="round"
-              hitStrokeWidth={Math.max(16, mirrorStrokeWidth + 8)}
+              hitStrokeWidth={Math.max(16, wallItemStrokeWidth + 8)}
             />
             <Line
               points={[start.x, start.y, end.x, end.y]}
               stroke="rgba(255,255,255,0.7)"
-              strokeWidth={Math.max(1.5, mirrorStrokeWidth * 0.22)}
+              strokeWidth={Math.max(1.5, wallItemStrokeWidth * 0.22)}
               opacity={0.7}
               lineCap="round"
               listening={false}
@@ -778,7 +807,7 @@ export const Canvas2D: React.FC = () => {
             {showInlineLabel && (
               <Group
                 x={mid.x - tagWidth / 2}
-                y={mid.y - mirrorStrokeWidth - tagHeight - 4}
+                y={mid.y - wallItemStrokeWidth - tagHeight - 4}
                 listening={false}
               >
                 <Rect
@@ -791,7 +820,7 @@ export const Canvas2D: React.FC = () => {
                 <Text
                   text={tagText}
                   fontSize={tagFontSize}
-                  fill="#647789"
+                  fill={isMirror ? '#647789' : '#8a5a34'}
                   x={tagPaddingX}
                   y={tagPaddingY - 1}
                   width={Math.max(0, tagWidth - tagPaddingX * 2)}
@@ -800,7 +829,7 @@ export const Canvas2D: React.FC = () => {
               </Group>
             )}
             {isSelected && (
-              <Group x={mid.x + 12} y={mid.y - mirrorStrokeWidth - 10}>
+              <Group x={mid.x + 12} y={mid.y - wallItemStrokeWidth - 10}>
                 <Rect
                   width={Math.max(70, placement.category.length * 8)}
                   height={20}
@@ -849,6 +878,70 @@ export const Canvas2D: React.FC = () => {
                   fill="#fff"
                   x={10}
                   y={3}
+                />
+              </Group>
+            )}
+          </Group>
+        );
+      }
+
+      if (isCeilingMounted) {
+        const radius = Math.max(8, Math.min(Math.max(w, d) * 0.28, 24));
+        return (
+          <Group
+            key={placement.placement_id}
+            x={pos.x}
+            y={pos.y}
+            draggable={!isLocked}
+            onDragMove={(evt) => {
+              if (isLocked) return;
+              const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
+              updatePlacement({ ...placement, position_mm: newPos });
+            }}
+            onClick={() => selectPlacement(placement.placement_id)}
+            onTap={() => selectPlacement(placement.placement_id)}
+          >
+            <Circle
+              radius={radius}
+              fill={placement.color_hex || '#fff3b0'}
+              stroke={stroke}
+              strokeWidth={isSelected ? 3 : 1}
+              opacity={0.92}
+              shadowColor="#d8b84f"
+              shadowBlur={isSelected ? 8 : 4}
+              shadowOpacity={0.25}
+            />
+            <Line
+              points={[-radius * 0.55, 0, radius * 0.55, 0]}
+              stroke="rgba(255,255,255,0.95)"
+              strokeWidth={Math.max(2, radius * 0.16)}
+              lineCap="round"
+              listening={false}
+            />
+            <Line
+              points={[0, -radius * 0.55, 0, radius * 0.55]}
+              stroke="rgba(255,255,255,0.95)"
+              strokeWidth={Math.max(2, radius * 0.16)}
+              lineCap="round"
+              listening={false}
+            />
+            {showInlineLabel && (
+              <Group x={-tagWidth / 2} y={radius + 5} listening={false}>
+                <Rect
+                  width={tagWidth}
+                  height={tagHeight}
+                  fill="rgba(255,255,255,0.78)"
+                  stroke="rgba(0,0,0,0.18)"
+                  cornerRadius={5}
+                />
+                <Text
+                  text={tagText}
+                  fontSize={tagFontSize}
+                  fill="#7a671d"
+                  x={tagPaddingX}
+                  y={tagPaddingY - 1}
+                  width={Math.max(0, tagWidth - tagPaddingX * 2)}
+                  ellipsis
                 />
               </Group>
             )}
@@ -1120,6 +1213,19 @@ function isFloorCovering(category: string): boolean {
   );
 }
 
+function placementLayer(placement: Placement): number {
+  const explicitLayer = String((placement as any).collision_layer ?? '').trim();
+  if (explicitLayer === 'floor_underlay') return 0;
+  if (explicitLayer === 'surface_child') return 2;
+  if (explicitLayer === 'wall_mounted') return 3;
+  if (explicitLayer === 'ceiling') return 4;
+  if (isFloorCovering(placement.category)) return 0;
+  if (isCeilingMountedLike(placement)) return 4;
+  if (isWallMountedLike(placement)) return 3;
+  if (placement.place_on?.method === 'on_top') return 2;
+  return 1;
+}
+
 function isCurtainLike(category: string): boolean {
   const cat = category.toLowerCase();
   return cat.includes('curtain') || cat.includes('blind') || cat.includes('drape');
@@ -1127,6 +1233,33 @@ function isCurtainLike(category: string): boolean {
 
 function isMirrorLike(category: string): boolean {
   return category.toLowerCase().includes('mirror');
+}
+
+function isWallMountedLike(placement: Placement): boolean {
+  const cat = placement.category.toLowerCase();
+  return (
+    placement.place_on?.method === 'hang_on' &&
+    placement.place_on.target_instance_id !== 'ceiling' &&
+    (
+      isMirrorLike(cat) ||
+      cat.includes('wall_art') ||
+      cat.includes('art') ||
+      cat.includes('clock') ||
+      cat.includes('sconce') ||
+      cat.includes('whiteboard') ||
+      cat.includes('screen')
+    )
+  );
+}
+
+function isCeilingMountedLike(placement: Placement): boolean {
+  const cat = placement.category.toLowerCase();
+  return (
+    placement.place_on?.target_instance_id === 'ceiling' ||
+    cat.includes('ceiling_light') ||
+    cat.includes('pendant_light') ||
+    cat.includes('track_light')
+  );
 }
 
 function findNearestWindowForPlacement(

@@ -50,6 +50,14 @@ _PLACER_MODEL_ROTATION_KEYS = (
 )
 _placer_model_cursor = 0
 
+_PLANNER_OBJECT_AXIS_INTENTS = {
+    "same_direction_as_anchor",
+    "same_view_side_as_primary_pair",
+    "align_with_anchor_axis",
+    "not_behind_anchor_view",
+    "in_front_of_anchor",
+}
+
 
 AllowedRotation = Literal[0, 90, 180, 270]
 RepairStatus = Literal["REPAIRED", "NO_IMPROVEMENT", "NEED_INFO"]
@@ -1588,14 +1596,31 @@ def _has_macro_orientation_pressure(evaluation: Dict[str, Any]) -> bool:
     for row in metrics.get("orientation_debug") or []:
         if not isinstance(row, dict):
             continue
-        if int(row.get("penalty_mm") or 0) < 300:
+        if int(row.get("penalty_mm") or 0) < 220:
             continue
         kind = str(row.get("kind") or "")
         intent = str(row.get("intent") or "")
         relation = str(row.get("relation") or "")
         if kind in {"cluster_directional_relation", "cluster_orientation"}:
             return True
-        if relation == "face_each_other" or intent == "face_object":
+        if (
+            relation in {"face_each_other", "access_faces_other"}
+            or intent == "face_object"
+        ):
+            return True
+    return False
+
+
+def _has_planner_object_axis_pressure(evaluation: Dict[str, Any]) -> bool:
+    metrics = evaluation.get("metrics") or {}
+    for row in metrics.get("orientation_debug") or []:
+        if not isinstance(row, dict):
+            continue
+        if int(row.get("penalty_mm") or 0) < 180:
+            continue
+        kind = str(row.get("kind") or "")
+        intent = str(row.get("intent") or "").strip().lower()
+        if kind == "object_orientation" and intent in _PLANNER_OBJECT_AXIS_INTENTS:
             return True
     return False
 
@@ -1615,6 +1640,11 @@ def _deterministic_move_rank(
         if move_kind in {"cluster_variant", "cluster_pose"}:
             orientation_priority = 1
         elif move_kind == "object_pose":
+            orientation_priority = -1
+    elif _has_planner_object_axis_pressure(evaluation):
+        if move_kind == "object_pose":
+            orientation_priority = 1
+        elif move_kind in {"cluster_variant", "cluster_pose"}:
             orientation_priority = -1
     move_priority = 0
     if move_kind == "cluster_variant":

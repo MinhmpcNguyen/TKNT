@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.routes import account, auth, inventory, object_3d, pipeline
 from config import root_config
@@ -100,6 +102,14 @@ app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(inventory.router)
 app.include_router(object_3d.router)
+
+assets_gen_dir = Path(__file__).resolve().parents[1] / "assets_gen"
+if assets_gen_dir.exists():
+    app.mount(
+        "/assets_gen",
+        StaticFiles(directory=assets_gen_dir),
+        name="assets_gen",
+    )
 
 
 @app.get("/")

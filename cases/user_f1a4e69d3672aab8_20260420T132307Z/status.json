@@ -1,0 +1,48 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260420T132307Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-20T13:24:21.368200+00:00",
+  "error": "4 validation errors for ClusterComposerOutput\nvariant_bundle.0.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.0.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-20T13:23:07.428303+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-20T13:23:42.285230+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-04-20T13:24:20.081217+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_composer",
+      "message": "Composing the primary cluster bundle 0/1",
+      "updated_at_utc": "2026-04-20T13:24:20.216865+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "4 validation errors for ClusterComposerOutput\nvariant_bundle.0.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.0.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden",
+      "updated_at_utc": "2026-04-20T13:24:21.368200+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": "4 validation errors for ClusterComposerOutput\nvariant_bundle.0.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.0.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_layout_hints\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'anchor_first_enabled': ...n_integrity_score': 1.0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nvariant_bundle.1.anchor_chain_integrity_score\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden"
+    }
+  ]
+}

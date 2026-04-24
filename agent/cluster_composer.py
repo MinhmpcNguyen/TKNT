@@ -4,7 +4,6 @@ import json
 import logging
 import math
 import re
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,9 +49,8 @@ ARCHETYPE_LIBRARY: dict[str, tuple[str, ...]] = {
     ),
     "living_media": (
         "media_facing",
-        "conversation_facing",
-        "window_oriented",
-        "open_center",
+        "wall_backed_focal",
+        "focal_media",
     ),
     "living": (
         "media_facing",
@@ -68,8 +66,8 @@ ARCHETYPE_LIBRARY: dict[str, tuple[str, ...]] = {
     ),
     "media": (
         "media_facing",
-        "wall_media_linear",
-        "open_center",
+        "wall_backed_focal",
+        "focal_media",
     ),
     "work_study": (
         "wall_desk",
@@ -123,7 +121,6 @@ class SemanticContext:
     optional_object_ids: set[str]
     bundle_graph: dict[str, list[str]]
     grid_mm: int
-    semantic_placements: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -301,8 +298,6 @@ def _generate_cluster_variant_bundle_payload(
         }
 
     ctx = _semantic_context(cluster)
-    ctx = _ctx_with_local_seed_required_relaxation(cluster=cluster, ctx=ctx)
-
     families = _select_variant_families(cluster, ctx)
     target_count = _target_variant_count(cluster)
     step_budget = max(1, int(max_steps))
@@ -417,23 +412,14 @@ def _generate_cluster_variant_bundle_payload(
     if native_variants:
         valid_variants = native_variants
     elif _is_core_cluster(ctx):
-        droppable_ids = _local_seed_droppable_ids(cluster=cluster, ctx=ctx)
         return _semantic_fail_payload(
             cluster=cluster,
             conflicts=[
                 *_dedupe_strings(conflicts)[:12],
                 (
                     "Core cluster has no family_native variant at or above "
-                    f"{CORE_CLUSTER_FAMILY_FIDELITY_THRESHOLD:.2f} fidelity."
-                ),
-                (
-                    "Allowed local-seed degradation order: "
-                    f"{droppable_ids if droppable_ids else '[]'}"
-                ),
-                (
-                    "Failure happened after semantic-first local composition, "
-                    "so the remaining unplaced objects are outside the permitted "
-                    "local degradation ladder."
+                    f"{CORE_CLUSTER_FAMILY_FIDELITY_THRESHOLD:.2f} fidelity; "
+                    "upstream should back off inventory or regenerate a local family."
                 ),
             ],
         )
@@ -593,6 +579,8 @@ def _generate_family_seed_states(
 
     if family_key in {
         "media_facing",
+        "wall_backed_focal",
+        "focal_media",
         "conversation_facing",
         "window_oriented",
         "open_center",
@@ -647,6 +635,8 @@ def _generate_living_family_states(
 ) -> list[SemanticSeedCandidate]:
     composer_by_family = {
         "media_facing": _compose_media_facing_seed,
+        "wall_backed_focal": _compose_wall_backed_focal_seed,
+        "focal_media": _compose_focal_media_seed,
         "conversation_facing": _compose_conversation_seed,
         "window_oriented": _compose_window_oriented_seed,
         "open_center": _compose_open_center_seed,
@@ -817,7 +807,6 @@ def _compose_media_facing_seed(
             gap=max(300, ctx.grid_mm * 4),
             align="center",
             face_base=False,
-            desired_front=front,
         )
     for idx, oid in enumerate(_role_ids(ctx, "media_support", "media_anchor")):
         _place_object_on_side(
@@ -831,15 +820,95 @@ def _compose_media_facing_seed(
             align="center",
             face_base=True,
         )
-    _place_flanking_seats(
-        cluster,
-        ctx,
-        placements,
-        anchor_id,
-        front,
-        family="media_facing",
-    )
+    _place_flanking_seats(cluster, ctx, placements, anchor_id, front)
     return _complete_semantic_seed(cluster, ctx, "media_facing", placements)
+
+
+def _compose_wall_backed_focal_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    media_anchor_ids = _role_ids(ctx, "media_anchor", "media_support")
+    anchor_id = media_anchor_ids[0] if media_anchor_ids else ctx.dominant_anchor_id
+    if anchor_id is None:
+        return []
+
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    left = _rotate_cardinal_side(front, -1)
+    right = _rotate_cardinal_side(front, 1)
+
+    side_support_ids = [
+        oid
+        for oid in _role_ids(
+            ctx, "side_support", "storage_support", "accessory_support"
+        )
+        if oid != anchor_id
+    ]
+    for idx, oid in enumerate(side_support_ids):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=left if idx % 2 == 0 else right,
+            gap=max(50, ctx.grid_mm * 2),
+            align="center",
+            face_base=False,
+        )
+
+    return _complete_semantic_seed(cluster, ctx, "wall_backed_focal", placements)
+
+
+def _compose_focal_media_seed(
+    cluster: dict[str, Any],
+    ctx: SemanticContext,
+) -> list[dict[str, Any]]:
+    media_anchor_ids = _role_ids(ctx, "media_anchor", "media_support")
+    anchor_id = media_anchor_ids[0] if media_anchor_ids else ctx.dominant_anchor_id
+    if anchor_id is None:
+        return []
+
+    placements = _place_anchor_first(ctx, anchor_id, prefer_rot=0)
+    anchor = placements.get(anchor_id)
+    if anchor is None:
+        return []
+
+    front = _global_front_side(cluster, ctx, anchor_id, anchor)
+    left = _rotate_cardinal_side(front, -1)
+    right = _rotate_cardinal_side(front, 1)
+
+    support_ids = [
+        oid
+        for oid in _role_ids(
+            ctx,
+            "side_support",
+            "storage_support",
+            "accessory_support",
+            "secondary_support",
+        )
+        if oid != anchor_id
+    ]
+
+    for idx, oid in enumerate(support_ids):
+        _place_object_on_side(
+            cluster=cluster,
+            ctx=ctx,
+            placements=placements,
+            object_id=oid,
+            base_id=anchor_id,
+            side=left if idx % 2 == 0 else right,
+            gap=max(100, ctx.grid_mm * 3),
+            align="center",
+            face_base=False,
+        )
+
+    return _complete_semantic_seed(cluster, ctx, "focal_media", placements)
 
 
 def _compose_conversation_seed(
@@ -866,33 +935,25 @@ def _compose_conversation_seed(
             gap=max(250, ctx.grid_mm * 4),
             align="center",
             face_base=False,
-            desired_front=front,
         )
-    _place_flanking_seats(
-        cluster,
-        ctx,
-        placements,
-        anchor_id,
-        front,
-        family="conversation_facing",
-    )
-    remaining_seats = [
-        oid
-        for oid in _role_ids(ctx, "secondary_anchor", "secondary_support")
-        if oid not in placements
-    ]
-    for oid in remaining_seats:
+    opposite = _opposite_side(front)
+    seat_ids = _role_ids(ctx, "secondary_anchor", "secondary_support")
+    for idx, oid in enumerate(seat_ids):
+        side = [
+            opposite,
+            _rotate_cardinal_side(front, -1),
+            _rotate_cardinal_side(front, 1),
+        ][idx % 3]
         _place_object_on_side(
             cluster=cluster,
             ctx=ctx,
             placements=placements,
             object_id=oid,
             base_id=anchor_id,
-            side=_opposite_side(front),
+            side=side,
             gap=max(450, ctx.grid_mm * 6),
             align="center",
-            face_base=False,
-            desired_front=front,
+            face_base=True,
         )
     for oid in _role_ids(ctx, "media_support", "media_anchor"):
         _place_object_on_side(
@@ -904,8 +965,7 @@ def _compose_conversation_seed(
             side=_rotate_cardinal_side(front, 1),
             gap=max(900, ctx.grid_mm * 12),
             align="end",
-            face_base=False,
-            desired_front=front,
+            face_base=True,
         )
     return _complete_semantic_seed(cluster, ctx, "conversation_facing", placements)
 
@@ -1320,36 +1380,15 @@ def _role_ids(ctx: SemanticContext, *roles: str) -> list[str]:
 
 
 def _living_anchor_id(ctx: SemanticContext) -> str | None:
-    if (
-        isinstance(ctx.dominant_anchor_id, str)
-        and ctx.dominant_anchor_id in ctx.members
-    ):
-        return ctx.dominant_anchor_id
-
-    explicit_anchor_ids = [
-        oid for oid in ctx.members if ctx.roles.get(oid) == "dominant_anchor"
-    ]
-    if explicit_anchor_ids:
-        return explicit_anchor_ids[0]
-
-    sofa_like = [
+    candidates = [
         oid
         for oid in ctx.members
         if any(
-            token in _object_kind(oid) for token in ("sofa", "sectional", "loveseat")
+            token in _object_kind(oid)
+            for token in ("sofa", "sectional", "loveseat", "chair", "recliner")
         )
     ]
-    if sofa_like:
-        return sofa_like[0]
-
-    chair_like = [
-        oid
-        for oid in ctx.members
-        if any(
-            token in _object_kind(oid) for token in ("armchair", "chair", "recliner")
-        )
-    ]
-    return chair_like[0] if chair_like else None
+    return candidates[0] if candidates else ctx.dominant_anchor_id
 
 
 def _preferred_storage_anchor(ctx: SemanticContext) -> str | None:
@@ -1365,18 +1404,11 @@ def _place_flanking_seats(
     placements: dict[str, dict[str, Any]],
     anchor_id: str,
     front: str,
-    *,
-    family: str = "",
 ) -> None:
     side_sequence = [
         _rotate_cardinal_side(front, -1),
         _rotate_cardinal_side(front, 1),
     ]
-    if _normalize_token(family) == "conversation_facing":
-        side_sequence = [
-            _rotate_cardinal_side(front, -1),
-            _rotate_cardinal_side(front, 1),
-        ]
     for idx, oid in enumerate(_role_ids(ctx, "secondary_anchor", "secondary_support")):
         _place_object_on_side(
             cluster=cluster,
@@ -1387,143 +1419,8 @@ def _place_flanking_seats(
             side=side_sequence[idx % len(side_sequence)],
             gap=max(300, ctx.grid_mm * 4),
             align="center",
-            face_base=False,
-            desired_front=front,
+            face_base=True,
         )
-
-
-def _degradation_token_to_object_id(
-    *,
-    token: str,
-    ctx: SemanticContext,
-) -> str | None:
-    token_norm = _normalize_token(token)
-    if not token_norm.startswith("drop_"):
-        return None
-
-    body = token_norm[5:]
-    if not body or body.startswith("if_"):
-        return None
-
-    for oid in ctx.members:
-        if _normalize_token(oid) == body or _object_kind(oid) == body:
-            return oid
-    return None
-
-
-def _local_seed_protected_ids(
-    *,
-    cluster: dict[str, Any],
-    ctx: SemanticContext,
-) -> set[str]:
-    del cluster
-    protected: set[str] = set()
-
-    if isinstance(ctx.dominant_anchor_id, str) and ctx.dominant_anchor_id:
-        protected.add(ctx.dominant_anchor_id)
-
-    for row in ctx.semantic_placements:
-        if not isinstance(row, dict):
-            continue
-        object_id = str(row.get("id") or "")
-        if not object_id:
-            continue
-        support_role = _semantic_support_role_for_row(row, object_id=object_id)
-        if support_role == "frontal_support":
-            protected.add(object_id)
-
-    return protected
-
-
-def _local_seed_droppable_ids(
-    *,
-    cluster: dict[str, Any],
-    ctx: SemanticContext,
-) -> list[str]:
-    rules = cluster.get("cluster_rules") if isinstance(cluster, dict) else None
-    ladder = rules.get("degradation_ladder") if isinstance(rules, dict) else None
-    if not isinstance(ladder, list):
-        return []
-
-    protected = _local_seed_protected_ids(cluster=cluster, ctx=ctx)
-    out: list[str] = []
-    seen: set[str] = set()
-
-    for token in ladder:
-        if not isinstance(token, str):
-            continue
-        object_id = _degradation_token_to_object_id(token=token, ctx=ctx)
-        if not object_id:
-            continue
-        if object_id in protected:
-            continue
-        if object_id in seen:
-            continue
-        seen.add(object_id)
-        out.append(object_id)
-
-    return out
-
-
-def _ctx_with_local_seed_required_relaxation(
-    *,
-    cluster: dict[str, Any],
-    ctx: SemanticContext,
-) -> SemanticContext:
-    droppable = set(_local_seed_droppable_ids(cluster=cluster, ctx=ctx))
-    if not droppable:
-        return ctx
-
-    relaxed_required = set(ctx.required_object_ids) - droppable
-    relaxed_optional = set(ctx.optional_object_ids) | droppable
-
-    return SemanticContext(
-        cluster_id=ctx.cluster_id,
-        cluster_type=ctx.cluster_type,
-        semantic_role=ctx.semantic_role,
-        members=ctx.members,
-        specs=ctx.specs,
-        roles=ctx.roles,
-        role_ids=ctx.role_ids,
-        dominant_anchor_id=ctx.dominant_anchor_id,
-        required_object_ids=relaxed_required,
-        optional_object_ids=relaxed_optional,
-        bundle_graph=ctx.bundle_graph,
-        grid_mm=ctx.grid_mm,
-        semantic_placements=ctx.semantic_placements,
-    )
-
-
-def _local_seed_dependents_of(
-    *,
-    root_id: str,
-    ctx: SemanticContext,
-    placements: Mapping[str, dict[str, Any]],
-) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = {root_id}
-    queue: list[str] = [root_id]
-
-    while queue:
-        current = queue.pop(0)
-        for row in ctx.semantic_placements:
-            if not isinstance(row, dict):
-                continue
-            object_id = str(row.get("id") or "")
-            relative_to = str(row.get("relative_to") or "")
-            if not object_id or not relative_to:
-                continue
-            if relative_to != current:
-                continue
-            if object_id not in placements:
-                continue
-            if object_id in seen:
-                continue
-            seen.add(object_id)
-            out.append(object_id)
-            queue.append(object_id)
-
-    return out
 
 
 def _complete_semantic_seed(
@@ -1532,69 +1429,17 @@ def _complete_semantic_seed(
     family: str,
     placements: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    droppable_order = _local_seed_droppable_ids(cluster=cluster, ctx=ctx)
-    droppable_set = set(droppable_order)
-
-    working = dict(placements)
-    dropped_ids: list[str] = []
-    tried_drop_roots: set[str] = set()
-
-    while True:
-        remaining = [
-            oid for oid in ctx.members if oid not in working and oid not in dropped_ids
-        ]
-
-        updated, unplaced, auto_dropped = _place_leftover_objects(
-            cluster=cluster,
-            ctx=ctx,
-            placements=working,
-            object_ids=remaining,
-            family=family,
-        )
-
-        for oid in auto_dropped:
-            if oid not in dropped_ids:
-                dropped_ids.append(oid)
-
-        if not unplaced:
-            return _seed_normalize_to_origin(list(updated.values()))
-
-        victim: str | None = None
-        cascade_to_drop: list[str] = []
-
-        for candidate_id in droppable_order:
-            if candidate_id in tried_drop_roots:
-                continue
-            if candidate_id not in updated:
-                continue
-
-            dependents = _local_seed_dependents_of(
-                root_id=candidate_id,
-                ctx=ctx,
-                placements=updated,
-            )
-            if any(dep not in droppable_set for dep in dependents):
-                tried_drop_roots.add(candidate_id)
-                continue
-
-            victim = candidate_id
-            cascade_to_drop = dependents
-            break
-
-        if victim is None:
-            return []
-
-        tried_drop_roots.add(victim)
-        updated.pop(victim, None)
-        if victim not in dropped_ids:
-            dropped_ids.append(victim)
-
-        for dep_id in cascade_to_drop:
-            updated.pop(dep_id, None)
-            if dep_id not in dropped_ids:
-                dropped_ids.append(dep_id)
-
-        working = updated
+    remaining = [oid for oid in ctx.members if oid not in placements]
+    updated, unplaced = _place_leftover_objects(
+        cluster=cluster,
+        ctx=ctx,
+        placements=placements,
+        object_ids=remaining,
+        family=family,
+    )
+    if unplaced:
+        return []
+    return _seed_normalize_to_origin(list(updated.values()))
 
 
 def _seed_candidate(
@@ -1669,6 +1514,18 @@ def _family_contract_validator(
         penalties += 0.30
     elif anchor_id:
         bonuses += 0.08
+    family_token = _normalize_token(family)
+    if (
+        _is_media_like_cluster(
+            cluster_type=ctx.cluster_type,
+            semantic_role=ctx.semantic_role,
+            cluster_id=ctx.cluster_id,
+            members=ctx.members,
+        )
+        and family_token == "window_oriented"
+    ):
+        reasons.append("media cluster cannot use window_oriented family")
+        penalties += 0.50
 
     if anchor_id and anchor is not None:
         front = _global_front_side({}, ctx, anchor_id, anchor)
@@ -1709,29 +1566,15 @@ def _family_contract_validator(
         reasons.append("fallback generic reserve candidate")
         base = min(base, 0.35)
 
-    blocking_contract_failures = _has_blocking_contract_failures(reasons)
     fidelity = _clamp01(base + bonuses - penalties)
     threshold = _family_fidelity_threshold(ctx)
-    passed = (
-        not missing_required
-        and fidelity >= min(threshold, 0.50)
-        and not blocking_contract_failures
-    )
+    passed = not missing_required and fidelity >= min(threshold, 0.50)
     if _normalize_token(family) == "fallback_generic":
-        passed = (
-            not missing_required
-            and component_count <= 2
-            and not blocking_contract_failures
-        )
+        passed = not missing_required and component_count <= 2
 
     if not reasons:
         reasons.append("family contract passed")
-    confidence = _clamp01(
-        0.35
-        + 0.65 * fidelity
-        - min(0.25, penalties * 0.35)
-        - (0.18 if blocking_contract_failures else 0.0)
-    )
+    confidence = _clamp01(0.35 + 0.65 * fidelity - min(0.25, penalties * 0.35))
     return FamilyContractResult(
         passed=passed,
         family_fidelity=fidelity,
@@ -1752,14 +1595,6 @@ def _family_support_contract(
     reasons: list[str] = []
     penalty = 0.0
     bonus = 0.0
-
-    semantic_penalty, semantic_reasons, semantic_bonus = _semantic_support_contract(
-        ctx=ctx,
-        placement_by_id=placement_by_id,
-    )
-    penalty += semantic_penalty
-    bonus += semantic_bonus
-    reasons.extend(semantic_reasons)
 
     central_ids = _placed_role_ids(ctx, placement_by_id, "central_support")
     if central_ids:
@@ -1837,9 +1672,9 @@ def _family_allowed_secondary_sides(
     right = _rotate_cardinal_side(anchor_front, 1)
     back = _opposite_side(anchor_front)
     if "media" in family_token:
-        return {left, right, anchor_front}
+        return {left, right, back}
     if "conversation" in family_token:
-        return {left, right, anchor_front}
+        return {left, right, back}
     if "open_center" in family_token:
         return {left, right, back}
     if "headboard" in family_token or "bed_plus" in family_token:
@@ -1868,318 +1703,6 @@ def _relative_side_between(
     if abs(dx) > abs(dy):
         return "right" if dx > 0 else "left"
     return "top" if dy > 0 else "bottom"
-
-
-def _placement_front_side(
-    object_id: str,
-    placement_by_id: dict[str, dict[str, Any]],
-    ctx: SemanticContext,
-) -> str:
-    placement = placement_by_id.get(object_id)
-    if placement is None:
-        return "unknown"
-    return _global_front_side({}, ctx, object_id, placement)
-
-
-def _semantic_support_role_for_row(
-    row: Mapping[str, Any],
-    *,
-    object_id: str,
-) -> str:
-    token = _normalize_token(row.get("support_role") or "")
-    if token in {
-        "frontal_support",
-        "side_support",
-        "secondary_seat",
-        "peripheral_support",
-        "wall_support",
-    }:
-        return token
-    key = _normalize_token(object_id)
-    if any(
-        item in key for item in ("coffee_table", "bench", "ottoman", "console_table")
-    ):
-        return "frontal_support"
-    if any(item in key for item in ("armchair", "chair", "stool", "seat")):
-        return "secondary_seat"
-    if any(
-        item in key for item in ("side_table", "nightstand", "bedside", "end_table")
-    ):
-        return "side_support"
-    if "lamp" in key:
-        return "peripheral_support"
-    if any(
-        item in key
-        for item in (
-            "shelf",
-            "bookshelf",
-            "cabinet",
-            "dresser",
-            "wardrobe",
-            "buffet",
-            "sideboard",
-        )
-    ):
-        return "wall_support"
-    return ""
-
-
-def _semantic_allowed_world_sides(base_front: str, row: Mapping[str, Any]) -> set[str]:
-    left = _rotate_cardinal_side(base_front, -1)
-    right = _rotate_cardinal_side(base_front, 1)
-    back = _opposite_side(base_front)
-    option_map = {
-        "head": base_front,
-        "front": base_front,
-        "left": left,
-        "right": right,
-        "back": back,
-        "foot": back,
-        "head_left": base_front,
-        "head_right": base_front,
-        "front_left": base_front,
-        "front_right": base_front,
-        "foot_left": back,
-        "foot_right": back,
-        "back_left": back,
-        "back_right": back,
-    }
-    out: set[str] = set()
-    for option in row.get("side_options") or []:
-        side = option_map.get(_normalize_token(option))
-        if side:
-            out.add(side)
-    return out
-
-
-def _rect_center_for_object(
-    ctx: SemanticContext,
-    placement_by_id: Mapping[str, dict[str, Any]],
-    object_id: str,
-) -> tuple[float, float] | None:
-    placement = placement_by_id.get(object_id)
-    if not isinstance(placement, Mapping):
-        return None
-    rect = _rect_for_placement(ctx=ctx, placement=dict(placement))
-    if rect is None:
-        return None
-    return ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0)
-
-
-def _semantic_relative_axes(
-    *,
-    ctx: SemanticContext,
-    base_id: str,
-    object_id: str,
-    placement_by_id: Mapping[str, dict[str, Any]],
-    base_front: str,
-) -> tuple[float, float] | None:
-    base_center = _rect_center_for_object(ctx, placement_by_id, base_id)
-    object_center = _rect_center_for_object(ctx, placement_by_id, object_id)
-    if base_center is None or object_center is None:
-        return None
-    dx = float(object_center[0] - base_center[0])
-    dy = float(object_center[1] - base_center[1])
-    if base_front == "top":
-        return (dy, dx)
-    if base_front == "bottom":
-        return (-dy, dx)
-    if base_front == "left":
-        return (-dx, dy)
-    if base_front == "right":
-        return (dx, dy)
-    return None
-
-
-def _is_in_front_band(
-    *,
-    ctx: SemanticContext,
-    base_id: str,
-    object_id: str,
-    placement_by_id: Mapping[str, dict[str, Any]],
-    base_front: str,
-) -> bool:
-    axes = _semantic_relative_axes(
-        ctx=ctx,
-        base_id=base_id,
-        object_id=object_id,
-        placement_by_id=placement_by_id,
-        base_front=base_front,
-    )
-    if axes is None:
-        return False
-    front_proj, lateral_proj = axes
-    return front_proj > 0.0 and abs(lateral_proj) <= max(260.0, front_proj * 0.85)
-
-
-def _is_in_flank_band(
-    *,
-    ctx: SemanticContext,
-    base_id: str,
-    object_id: str,
-    placement_by_id: Mapping[str, dict[str, Any]],
-    base_front: str,
-) -> bool:
-    axes = _semantic_relative_axes(
-        ctx=ctx,
-        base_id=base_id,
-        object_id=object_id,
-        placement_by_id=placement_by_id,
-        base_front=base_front,
-    )
-    if axes is None:
-        return False
-    front_proj, lateral_proj = axes
-    return (
-        abs(lateral_proj) >= max(220.0, abs(front_proj) * 0.8) and front_proj > -260.0
-    )
-
-
-def _has_blocking_contract_failures(reasons: Sequence[str]) -> bool:
-    blocking_markers = (
-        "missing required objects",
-        "dominant anchor not placed",
-        "important access zone blocked",
-        "split cluster into",
-        "center reserve occupied",
-        "missing semantic base",
-        "outside anchor use band",
-        "drifted outside frontal band",
-        "breaks anchor-facing consistency",
-        "breaks anchor front consistency",
-        "not in viewing band",
-        "semantic orientation mismatch",
-        "is not facing its semantic base",
-        "violates semantic side band",
-        "drifted behind anchor",
-        "is not beside its base",
-    )
-    for row in reasons:
-        text = str(row or "").strip().lower()
-        if text and any(marker in text for marker in blocking_markers):
-            return True
-    return False
-
-
-def _semantic_support_contract(
-    *,
-    ctx: SemanticContext,
-    placement_by_id: dict[str, dict[str, Any]],
-) -> tuple[float, list[str], float]:
-    reasons: list[str] = []
-    penalty = 0.0
-    bonus = 0.0
-    for row in ctx.semantic_placements:
-        object_id = str(row.get("id") or "")
-        base_id = str(row.get("relative_to") or "")
-        if not object_id or not base_id:
-            continue
-        if object_id not in placement_by_id or base_id not in placement_by_id:
-            continue
-        actual_side = _relative_side_between(ctx, base_id, object_id, placement_by_id)
-        base_front = _placement_front_side(base_id, placement_by_id, ctx)
-        object_front = _placement_front_side(object_id, placement_by_id, ctx)
-        allowed_sides = _semantic_allowed_world_sides(base_front, row)
-        support_role = _semantic_support_role_for_row(row, object_id=object_id)
-        band_intent = _normalize_token(row.get("band_intent") or support_role)
-
-        if support_role == "frontal_support" or band_intent == "front_band":
-            if not _is_in_front_band(
-                ctx=ctx,
-                base_id=base_id,
-                object_id=object_id,
-                placement_by_id=placement_by_id,
-                base_front=base_front,
-            ):
-                reasons.append(
-                    f"semantic support {object_id} drifted outside frontal band"
-                )
-                penalty += 0.34
-            elif actual_side == base_front:
-                bonus += 0.12
-            else:
-                bonus += 0.06
-            if object_front not in {base_front, _opposite_side(base_front)}:
-                reasons.append(
-                    f"frontal support {object_id} breaks anchor front consistency"
-                )
-                penalty += 0.14
-        elif support_role == "side_support" or band_intent == "beside_base":
-            allowed = {
-                _rotate_cardinal_side(base_front, -1),
-                _rotate_cardinal_side(base_front, 1),
-            }
-            if actual_side not in allowed or not _is_in_flank_band(
-                ctx=ctx,
-                base_id=base_id,
-                object_id=object_id,
-                placement_by_id=placement_by_id,
-                base_front=base_front,
-            ):
-                reasons.append(f"semantic support {object_id} is not beside its base")
-                penalty += 0.28
-            else:
-                bonus += 0.08
-        elif support_role == "secondary_seat" or band_intent == "flank_band":
-            preferred = allowed_sides or {
-                _rotate_cardinal_side(base_front, -1),
-                _rotate_cardinal_side(base_front, 1),
-            }
-            if actual_side not in preferred or not _is_in_flank_band(
-                ctx=ctx,
-                base_id=base_id,
-                object_id=object_id,
-                placement_by_id=placement_by_id,
-                base_front=base_front,
-            ):
-                reasons.append(
-                    f"secondary seat {object_id} violates semantic side band"
-                )
-                penalty += 0.28
-            elif actual_side == _opposite_side(base_front):
-                reasons.append(f"secondary seat {object_id} drifted behind anchor")
-                penalty += 0.20
-            else:
-                bonus += 0.10
-        elif band_intent == "wall_band":
-            if allowed_sides and actual_side not in allowed_sides:
-                reasons.append(
-                    f"wall support {object_id} drifted away from its wall band"
-                )
-                penalty += 0.16
-            else:
-                bonus += 0.05
-        elif allowed_sides and actual_side not in allowed_sides:
-            reasons.append(
-                f"semantic placement {object_id} violates allowed support band"
-            )
-            penalty += 0.16
-        else:
-            bonus += 0.04
-
-        orientation = _normalize_token(row.get("orientation") or "")
-        if support_role == "secondary_seat" and orientation == "same_direction":
-            if object_front != base_front:
-                reasons.append(
-                    f"secondary seat {object_id} breaks anchor-facing consistency"
-                )
-                penalty += 0.24
-        elif orientation:
-            if orientation == "same_direction" and object_front != base_front:
-                reasons.append(f"semantic orientation mismatch for {object_id}")
-                penalty += 0.14
-            elif orientation == "face_base" and actual_side in {
-                "left",
-                "right",
-                "top",
-                "bottom",
-            }:
-                expected_front = _opposite_side(actual_side)
-                if object_front != expected_front:
-                    reasons.append(f"{object_id} is not facing its semantic base")
-                    penalty += 0.16
-
-    return min(0.75, penalty), reasons, min(0.32, bonus)
 
 
 def _cluster_component_count(
@@ -2372,6 +1895,13 @@ def _select_variant_families(
                 item.strip() for item in raw if isinstance(item, str) and item.strip()
             ]
             if families:
+                families = _normalize_variant_families_for_cluster(
+                    families,
+                    cluster_type=cluster_type,
+                    semantic_role=semantic_role,
+                    cluster_id=_cluster_id(cluster),
+                    members=(ctx.members if ctx is not None else _member_ids(cluster)),
+                )
                 return families[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
 
     library = (
@@ -2386,6 +1916,13 @@ def _select_variant_families(
                 item.strip() for item in raw if isinstance(item, str) and item.strip()
             ]
             if families:
+                families = _normalize_variant_families_for_cluster(
+                    families,
+                    cluster_type=cluster_type,
+                    semantic_role=semantic_role,
+                    cluster_id=_cluster_id(cluster),
+                    members=(ctx.members if ctx is not None else _member_ids(cluster)),
+                )
                 return families[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
 
     role_token = _normalize_token(semantic_role or "")
@@ -2403,9 +1940,17 @@ def _select_variant_families(
         elif "dining" in role_token:
             cluster_type = "dining"
 
-    return list(
+    families = list(
         ARCHETYPE_LIBRARY.get(cluster_type, ARCHETYPE_LIBRARY.get("living", ()))
-    )[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
+    )
+    families = _normalize_variant_families_for_cluster(
+        families,
+        cluster_type=cluster_type,
+        semantic_role=semantic_role,
+        cluster_id=_cluster_id(cluster),
+        members=(ctx.members if ctx is not None else _member_ids(cluster)),
+    )
+    return families[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
 
 
 def _resolve_cluster_type(cluster: dict[str, Any]) -> str:
@@ -2472,6 +2017,55 @@ def _semantic_role_from_cluster(cluster: dict[str, Any]) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _is_media_like_cluster(
+    *,
+    cluster_type: str | None,
+    semantic_role: str | None,
+    cluster_id: str | None,
+    members: Sequence[str] | None,
+) -> bool:
+    tokens = " ".join(
+        [
+            _normalize_token(cluster_type or ""),
+            _normalize_token(semantic_role or ""),
+            _normalize_token(cluster_id or ""),
+            *[_normalize_token(item) for item in (members or [])],
+        ]
+    )
+    if "media" in tokens or "tv" in tokens or "screen" in tokens:
+        return True
+    return False
+
+
+def _normalize_variant_families_for_cluster(
+    families: Sequence[str],
+    *,
+    cluster_type: str | None,
+    semantic_role: str | None,
+    cluster_id: str | None,
+    members: Sequence[str] | None,
+) -> list[str]:
+    deduped: list[str] = []
+    for family in families:
+        if isinstance(family, str) and family.strip() and family.strip() not in deduped:
+            deduped.append(family.strip())
+
+    if not _is_media_like_cluster(
+        cluster_type=cluster_type,
+        semantic_role=semantic_role,
+        cluster_id=cluster_id,
+        members=members,
+    ):
+        return deduped
+
+    allowed = ["media_facing", "wall_backed_focal", "focal_media"]
+    filtered = [family for family in deduped if family in allowed]
+    for family in allowed:
+        if family not in filtered:
+            filtered.append(family)
+    return filtered
 
 
 def _infer_cluster_type_from_structure(cluster: dict[str, Any]) -> str | None:
@@ -2903,7 +2497,6 @@ def _semantic_context(cluster: dict[str, Any]) -> SemanticContext:
         optional_object_ids=optional_ids,
         bundle_graph=_extract_bundle_graph(cluster),
         grid_mm=_extract_grid_mm(cluster),
-        semantic_placements=tuple(_extract_semantic_placements(cluster)),
     )
 
 
@@ -3227,7 +2820,6 @@ def _place_object_on_side(
     gap: int,
     align: str,
     face_base: bool,
-    desired_front: str | None = None,
 ) -> None:
     if object_id in placements or base_id not in placements:
         return
@@ -3242,12 +2834,8 @@ def _place_object_on_side(
     bx = int(base["x"])
     by = int(base["y"])
     bw, bh = _seed_rotated_wh(base_spec, int(base["rot"]))
-    desired_front_side = (
-        desired_front
-        if desired_front is not None
-        else (_opposite_side(side) if face_base else None)
-    )
-    rot = _rotation_for_front_side(cluster, object_id, spec, desired_front_side)
+    desired_front = _opposite_side(side) if face_base else None
+    rot = _rotation_for_front_side(cluster, object_id, spec, desired_front)
     ow, oh = _seed_rotated_wh(spec, rot)
     gap = _seed_snap_up_value(max(0, int(gap)), grid_mm)
 
@@ -3277,26 +2865,15 @@ def _place_leftover_objects(
     cluster: dict[str, Any],
     ctx: SemanticContext,
     placements: dict[str, dict[str, Any]],
-    object_ids: Sequence[str],
+    object_ids: list[str],
     family: str,
-) -> tuple[dict[str, dict[str, Any]], list[str], list[str]]:
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
     updated = dict(placements)
-    droppable_ids = set(_local_seed_droppable_ids(cluster=cluster, ctx=ctx))
-
-    ordered_ids = _semantic_topological_leftover_order(
-        ctx=ctx,
-        placed_ids=set(updated),
-        object_ids=object_ids,
-    )
-
     unplaced: list[str] = []
-    dropped: list[str] = []
-
-    for oid in ordered_ids:
+    for oid in object_ids:
         if oid in updated:
             continue
-
-        placed = _try_place_from_explicit_semantic_rules(
+        placed = _try_place_on_semantic_slot(
             cluster=cluster,
             ctx=ctx,
             placements=updated,
@@ -3304,228 +2881,10 @@ def _place_leftover_objects(
             family=family,
         )
         if placed is None:
-            placed = _try_place_on_semantic_slot(
-                cluster=cluster,
-                ctx=ctx,
-                placements=updated,
-                object_id=oid,
-                family=family,
-            )
-
-        if placed is None:
-            if oid in droppable_ids:
-                dropped.append(oid)
-                continue
             unplaced.append(oid)
-        else:
-            updated[oid] = placed
-
-    return updated, unplaced, dropped
-
-
-def _semantic_topological_leftover_order(
-    *,
-    ctx: SemanticContext,
-    placed_ids: set[str],
-    object_ids: Sequence[str],
-) -> list[str]:
-    requested = [oid for oid in object_ids if isinstance(oid, str) and oid]
-    requested_set = set(requested)
-    if not requested:
-        return []
-
-    followers: dict[str, set[str]] = {oid: set() for oid in requested}
-    indegree: dict[str, int] = {oid: 0 for oid in requested}
-
-    for oid in requested:
-        for row in _semantic_rows_for_object(ctx, oid):
-            base_id = str(row.get("relative_to") or "")
-            if not base_id or base_id in placed_ids:
-                continue
-            if base_id not in requested_set or base_id == oid:
-                continue
-            followers.setdefault(base_id, set()).add(oid)
-            indegree[oid] = indegree.get(oid, 0) + 1
-
-    queue: list[str] = [oid for oid in requested if indegree.get(oid, 0) == 0]
-    ordered: list[str] = []
-    seen: set[str] = set()
-
-    while queue:
-        oid = queue.pop(0)
-        if oid in seen:
             continue
-        seen.add(oid)
-        ordered.append(oid)
-        for child in sorted(followers.get(oid, set())):
-            indegree[child] = max(0, indegree.get(child, 0) - 1)
-            if indegree[child] == 0:
-                queue.append(child)
-
-    for oid in requested:
-        if oid not in seen:
-            ordered.append(oid)
-    return ordered
-
-
-def _semantic_rows_for_object(
-    ctx: SemanticContext,
-    object_id: str,
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for row in ctx.semantic_placements:
-        if not isinstance(row, dict):
-            continue
-        if str(row.get("id") or "") != object_id:
-            continue
-        out.append(dict(row))
-    return out
-
-
-def _semantic_slot_entries_for_row(
-    *,
-    base_front: str,
-    row: Mapping[str, Any],
-) -> list[dict[str, Any]]:
-    option_map = {
-        "head": (base_front, "center"),
-        "front": (base_front, "center"),
-        "head_left": (base_front, "start"),
-        "front_left": (base_front, "start"),
-        "head_right": (base_front, "end"),
-        "front_right": (base_front, "end"),
-        "left": (_rotate_cardinal_side(base_front, -1), "center"),
-        "right": (_rotate_cardinal_side(base_front, 1), "center"),
-        "foot": (_opposite_side(base_front), "center"),
-        "back": (_opposite_side(base_front), "center"),
-        "foot_left": (_opposite_side(base_front), "start"),
-        "back_left": (_opposite_side(base_front), "start"),
-        "foot_right": (_opposite_side(base_front), "end"),
-        "back_right": (_opposite_side(base_front), "end"),
-    }
-    out: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
-    raw_options = (
-        row.get("side_options") if isinstance(row.get("side_options"), list) else []
-    )
-    for raw in raw_options:
-        token = _normalize_token(raw)
-        entry = option_map.get(token)
-        if entry is None:
-            continue
-        key = (entry[0], entry[1])
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"side": entry[0], "align": entry[1], "token": token})
-    if not out:
-        out.append({"side": base_front, "align": "center", "token": "head"})
-    return out
-
-
-def _semantic_gap_candidates(row: Mapping[str, Any], grid_mm: int) -> list[int]:
-    raw_min = row.get("gap_min")
-    raw_max = row.get("gap_max")
-    gap_min = int(raw_min) if isinstance(raw_min, (int, float)) else max(grid_mm, 50)
-    gap_max = int(raw_max) if isinstance(raw_max, (int, float)) else gap_min
-    if gap_max < gap_min:
-        gap_min, gap_max = gap_max, gap_min
-    values = [gap_min, (gap_min + gap_max) // 2, gap_max]
-    out: list[int] = []
-    seen: set[int] = set()
-    for value in values:
-        snapped = _seed_snap_up_value(max(0, int(value)), grid_mm)
-        if snapped in seen:
-            continue
-        seen.add(snapped)
-        out.append(snapped)
-    return out or [max(grid_mm, 50)]
-
-
-def _semantic_desired_front(
-    *,
-    base_front: str,
-    actual_side: str,
-    row: Mapping[str, Any],
-    object_id: str,
-) -> str | None:
-    orientation = _normalize_token(row.get("orientation") or "")
-    support_role = _semantic_support_role_for_row(row, object_id=object_id)
-    if orientation == "same_direction":
-        return base_front
-    if orientation == "face_base" and actual_side in {"left", "right", "top", "bottom"}:
-        return _opposite_side(actual_side)
-    if support_role in {
-        "frontal_support",
-        "secondary_seat",
-        "side_support",
-        "wall_support",
-    }:
-        return base_front
-    return None
-
-
-def _try_place_from_explicit_semantic_rules(
-    *,
-    cluster: dict[str, Any],
-    ctx: SemanticContext,
-    placements: dict[str, dict[str, Any]],
-    object_id: str,
-    family: str,
-) -> dict[str, Any] | None:
-    del family
-    rows = _semantic_rows_for_object(ctx, object_id)
-    if not rows:
-        return None
-
-    for row in rows:
-        base_id = str(row.get("relative_to") or "")
-        if not base_id or base_id not in placements:
-            continue
-        base_pl = placements[base_id]
-        base_front = _global_front_side(cluster, ctx, base_id, base_pl)
-        slot_entries = _semantic_slot_entries_for_row(base_front=base_front, row=row)
-        gap_values = _semantic_gap_candidates(row, ctx.grid_mm)
-        for slot in slot_entries:
-            side = str(slot["side"])
-            align = str(slot["align"])
-            desired_front = _semantic_desired_front(
-                base_front=base_front,
-                actual_side=side,
-                row=row,
-                object_id=object_id,
-            )
-            for gap in gap_values:
-                trial = dict(placements)
-                _place_object_on_side(
-                    cluster=cluster,
-                    ctx=ctx,
-                    placements=trial,
-                    object_id=object_id,
-                    base_id=base_id,
-                    side=side,
-                    gap=gap,
-                    align=align,
-                    face_base=False,
-                    desired_front=desired_front,
-                )
-                placed = trial.get(object_id)
-                if placed is not None:
-                    return placed
-    return None
-
-
-def _semantic_row_primary_base(
-    *,
-    ctx: SemanticContext,
-    object_id: str,
-    placements: Mapping[str, dict[str, Any]],
-) -> str | None:
-    for row in _semantic_rows_for_object(ctx, object_id):
-        base_id = str(row.get("relative_to") or "")
-        if base_id and base_id in placements:
-            return base_id
-    return None
+        updated[oid] = placed
+    return updated, unplaced
 
 
 def _semantic_slot_candidates_for_leftover(
@@ -3535,47 +2894,17 @@ def _semantic_slot_candidates_for_leftover(
     ctx: SemanticContext,
     placements: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    explicit_rows = _semantic_rows_for_object(ctx, object_id)
-    explicit_slots: list[dict[str, Any]] = []
-    for row in explicit_rows:
-        base_id = str(row.get("relative_to") or "")
-        if not base_id or base_id not in placements:
-            continue
-        base_pl = placements[base_id]
-        base_front = _global_front_side({}, ctx, base_id, base_pl)
-        gap_values = _semantic_gap_candidates(row, ctx.grid_mm)
-        for slot in _semantic_slot_entries_for_row(base_front=base_front, row=row):
-            explicit_slots.append(
-                {
-                    "base_id": base_id,
-                    "side": str(slot["side"]),
-                    "gap": gap_values[0],
-                    "align": str(slot["align"]),
-                    "face_base": False,
-                    "desired_front": _semantic_desired_front(
-                        base_front=base_front,
-                        actual_side=str(slot["side"]),
-                        row=row,
-                        object_id=object_id,
-                    ),
-                }
-            )
-    if explicit_slots:
-        return explicit_slots
-
     role = ctx.roles.get(object_id, "")
     anchor_id = ctx.dominant_anchor_id
     if anchor_id is None or anchor_id not in placements:
         anchor_id = next(iter(placements), None)
-    base_id = (
-        _semantic_row_primary_base(ctx=ctx, object_id=object_id, placements=placements)
-        or anchor_id
-    )
-    if base_id is None:
+    if anchor_id is None:
         return []
 
-    base_pl = placements[base_id]
-    front = _global_front_side({}, ctx, base_id, base_pl)
+    anchor_pl = placements[anchor_id]
+    front = "top"
+    if anchor_id in placements:
+        front = _seed_rotate_side("top", int(anchor_pl.get("rot", 0) or 0))
     left = _rotate_cardinal_side(front, -1)
     right = _rotate_cardinal_side(front, 1)
     back = _opposite_side(front)
@@ -3585,31 +2914,28 @@ def _semantic_slot_candidates_for_leftover(
     if role in {"media_support", "media_anchor"} or "media" in _object_kind(object_id):
         return [
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": front,
                 "gap": max(1200, ctx.grid_mm * 16),
                 "align": "center",
-                "face_base": False,
-                "desired_front": front,
+                "face_base": True,
             }
         ]
     if role in {"side_support", "accessory_support"}:
         return [
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": left,
                 "gap": gap,
                 "align": "center",
                 "face_base": False,
-                "desired_front": front,
             },
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": right,
                 "gap": gap,
                 "align": "center",
                 "face_base": False,
-                "desired_front": front,
             },
         ]
     if role == "storage_support" or "storage" in family_token:
@@ -3618,51 +2944,46 @@ def _semantic_slot_candidates_for_leftover(
         )
         return [
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": side,
                 "gap": max(450, ctx.grid_mm * 6),
                 "align": "center",
                 "face_base": False,
-                "desired_front": front,
             }
             for side in side_order
         ]
     if role in {"secondary_support", "secondary_anchor"}:
         return [
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": left,
                 "gap": max(300, ctx.grid_mm * 4),
                 "align": "center",
-                "face_base": False,
-                "desired_front": front,
+                "face_base": True,
             },
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": right,
                 "gap": max(300, ctx.grid_mm * 4),
                 "align": "center",
-                "face_base": False,
-                "desired_front": front,
+                "face_base": True,
             },
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": back,
                 "gap": max(300, ctx.grid_mm * 4),
                 "align": "center",
-                "face_base": False,
-                "desired_front": front,
+                "face_base": True,
             },
         ]
     if role == "central_support":
         return [
             {
-                "base_id": base_id,
+                "base_id": anchor_id,
                 "side": front,
                 "gap": max(250, ctx.grid_mm * 4),
                 "align": "center",
                 "face_base": False,
-                "desired_front": front,
             }
         ]
     return []
@@ -3676,16 +2997,6 @@ def _try_place_on_semantic_slot(
     object_id: str,
     family: str,
 ) -> dict[str, Any] | None:
-    placed = _try_place_from_explicit_semantic_rules(
-        cluster=cluster,
-        ctx=ctx,
-        placements=placements,
-        object_id=object_id,
-        family=family,
-    )
-    if placed is not None:
-        return placed
-
     for slot in _semantic_slot_candidates_for_leftover(
         family=family,
         object_id=object_id,
@@ -3703,11 +3014,6 @@ def _try_place_on_semantic_slot(
             gap=int(slot["gap"]),
             align=str(slot["align"]),
             face_base=bool(slot["face_base"]),
-            desired_front=(
-                str(slot.get("desired_front"))
-                if slot.get("desired_front") is not None
-                else None
-            ),
         )
         placed = trial.get(object_id)
         if placed is not None:
@@ -7115,8 +6421,6 @@ def _collect_patch_candidates(
         _generate_rotation_escape_moves(
             cluster=cluster,
             placements=placements,
-            family=family,
-            ctx=ctx,
         )
     )
     out.extend(
@@ -7296,8 +6600,6 @@ def _generate_rotation_escape_moves(
     *,
     cluster: dict[str, Any],
     placements: list[dict[str, Any]],
-    family: str | None = None,
-    ctx: SemanticContext | None = None,
 ) -> list[dict[str, Any]]:
     decisions = cluster.get("decisions", [])
     rules = cluster.get("cluster_rules", {}) if isinstance(cluster, dict) else {}
@@ -7306,37 +6608,12 @@ def _generate_rotation_escape_moves(
 
     placement_by_id = {p["id"]: p for p in _canonicalize_local_placements(placements)}
     moves: list[dict[str, Any]] = []
-    family_token = _normalize_token(family or "")
-    protected_anchor_id = (
-        ctx.dominant_anchor_id if isinstance(ctx, SemanticContext) else None
-    )
-    protect_anchor_rotation = False
-    if (
-        protected_anchor_id
-        and family_token
-        in {"media_facing", "conversation_facing", "open_center", "window_oriented"}
-        and isinstance(ctx, SemanticContext)
-    ):
-        for row in ctx.semantic_placements:
-            if not isinstance(row, dict):
-                continue
-            if str(row.get("relative_to") or "") != protected_anchor_id:
-                continue
-            role = _semantic_support_role_for_row(
-                row, object_id=str(row.get("id") or "")
-            )
-            band = _normalize_token(row.get("band_intent") or role)
-            if role == "frontal_support" or band == "front_band":
-                protect_anchor_rotation = True
-                break
 
     for d in decisions:
         if not isinstance(d, dict):
             continue
         obj_id = d.get("object_type") or d.get("category")
         if not isinstance(obj_id, str) or obj_id not in placement_by_id:
-            continue
-        if protect_anchor_rotation and obj_id == protected_anchor_id:
             continue
 
         current_rot = int(placement_by_id[obj_id]["rot"]) % 360
@@ -7350,6 +6627,7 @@ def _generate_rotation_escape_moves(
             rot = rot % 360
             if rot == current_rot:
                 continue
+
             moves.append(
                 {
                     "reason": "HOST_ROTATION_ESCAPE",

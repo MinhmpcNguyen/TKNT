@@ -437,13 +437,13 @@ function buildDesignFromStyledLayout(
           y: Number(manualInput.position_mm?.y ?? 0),
         },
         rotation_deg: Number(
-          manualInput.rotation_deg ?? objectRow?.rotation_ccw ?? 0,
+          manualInput.rotation_deg ?? getObjectRotationCcw(objectRow),
         ),
         front_world: frontWorld,
         front_side_world: frontSideWorld,
         front_side_local: frontWorldToLocalSide(
           frontWorld,
-          Number(manualInput.rotation_deg ?? objectRow?.rotation_ccw ?? 0),
+          Number(manualInput.rotation_deg ?? getObjectRotationCcw(objectRow)),
         ),
         footprint_mm: {
           w: Number(manualInput.footprint_mm?.w ?? 0),
@@ -462,9 +462,10 @@ function buildDesignFromStyledLayout(
               ? 'pinned'
               : 'free',
         place_on: placeOn,
+        collision_layer: normalizeCollisionLayer(objectRow?.collision_layer),
       };
     }
-    const rotationDeg = Number(objectRow?.rotation_ccw ?? 0);
+    const rotationDeg = getObjectRotationCcw(objectRow);
     const bbox = getNumericBbox(objectRow);
     const footprint = normalizePlacementFootprint(
       category,
@@ -488,6 +489,7 @@ function buildDesignFromStyledLayout(
       source: 'generated' as const,
       constraint_mode: 'free' as const,
       place_on: placeOn,
+      collision_layer: normalizeCollisionLayer(objectRow?.collision_layer),
     };
   });
 
@@ -495,6 +497,14 @@ function buildDesignFromStyledLayout(
     floorplan_geometry: floorplan,
     placements,
   };
+}
+
+function normalizeCollisionLayer(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const layer = value.trim();
+  return layer || null;
 }
 
 function normalizeLayoutAssetId(value: unknown): string | null {
@@ -550,7 +560,14 @@ function normalizePlacementFootprint(
 
 function isSlimWallMountedCategory(category: string): boolean {
   const lowered = category.toLowerCase();
-  return lowered.includes('mirror');
+  return (
+    lowered.includes('mirror') ||
+    lowered.includes('wall_art') ||
+    lowered.includes('clock') ||
+    lowered.includes('sconce') ||
+    lowered.includes('whiteboard') ||
+    lowered.includes('screen')
+  );
 }
 
 function applyStyledRoomAppearance(
@@ -644,7 +661,7 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
       continue;
     }
     const objectId = String(objectRow.object_id ?? '').trim();
-    const rotation = Number(objectRow.rotation_ccw ?? NaN);
+    const rotation = getObjectRotationCcw(objectRow);
     const bbox = objectRow.bbox;
     if (!Number.isFinite(rotation)) {
       continue;
@@ -685,7 +702,7 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
         byBbox.get(bboxKey(bbox) ?? '') ??
         null;
       const nextRotation = Number(
-        orientationPayload?.rotation_ccw ?? objectRow.rotation_ccw ?? 0,
+        orientationPayload?.rotation_ccw ?? getObjectRotationCcw(objectRow),
       );
       return {
         ...objectRow,
@@ -715,6 +732,16 @@ function normalizeFrontWorld(value: unknown): DirectionVector | null {
     return null;
   }
   return { dx, dy };
+}
+
+function getObjectRotationCcw(objectRow: any): number {
+  const rotation = Number(
+    objectRow?.rotation_ccw ?? objectRow?.rot ?? objectRow?.rotation_deg ?? 0,
+  );
+  if (!Number.isFinite(rotation)) {
+    return 0;
+  }
+  return ((rotation % 360) + 360) % 360;
 }
 
 function bboxKey(bbox: any): string | null {

@@ -191,6 +191,13 @@ def _run_hardcoded_tier_count(
     members_by_cluster = _extract_members_by_cluster(clusters_json)
     anchors_by_cluster = _extract_anchors_by_cluster(clusters_json)
     droppable_clusters = _extract_droppable_clusters(clusters_json)
+    semantic_support_roles = _extract_semantic_support_roles(clusters_json)
+    protected_ids_by_cluster = _extract_anchor_first_ids(
+        clusters_json, field="protected_ids"
+    )
+    droppable_ids_by_cluster = _extract_anchor_first_ids(
+        clusters_json, field="droppable_ids"
+    )
 
     furnishing_mode = _infer_furnishing_mode(context)
     available_area_m2 = _estimate_available_area_m2(context.get("room_model_json"))
@@ -228,6 +235,9 @@ def _run_hardcoded_tier_count(
         semantic_program=semantic_program,
         anchors_by_cluster=anchors_by_cluster,
         droppable_clusters=droppable_clusters,
+        semantic_support_roles=semantic_support_roles,
+        protected_ids_by_cluster=protected_ids_by_cluster,
+        droppable_ids_by_cluster=droppable_ids_by_cluster,
     )
     draft = _select_inventory_decision_program(
         bundles=bundles,
@@ -436,6 +446,9 @@ def _build_candidate_decision_set(
     semantic_program: dict[str, Any],
     anchors_by_cluster: dict[str, set[str]],
     droppable_clusters: set[str],
+    semantic_support_roles: dict[str, dict[str, dict[str, str]]],
+    protected_ids_by_cluster: dict[str, set[str]],
+    droppable_ids_by_cluster: dict[str, set[str]],
 ) -> list[dict[str, Any]]:
     clusters = _cluster_list(clusters_json)
     semantic_clusters = _semantic_clusters_by_id(semantic_program)
@@ -451,6 +464,9 @@ def _build_candidate_decision_set(
             semantic_cluster=semantic_cluster,
             anchors=anchors_by_cluster.get(cluster_id, set()),
             droppable=cluster_id in droppable_clusters,
+            semantic_support_roles=semantic_support_roles.get(cluster_id, {}),
+            protected_ids=protected_ids_by_cluster.get(cluster_id, set()),
+            droppable_ids=droppable_ids_by_cluster.get(cluster_id, set()),
         )
         if not cluster_bundles:
             cluster_bundles = [
@@ -458,6 +474,9 @@ def _build_candidate_decision_set(
                     cluster=cluster,
                     anchors=anchors_by_cluster.get(cluster_id, set()),
                     droppable=cluster_id in droppable_clusters,
+                    semantic_support_roles=semantic_support_roles.get(cluster_id, {}),
+                    protected_ids=protected_ids_by_cluster.get(cluster_id, set()),
+                    droppable_ids=droppable_ids_by_cluster.get(cluster_id, set()),
                 )
             ]
         bundles.extend(cluster_bundles[:4])
@@ -496,6 +515,9 @@ def _bundles_from_semantic_cluster(
     semantic_cluster: dict[str, Any],
     anchors: set[str],
     droppable: bool,
+    semantic_support_roles: dict[str, dict[str, str]],
+    protected_ids: set[str],
+    droppable_ids: set[str],
 ) -> list[dict[str, Any]]:
     raw_bundles = semantic_cluster.get("required_bundles")
     if not isinstance(raw_bundles, list):
@@ -525,16 +547,38 @@ def _bundles_from_semantic_cluster(
                 [],
             )
             for member in matched_members:
-                role = str(raw_object.get("role") or "support")
-                if droppable:
-                    role = "decor_light"
+                role = _resolved_object_role(
+                    member=member,
+                    anchors=anchors,
+                    explicit_role=str(raw_object.get("role") or "support"),
+                    droppable=droppable,
+                    semantic_support_roles=semantic_support_roles,
+                )
+                required = (
+                    bool(raw_object.get("required", False))
+                    or member in protected_ids
+                    or member in anchors
+                ) and not droppable
                 objects.append(
                     {
                         "object_type": member,
                         "base_type": _profile_category_for_member(member),
                         "role": role,
-                        "required": bool(raw_object.get("required", False))
-                        and not droppable,
+                        "semantic_support_role": str(
+                            (semantic_support_roles.get(member) or {}).get(
+                                "support_role"
+                            )
+                            or ""
+                        ),
+                        "band_intent": str(
+                            (semantic_support_roles.get(member) or {}).get(
+                                "band_intent"
+                            )
+                            or ""
+                        ),
+                        "required": required,
+                        "protected": member in protected_ids and not droppable,
+                        "droppable": member in droppable_ids or droppable,
                         "max_keep": _positive_int(
                             raw_object.get("max_keep"),
                             default=1,
@@ -571,18 +615,36 @@ def _fallback_bundle_from_cluster(
     cluster: dict[str, Any],
     anchors: set[str],
     droppable: bool,
+    semantic_support_roles: dict[str, dict[str, str]],
+    protected_ids: set[str],
+    droppable_ids: set[str],
 ) -> dict[str, Any]:
     cluster_id = str(cluster.get("cluster_id") or "cluster")
     tag = str(cluster.get("tag") or "").strip().lower()
     objects: list[dict[str, Any]] = []
     for member in _string_list_from_any(cluster.get("members")):
-        role = "decor_light" if droppable else _fallback_role(member, anchors)
+        role = _resolved_object_role(
+            member=member,
+            anchors=anchors,
+            explicit_role=_fallback_role(member, anchors),
+            droppable=droppable,
+            semantic_support_roles=semantic_support_roles,
+        )
         objects.append(
             {
                 "object_type": member,
                 "base_type": _profile_category_for_member(member),
                 "role": role,
-                "required": member in anchors and not droppable,
+                "semantic_support_role": str(
+                    (semantic_support_roles.get(member) or {}).get("support_role") or ""
+                ),
+                "band_intent": str(
+                    (semantic_support_roles.get(member) or {}).get("band_intent") or ""
+                ),
+                "required": (member in anchors or member in protected_ids)
+                and not droppable,
+                "protected": member in protected_ids and not droppable,
+                "droppable": member in droppable_ids or droppable,
                 "max_keep": _fallback_max_keep(member, tag),
             }
         )
@@ -622,9 +684,125 @@ def _dedupe_bundle_objects(
         existing["required"] = bool(existing.get("required")) or bool(
             obj.get("required")
         )
+        existing["protected"] = bool(existing.get("protected")) or bool(
+            obj.get("protected")
+        )
+        existing["droppable"] = bool(existing.get("droppable")) and bool(
+            obj.get("droppable")
+        )
+        if not existing.get("semantic_support_role") and obj.get(
+            "semantic_support_role"
+        ):
+            existing["semantic_support_role"] = obj.get("semantic_support_role")
+        if not existing.get("band_intent") and obj.get("band_intent"):
+            existing["band_intent"] = obj.get("band_intent")
         if object_type in anchors:
             existing["role"] = "dominant_anchor"
     return list(by_type.values())
+
+
+def _extract_semantic_support_roles(
+    clusters_json: Any,
+) -> dict[str, dict[str, dict[str, str]]]:
+    if not isinstance(clusters_json, dict):
+        return {}
+    clusters = clusters_json.get("clusters")
+    if not isinstance(clusters, list):
+        return {}
+    out: dict[str, dict[str, dict[str, str]]] = {}
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        rules = cluster.get("cluster_rules")
+        if not cluster_id or not isinstance(rules, dict):
+            continue
+        semantic_rows = rules.get("semantic_placements")
+        if not isinstance(semantic_rows, list):
+            continue
+        by_member: dict[str, dict[str, str]] = {}
+        for row in semantic_rows:
+            if not isinstance(row, dict):
+                continue
+            object_id = str(row.get("id") or "").strip()
+            if not object_id:
+                continue
+            by_member[object_id] = {
+                "support_role": str(row.get("support_role") or "").strip().lower(),
+                "band_intent": str(row.get("band_intent") or "").strip().lower(),
+                "orientation": str(row.get("orientation") or "").strip().lower(),
+            }
+        if by_member:
+            out[cluster_id] = by_member
+    return out
+
+
+def _extract_anchor_first_ids(clusters_json: Any, *, field: str) -> dict[str, set[str]]:
+    if not isinstance(clusters_json, dict):
+        return {}
+    clusters = clusters_json.get("clusters")
+    if not isinstance(clusters, list):
+        return {}
+    out: dict[str, set[str]] = {}
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        rules = cluster.get("cluster_rules")
+        if not cluster_id or not isinstance(rules, dict):
+            continue
+        anchor_policy = rules.get("anchor_first_policy")
+        values = anchor_policy.get(field) if isinstance(anchor_policy, dict) else None
+        if isinstance(values, list):
+            out[cluster_id] = {
+                str(item).strip()
+                for item in values
+                if isinstance(item, str) and str(item).strip()
+            }
+    return out
+
+
+def _resolved_object_role(
+    *,
+    member: str,
+    anchors: set[str],
+    explicit_role: str,
+    droppable: bool,
+    semantic_support_roles: dict[str, dict[str, str]],
+) -> str:
+    if droppable:
+        return "decor_light"
+    if member in anchors:
+        return "dominant_anchor"
+    semantic_role = (
+        str((semantic_support_roles.get(member) or {}).get("support_role") or "")
+        .strip()
+        .lower()
+    )
+    if semantic_role == "frontal_support":
+        return "support"
+    if semantic_role == "secondary_seat":
+        return "secondary_support"
+    if semantic_role in {"side_support", "wall_support"}:
+        return "support"
+    if semantic_role == "peripheral_support":
+        return "optional"
+    role = str(explicit_role or "support").strip().lower()
+    return role or "support"
+
+
+def _semantic_support_role_bias(obj: dict[str, Any]) -> float:
+    role = str(obj.get("semantic_support_role") or "").strip().lower()
+    band_intent = str(obj.get("band_intent") or "").strip().lower()
+    if role == "frontal_support" or band_intent == "front_band":
+        return 0.95
+    if role == "secondary_seat" or band_intent == "flank_band":
+        return 0.55
+    if role in {"side_support", "wall_support"}:
+        return 0.32
+    if role == "peripheral_support":
+        return 0.12
+    return 0.0
 
 
 def _fallback_role(member: str, anchors: set[str]) -> str:
@@ -787,6 +965,12 @@ def _select_inventory_decision_program(
                     "preserve_level": str(bundle.get("preserve_level") or "medium"),
                     "bundle_id": str(bundle.get("bundle_id") or ""),
                     "role": role,
+                    "semantic_support_role": str(
+                        obj.get("semantic_support_role") or ""
+                    ),
+                    "band_intent": str(obj.get("band_intent") or ""),
+                    "protected": bool(obj.get("protected")),
+                    "droppable": bool(obj.get("droppable")),
                     "rationale": reason,
                     "utility_score": round(float(score["total"]), 3),
                 }
@@ -835,6 +1019,7 @@ def _select_inventory_decision_program(
         "notes": [
             "Tier Count used deterministic utility, capacity, and bundle-preserving rules.",
             "No pose, macro placement, cluster composition, or LLM step was used.",
+            "Output is synchronized for the object-level anchor-first solver handoff.",
         ],
         "decisions": decisions,
     }
@@ -910,6 +1095,8 @@ def _score_object_utility(
         bundle=bundle,
         style_policy=style_policy,
     )
+    semantic_support_bias = _semantic_support_role_bias(obj)
+    protected_bonus = 0.9 if bool(obj.get("protected")) else 0.0
     space_surplus_bonus = _surplus_optional_support_bonus(
         obj=obj,
         bundle=bundle,
@@ -923,6 +1110,8 @@ def _score_object_utility(
         + completeness
         + roomfit
         + style_bias
+        + semantic_support_bias
+        + protected_bonus
         + space_surplus_bonus
         - clutter
         - circulation
@@ -938,6 +1127,8 @@ def _score_object_utility(
         "circulation_penalty": circulation,
         "redundancy_penalty": redundancy,
         "style_policy_bias": style_bias,
+        "semantic_support_bias": semantic_support_bias,
+        "protected_bonus": protected_bonus,
         "space_surplus_bonus": space_surplus_bonus,
         "total": total,
     }
@@ -1431,6 +1622,11 @@ def _is_core_object(obj: dict[str, Any], bundle: dict[str, Any]) -> bool:
     if bool(bundle.get("droppable")):
         return False
     role = str(obj.get("role") or "")
+    if bool(obj.get("protected")):
+        return True
+    semantic_support_role = str(obj.get("semantic_support_role") or "")
+    if semantic_support_role == "frontal_support":
+        return True
     return bool(obj.get("required")) or role in {"dominant_anchor", "workflow_anchor"}
 
 

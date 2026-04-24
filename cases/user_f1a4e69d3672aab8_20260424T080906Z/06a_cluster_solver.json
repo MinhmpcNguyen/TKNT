@@ -1,0 +1,3007 @@
+{
+  "solution_id": "object_sol_07",
+  "absolute_layout": {
+    "status": "PARTIAL",
+    "layout_kind": "object_level_anchor_first",
+    "room_id": "room_1",
+    "room_type": "living_room",
+    "room": {
+      "unit": "mm",
+      "room_id": "room_1",
+      "name": "Main",
+      "room_type": "living_room",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 7200,
+          "y": 0
+        },
+        {
+          "x": 7150,
+          "y": 2600
+        },
+        {
+          "x": 5550,
+          "y": 2600
+        },
+        {
+          "x": 5550,
+          "y": 4250
+        },
+        {
+          "x": 2950,
+          "y": 4200
+        },
+        {
+          "x": 2950,
+          "y": 5200
+        },
+        {
+          "x": 0,
+          "y": 5200
+        }
+      ],
+      "area_mm2": 30550000,
+      "area_m2": 30.55,
+      "perimeter_mm": 24800,
+      "centroid_mm": {
+        "x": 3150,
+        "y": 2244
+      },
+      "principal_axis": {
+        "angle_deg": 0,
+        "vector": {
+          "x": 1.0,
+          "y": 0.0
+        },
+        "confidence": 0.29
+      },
+      "bbox_mm": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 7200,
+        "max_y": 5200
+      },
+      "ceiling_height_mm": 2800
+    },
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "kind": "door",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "original_segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ],
+          "wall_id": "wall_8",
+          "width_mm": 1000,
+          "wall_t_start_mm": 2600,
+          "wall_t_end_mm": 3600,
+          "snap_distance_mm": 0,
+          "swing_radius_mm": 900,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "kind": "window",
+          "segment_mm": [
+            {
+              "x": 5292,
+              "y": 4245
+            },
+            {
+              "x": 3292,
+              "y": 4207
+            }
+          ],
+          "original_segment_mm": [
+            {
+              "x": 5292,
+              "y": 4228
+            },
+            {
+              "x": 3292,
+              "y": 4217
+            }
+          ],
+          "wall_id": "wall_5",
+          "width_mm": 2000,
+          "wall_t_start_mm": 258,
+          "wall_t_end_mm": 2258,
+          "snap_distance_mm": 17,
+          "clearance_mm": 150
+        },
+        {
+          "id": "window_1777018043091",
+          "kind": "window",
+          "segment_mm": [
+            {
+              "x": 2644,
+              "y": 5200
+            },
+            {
+              "x": 464,
+              "y": 5200
+            }
+          ],
+          "original_segment_mm": [
+            {
+              "x": 2644,
+              "y": 5206
+            },
+            {
+              "x": 464,
+              "y": 5206
+            }
+          ],
+          "wall_id": "wall_7",
+          "width_mm": 2180,
+          "wall_t_start_mm": 306,
+          "wall_t_end_mm": 2486,
+          "snap_distance_mm": 6,
+          "clearance_mm": 150
+        }
+      ]
+    },
+    "affordance_map": {
+      "usable_walls": [
+        {
+          "id": "wall_1_usable_200_7000",
+          "wall_id": "wall_1",
+          "segment_mm": [
+            {
+              "x": 200,
+              "y": 0
+            },
+            {
+              "x": 7000,
+              "y": 0
+            }
+          ],
+          "length_mm": 6800,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 7000,
+          "inward_normal": {
+            "x": -0.0,
+            "y": 1.0
+          }
+        },
+        {
+          "id": "wall_2_usable_200_2400",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 7196,
+              "y": 200
+            },
+            {
+              "x": 7154,
+              "y": 2400
+            }
+          ],
+          "length_mm": 2200,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 2400,
+          "inward_normal": {
+            "x": -0.9998151400298467,
+            "y": -0.019227214231343208
+          }
+        },
+        {
+          "id": "wall_3_usable_200_1400",
+          "wall_id": "wall_3",
+          "segment_mm": [
+            {
+              "x": 6950,
+              "y": 2600
+            },
+            {
+              "x": 5750,
+              "y": 2600
+            }
+          ],
+          "length_mm": 1200,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 1400,
+          "inward_normal": {
+            "x": -0.0,
+            "y": -1.0
+          }
+        },
+        {
+          "id": "wall_4_usable_200_1450",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 5550,
+              "y": 2800
+            },
+            {
+              "x": 5550,
+              "y": 4050
+            }
+          ],
+          "length_mm": 1250,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 1450,
+          "inward_normal": {
+            "x": -1.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "wall_8_usable_200_2500",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 5000
+            },
+            {
+              "x": 0,
+              "y": 2700
+            }
+          ],
+          "length_mm": 2300,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 2500,
+          "inward_normal": {
+            "x": 1.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "wall_8_usable_3700_5000",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "length_mm": 1300,
+          "wall_t_start_mm": 3700,
+          "wall_t_end_mm": 5000,
+          "inward_normal": {
+            "x": 1.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "blocked_walls": [
+        {
+          "wall_id": "wall_5",
+          "length_mm": 2600,
+          "blocked_intervals_mm": [
+            {
+              "start_mm": 0,
+              "end_mm": 2600,
+              "reason": "corner_start,window:window_1,corner_end"
+            }
+          ]
+        },
+        {
+          "wall_id": "wall_6",
+          "length_mm": 1000,
+          "blocked_intervals_mm": [
+            {
+              "start_mm": 0,
+              "end_mm": 200,
+              "reason": "corner_start"
+            },
+            {
+              "start_mm": 800,
+              "end_mm": 1000,
+              "reason": "corner_end"
+            }
+          ]
+        },
+        {
+          "wall_id": "wall_7",
+          "length_mm": 2950,
+          "blocked_intervals_mm": [
+            {
+              "start_mm": 0,
+              "end_mm": 2636,
+              "reason": "corner_start,window:window_1777018043091"
+            },
+            {
+              "start_mm": 2750,
+              "end_mm": 2950,
+              "reason": "corner_end"
+            }
+          ]
+        }
+      ],
+      "entry_landing_zones": [
+        {
+          "id": "door_1_entry_clearance",
+          "type": "entry_clearance",
+          "polygon_ccw": [
+            {
+              "x": 0,
+              "y": 2700
+            },
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 900,
+              "y": 1500
+            },
+            {
+              "x": 900,
+              "y": 2700
+            }
+          ],
+          "hard": true,
+          "source_id": "door_1"
+        }
+      ],
+      "circulation_corridors": [
+        {
+          "id": "corridor_1",
+          "from": "entry",
+          "to": "room_center",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2100
+            },
+            {
+              "x": 3150,
+              "y": 2244
+            }
+          ],
+          "width_mm": 900,
+          "score": 0.788
+        },
+        {
+          "id": "corridor_2",
+          "from": "entry",
+          "to": "deep_room",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2100
+            },
+            {
+              "x": 7000,
+              "y": 0
+            }
+          ],
+          "width_mm": 900,
+          "score": 1.0
+        },
+        {
+          "id": "corridor_3",
+          "from": "entry",
+          "to": "window:window_1",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2100
+            },
+            {
+              "x": 4292,
+              "y": 4226
+            }
+          ],
+          "width_mm": 900,
+          "score": 1.0
+        },
+        {
+          "id": "corridor_4",
+          "from": "entry",
+          "to": "window:window_1777018043091",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2100
+            },
+            {
+              "x": 1554,
+              "y": 5200
+            }
+          ],
+          "width_mm": 900,
+          "score": 0.867
+        }
+      ],
+      "daylight_regions": [
+        {
+          "id": "window_1_daylight",
+          "source_window_id": "window_1",
+          "near_polygon_ccw": [
+            {
+              "x": 5550,
+              "y": 4250
+            },
+            {
+              "x": 2992,
+              "y": 4201
+            },
+            {
+              "x": 3023,
+              "y": 2601
+            },
+            {
+              "x": 5581,
+              "y": 2650
+            }
+          ],
+          "mid_polygon_ccw": [
+            {
+              "x": 5550,
+              "y": 4250
+            },
+            {
+              "x": 2950,
+              "y": 4200
+            },
+            {
+              "x": 3008,
+              "y": 1201
+            },
+            {
+              "x": 5608,
+              "y": 1251
+            }
+          ],
+          "score": 1.0
+        },
+        {
+          "id": "window_1777018043091_daylight",
+          "source_window_id": "window_1777018043091",
+          "near_polygon_ccw": [
+            {
+              "x": 2944,
+              "y": 5200
+            },
+            {
+              "x": 164,
+              "y": 5200
+            },
+            {
+              "x": 164,
+              "y": 3600
+            },
+            {
+              "x": 2944,
+              "y": 3600
+            }
+          ],
+          "mid_polygon_ccw": [
+            {
+              "x": 2950,
+              "y": 5200
+            },
+            {
+              "x": 0,
+              "y": 5200
+            },
+            {
+              "x": 0,
+              "y": 2200
+            },
+            {
+              "x": 2950,
+              "y": 2200
+            }
+          ],
+          "score": 1.0
+        }
+      ],
+      "privacy_regions": [
+        {
+          "id": "privacy_back_zone",
+          "bbox_mm": {
+            "min_x": 6800,
+            "min_y": 0,
+            "max_x": 7000,
+            "max_y": 1600
+          },
+          "centroid_mm": {
+            "x": 6950,
+            "y": 650
+          },
+          "score": 1.0
+        }
+      ],
+      "focal_surfaces": [
+        {
+          "id": "wall_1_usable_200_7000_focal",
+          "wall_id": "wall_1",
+          "segment_mm": [
+            {
+              "x": 200,
+              "y": 0
+            },
+            {
+              "x": 7000,
+              "y": 0
+            }
+          ],
+          "score": 1.0,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_8_usable_200_2500_focal",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 5000
+            },
+            {
+              "x": 0,
+              "y": 2700
+            }
+          ],
+          "score": 0.657,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_2_usable_200_2400_focal",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 7196,
+              "y": 200
+            },
+            {
+              "x": 7154,
+              "y": 2400
+            }
+          ],
+          "score": 0.629,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_8_usable_3700_5000_focal",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "score": 0.371,
+          "reason": "long usable wall with low opening interruption"
+        }
+      ],
+      "center_openness_regions": [
+        {
+          "id": "center_openness_core",
+          "centroid_mm": {
+            "x": 3125,
+            "y": 2250
+          },
+          "bbox_mm": {
+            "min_x": 2800,
+            "min_y": 1800,
+            "max_x": 3400,
+            "max_y": 2600
+          },
+          "score": 1.0
+        }
+      ],
+      "wall_anchor_candidates": [
+        {
+          "id": "wall_1_usable_200_7000_anchor",
+          "wall_id": "wall_1",
+          "segment_mm": [
+            {
+              "x": 200,
+              "y": 0
+            },
+            {
+              "x": 7000,
+              "y": 0
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 200,
+              "y": 0
+            },
+            {
+              "x": 7000,
+              "y": 0
+            },
+            {
+              "x": 7000,
+              "y": 700
+            },
+            {
+              "x": 200,
+              "y": 700
+            }
+          ],
+          "max_backed_width_mm": 6800,
+          "score": 1.0
+        },
+        {
+          "id": "wall_8_usable_200_2500_anchor",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 5000
+            },
+            {
+              "x": 0,
+              "y": 2700
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 0,
+              "y": 5000
+            },
+            {
+              "x": 0,
+              "y": 2700
+            },
+            {
+              "x": 700,
+              "y": 2700
+            },
+            {
+              "x": 700,
+              "y": 5000
+            }
+          ],
+          "max_backed_width_mm": 2300,
+          "score": 0.767
+        },
+        {
+          "id": "wall_2_usable_200_2400_anchor",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 7196,
+              "y": 200
+            },
+            {
+              "x": 7154,
+              "y": 2400
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 7196,
+              "y": 200
+            },
+            {
+              "x": 7154,
+              "y": 2400
+            },
+            {
+              "x": 6454,
+              "y": 2387
+            },
+            {
+              "x": 6496,
+              "y": 187
+            }
+          ],
+          "max_backed_width_mm": 2200,
+          "score": 0.733
+        },
+        {
+          "id": "wall_8_usable_3700_5000_anchor",
+          "wall_id": "wall_8",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 0,
+              "y": 1500
+            },
+            {
+              "x": 0,
+              "y": 200
+            },
+            {
+              "x": 700,
+              "y": 200
+            },
+            {
+              "x": 700,
+              "y": 1500
+            }
+          ],
+          "max_backed_width_mm": 1300,
+          "score": 0.433
+        },
+        {
+          "id": "wall_4_usable_200_1450_anchor",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 5550,
+              "y": 2800
+            },
+            {
+              "x": 5550,
+              "y": 4050
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 5550,
+              "y": 2800
+            },
+            {
+              "x": 5550,
+              "y": 4050
+            },
+            {
+              "x": 4850,
+              "y": 4050
+            },
+            {
+              "x": 4850,
+              "y": 2800
+            }
+          ],
+          "max_backed_width_mm": 1250,
+          "score": 0.417
+        },
+        {
+          "id": "wall_3_usable_200_1400_anchor",
+          "wall_id": "wall_3",
+          "segment_mm": [
+            {
+              "x": 6950,
+              "y": 2600
+            },
+            {
+              "x": 5750,
+              "y": 2600
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 6950,
+              "y": 2600
+            },
+            {
+              "x": 5750,
+              "y": 2600
+            },
+            {
+              "x": 5750,
+              "y": 1900
+            },
+            {
+              "x": 6950,
+              "y": 1900
+            }
+          ],
+          "max_backed_width_mm": 1200,
+          "score": 0.4
+        }
+      ],
+      "floating_zone_candidates": [
+        {
+          "id": "floating_center_zone",
+          "centroid_mm": {
+            "x": 3125,
+            "y": 2250
+          },
+          "bbox_mm": {
+            "min_x": 2800,
+            "min_y": 1800,
+            "max_x": 3400,
+            "max_y": 2600
+          },
+          "score": 0.894
+        }
+      ],
+      "soft_usage_hints": {
+        "active_entry": true,
+        "prefer_private_back_zone": false,
+        "prefer_daylit_work_zone": true,
+        "prefer_open_center": false,
+        "likely_primary_focus": "media_wall"
+      }
+    },
+    "topology": {
+      "wall_graph": {
+        "nodes": [
+          {
+            "id": "wall_1",
+            "start_mm": {
+              "x": 0,
+              "y": 0
+            },
+            "end_mm": {
+              "x": 7200,
+              "y": 0
+            },
+            "length_mm": 7200,
+            "inward_normal": {
+              "x": -0.0,
+              "y": 1.0
+            }
+          },
+          {
+            "id": "wall_2",
+            "start_mm": {
+              "x": 7200,
+              "y": 0
+            },
+            "end_mm": {
+              "x": 7150,
+              "y": 2600
+            },
+            "length_mm": 2600,
+            "inward_normal": {
+              "x": -0.9998151400298467,
+              "y": -0.019227214231343208
+            }
+          },
+          {
+            "id": "wall_3",
+            "start_mm": {
+              "x": 7150,
+              "y": 2600
+            },
+            "end_mm": {
+              "x": 5550,
+              "y": 2600
+            },
+            "length_mm": 1600,
+            "inward_normal": {
+              "x": -0.0,
+              "y": -1.0
+            }
+          },
+          {
+            "id": "wall_4",
+            "start_mm": {
+              "x": 5550,
+              "y": 2600
+            },
+            "end_mm": {
+              "x": 5550,
+              "y": 4250
+            },
+            "length_mm": 1650,
+            "inward_normal": {
+              "x": -1.0,
+              "y": 0.0
+            }
+          },
+          {
+            "id": "wall_5",
+            "start_mm": {
+              "x": 5550,
+              "y": 4250
+            },
+            "end_mm": {
+              "x": 2950,
+              "y": 4200
+            },
+            "length_mm": 2600,
+            "inward_normal": {
+              "x": 0.019227214231343208,
+              "y": -0.9998151400298467
+            }
+          },
+          {
+            "id": "wall_6",
+            "start_mm": {
+              "x": 2950,
+              "y": 4200
+            },
+            "end_mm": {
+              "x": 2950,
+              "y": 5200
+            },
+            "length_mm": 1000,
+            "inward_normal": {
+              "x": -1.0,
+              "y": 0.0
+            }
+          },
+          {
+            "id": "wall_7",
+            "start_mm": {
+              "x": 2950,
+              "y": 5200
+            },
+            "end_mm": {
+              "x": 0,
+              "y": 5200
+            },
+            "length_mm": 2950,
+            "inward_normal": {
+              "x": -0.0,
+              "y": -1.0
+            }
+          },
+          {
+            "id": "wall_8",
+            "start_mm": {
+              "x": 0,
+              "y": 5200
+            },
+            "end_mm": {
+              "x": 0,
+              "y": 0
+            },
+            "length_mm": 5200,
+            "inward_normal": {
+              "x": 1.0,
+              "y": 0.0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "from": "wall_1",
+            "to": "wall_8",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_1",
+            "to": "wall_2",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_2",
+            "to": "wall_3",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_3",
+            "to": "wall_4",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_4",
+            "to": "wall_5",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_5",
+            "to": "wall_6",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_6",
+            "to": "wall_7",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_7",
+            "to": "wall_8",
+            "type": "adjacent"
+          }
+        ]
+      },
+      "entry_node": {
+        "id": "entry",
+        "type": "entry",
+        "point_mm": {
+          "x": 0,
+          "y": 2100
+        }
+      },
+      "window_nodes": [
+        {
+          "id": "window:window_1",
+          "type": "window",
+          "point_mm": {
+            "x": 4292,
+            "y": 4226
+          },
+          "opening_id": "window_1"
+        },
+        {
+          "id": "window:window_1777018043091",
+          "type": "window",
+          "point_mm": {
+            "x": 1554,
+            "y": 5200
+          },
+          "opening_id": "window_1777018043091"
+        }
+      ],
+      "passage_graph": {
+        "nodes": [
+          {
+            "id": "entry",
+            "type": "entry",
+            "point_mm": {
+              "x": 0,
+              "y": 2100
+            }
+          },
+          {
+            "id": "room_center",
+            "type": "center",
+            "point_mm": {
+              "x": 3150,
+              "y": 2244
+            }
+          },
+          {
+            "id": "window:window_1",
+            "type": "window",
+            "point_mm": {
+              "x": 4292,
+              "y": 4226
+            },
+            "opening_id": "window_1"
+          },
+          {
+            "id": "window:window_1777018043091",
+            "type": "window",
+            "point_mm": {
+              "x": 1554,
+              "y": 5200
+            },
+            "opening_id": "window_1777018043091"
+          }
+        ],
+        "edges": [
+          {
+            "from": "entry",
+            "to": "room_center",
+            "corridor_id": "corridor_1",
+            "width_mm": 900
+          },
+          {
+            "from": "entry",
+            "to": "deep_room",
+            "corridor_id": "corridor_2",
+            "width_mm": 900
+          },
+          {
+            "from": "entry",
+            "to": "window:window_1",
+            "corridor_id": "corridor_3",
+            "width_mm": 900
+          },
+          {
+            "from": "entry",
+            "to": "window:window_1777018043091",
+            "corridor_id": "corridor_4",
+            "width_mm": 900
+          }
+        ]
+      },
+      "room_subzones": [
+        {
+          "id": "zone_front_right",
+          "label": "front_right",
+          "centroid_mm": {
+            "x": 5100,
+            "y": 1100
+          },
+          "bbox_mm": {
+            "min_x": 3200,
+            "min_y": 0,
+            "max_x": 7000,
+            "max_y": 2200
+          },
+          "sample_count": 240
+        },
+        {
+          "id": "zone_back_left",
+          "label": "back_left",
+          "centroid_mm": {
+            "x": 1524,
+            "y": 3738
+          },
+          "bbox_mm": {
+            "min_x": 0,
+            "min_y": 2400,
+            "max_x": 3000,
+            "max_y": 5000
+          },
+          "sample_count": 210
+        },
+        {
+          "id": "zone_front_left",
+          "label": "front_left",
+          "centroid_mm": {
+            "x": 1628,
+            "y": 1007
+          },
+          "bbox_mm": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 3000,
+            "max_y": 2200
+          },
+          "sample_count": 172
+        },
+        {
+          "id": "zone_back_right",
+          "label": "back_right",
+          "centroid_mm": {
+            "x": 4436,
+            "y": 3163
+          },
+          "bbox_mm": {
+            "min_x": 3200,
+            "min_y": 2400,
+            "max_x": 7000,
+            "max_y": 4200
+          },
+          "sample_count": 118
+        }
+      ]
+    },
+    "objects": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "category": "sofa",
+        "x": 1950,
+        "y": 2600,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 960,
+        "h": 2060,
+        "rect": [
+          1950,
+          2600,
+          2910,
+          4660
+        ],
+        "bbox": {
+          "min_x": 1950,
+          "min_y": 2600,
+          "max_x": 2910,
+          "max_y": 4660
+        },
+        "center": {
+          "x": 2430,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "media",
+        "object_id": "tv_console",
+        "category": "tv_console",
+        "x": 5050,
+        "y": 2600,
+        "rot": 270,
+        "rotation_ccw": 270,
+        "w": 460,
+        "h": 1590,
+        "rect": [
+          5050,
+          2600,
+          5510,
+          4190
+        ],
+        "bbox": {
+          "min_x": 5050,
+          "min_y": 2600,
+          "max_x": 5510,
+          "max_y": 4190
+        },
+        "center": {
+          "x": 5280,
+          "y": 3395
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": -1,
+          "dy": 0
+        },
+        "front_side_world": "left",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "object_id": "bookshelf",
+        "category": "bookshelf",
+        "x": 2300,
+        "y": 4950,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 630,
+        "h": 250,
+        "rect": [
+          2300,
+          4950,
+          2930,
+          5200
+        ],
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 4950,
+          "max_x": 2930,
+          "max_y": 5200
+        },
+        "center": {
+          "x": 2615,
+          "y": 5075
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "decor_light",
+        "priority": "optional"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "coffee_table",
+        "category": "coffee_table",
+        "x": 4150,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 900,
+        "h": 500,
+        "rect": [
+          4150,
+          2600,
+          5050,
+          3100
+        ],
+        "bbox": {
+          "min_x": 4150,
+          "min_y": 2600,
+          "max_x": 5050,
+          "max_y": 3100
+        },
+        "center": {
+          "x": 4600,
+          "y": 2850
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "category": "armchair",
+        "x": 2950,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 840,
+        "h": 710,
+        "rect": [
+          2950,
+          2600,
+          3790,
+          3310
+        ],
+        "bbox": {
+          "min_x": 2950,
+          "min_y": 2600,
+          "max_x": 3790,
+          "max_y": 3310
+        },
+        "center": {
+          "x": 3370,
+          "y": 2955
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "secondary_support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "category": "side_table",
+        "x": 1550,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 390,
+        "h": 370,
+        "rect": [
+          1550,
+          2600,
+          1940,
+          2970
+        ],
+        "bbox": {
+          "min_x": 1550,
+          "min_y": 2600,
+          "max_x": 1940,
+          "max_y": 2970
+        },
+        "center": {
+          "x": 1745,
+          "y": 2785
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "armchair",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "category": "floor_lamp",
+        "x": 4050,
+        "y": 3800,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 320,
+        "h": 350,
+        "rect": [
+          4050,
+          3800,
+          4370,
+          4150
+        ],
+        "bbox": {
+          "min_x": 4050,
+          "min_y": 3800,
+          "max_x": 4370,
+          "max_y": 4150
+        },
+        "center": {
+          "x": 4210,
+          "y": 3975
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      }
+    ],
+    "placements": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "category": "sofa",
+        "x": 1950,
+        "y": 2600,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 960,
+        "h": 2060,
+        "rect": [
+          1950,
+          2600,
+          2910,
+          4660
+        ],
+        "bbox": {
+          "min_x": 1950,
+          "min_y": 2600,
+          "max_x": 2910,
+          "max_y": 4660
+        },
+        "center": {
+          "x": 2430,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "media",
+        "object_id": "tv_console",
+        "category": "tv_console",
+        "x": 5050,
+        "y": 2600,
+        "rot": 270,
+        "rotation_ccw": 270,
+        "w": 460,
+        "h": 1590,
+        "rect": [
+          5050,
+          2600,
+          5510,
+          4190
+        ],
+        "bbox": {
+          "min_x": 5050,
+          "min_y": 2600,
+          "max_x": 5510,
+          "max_y": 4190
+        },
+        "center": {
+          "x": 5280,
+          "y": 3395
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": -1,
+          "dy": 0
+        },
+        "front_side_world": "left",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "object_id": "bookshelf",
+        "category": "bookshelf",
+        "x": 2300,
+        "y": 4950,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 630,
+        "h": 250,
+        "rect": [
+          2300,
+          4950,
+          2930,
+          5200
+        ],
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 4950,
+          "max_x": 2930,
+          "max_y": 5200
+        },
+        "center": {
+          "x": 2615,
+          "y": 5075
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "decor_light",
+        "priority": "optional"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "coffee_table",
+        "category": "coffee_table",
+        "x": 4150,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 900,
+        "h": 500,
+        "rect": [
+          4150,
+          2600,
+          5050,
+          3100
+        ],
+        "bbox": {
+          "min_x": 4150,
+          "min_y": 2600,
+          "max_x": 5050,
+          "max_y": 3100
+        },
+        "center": {
+          "x": 4600,
+          "y": 2850
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "category": "armchair",
+        "x": 2950,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 840,
+        "h": 710,
+        "rect": [
+          2950,
+          2600,
+          3790,
+          3310
+        ],
+        "bbox": {
+          "min_x": 2950,
+          "min_y": 2600,
+          "max_x": 3790,
+          "max_y": 3310
+        },
+        "center": {
+          "x": 3370,
+          "y": 2955
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "secondary_support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "category": "side_table",
+        "x": 1550,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 390,
+        "h": 370,
+        "rect": [
+          1550,
+          2600,
+          1940,
+          2970
+        ],
+        "bbox": {
+          "min_x": 1550,
+          "min_y": 2600,
+          "max_x": 1940,
+          "max_y": 2970
+        },
+        "center": {
+          "x": 1745,
+          "y": 2785
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "armchair",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "category": "floor_lamp",
+        "x": 4050,
+        "y": 3800,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 320,
+        "h": 350,
+        "rect": [
+          4050,
+          3800,
+          4370,
+          4150
+        ],
+        "bbox": {
+          "min_x": 4050,
+          "min_y": 3800,
+          "max_x": 4370,
+          "max_y": 4150
+        },
+        "center": {
+          "x": 4210,
+          "y": 3975
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      }
+    ],
+    "object_placements": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "category": "sofa",
+        "x": 1950,
+        "y": 2600,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 960,
+        "h": 2060,
+        "rect": [
+          1950,
+          2600,
+          2910,
+          4660
+        ],
+        "bbox": {
+          "min_x": 1950,
+          "min_y": 2600,
+          "max_x": 2910,
+          "max_y": 4660
+        },
+        "center": {
+          "x": 2430,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "media",
+        "object_id": "tv_console",
+        "category": "tv_console",
+        "x": 5050,
+        "y": 2600,
+        "rot": 270,
+        "rotation_ccw": 270,
+        "w": 460,
+        "h": 1590,
+        "rect": [
+          5050,
+          2600,
+          5510,
+          4190
+        ],
+        "bbox": {
+          "min_x": 5050,
+          "min_y": 2600,
+          "max_x": 5510,
+          "max_y": 4190
+        },
+        "center": {
+          "x": 5280,
+          "y": 3395
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": -1,
+          "dy": 0
+        },
+        "front_side_world": "left",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor"
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "object_id": "bookshelf",
+        "category": "bookshelf",
+        "x": 2300,
+        "y": 4950,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 630,
+        "h": 250,
+        "rect": [
+          2300,
+          4950,
+          2930,
+          5200
+        ],
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 4950,
+          "max_x": 2930,
+          "max_y": 5200
+        },
+        "center": {
+          "x": 2615,
+          "y": 5075
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "decor_light",
+        "priority": "optional"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "coffee_table",
+        "category": "coffee_table",
+        "x": 4150,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 900,
+        "h": 500,
+        "rect": [
+          4150,
+          2600,
+          5050,
+          3100
+        ],
+        "bbox": {
+          "min_x": 4150,
+          "min_y": 2600,
+          "max_x": 5050,
+          "max_y": 3100
+        },
+        "center": {
+          "x": 4600,
+          "y": 2850
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "category": "armchair",
+        "x": 2950,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 840,
+        "h": 710,
+        "rect": [
+          2950,
+          2600,
+          3790,
+          3310
+        ],
+        "bbox": {
+          "min_x": 2950,
+          "min_y": 2600,
+          "max_x": 3790,
+          "max_y": 3310
+        },
+        "center": {
+          "x": 3370,
+          "y": 2955
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "sofa",
+        "role": "secondary_support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "category": "side_table",
+        "x": 1550,
+        "y": 2600,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 390,
+        "h": 370,
+        "rect": [
+          1550,
+          2600,
+          1940,
+          2970
+        ],
+        "bbox": {
+          "min_x": 1550,
+          "min_y": 2600,
+          "max_x": 1940,
+          "max_y": 2970
+        },
+        "center": {
+          "x": 1745,
+          "y": 2785
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": "armchair",
+        "role": "support",
+        "priority": "secondary"
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "category": "floor_lamp",
+        "x": 4050,
+        "y": 3800,
+        "rot": 90,
+        "rotation_ccw": 90,
+        "w": 320,
+        "h": 350,
+        "rect": [
+          4050,
+          3800,
+          4370,
+          4150
+        ],
+        "bbox": {
+          "min_x": 4050,
+          "min_y": 3800,
+          "max_x": 4370,
+          "max_y": 4150
+        },
+        "center": {
+          "x": 4210,
+          "y": 3975
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 1,
+          "dy": 0
+        },
+        "front_side_world": "right",
+        "relative_to": "sofa",
+        "role": "support",
+        "priority": "secondary"
+      }
+    ],
+    "clusters": [
+      {
+        "cluster_id": "main_seating",
+        "object_ids": [
+          "sofa",
+          "coffee_table",
+          "armchair",
+          "side_table",
+          "floor_lamp"
+        ],
+        "dominant_anchor_id": "sofa",
+        "bbox": {
+          "min_x": 1550,
+          "min_y": 2600,
+          "max_x": 5050,
+          "max_y": 4660
+        }
+      },
+      {
+        "cluster_id": "media",
+        "object_ids": [
+          "tv_console"
+        ],
+        "dominant_anchor_id": "tv_console",
+        "bbox": {
+          "min_x": 5050,
+          "min_y": 2600,
+          "max_x": 5510,
+          "max_y": 4190
+        }
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "object_ids": [
+          "bookshelf"
+        ],
+        "dominant_anchor_id": "bookshelf",
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 4950,
+          "max_x": 2930,
+          "max_y": 5200
+        }
+      }
+    ],
+    "cluster_instances": [
+      {
+        "cluster_id": "main_seating",
+        "object_ids": [
+          "sofa",
+          "coffee_table",
+          "armchair",
+          "side_table",
+          "floor_lamp"
+        ],
+        "dominant_anchor_id": "sofa",
+        "bbox": {
+          "min_x": 1550,
+          "min_y": 2600,
+          "max_x": 5050,
+          "max_y": 4660
+        }
+      },
+      {
+        "cluster_id": "media",
+        "object_ids": [
+          "tv_console"
+        ],
+        "dominant_anchor_id": "tv_console",
+        "bbox": {
+          "min_x": 5050,
+          "min_y": 2600,
+          "max_x": 5510,
+          "max_y": 4190
+        }
+      },
+      {
+        "cluster_id": "storage_display_support",
+        "object_ids": [
+          "bookshelf"
+        ],
+        "dominant_anchor_id": "bookshelf",
+        "bbox": {
+          "min_x": 2300,
+          "min_y": 4950,
+          "max_x": 2930,
+          "max_y": 5200
+        }
+      }
+    ],
+    "coverage": {
+      "expected_cluster_ids": [
+        "main_seating",
+        "media",
+        "storage_display_support"
+      ],
+      "present_cluster_ids": [
+        "main_seating",
+        "media",
+        "storage_display_support"
+      ],
+      "missing_cluster_ids": []
+    },
+    "complete": true,
+    "gallery_eligible": false,
+    "coverage_ratio": 1.0,
+    "missing_cluster_ids": [],
+    "notes": [
+      "Absolute layout was emitted directly by the object-level solver.",
+      "Cluster local composition and phase-2 repair were bypassed in this flow.",
+      "Backend geometry guardrail repaired polygon bounds and overlap before styling."
+    ],
+    "solver_debug": {
+      "selected_concept_id": "concept_04",
+      "dropped_inventory_by_cluster": {
+        "media": [
+          {
+            "object_id": "media_shelf",
+            "reason": "support_slot_failed"
+          }
+        ]
+      },
+      "verify_summary": {
+        "geometry_valid": true,
+        "hard_valid": false,
+        "complete": true,
+        "gallery_eligible": false,
+        "coverage_ratio": 1.0,
+        "missing_cluster_ids": [],
+        "present_cluster_ids": [
+          "main_seating",
+          "media",
+          "storage_display_support"
+        ],
+        "offending_clusters": [
+          "main_seating"
+        ],
+        "primary_pair_ok": true,
+        "orientation_issues": [],
+        "blocking_orientation_issues": [],
+        "protected_region_issues": [
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.883,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.833,
+            "overlap_area_mm2": 1747200,
+            "blocking": true
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "region_id": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "medium",
+            "enforcement": "soft",
+            "violation_severity": "advisory",
+            "overlap_ratio": 0.631,
+            "max_overlap_ratio": 0.35,
+            "excess_overlap_ratio": 0.281,
+            "overlap_area_mm2": 1248000,
+            "blocking": false
+          },
+          {
+            "cluster_id": "media",
+            "object_id": "tv_console",
+            "region_id": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "medium",
+            "enforcement": "soft",
+            "violation_severity": "advisory",
+            "overlap_ratio": 0.622,
+            "max_overlap_ratio": 0.35,
+            "excess_overlap_ratio": 0.272,
+            "overlap_area_mm2": 455000,
+            "blocking": false
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "coffee_table",
+            "region_id": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "medium",
+            "enforcement": "soft",
+            "violation_severity": "advisory",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.35,
+            "excess_overlap_ratio": 0.65,
+            "overlap_area_mm2": 450000,
+            "blocking": false
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.95,
+            "overlap_area_mm2": 596400,
+            "blocking": true
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "region_id": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "medium",
+            "enforcement": "soft",
+            "violation_severity": "advisory",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.35,
+            "excess_overlap_ratio": 0.65,
+            "overlap_area_mm2": 596400,
+            "blocking": false
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "side_table",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.95,
+            "overlap_area_mm2": 144300,
+            "blocking": true
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "side_table",
+            "region_id": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "medium",
+            "enforcement": "soft",
+            "violation_severity": "advisory",
+            "overlap_ratio": 0.359,
+            "max_overlap_ratio": 0.35,
+            "excess_overlap_ratio": 0.009,
+            "overlap_area_mm2": 51800,
+            "blocking": false
+          }
+        ],
+        "blocking_protected_region_issues": [
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.883,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.833,
+            "overlap_area_mm2": 1747200,
+            "blocking": true
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.95,
+            "overlap_area_mm2": 596400,
+            "blocking": true
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "side_table",
+            "region_id": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "violation_severity": "blocking",
+            "overlap_ratio": 1.0,
+            "max_overlap_ratio": 0.05,
+            "excess_overlap_ratio": 0.95,
+            "overlap_area_mm2": 144300,
+            "blocking": true
+          }
+        ],
+        "functional_geometry_issues": [
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "blocked_cluster_id": "main_seating",
+            "blocked_object_id": "sofa",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.845,
+            "overlap_area_mm2": 504100
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "blocked_cluster_id": "media",
+            "blocked_object_id": "tv_console",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.219,
+            "overlap_area_mm2": 24500
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "blocked_cluster_id": "storage_display_support",
+            "blocked_object_id": "bookshelf",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.142,
+            "overlap_area_mm2": 280600
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.349,
+            "overlap_area_mm2": 208320
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.463,
+            "overlap_area_mm2": 51840
+          }
+        ],
+        "blocking_functional_geometry_issues": [
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "blocked_cluster_id": "main_seating",
+            "blocked_object_id": "sofa",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.845,
+            "overlap_area_mm2": 504100
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "blocked_cluster_id": "media",
+            "blocked_object_id": "tv_console",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.219,
+            "overlap_area_mm2": 24500
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "blocked_cluster_id": "storage_display_support",
+            "blocked_object_id": "bookshelf",
+            "reason": "front_access_zone_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.142,
+            "overlap_area_mm2": 280600
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.349,
+            "overlap_area_mm2": 208320
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "floor_lamp",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.463,
+            "overlap_area_mm2": 51840
+          }
+        ],
+        "face_pair_issues": [],
+        "critical_issue_count": 0,
+        "blocking_issue_count": 8,
+        "view_corridor_ok": false,
+        "front_access_ok": false,
+        "protected_region_penalty": 19803.873,
+        "soft_issue_count": 11,
+        "soft_constraint_score": 9,
+        "quality_gate_reasons": [
+          "blocking_protected_region_overlap",
+          "front_access_zone_blocked",
+          "view_corridor_blocked"
+        ],
+        "layout_score": -48319,
+        "geometry_repair": {
+          "status": "repaired",
+          "moved_objects": [
+            {
+              "cluster_id": "main_seating",
+              "object_id": "sofa",
+              "from_rect": [
+                3750,
+                1550,
+                4710,
+                3610
+              ],
+              "to_rect": [
+                1950,
+                2600,
+                2910,
+                4660
+              ],
+              "shift_mm": 2083.867,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            },
+            {
+              "cluster_id": "media",
+              "object_id": "tv_console",
+              "from_rect": [
+                6000,
+                1800,
+                6460,
+                3390
+              ],
+              "to_rect": [
+                5050,
+                2600,
+                5510,
+                4190
+              ],
+              "shift_mm": 1241.974,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            },
+            {
+              "cluster_id": "storage_display_support",
+              "object_id": "bookshelf",
+              "from_rect": [
+                3300,
+                4950,
+                3930,
+                5200
+              ],
+              "to_rect": [
+                2300,
+                4950,
+                2930,
+                5200
+              ],
+              "shift_mm": 1000.0,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            },
+            {
+              "cluster_id": "main_seating",
+              "object_id": "armchair",
+              "from_rect": [
+                3800,
+                500,
+                4640,
+                1210
+              ],
+              "to_rect": [
+                2950,
+                2600,
+                3790,
+                3310
+              ],
+              "shift_mm": 2265.502,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            },
+            {
+              "cluster_id": "main_seating",
+              "object_id": "coffee_table",
+              "from_rect": [
+                5050,
+                1600,
+                5950,
+                2100
+              ],
+              "to_rect": [
+                4150,
+                2600,
+                5050,
+                3100
+              ],
+              "shift_mm": 1345.362,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            },
+            {
+              "cluster_id": "main_seating",
+              "object_id": "side_table",
+              "from_rect": [
+                3200,
+                400,
+                3590,
+                770
+              ],
+              "to_rect": [
+                1550,
+                2600,
+                1940,
+                2970
+              ],
+              "shift_mm": 2750.0,
+              "reason": "polygon_oob_or_overlap_guardrail"
+            }
+          ],
+          "total_shift_mm": 10686.705,
+          "penalty": 20316
+        },
+        "geometry_repair_penalty": 20316
+      },
+      "geometry_repair": {
+        "status": "repaired",
+        "moved_objects": [
+          {
+            "cluster_id": "main_seating",
+            "object_id": "sofa",
+            "from_rect": [
+              3750,
+              1550,
+              4710,
+              3610
+            ],
+            "to_rect": [
+              1950,
+              2600,
+              2910,
+              4660
+            ],
+            "shift_mm": 2083.867,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          },
+          {
+            "cluster_id": "media",
+            "object_id": "tv_console",
+            "from_rect": [
+              6000,
+              1800,
+              6460,
+              3390
+            ],
+            "to_rect": [
+              5050,
+              2600,
+              5510,
+              4190
+            ],
+            "shift_mm": 1241.974,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          },
+          {
+            "cluster_id": "storage_display_support",
+            "object_id": "bookshelf",
+            "from_rect": [
+              3300,
+              4950,
+              3930,
+              5200
+            ],
+            "to_rect": [
+              2300,
+              4950,
+              2930,
+              5200
+            ],
+            "shift_mm": 1000.0,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "armchair",
+            "from_rect": [
+              3800,
+              500,
+              4640,
+              1210
+            ],
+            "to_rect": [
+              2950,
+              2600,
+              3790,
+              3310
+            ],
+            "shift_mm": 2265.502,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "coffee_table",
+            "from_rect": [
+              5050,
+              1600,
+              5950,
+              2100
+            ],
+            "to_rect": [
+              4150,
+              2600,
+              5050,
+              3100
+            ],
+            "shift_mm": 1345.362,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          },
+          {
+            "cluster_id": "main_seating",
+            "object_id": "side_table",
+            "from_rect": [
+              3200,
+              400,
+              3590,
+              770
+            ],
+            "to_rect": [
+              1550,
+              2600,
+              1940,
+              2970
+            ],
+            "shift_mm": 2750.0,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          }
+        ],
+        "total_shift_mm": 10686.705,
+        "penalty": 20316
+      }
+    }
+  },
+  "layout_score": -48319,
+  "hard_valid": false,
+  "geometry_valid": true,
+  "complete": true,
+  "gallery_eligible": false,
+  "coverage_ratio": 1.0,
+  "missing_cluster_ids": [],
+  "verify_summary": {
+    "geometry_valid": true,
+    "hard_valid": false,
+    "complete": true,
+    "gallery_eligible": false,
+    "coverage_ratio": 1.0,
+    "missing_cluster_ids": [],
+    "present_cluster_ids": [
+      "main_seating",
+      "media",
+      "storage_display_support"
+    ],
+    "offending_clusters": [
+      "main_seating"
+    ],
+    "primary_pair_ok": true,
+    "orientation_issues": [],
+    "blocking_orientation_issues": [],
+    "protected_region_issues": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.883,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.833,
+        "overlap_area_mm2": 1747200,
+        "blocking": true
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "region_id": "center_openness_core",
+        "zone_type": "center_openness_core",
+        "priority": "medium",
+        "enforcement": "soft",
+        "violation_severity": "advisory",
+        "overlap_ratio": 0.631,
+        "max_overlap_ratio": 0.35,
+        "excess_overlap_ratio": 0.281,
+        "overlap_area_mm2": 1248000,
+        "blocking": false
+      },
+      {
+        "cluster_id": "media",
+        "object_id": "tv_console",
+        "region_id": "center_openness_core",
+        "zone_type": "center_openness_core",
+        "priority": "medium",
+        "enforcement": "soft",
+        "violation_severity": "advisory",
+        "overlap_ratio": 0.622,
+        "max_overlap_ratio": 0.35,
+        "excess_overlap_ratio": 0.272,
+        "overlap_area_mm2": 455000,
+        "blocking": false
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "coffee_table",
+        "region_id": "center_openness_core",
+        "zone_type": "center_openness_core",
+        "priority": "medium",
+        "enforcement": "soft",
+        "violation_severity": "advisory",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.35,
+        "excess_overlap_ratio": 0.65,
+        "overlap_area_mm2": 450000,
+        "blocking": false
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.95,
+        "overlap_area_mm2": 596400,
+        "blocking": true
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "region_id": "center_openness_core",
+        "zone_type": "center_openness_core",
+        "priority": "medium",
+        "enforcement": "soft",
+        "violation_severity": "advisory",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.35,
+        "excess_overlap_ratio": 0.65,
+        "overlap_area_mm2": 596400,
+        "blocking": false
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.95,
+        "overlap_area_mm2": 144300,
+        "blocking": true
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "region_id": "center_openness_core",
+        "zone_type": "center_openness_core",
+        "priority": "medium",
+        "enforcement": "soft",
+        "violation_severity": "advisory",
+        "overlap_ratio": 0.359,
+        "max_overlap_ratio": 0.35,
+        "excess_overlap_ratio": 0.009,
+        "overlap_area_mm2": 51800,
+        "blocking": false
+      }
+    ],
+    "blocking_protected_region_issues": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.883,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.833,
+        "overlap_area_mm2": 1747200,
+        "blocking": true
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.95,
+        "overlap_area_mm2": 596400,
+        "blocking": true
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "side_table",
+        "region_id": "door_1_to_room_center_corridor",
+        "zone_type": "primary_circulation_corridor",
+        "priority": "high",
+        "enforcement": "hard_soft",
+        "violation_severity": "blocking",
+        "overlap_ratio": 1.0,
+        "max_overlap_ratio": 0.05,
+        "excess_overlap_ratio": 0.95,
+        "overlap_area_mm2": 144300,
+        "blocking": true
+      }
+    ],
+    "functional_geometry_issues": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "blocked_cluster_id": "main_seating",
+        "blocked_object_id": "sofa",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.845,
+        "overlap_area_mm2": 504100
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "blocked_cluster_id": "media",
+        "blocked_object_id": "tv_console",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.219,
+        "overlap_area_mm2": 24500
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "blocked_cluster_id": "storage_display_support",
+        "blocked_object_id": "bookshelf",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.142,
+        "overlap_area_mm2": 280600
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.349,
+        "overlap_area_mm2": 208320
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.463,
+        "overlap_area_mm2": 51840
+      }
+    ],
+    "blocking_functional_geometry_issues": [
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "blocked_cluster_id": "main_seating",
+        "blocked_object_id": "sofa",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.845,
+        "overlap_area_mm2": 504100
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "blocked_cluster_id": "media",
+        "blocked_object_id": "tv_console",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.219,
+        "overlap_area_mm2": 24500
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "sofa",
+        "blocked_cluster_id": "storage_display_support",
+        "blocked_object_id": "bookshelf",
+        "reason": "front_access_zone_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.142,
+        "overlap_area_mm2": 280600
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "armchair",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.349,
+        "overlap_area_mm2": 208320
+      },
+      {
+        "cluster_id": "main_seating",
+        "object_id": "floor_lamp",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.463,
+        "overlap_area_mm2": 51840
+      }
+    ],
+    "face_pair_issues": [],
+    "critical_issue_count": 0,
+    "blocking_issue_count": 8,
+    "view_corridor_ok": false,
+    "front_access_ok": false,
+    "protected_region_penalty": 19803.873,
+    "soft_issue_count": 11,
+    "soft_constraint_score": 9,
+    "quality_gate_reasons": [
+      "blocking_protected_region_overlap",
+      "front_access_zone_blocked",
+      "view_corridor_blocked"
+    ],
+    "layout_score": -48319,
+    "geometry_repair": {
+      "status": "repaired",
+      "moved_objects": [
+        {
+          "cluster_id": "main_seating",
+          "object_id": "sofa",
+          "from_rect": [
+            3750,
+            1550,
+            4710,
+            3610
+          ],
+          "to_rect": [
+            1950,
+            2600,
+            2910,
+            4660
+          ],
+          "shift_mm": 2083.867,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        },
+        {
+          "cluster_id": "media",
+          "object_id": "tv_console",
+          "from_rect": [
+            6000,
+            1800,
+            6460,
+            3390
+          ],
+          "to_rect": [
+            5050,
+            2600,
+            5510,
+            4190
+          ],
+          "shift_mm": 1241.974,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "object_id": "bookshelf",
+          "from_rect": [
+            3300,
+            4950,
+            3930,
+            5200
+          ],
+          "to_rect": [
+            2300,
+            4950,
+            2930,
+            5200
+          ],
+          "shift_mm": 1000.0,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "armchair",
+          "from_rect": [
+            3800,
+            500,
+            4640,
+            1210
+          ],
+          "to_rect": [
+            2950,
+            2600,
+            3790,
+            3310
+          ],
+          "shift_mm": 2265.502,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "coffee_table",
+          "from_rect": [
+            5050,
+            1600,
+            5950,
+            2100
+          ],
+          "to_rect": [
+            4150,
+            2600,
+            5050,
+            3100
+          ],
+          "shift_mm": 1345.362,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        },
+        {
+          "cluster_id": "main_seating",
+          "object_id": "side_table",
+          "from_rect": [
+            3200,
+            400,
+            3590,
+            770
+          ],
+          "to_rect": [
+            1550,
+            2600,
+            1940,
+            2970
+          ],
+          "shift_mm": 2750.0,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        }
+      ],
+      "total_shift_mm": 10686.705,
+      "penalty": 20316
+    },
+    "geometry_repair_penalty": 20316
+  },
+  "dropped_inventory_by_cluster": {
+    "media": [
+      {
+        "object_id": "media_shelf",
+        "reason": "support_slot_failed"
+      }
+    ]
+  },
+  "state_signature": "main_seating|armchair|0|2950|2600|3790|3310\nmain_seating|coffee_table|0|4150|2600|5050|3100\nmain_seating|floor_lamp|90|4050|3800|4370|4150\nmain_seating|side_table|0|1550|2600|1940|2970\nmain_seating|sofa|90|1950|2600|2910|4660\nmedia|tv_console|270|5050|2600|5510|4190\nstorage_display_support|bookshelf|180|2300|4950|2930|5200",
+  "notes": [
+    "Object-level solver kept this geometry-valid arrangement for ranked constraint search.",
+    "soft_issue_count=11",
+    "blocking_issue_count=8"
+  ]
+}

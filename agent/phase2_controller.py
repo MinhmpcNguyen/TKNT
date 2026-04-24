@@ -1514,6 +1514,8 @@ def _forced_object_moves(
         "front_to_window",
         "in_front_of_anchor",
         "align_with_anchor_axis",
+        "same_view_side_as_primary_pair",
+        "not_behind_anchor_view",
         "preserve_access_around_anchor",
         "flank_anchor",
         "beside_secondary_seat",
@@ -1937,6 +1939,96 @@ def _is_object_orientation_snap_move(move: dict[str, Any]) -> bool:
     }
 
 
+def _relation_plan_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    return relation_plan if isinstance(relation_plan, dict) else {}
+
+
+def _normalized_cluster_pair(a: Any, b: Any) -> tuple[str, str] | None:
+    left = str(a or "").strip()
+    right = str(b or "").strip()
+    if not left or not right or left == right:
+        return None
+    return (left, right)
+
+
+def _anchor_layout_hints_by_cluster(
+    payload: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    relation_plan = _relation_plan_from_payload(payload)
+    candidates = []
+    for container in (
+        relation_plan,
+        relation_plan.get("macro_concept")
+        if isinstance(relation_plan.get("macro_concept"), dict)
+        else None,
+        (payload.get("goals") or {}),
+    ):
+        if isinstance(container, dict):
+            candidates.append(container.get("anchor_layout_hints_by_cluster"))
+    out: dict[str, dict[str, Any]] = {}
+    for mapping in candidates:
+        if not isinstance(mapping, dict):
+            continue
+        for cluster_id, row in mapping.items():
+            cid = str(cluster_id or "").strip()
+            if not cid or not isinstance(row, dict):
+                continue
+            out[cid] = deepcopy(row)
+    return out
+
+
+def _anchor_pairs_from_payload(payload: dict[str, Any]) -> list[tuple[str, str, str]]:
+    relation_plan = _relation_plan_from_payload(payload)
+    pair_rows: list[tuple[str, str, str]] = []
+    raw_sources = [
+        relation_plan.get("anchor_pairs"),
+        (relation_plan.get("macro_concept") or {}).get("anchor_pairs")
+        if isinstance(relation_plan.get("macro_concept"), dict)
+        else None,
+        (
+            (payload.get("goals") or {}).get("anchor_pairs")
+            if isinstance((payload.get("goals") or {}), dict)
+            else None
+        ),
+    ]
+    seen: set[tuple[str, str, str]] = set()
+    for raw in raw_sources:
+        if not isinstance(raw, list):
+            continue
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            pair = _normalized_cluster_pair(
+                row.get("left_cluster_id") or row.get("a") or row.get("left"),
+                row.get("right_cluster_id") or row.get("b") or row.get("right"),
+            )
+            if pair is None:
+                continue
+            mode = (
+                str(
+                    row.get("mode")
+                    or row.get("relation")
+                    or row.get("focus_mode")
+                    or ""
+                )
+                .strip()
+                .lower()
+            )
+            if mode in {"viewing", "face_each_other", "turn_toward"}:
+                relation = "face_each_other"
+            elif mode in {"access", "access_faces_other", "mixed"}:
+                relation = "access_faces_other"
+            else:
+                relation = "face_each_other"
+            key = (pair[0], pair[1], relation)
+            if key in seen:
+                continue
+            seen.add(key)
+            pair_rows.append(key)
+    return pair_rows
+
+
 def _viewing_cluster_pairs(payload: dict[str, Any]) -> list[tuple[str, str]]:
     relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
     layout_intent = relation_plan.get("layout_intent_profile") or {}
@@ -2078,11 +2170,23 @@ def _viewing_pair_move_priority(
 
 
 def _anchor_contract_cluster_ids(payload: dict[str, Any]) -> set[str]:
-    relation_plan = (payload.get("goals") or {}).get("relation_plan_used") or {}
+    relation_plan = _relation_plan_from_payload(payload)
     protected_cluster_ids: set[str] = set()
     for left_cluster_id, right_cluster_id in _viewing_cluster_pairs(payload):
         protected_cluster_ids.add(left_cluster_id)
         protected_cluster_ids.add(right_cluster_id)
+    for left_cluster_id, right_cluster_id, _relation in _anchor_pairs_from_payload(
+        payload
+    ):
+        protected_cluster_ids.add(left_cluster_id)
+        protected_cluster_ids.add(right_cluster_id)
+    for cluster_id, hint in _anchor_layout_hints_by_cluster(payload).items():
+        if not isinstance(hint, dict):
+            continue
+        if bool(hint.get("protect_anchor_orientation", True)) or bool(
+            hint.get("protect_pair_axis", False)
+        ):
+            protected_cluster_ids.add(cluster_id)
     for row in relation_plan.get("cluster_orientations") or []:
         if not isinstance(row, dict):
             continue
@@ -2104,6 +2208,7 @@ def _anchor_contract_cluster_ids(payload: dict[str, Any]) -> set[str]:
 
 def _anchor_ids_by_cluster(payload: dict[str, Any]) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
+    hints_by_cluster = _anchor_layout_hints_by_cluster(payload)
     for card in payload.get("cluster_cards") or []:
         if not isinstance(card, dict):
             continue
@@ -2116,8 +2221,32 @@ def _anchor_ids_by_cluster(payload: dict[str, Any]) -> dict[str, set[str]]:
             if isinstance(anchor, str) and str(anchor).strip()
         }
         anchor_override = str(card.get("anchor_override") or "").strip()
-        if not anchors and anchor_override:
+        if anchor_override:
             anchors.add(anchor_override)
+        rules = card.get("cluster_rules") or {}
+        if isinstance(rules, dict):
+            anchor_first_policy = rules.get("anchor_first_policy") or {}
+            if isinstance(anchor_first_policy, dict):
+                dominant_anchor_id = str(
+                    anchor_first_policy.get("dominant_anchor_id") or ""
+                ).strip()
+                if dominant_anchor_id:
+                    anchors.add(dominant_anchor_id)
+                for candidate in (
+                    anchor_first_policy.get("dominant_anchor_candidates") or []
+                ):
+                    if isinstance(candidate, str) and candidate.strip():
+                        anchors.add(candidate.strip())
+        hint = hints_by_cluster.get(cluster_id) or {}
+        if isinstance(hint, dict):
+            for key in (
+                "dominant_anchor_id",
+                "anchor_object_id",
+                "primary_anchor_object_id",
+            ):
+                value = str(hint.get(key) or "").strip()
+                if value:
+                    anchors.add(value)
         for row in card.get("decisions") or []:
             if not isinstance(row, dict):
                 continue
@@ -2379,9 +2508,15 @@ def build_phase2_preview_candidate(
     move_limit: int = 24,
     note: str = "Fast preview from solver seed.",
 ) -> dict[str, Any]:
-    baseline_repair = make_no_improvement_repair(payload, note=note)
+    preview_payload = deepcopy(payload)
+    seed_verify = (preview_payload.get("repair_debug") or {}).get("seed_verify") or {}
+    if isinstance(seed_verify, dict) and _needs_primary_pair_axis_repair(
+        preview_payload, seed_verify
+    ):
+        _set_search_phase(preview_payload, "object_refine")
+    baseline_repair = make_no_improvement_repair(preview_payload, note=note)
     snapped_payload, snapped_repair, snapped_eval = _postsolve_orientation_snap(
-        payload=payload,
+        payload=preview_payload,
         repair=baseline_repair,
         rounds=rounds,
         move_limit=move_limit,

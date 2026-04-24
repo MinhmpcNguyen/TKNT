@@ -49,13 +49,20 @@ export type Object3DStatusResponse = {
 
 export type SnapshotImageRenderResult = {
   request: {
+    render_mode: 'generate' | 'edit';
     system_prompt: string;
     user_prompt: string;
+    raw_user_prompt?: string | null;
+    preset_prompt?: string | null;
+    preset_selection?: SnapshotImagePresetSelection;
     aspect_ratio: string;
     source_image_mime_type: string;
+    structural_image_mime_type?: string | null;
     layout_reference_enabled: boolean;
     layout_reference_used: boolean;
     layout_reference_image_mime_type?: string | null;
+    reference_image_count?: number;
+    edit_operations?: SnapshotImageEditOperationSummary[];
   };
   image: {
     mime_type: string;
@@ -69,11 +76,51 @@ export type SnapshotImageRenderResult = {
     image_model_name: string;
     max_tokens: number;
   };
+  metadata?: {
+    camera?: Record<string, unknown> | null;
+    visible_objects?: Array<Record<string, unknown>>;
+    visible_object_ids?: string[];
+    render_mode?: 'generate' | 'edit';
+    preset_selection?: SnapshotImagePresetSelection;
+    edit_operations?: SnapshotImageEditOperationSummary[];
+  };
 };
 
 export type SnapshotImageRenderApiResponse = {
   render: SnapshotImageRenderResult;
   saved_render?: GeneratedRenderRecord | null;
+};
+
+export type SnapshotImagePresetOption = {
+  label: string;
+  prompt_suffix?: string | null;
+  reference_image?: string | null;
+};
+
+export type SnapshotImagePresets = {
+  styles: Record<string, SnapshotImagePresetOption>;
+  lights: Record<string, SnapshotImagePresetOption>;
+  sceneries: Record<string, SnapshotImagePresetOption>;
+};
+
+export type SnapshotImagePresetSelection = {
+  style?: string | null;
+  lighting?: string | null;
+  scenery?: string | null;
+};
+
+export type SnapshotImageEditOperation = {
+  object_id: string;
+  object_name?: string | null;
+  replacement_image_data_url?: string | null;
+  target_color?: string | null;
+};
+
+export type SnapshotImageEditOperationSummary = {
+  object_id: string;
+  object_name?: string | null;
+  replacement_image_provided?: boolean;
+  target_color?: string | null;
 };
 
 export function getStoredAuthToken(): string | null {
@@ -188,11 +235,79 @@ export function appendAccessToken(url: string, token?: string | null): string {
   return `${absolute.pathname}${absolute.search}${absolute.hash}`;
 }
 
+function resolveReferenceImageUrl(referenceImage: string | null | undefined): string | null {
+  const rawUrl = referenceImage?.trim();
+  if (!rawUrl) {
+    return null;
+  }
+  if (/^(?:https?:|data:|blob:)/i.test(rawUrl)) {
+    return rawUrl;
+  }
+  return new URL(rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`, API_BASE).toString();
+}
+
+function normalizePresetReferenceImages(
+  presets: SnapshotImagePresets
+): SnapshotImagePresets {
+  const normalizeGroup = (
+    group: Record<string, SnapshotImagePresetOption>
+  ): Record<string, SnapshotImagePresetOption> =>
+    Object.fromEntries(
+      Object.entries(group).map(([key, option]) => [
+        key,
+        {
+          ...option,
+          reference_image: resolveReferenceImageUrl(option.reference_image),
+        },
+      ])
+    );
+
+  return {
+    styles: normalizeGroup(presets.styles),
+    lights: normalizeGroup(presets.lights),
+    sceneries: normalizeGroup(presets.sceneries),
+  };
+}
+
 function appendTokenToAttributes(
   attributes: Record<string, unknown> | null | undefined,
   token?: string | null
 ): Record<string, unknown> {
   const nextAttributes = { ...(attributes ?? {}) };
+
+  const appendTokenToModelRecord = (
+    value: unknown
+  ): Record<string, unknown> | unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+    const nextRecord = { ...(value as Record<string, unknown>) };
+    const nestedUrlKeys = [
+      'url',
+      'href',
+      'src',
+      'path',
+      'model_url',
+      'modelUrl',
+      'glb_url',
+      'glbUrl',
+      'gltf_url',
+      'gltfUrl',
+      'model_path',
+      'modelPath',
+      'glb_path',
+      'glbPath',
+      'gltf_path',
+      'gltfPath',
+    ];
+    for (const key of nestedUrlKeys) {
+      if (typeof nextRecord[key] === 'string') {
+        nextRecord[key] = appendAccessToken(String(nextRecord[key]), token);
+      }
+    }
+    return nextRecord;
+  };
+
   const files = Array.isArray(nextAttributes.files) ? nextAttributes.files : null;
   if (files) {
     nextAttributes.files = files.map((file) => {
@@ -220,6 +335,36 @@ function appendTokenToAttributes(
       nextAttributes[key] = appendAccessToken(String(nextAttributes[key]), token);
     }
   }
+
+  const nestedModelKeys = [
+    'model',
+    'model_3d',
+    'model3d',
+    'three_model',
+    'threeModel',
+    'preview_model',
+    'previewModel',
+    'glb',
+    'gltf',
+  ];
+  for (const key of nestedModelKeys) {
+    nextAttributes[key] = appendTokenToModelRecord(nextAttributes[key]);
+  }
+
+  const variantKeys = ['model_variants', 'modelVariants'];
+  for (const key of variantKeys) {
+    const variants = nextAttributes[key];
+    if (!variants || typeof variants !== 'object' || Array.isArray(variants)) {
+      continue;
+    }
+    nextAttributes[key] = Object.fromEntries(
+      Object.entries(variants as Record<string, unknown>).map(([variantKey, variantValue]) => [
+        variantKey,
+        appendTokenToModelRecord(variantValue),
+      ])
+    );
+  }
+
   return nextAttributes;
 }
 
@@ -492,6 +637,10 @@ export async function renderSnapshotImage(
     snapshotImageDataUrl: string;
     layoutReferenceImageDataUrl?: string | null;
     userPrompt: string;
+    renderMode?: 'generate' | 'edit';
+    presetSelection?: SnapshotImagePresetSelection;
+    editOperations?: SnapshotImageEditOperation[];
+    editSourceImageDataUrl?: string | null;
   },
   token?: string | null
 ): Promise<SnapshotImageRenderApiResponse> {
@@ -505,6 +654,10 @@ export async function renderSnapshotImage(
         layout_reference_image_data_url:
           request.layoutReferenceImageDataUrl ?? null,
         user_prompt: request.userPrompt,
+        render_mode: request.renderMode ?? 'generate',
+        preset_selection: request.presetSelection ?? {},
+        edit_operations: request.editOperations ?? [],
+        edit_source_image_data_url: request.editSourceImageDataUrl ?? null,
       }),
     },
     {
@@ -521,6 +674,16 @@ export async function renderSnapshotImage(
         }
       : response.saved_render,
   }));
+}
+
+export async function fetchRenderPresets(
+  token?: string | null
+): Promise<SnapshotImagePresets> {
+  return requestJson<SnapshotImagePresets>(
+    '/pipeline/render-presets',
+    {},
+    { token, fallbackError: 'Failed to load image presets' }
+  ).then(normalizePresetReferenceImages);
 }
 
 export async function listSavedLayouts(token?: string | null): Promise<SavedLayoutRecord[]> {

@@ -190,6 +190,62 @@ for _module_name in _STUBBED_MODULE_NAMES:
 
 
 class OrchestratorArchitectureTest(unittest.TestCase):
+    def test_select_final_styling_candidates_caps_to_selected_top_five(self) -> None:
+        candidates = [
+            {
+                "source": f"candidate_{index}",
+                "absolute_layout": {"objects": [], "room": {}, "status": "OK"},
+            }
+            for index in range(1, 10)
+        ]
+
+        original_selector = orchestrator.select_distinct_final_gallery_candidates
+        orchestrator.select_distinct_final_gallery_candidates = (
+            lambda **kwargs: list((kwargs.get("candidates") or [])[:5])
+        )
+        try:
+            selected = orchestrator._select_final_styling_candidates(
+                candidates,
+                max_variants=5,
+            )
+        finally:
+            orchestrator.select_distinct_final_gallery_candidates = original_selector
+
+        self.assertEqual(len(selected), 5)
+        self.assertEqual(
+            [item["source"] for item in selected],
+            [f"candidate_{index}" for index in range(1, 6)],
+        )
+
+    def test_select_final_styling_candidates_falls_back_to_prefix_when_selector_empty(
+        self,
+    ) -> None:
+        candidates = [
+            {
+                "source": f"candidate_{index}",
+                "absolute_layout": {"objects": [], "room": {}, "status": "OK"},
+            }
+            for index in range(1, 10)
+        ]
+
+        original_selector = orchestrator.select_distinct_final_gallery_candidates
+        orchestrator.select_distinct_final_gallery_candidates = (
+            lambda **_kwargs: []
+        )
+        try:
+            selected = orchestrator._select_final_styling_candidates(
+                candidates,
+                max_variants=5,
+            )
+        finally:
+            orchestrator.select_distinct_final_gallery_candidates = original_selector
+
+        self.assertEqual(len(selected), 5)
+        self.assertEqual(
+            [item["source"] for item in selected],
+            [f"candidate_{index}" for index in range(1, 6)],
+        )
+
     def test_fast_layout_mode_caps_attempt_budgets(self) -> None:
         previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
         os.environ["TKNT_LAYOUT_SPEED_MODE"] = "fast"

@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260420T131621Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-20T13:17:53.196149+00:00",
+  "error": "name '_object_kind' is not defined",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-20T13:16:21.905601+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-20T13:16:23.887629+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "name '_object_kind' is not defined",
+      "updated_at_utc": "2026-04-20T13:17:53.196149+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "name '_object_kind' is not defined"
+    }
+  ]
+}

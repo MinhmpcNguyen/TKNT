@@ -146,6 +146,65 @@ class AccessZone(BaseModel):
         return _strip_required_str(value, info.field_name)
 
 
+class AnchorSupportChainItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    object_id: str
+    relative_to: str | None = None
+    support_role: str = ""
+    band_intent: str = ""
+    orientation: str = ""
+
+    @field_validator("object_id")
+    @classmethod
+    def _object_id_non_empty(cls, value: str) -> str:
+        return _strip_required_str(value, "object_id")
+
+    @field_validator("relative_to")
+    @classmethod
+    def _relative_to_non_empty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_required_str(value, "relative_to")
+
+    @field_validator("support_role", "band_intent", "orientation")
+    @classmethod
+    def _optional_token_strip(cls, value: str) -> str:
+        return value.strip()
+
+
+class AnchorLayoutHints(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    anchor_first_enabled: bool = False
+    dominant_anchor_id: str | None = None
+    placement_order: list[str] = Field(default_factory=list)
+    support_chain: list[AnchorSupportChainItem] = Field(default_factory=list)
+    anchor_chain_integrity_score: float = 0.0
+
+    @field_validator("dominant_anchor_id")
+    @classmethod
+    def _dominant_anchor_id_non_empty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_required_str(value, "dominant_anchor_id")
+
+    @field_validator("placement_order")
+    @classmethod
+    def _placement_order_non_empty(cls, value: list[str]) -> list[str]:
+        out: list[str] = []
+        for item in value:
+            out.append(_strip_required_str(item, "placement_order"))
+        return out
+
+    @field_validator("anchor_chain_integrity_score")
+    @classmethod
+    def _integrity_score_range(cls, value: float) -> float:
+        if value < 0.0 or value > 1.0:
+            raise ValueError("anchor_chain_integrity_score must be between 0 and 1")
+        return value
+
+
 class WallContactEdge(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -212,6 +271,8 @@ class ClusterVariant(BaseModel):
     interaction_hull_polygon_mm: list[PolygonPoint] = Field(default_factory=list)
     interaction_hull_polygons_mm: list[list[PolygonPoint]] = Field(default_factory=list)
     family_contract_reasons: list[str] = Field(default_factory=list)
+    anchor_layout_hints: AnchorLayoutHints | None = None
+    anchor_chain_integrity_score: float = 0.0
     local_bbox_mm: BBoxMinMax
     wall_contact_edges: list[WallContactEdge] = Field(default_factory=list)
     required_access_zones: list[AccessZone] = Field(default_factory=list)
@@ -249,7 +310,12 @@ class ClusterVariant(BaseModel):
             raise ValueError("variant local_placements ids must be unique")
         return value
 
-    @field_validator("family_fidelity", "semantic_confidence", "solver_friendliness")
+    @field_validator(
+        "family_fidelity",
+        "semantic_confidence",
+        "solver_friendliness",
+        "anchor_chain_integrity_score",
+    )
     @classmethod
     def _variant_score_range(cls, value: float, info) -> float:
         if value < 0.0 or value > 1.0:

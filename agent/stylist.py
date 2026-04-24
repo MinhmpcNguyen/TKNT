@@ -20,6 +20,8 @@ from stylist.deterministic_layout import (
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
 from stylist.style_policy import (
     compile_style_policy as compile_layout_style_policy,
+)
+from stylist.style_policy import (
     final_style_plan_from_surface_payload,
 )
 from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS

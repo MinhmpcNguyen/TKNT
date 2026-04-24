@@ -86,6 +86,7 @@ class Placement(BaseModel):
     height_mm: float = 0.0
     color_hex: str = "#CFCAC2"
     anchor: Literal["center"] = "center"
+    collision_layer: str | None = None
 
 
 class TopView(BaseModel):

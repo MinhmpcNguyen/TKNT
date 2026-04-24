@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorStore } from '../store';
 import { polygonBounds } from '../utils/geometry';
 import { getNumericBbox, getWorldBboxFromPlacement, placementMatchesStyledObject } from '../utils/styledLayout';
-import { planRotationToYawRad } from '../utils/planOrientation';
+import { resolvePlanObjectYawRad } from '../utils/planOrientation';
 import {
+  applyInventoryModelPreviewOverride,
   buildGlbPreviewModel,
   disposeThreeObject,
 } from '../three/models';
@@ -26,6 +27,9 @@ type RenderObject = {
   colorHex: string;
   material?: string | null;
   rotationCcw?: number;
+  frontWorld?: unknown;
+  frontSideWorld?: unknown;
+  frontSideLocal?: unknown;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   placeOn?: { method: string; targetId?: string | null } | null;
   reintroduced?: boolean;
@@ -132,6 +136,9 @@ export const ThreeDPreviewModal: React.FC = () => {
           obj.assetId ??
           obj.object_id ??
           null;
+        const frontWorld = placement?.front_world ?? obj.front_world ?? null;
+        const frontSideWorld = placement?.front_side_world ?? obj.front_side_world ?? null;
+        const frontSideLocal = placement?.front_side_local ?? obj.front_side_local ?? null;
         out.push({
           id,
           assetId: normalizeRenderAssetId(rawAssetId) ?? null,
@@ -140,6 +147,9 @@ export const ThreeDPreviewModal: React.FC = () => {
           colorHex: String(obj.color_hex ?? '#cfcac2'),
           material: obj.material ?? null,
           rotationCcw,
+          frontWorld,
+          frontSideWorld,
+          frontSideLocal,
           bbox,
           placeOn: obj.place_on
             ? {
@@ -165,6 +175,9 @@ export const ThreeDPreviewModal: React.FC = () => {
           colorHex: placement.color_hex ?? '#cfcac2',
           material: null,
           rotationCcw: Number(placement.rotation_deg ?? 0),
+          frontWorld: placement.front_world ?? null,
+          frontSideWorld: placement.front_side_world ?? null,
+          frontSideLocal: placement.front_side_local ?? null,
           bbox: getWorldBboxFromPlacement(placement),
           placeOn: { method: 'floor', targetId: 'floor' },
           reintroduced:
@@ -186,6 +199,9 @@ export const ThreeDPreviewModal: React.FC = () => {
         colorHex: placement.color_hex ?? '#cfcac2',
         material: null,
         rotationCcw: Number(placement.rotation_deg ?? 0),
+        frontWorld: placement.front_world ?? null,
+        frontSideWorld: placement.front_side_world ?? null,
+        frontSideLocal: placement.front_side_local ?? null,
         bbox: getWorldBboxFromPlacement(placement),
         placeOn: { method: 'floor', targetId: 'floor' },
         reintroduced:
@@ -853,8 +869,13 @@ export const ThreeDPreviewModal: React.FC = () => {
           let pxMm = cxMm;
           let pyMm = cyMm;
           // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
-          // Our proxies and GLBs both use the same shared plan-rotation mapping.
-          let rotY = planRotationToYawRad(rotCcwDeg);
+          // Prefer the same explicit front metadata that drives the 2D white marker.
+          let rotY = resolvePlanObjectYawRad({
+            rotationDeg: rotCcwDeg,
+            frontWorld: obj.frontWorld,
+            frontSideWorld: obj.frontSideWorld,
+            frontSideLocal: obj.frontSideLocal,
+          });
           if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
             if (mount) {
@@ -890,20 +911,29 @@ export const ThreeDPreviewModal: React.FC = () => {
             const preserveGeneratedMeshShape = isUserGeneratedPreviewItem(
               obj.inventoryResolution.item
             );
+            const resolvedFitStrategy = isWallHung
+              ? preserveGeneratedMeshShape
+                ? 'wall-plane-uniform'
+                : 'wall-plane'
+              : preserveGeneratedMeshShape
+                ? 'footprint-uniform'
+                : 'footprint';
+            const previewOverride = applyInventoryModelPreviewOverride({
+              descriptor: modelDescriptor,
+              context: 'modal',
+              fitStrategy: resolvedFitStrategy,
+              wM,
+              dM,
+              hM,
+            });
             void buildGlbPreviewModel({
                 THREE,
                 GLTFLoader,
-                descriptor: modelDescriptor,
-                wM,
-                dM,
-                hM,
-                fitStrategy: isWallHung
-                  ? preserveGeneratedMeshShape
-                    ? 'wall-plane-uniform'
-                    : 'wall-plane'
-                  : preserveGeneratedMeshShape
-                    ? 'footprint-uniform'
-                    : 'footprint',
+                descriptor: previewOverride.descriptor,
+                wM: previewOverride.wM,
+                dM: previewOverride.dM,
+                hM: previewOverride.hM,
+                fitStrategy: previewOverride.fitStrategy,
                 colorHex: obj.colorHex,
                 preserveMaterialTextures: preserveGeneratedMeshShape,
                 minimumHorizontalAspectRatio: preserveGeneratedMeshShape ? 0.45 : null,
@@ -924,7 +954,9 @@ export const ThreeDPreviewModal: React.FC = () => {
                       reintroduced: Boolean(obj.reintroduced),
                     }),
                     status: 'glb_loaded',
-                    reason: `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
+                    reason: previewOverride.applied
+                      ? `Loaded GLB with preview override for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
+                      : `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
                   },
                 }));
                 const previousChildren = [...objectRoot.children];

@@ -37,17 +37,18 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
 
         concepts = bundle["concepts"]
         self.assertEqual(len(concepts), 5)
+        scenario_ids = {
+            concept["macro_scenario"]["scenario_id"] for concept in concepts
+        }
+        self.assertEqual(len(scenario_ids), 5)
         for concept in concepts:
+            self.assertIn("macro_scenario", concept)
+            self.assertIn("anchor_region_preferences_by_cluster", concept)
+            self.assertIn("anchor_pair_contracts", concept)
             allowed = concept["allowed_variant_families_by_cluster"]
             self.assertEqual(set(allowed), {"main_seating", "media", "storage"})
             self.assertTrue(
                 all(2 <= len(families) <= 4 for families in allowed.values())
-            )
-            self.assertTrue(
-                all(
-                    set(families).isdisjoint({"social_anchor", "media", "work"})
-                    for families in allowed.values()
-                )
             )
             self.assertIn("conversation_facing", allowed["main_seating"])
             self.assertIn("media_facing", allowed["media"])
@@ -89,6 +90,10 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             )
             self.assertIn("family_match_weight", concept["variant_bias_weights"])
             self.assertTrue(concept["macro_constraints"]["protected_topology"])
+            anchor_hints = concept["anchor_region_preferences_by_cluster"]
+            for cluster_id in ("main_seating", "media"):
+                self.assertTrue(anchor_hints[cluster_id]["required_region_ids"])
+                self.assertTrue(anchor_hints[cluster_id]["preferred_wall_side"])
 
         solver_plan = solver_plan_from_concept(
             concept=concepts[0],
@@ -101,6 +106,12 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             concepts[0]["allowed_variant_families_by_cluster"],
         )
         self.assertTrue(solver_plan["cluster_directional_relations"])
+        self.assertTrue(solver_plan["anchor_pair_contracts"])
+        self.assertTrue(
+            solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
+                "required_region_ids"
+            ]
+        )
 
 
 def _zone_logic_class(zone: object) -> str:

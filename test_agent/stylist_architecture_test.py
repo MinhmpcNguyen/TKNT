@@ -278,6 +278,53 @@ def _sample_layout() -> dict[str, object]:
     }
 
 
+def _living_room_layout_with_tv_console() -> dict[str, object]:
+    return {
+        "status": "OK",
+        "room": {
+            "room_id": "living_room_1",
+            "room_type": "living_room",
+            "polygon_ccw": [
+                {"x": 0, "y": 0},
+                {"x": 6000, "y": 0},
+                {"x": 6000, "y": 4000},
+                {"x": 0, "y": 4000},
+            ],
+            "obstacles": [],
+            "openings": {
+                "doors": [],
+                "windows": [],
+            },
+            "surfaces": {},
+        },
+        "objects": [
+            {
+                "instance_id": "tv_console_1",
+                "object_type": "tv_console",
+                "polygon_ccw": [
+                    {"x": 4700, "y": 1200},
+                    {"x": 5600, "y": 1200},
+                    {"x": 5600, "y": 1600},
+                    {"x": 4700, "y": 1600},
+                ],
+                "bbox": {
+                    "min_x": 4700,
+                    "min_y": 1200,
+                    "max_x": 5600,
+                    "max_y": 1600,
+                },
+                "color_hex": "#8D6B4D",
+                "material": "oak_wood",
+                "place_on": None,
+            }
+        ],
+        "openings": {
+            "doors": [],
+            "windows": [],
+        },
+    }
+
+
 class StylistArchitectureTest(unittest.TestCase):
     def setUp(self) -> None:
         LAST_CHAT_KWARGS.clear()
@@ -484,6 +531,24 @@ class StylistArchitectureTest(unittest.TestCase):
             "Palette locked from the requested Japandi direction.",
             result["notes"],
         )
+
+    def test_generate_does_not_add_tv_on_top_of_tv_console(self) -> None:
+        result = Stylist().generate(
+            layout_json=_living_room_layout_with_tv_console(),
+            user_context_json={
+                "tenant_id": "demo_tenant",
+                "style": "japandi",
+            },
+            tenant_id="demo_tenant",
+        )
+
+        object_types = {
+            str(row.get("object_type") or "")
+            for row in result["objects"]
+            if isinstance(row, dict)
+        }
+        self.assertIn("tv_console", object_types)
+        self.assertNotIn("tv", object_types)
 
 
 if __name__ == "__main__":

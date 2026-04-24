@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_optional_current_user
+from config import root_config
 from db.models import UserAccount
 from pipeline.orchestrator import (
     run_case,
@@ -21,6 +22,7 @@ from pipeline.snapshot_prompt_compiler import (
     compile_snapshot_prompt_from_path,
 )
 from pipeline.snapshot_image_renderer import (
+    SnapshotEditOperation,
     render_snapshot_image,
     render_snapshot_image_from_path,
 )
@@ -79,17 +81,50 @@ class SnapshotPromptCompileResponse(BaseModel):
     compilation: dict[str, Any]
 
 
+class SnapshotImagePresetSelection(BaseModel):
+    style: str | None = None
+    lighting: str | None = None
+    scenery: str | None = None
+
+
+class SnapshotImageEditOperationRequest(BaseModel):
+    object_id: str
+    object_name: str | None = None
+    replacement_image_data_url: str | None = None
+    target_color: str | None = None
+
+
 class SnapshotImageRenderRequest(BaseModel):
     snapshot_payload: dict[str, Any] | None = None
     snapshot_path: str | None = None
     snapshot_image_data_url: str | None = None
     layout_reference_image_data_url: str | None = None
     user_prompt: str | None = None
+    render_mode: Literal["generate", "edit"] = "generate"
+    preset_selection: SnapshotImagePresetSelection = Field(
+        default_factory=lambda: SnapshotImagePresetSelection()
+    )
+    edit_operations: list[SnapshotImageEditOperationRequest] = Field(
+        default_factory=list
+    )
+    edit_source_image_data_url: str | None = None
 
 
 class SnapshotImageRenderResponse(BaseModel):
     render: dict[str, Any]
     saved_render: dict[str, Any] | None = None
+
+
+class SnapshotImagePresetOptionResponse(BaseModel):
+    label: str
+    prompt_suffix: str | None = None
+    reference_image: str | None = None
+
+
+class SnapshotImagePresetsResponse(BaseModel):
+    styles: dict[str, SnapshotImagePresetOptionResponse]
+    lights: dict[str, SnapshotImagePresetOptionResponse]
+    sceneries: dict[str, SnapshotImagePresetOptionResponse]
 
 
 def get_user_content_service() -> UserContentService:
@@ -121,14 +156,16 @@ def _enrich_rotation_ccw(
         if not isinstance(ao, dict):
             continue
         oid = ao.get("object_id")
-        rot = ao.get("rotation_ccw")
+        rot = ao.get("rotation_ccw", ao.get("rot"))
         bbox = ao.get("bbox") or {}
         if not isinstance(oid, str) or not oid:
             continue
-        if not isinstance(rot, int):
+        try:
+            rotation_ccw = int(rot) % 360
+        except (TypeError, ValueError):
             continue
         orientation_payload = {
-            "rotation_ccw": int(rot) % 360,
+            "rotation_ccw": rotation_ccw,
             "front_world": deepcopy(ao.get("front_world"))
             if isinstance(ao.get("front_world"), dict)
             else None,
@@ -186,9 +223,16 @@ def _enrich_rotation_ccw(
                 orientation_payload = None
 
         next_obj = dict(obj)
-        next_obj["rotation_ccw"] = int(
-            (orientation_payload or {}).get("rotation_ccw") or 0
-        ) % 360
+        next_obj["rotation_ccw"] = (
+            int(
+                (orientation_payload or {}).get(
+                    "rotation_ccw",
+                    next_obj.get("rotation_ccw", next_obj.get("rot", 0)),
+                )
+                or 0
+            )
+            % 360
+        )
         next_obj["front_world"] = deepcopy(
             (orientation_payload or {}).get("front_world")
         )
@@ -313,6 +357,16 @@ def render_snapshot_image_route(
         )
 
     try:
+        edit_operations = [
+            SnapshotEditOperation(
+                object_id=item.object_id,
+                object_name=item.object_name,
+                replacement_image_data_url=item.replacement_image_data_url,
+                target_color=item.target_color,
+            )
+            for item in req.edit_operations
+        ]
+        preset_selection = req.preset_selection.model_dump()
         if req.snapshot_payload is not None:
             if not req.snapshot_image_data_url:
                 raise HTTPException(
@@ -327,6 +381,10 @@ def render_snapshot_image_route(
                 snapshot_image_data_url=req.snapshot_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
                 user_prompt=req.user_prompt,
+                render_mode=req.render_mode,
+                preset_selection=preset_selection,
+                edit_operations=edit_operations,
+                edit_source_image_data_url=req.edit_source_image_data_url,
             )
         else:
             render = render_snapshot_image_from_path(
@@ -334,6 +392,10 @@ def render_snapshot_image_route(
                 snapshot_image_data_url=req.snapshot_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
                 user_prompt=req.user_prompt,
+                render_mode=req.render_mode,
+                preset_selection=preset_selection,
+                edit_operations=edit_operations,
+                edit_source_image_data_url=req.edit_source_image_data_url,
             )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -345,6 +407,8 @@ def render_snapshot_image_route(
     saved_render: dict[str, Any] | None = None
     if current_user is not None:
         try:
+            metadata = render.get("metadata") if isinstance(render, dict) else None
+            metadata_payload = metadata if isinstance(metadata, dict) else {}
             saved = user_content_service.save_snapshot_render_from_data_url(
                 user=current_user,
                 image_data_url=str(render["image"]["data_url"]),
@@ -353,10 +417,18 @@ def render_snapshot_image_route(
                 negative_prompt=None,
                 meta={
                     "user_prompt": str(render["request"]["user_prompt"]),
+                    "render_mode": str(
+                        render["request"].get("render_mode", "generate")
+                    ),
+                    "preset_selection": render["request"].get("preset_selection"),
+                    "edit_operations": render["request"].get("edit_operations"),
                     "aspect_ratio": str(render["image"]["aspect_ratio"]),
                     "source_image_mime_type": str(
                         render["request"]["source_image_mime_type"]
                     ),
+                    "camera": metadata_payload.get("camera"),
+                    "visible_objects": metadata_payload.get("visible_objects"),
+                    "visible_object_ids": metadata_payload.get("visible_object_ids"),
                     "layout_reference_enabled": bool(
                         render["request"]["layout_reference_enabled"]
                     ),
@@ -373,6 +445,25 @@ def render_snapshot_image_route(
             saved_render = None
 
     return SnapshotImageRenderResponse(render=render, saved_render=saved_render)
+
+
+@router.get("/render-presets", response_model=SnapshotImagePresetsResponse)
+def get_render_presets() -> SnapshotImagePresetsResponse:
+    presets = root_config.presets
+    return SnapshotImagePresetsResponse(
+        styles={
+            key: SnapshotImagePresetOptionResponse(**value.model_dump())
+            for key, value in presets.styles.items()
+        },
+        lights={
+            key: SnapshotImagePresetOptionResponse(**value.model_dump())
+            for key, value in presets.lights.items()
+        },
+        sceneries={
+            key: SnapshotImagePresetOptionResponse(**value.model_dump())
+            for key, value in presets.sceneries.items()
+        },
+    )
 
 
 @router.get("/{case_id}/status", response_model=PipelineStatusResponse)
@@ -459,9 +550,7 @@ def get_artifact(case_id: str, name: str) -> ArtifactResponse:
         "cluster_merged": paths.cluster_merged,
         "cluster_output_merger": paths.module_output("cluster_output_merger"),
         "cluster_relation_plan": paths.cluster_relation_plan,
-        "seed_concept_relation_plan": paths.module_output(
-            "seed_concept_relation_plan"
-        ),
+        "seed_concept_relation_plan": paths.module_output("seed_concept_relation_plan"),
         "seed_concept_generator": paths.module_output("seed_concept_generator"),
         "cluster_placer": paths.cluster_placer,
         "phase2_controller": paths.module_output("phase2_controller"),

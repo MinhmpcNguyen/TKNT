@@ -336,6 +336,22 @@ function canonicalizeStyleKey(value: unknown): string | null {
   return raw.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+function normalizeModelUrlForMatching(value: string): string {
+  const raw = value.trim();
+  if (!raw) {
+    return '';
+  }
+  if (/^(?:https?:)?\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      return `${url.origin}${url.pathname}`.toLowerCase();
+    } catch {
+      return raw.split(/[?#]/, 1)[0].toLowerCase();
+    }
+  }
+  return raw.split(/[?#]/, 1)[0].toLowerCase();
+}
+
 function resolveUrlFromRecord(record: Record<string, unknown>): { url: string; source: string } | null {
   for (const key of URL_VALUE_KEYS) {
     const url = readString(record[key]);
@@ -697,13 +713,17 @@ function resolveMatchingModelMetadataRecord(
   attributes: Record<string, unknown>,
   url: string
 ): Record<string, unknown> | null {
+  const normalizedUrl = normalizeModelUrlForMatching(url);
   for (const key of NESTED_MODEL_KEYS) {
     const candidate = attributes[key];
     if (!isRecord(candidate)) {
       continue;
     }
     const nested = resolveUrlFromRecord(candidate);
-    if (nested?.url === url) {
+    if (
+      nested?.url &&
+      normalizeModelUrlForMatching(nested.url) === normalizedUrl
+    ) {
       return candidate;
     }
   }

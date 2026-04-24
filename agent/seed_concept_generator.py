@@ -16,6 +16,7 @@ ConceptFamily = Literal[
 ]
 Priority = Literal["core", "support", "optional"]
 ZoneComplementRole = Literal["focal_claim", "topology_complement", "neutral"]
+AnchorStrength = Literal["hard", "strong", "medium"]
 
 CONCEPT_FAMILIES: tuple[ConceptFamily, ...] = (
     "focal_axis",
@@ -24,7 +25,7 @@ CONCEPT_FAMILIES: tuple[ConceptFamily, ...] = (
     "zoned",
     "daylight_oriented",
 )
-MACRO_REGION_CAP = 8
+MACRO_REGION_CAP = 16
 MAX_REGION_CANDIDATES_PER_CLUSTER = 4
 MAX_ASSIGNMENT_CANDIDATES_PER_CONCEPT = 32
 DEDUPE_THRESHOLD = 0.75
@@ -43,7 +44,10 @@ class ClusterProgram:
     relation_intents: tuple[Mapping[str, object], ...]
     seed_region_tags: tuple[str, ...]
     object_ids: tuple[str, ...]
-    semantic_placements: tuple[Mapping[str, object], ...] = ()
+
+    @property
+    def dominant_anchor_object_id(self) -> str | None:
+        return self.object_ids[0] if self.object_ids else None
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,25 @@ class MacroRegion:
     label: str
     source_ids: tuple[str, ...]
     tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroScenario:
+    scenario_id: str
+    label: str
+    primary_zone_id: str
+    secondary_zone_id: str
+    storage_zone_id: str
+    support_zone_id: str
+    primary_wall_side: str
+    secondary_wall_side: str
+    storage_wall_side: str
+    pair_type: str
+    center_policy: str
+    primary_anchor_strength: AnchorStrength
+    secondary_anchor_strength: AnchorStrength
+    support_anchor_strength: AnchorStrength
+    allow_primary_center_overlap: bool = False
 
 
 @dataclass(frozen=True)
@@ -296,25 +319,6 @@ def _extract_clusters_map(
     return out
 
 
-def _semantic_placements_from_cluster(
-    cluster: Mapping[str, object],
-) -> tuple[Mapping[str, object], ...]:
-    rules = cluster.get("cluster_rules")
-    if not isinstance(rules, Mapping):
-        return ()
-    raw = rules.get("semantic_placements")
-    if not isinstance(raw, Sequence) or isinstance(raw, str):
-        return ()
-    out: list[Mapping[str, object]] = []
-    for item in raw:
-        if not isinstance(item, Mapping):
-            continue
-        if _clean_str(item.get("id")) is None:
-            continue
-        out.append(dict(item))
-    return tuple(out)
-
-
 def _build_cluster_programs(
     clusters_json: Mapping[str, object],
 ) -> list[ClusterProgram]:
@@ -348,7 +352,6 @@ def _build_cluster_programs(
                 relation_intents=relation_intents,
                 seed_region_tags=tuple(_seed_region_tags(cluster)),
                 object_ids=object_ids,
-                semantic_placements=_semantic_placements_from_cluster(cluster),
             )
         )
     return programs
@@ -393,6 +396,12 @@ def _build_macro_region_map(room_model: Mapping[str, object]) -> dict[str, objec
     private_ids = _region_refs(affordance.get("privacy_regions")) or [
         "deep_zone_far_from_entry"
     ]
+    side_wall_ids = (
+        "top_wall_zone",
+        "right_wall_zone",
+        "bottom_wall_zone",
+        "left_wall_zone",
+    )
 
     regions = [
         MacroRegion(
@@ -437,7 +446,8 @@ def _build_macro_region_map(room_model: Mapping[str, object]) -> dict[str, objec
             region_type="floating_support_zone",
             label="floating support zone",
             source_ids=tuple(
-                _region_refs(affordance.get("floating_zone_candidates")) or center_ids
+                _region_refs(affordance.get("floating_zone_candidates"))
+                or ["floating_center_zone"]
             ),
             tags=("floating", "support", "center"),
         ),
@@ -445,7 +455,7 @@ def _build_macro_region_map(room_model: Mapping[str, object]) -> dict[str, objec
             region_id="storage_service_edge_zone",
             region_type="storage_service_edge_zone",
             label="storage/service edge zone",
-            source_ids=tuple(wall_ids),
+            source_ids=side_wall_ids or tuple(wall_ids),
             tags=("wall", "edge", "storage"),
         ),
         MacroRegion(
@@ -453,9 +463,53 @@ def _build_macro_region_map(room_model: Mapping[str, object]) -> dict[str, objec
             region_type="edge_loading_zone",
             label="edge loading zone",
             source_ids=tuple(
-                _region_refs(affordance.get("wall_anchor_candidates")) or wall_ids
+                _region_refs(affordance.get("wall_anchor_candidates"))
+                or side_wall_ids
+                or wall_ids
             ),
             tags=("wall", "edge", "perimeter"),
+        ),
+        MacroRegion(
+            region_id="top_wall_zone",
+            region_type="side_wall_zone",
+            label="top wall zone",
+            source_ids=("top_wall_zone",),
+            tags=("wall", "edge", "top_wall"),
+        ),
+        MacroRegion(
+            region_id="right_wall_zone",
+            region_type="side_wall_zone",
+            label="right wall zone",
+            source_ids=("right_wall_zone",),
+            tags=("wall", "edge", "right_wall"),
+        ),
+        MacroRegion(
+            region_id="bottom_wall_zone",
+            region_type="side_wall_zone",
+            label="bottom wall zone",
+            source_ids=("bottom_wall_zone",),
+            tags=("wall", "edge", "bottom_wall"),
+        ),
+        MacroRegion(
+            region_id="left_wall_zone",
+            region_type="side_wall_zone",
+            label="left wall zone",
+            source_ids=("left_wall_zone",),
+            tags=("wall", "edge", "left_wall"),
+        ),
+        MacroRegion(
+            region_id="window_side_zone",
+            region_type="window_side_zone",
+            label="window side zone",
+            source_ids=tuple(daylight_ids or ["window_side_zone"]),
+            tags=("wall", "daylight", "window_side"),
+        ),
+        MacroRegion(
+            region_id="floating_center_zone",
+            region_type="floating_center_zone",
+            label="floating center zone",
+            source_ids=("floating_center_zone",),
+            tags=("floating", "center"),
         ),
     ][:MACRO_REGION_CAP]
     return {
@@ -649,6 +703,113 @@ def _score_cluster_region(
     )
 
 
+def _macro_scenario_for_family(family: ConceptFamily) -> MacroScenario:
+    scenarios: dict[ConceptFamily, MacroScenario] = {
+        "focal_axis": MacroScenario(
+            scenario_id="focal_axis_top_bottom",
+            label="primary seating top wall, focal media opposite",
+            primary_zone_id="top_wall_zone",
+            secondary_zone_id="bottom_wall_zone",
+            storage_zone_id="right_wall_zone",
+            support_zone_id="left_wall_zone",
+            primary_wall_side="top_wall",
+            secondary_wall_side="bottom_wall",
+            storage_wall_side="right_wall",
+            pair_type="opposite_walls",
+            center_policy="balanced_open",
+            primary_anchor_strength="strong",
+            secondary_anchor_strength="strong",
+            support_anchor_strength="medium",
+        ),
+        "open_center": MacroScenario(
+            scenario_id="open_center_left_right",
+            label="primary and media on opposing side walls with open center",
+            primary_zone_id="left_wall_zone",
+            secondary_zone_id="right_wall_zone",
+            storage_zone_id="bottom_wall_zone",
+            support_zone_id="top_wall_zone",
+            primary_wall_side="left_wall",
+            secondary_wall_side="right_wall",
+            storage_wall_side="bottom_wall",
+            pair_type="opposite_walls",
+            center_policy="open_reserved",
+            primary_anchor_strength="strong",
+            secondary_anchor_strength="strong",
+            support_anchor_strength="medium",
+        ),
+        "edge_weighted": MacroScenario(
+            scenario_id="edge_weighted_bottom_top",
+            label="perimeter loaded layout with primary bottom and media top",
+            primary_zone_id="bottom_wall_zone",
+            secondary_zone_id="top_wall_zone",
+            storage_zone_id="left_wall_zone",
+            support_zone_id="right_wall_zone",
+            primary_wall_side="bottom_wall",
+            secondary_wall_side="top_wall",
+            storage_wall_side="left_wall",
+            pair_type="opposite_walls",
+            center_policy="open_reserved",
+            primary_anchor_strength="strong",
+            secondary_anchor_strength="strong",
+            support_anchor_strength="strong",
+        ),
+        "zoned": MacroScenario(
+            scenario_id="floating_primary_right_media",
+            label="floating primary seating with wall-backed media zone",
+            primary_zone_id="floating_center_zone",
+            secondary_zone_id="right_wall_zone",
+            storage_zone_id="left_wall_zone",
+            support_zone_id="bottom_wall_zone",
+            primary_wall_side="center",
+            secondary_wall_side="right_wall",
+            storage_wall_side="left_wall",
+            pair_type="floating_to_wall",
+            center_policy="floating_primary",
+            primary_anchor_strength="strong",
+            secondary_anchor_strength="strong",
+            support_anchor_strength="medium",
+            allow_primary_center_overlap=True,
+        ),
+        "daylight_oriented": MacroScenario(
+            scenario_id="daylight_primary_bottom_media",
+            label="primary seating claims daylight with media opposite",
+            primary_zone_id="window_side_zone",
+            secondary_zone_id="bottom_wall_zone",
+            storage_zone_id="right_wall_zone",
+            support_zone_id="left_wall_zone",
+            primary_wall_side="window_side",
+            secondary_wall_side="bottom_wall",
+            storage_wall_side="right_wall",
+            pair_type="daylight_opposite",
+            center_policy="balanced_open",
+            primary_anchor_strength="strong",
+            secondary_anchor_strength="strong",
+            support_anchor_strength="medium",
+        ),
+    }
+    return scenarios[family]
+
+
+def _macro_scenario_to_dict(scenario: MacroScenario) -> dict[str, object]:
+    return {
+        "scenario_id": scenario.scenario_id,
+        "label": scenario.label,
+        "primary_zone_id": scenario.primary_zone_id,
+        "secondary_zone_id": scenario.secondary_zone_id,
+        "storage_zone_id": scenario.storage_zone_id,
+        "support_zone_id": scenario.support_zone_id,
+        "primary_wall_side": scenario.primary_wall_side,
+        "secondary_wall_side": scenario.secondary_wall_side,
+        "storage_wall_side": scenario.storage_wall_side,
+        "pair_type": scenario.pair_type,
+        "center_policy": scenario.center_policy,
+        "primary_anchor_strength": scenario.primary_anchor_strength,
+        "secondary_anchor_strength": scenario.secondary_anchor_strength,
+        "support_anchor_strength": scenario.support_anchor_strength,
+        "allow_primary_center_overlap": scenario.allow_primary_center_overlap,
+    }
+
+
 def _instantiate_concept_families(
     *,
     room_model: Mapping[str, object],
@@ -665,10 +826,12 @@ def _instantiate_concept_families(
     secondary_cluster_id = _secondary_cluster_id(cluster_programs, primary_cluster_id)
     concepts: list[dict[str, object]] = []
     for index, family in enumerate(family_order[:concept_count], start=1):
+        scenario = _macro_scenario_for_family(family)
         topology_policy = _topology_policy_for_family(family, style_policy=style_policy)
         cluster_zone_plan = [
             _cluster_zone_assignment(
                 family=family,
+                scenario=scenario,
                 cluster=cluster,
                 primary_cluster_id=primary_cluster_id,
                 secondary_cluster_id=secondary_cluster_id,
@@ -679,6 +842,7 @@ def _instantiate_concept_families(
         ]
         cluster_zone_plan = _resolve_complementary_zone_assignments(
             family=family,
+            scenario=scenario,
             cluster_programs=cluster_programs,
             cluster_zone_plan=cluster_zone_plan,
             primary_cluster_id=primary_cluster_id,
@@ -686,6 +850,7 @@ def _instantiate_concept_families(
         )
         macro_constraints = _macro_constraints_for_concept(
             family=family,
+            scenario=scenario,
             room_model=room_model,
             macro_region_map=macro_region_map,
             cluster_zone_plan=cluster_zone_plan,
@@ -694,6 +859,7 @@ def _instantiate_concept_families(
         )
         primary_pair_contracts = _primary_pair_contracts_for_concept(
             family=family,
+            scenario=scenario,
             cluster_zone_plan=cluster_zone_plan,
             primary_cluster_id=primary_cluster_id,
             secondary_cluster_id=secondary_cluster_id,
@@ -701,7 +867,9 @@ def _instantiate_concept_families(
         concept = {
             "concept_id": f"concept_{index:02d}",
             "concept_family": family,
+            "macro_scenario": _macro_scenario_to_dict(scenario),
             "spatial_character": _spatial_character(family, room_type),
+            "macro_region_map_snapshot": dict(macro_region_map),
             "cluster_zone_plan": cluster_zone_plan,
             "allowed_variant_families_by_cluster": (
                 _allowed_variant_families_by_cluster(
@@ -717,6 +885,20 @@ def _instantiate_concept_families(
                 secondary_cluster_id=secondary_cluster_id,
             ),
             "primary_pair_contracts": primary_pair_contracts,
+            "anchor_region_preferences_by_cluster": (
+                _anchor_region_preferences_by_cluster(
+                    cluster_zone_plan=cluster_zone_plan,
+                )
+            ),
+            "anchor_pair_contracts": _anchor_pair_contracts_for_concept(
+                primary_pair_contracts=primary_pair_contracts,
+                primary_cluster_id=primary_cluster_id,
+                secondary_cluster_id=secondary_cluster_id,
+            ),
+            "object_solver_policy": _object_solver_policy_for_concept(
+                family=family,
+                cluster_programs=cluster_programs,
+            ),
             "topology_policy": topology_policy,
             "macro_constraints": macro_constraints,
             "concept_readiness_requirements": _concept_readiness_requirements(
@@ -744,6 +926,7 @@ def _instantiate_concept_families(
 def _cluster_zone_assignment(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     cluster: ClusterProgram,
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
@@ -752,6 +935,7 @@ def _cluster_zone_assignment(
 ) -> dict[str, object]:
     preferred_region_id = _preferred_region_for_family(
         family=family,
+        scenario=scenario,
         cluster=cluster,
         primary_cluster_id=primary_cluster_id,
         secondary_cluster_id=secondary_cluster_id,
@@ -768,18 +952,47 @@ def _cluster_zone_assignment(
     zone_assignment = preferred_region_id
     if candidate is not None and family not in {"open_center", "edge_weighted"}:
         zone_assignment = candidate.region_id
+    scenario_role = _scenario_role_for_cluster(
+        cluster=cluster,
+        primary_cluster_id=primary_cluster_id,
+        secondary_cluster_id=secondary_cluster_id,
+    )
+    if scenario_role in {"primary", "secondary", "storage"}:
+        zone_assignment = preferred_region_id
     wall_claim = _wall_claim_for(cluster, zone_assignment, family)
     center_usage = _center_usage_for(
         cluster=cluster,
         family=family,
         primary_cluster_id=primary_cluster_id,
+        scenario=scenario,
+        scenario_role=scenario_role,
+    )
+    anchor_strength = _anchor_strength_for_scenario_role(
+        scenario=scenario,
+        scenario_role=scenario_role,
+    )
+    preferred_wall_side = _preferred_wall_side_for_scenario_role(
+        scenario=scenario,
+        scenario_role=scenario_role,
     )
     return {
         "cluster_id": cluster.cluster_id,
         "semantic_role": cluster.semantic_role,
         "role_kind": cluster.role_kind,
         "priority": cluster.priority,
+        "macro_scenario_id": scenario.scenario_id,
+        "scenario_role": scenario_role,
+        "scenario_locked": scenario_role in {"primary", "secondary", "storage"},
         "zone_assignment": zone_assignment,
+        "required_region_ids": [zone_assignment]
+        if scenario_role in {"primary", "secondary", "storage"}
+        else [],
+        "forbidden_region_ids": _forbidden_region_ids_for_scenario_role(
+            scenario=scenario,
+            scenario_role=scenario_role,
+        ),
+        "preferred_wall_side": preferred_wall_side,
+        "anchor_strength": anchor_strength,
         "region_candidates": [
             _region_candidate_to_dict(item) for item in candidates[:3]
         ],
@@ -795,6 +1008,7 @@ def _cluster_zone_assignment(
 def _resolve_complementary_zone_assignments(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     cluster_programs: Sequence[ClusterProgram],
     cluster_zone_plan: Sequence[Mapping[str, object]],
     primary_cluster_id: str | None,
@@ -815,6 +1029,20 @@ def _resolve_complementary_zone_assignments(
     if primary_row is None or secondary_row is None:
         return rows
     if primary.priority != "core" or secondary.priority != "core":
+        return rows
+    if bool(primary_row.get("scenario_locked")) or bool(
+        secondary_row.get("scenario_locked")
+    ):
+        _mark_zone_complement_role(
+            rows,
+            focal_cluster_id=_focal_claim_cluster_id(
+                primary=primary,
+                secondary=secondary,
+                primary_cluster_id=primary_cluster_id,
+            ),
+            primary_cluster_id=primary_cluster_id,
+            secondary_cluster_id=secondary_cluster_id,
+        )
         return rows
     if not _zone_claims_same_logic_class(primary_row, secondary_row):
         _mark_zone_complement_role(
@@ -853,6 +1081,7 @@ def _resolve_complementary_zone_assignments(
     if complement_row is not None:
         zone_assignment = _complementary_zone_for_cluster(
             family=family,
+            scenario=scenario,
             cluster=complement,
         )
         _apply_zone_assignment_to_row(
@@ -918,15 +1147,71 @@ def _focal_claim_cluster_id(
     return primary_cluster_id
 
 
+def _scenario_role_for_cluster(
+    *,
+    cluster: ClusterProgram,
+    primary_cluster_id: str | None,
+    secondary_cluster_id: str | None,
+) -> str:
+    if cluster.cluster_id == primary_cluster_id:
+        return "primary"
+    if cluster.cluster_id == secondary_cluster_id:
+        return "secondary"
+    if cluster.role_kind == "storage":
+        return "storage"
+    return "support"
+
+
+def _anchor_strength_for_scenario_role(
+    *,
+    scenario: MacroScenario,
+    scenario_role: str,
+) -> AnchorStrength:
+    if scenario_role == "primary":
+        return scenario.primary_anchor_strength
+    if scenario_role == "secondary":
+        return scenario.secondary_anchor_strength
+    return scenario.support_anchor_strength
+
+
+def _preferred_wall_side_for_scenario_role(
+    *,
+    scenario: MacroScenario,
+    scenario_role: str,
+) -> str:
+    if scenario_role == "primary":
+        return scenario.primary_wall_side
+    if scenario_role == "secondary":
+        return scenario.secondary_wall_side
+    if scenario_role == "storage":
+        return scenario.storage_wall_side
+    return ""
+
+
+def _forbidden_region_ids_for_scenario_role(
+    *,
+    scenario: MacroScenario,
+    scenario_role: str,
+) -> list[str]:
+    if scenario.center_policy == "open_reserved" and scenario_role != "primary":
+        return ["floating_center_zone", "keep_open_center"]
+    if scenario.center_policy == "open_reserved" and scenario_role == "primary":
+        return ["floating_center_zone"]
+    if scenario.center_policy == "floating_primary" and scenario_role != "primary":
+        return ["floating_center_zone", "keep_open_center"]
+    return []
+
+
 def _complementary_zone_for_cluster(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     cluster: ClusterProgram,
 ) -> str:
     if cluster.role_kind == "work":
         return "daylight_biased_zone"
     if cluster.role_kind == "storage":
-        return "storage_service_edge_zone"
+        return scenario.storage_zone_id
     if cluster.role_kind == "sleep":
         return "quiet_private_deep_zone"
     if family == "daylight_oriented" and cluster.role_kind in {
@@ -935,8 +1220,8 @@ def _complementary_zone_for_cluster(
     }:
         return "daylight_biased_zone"
     if family == "zoned":
-        return "floating_support_zone"
-    return "edge_loading_zone"
+        return scenario.support_zone_id
+    return scenario.support_zone_id
 
 
 def _apply_zone_assignment_to_row(
@@ -984,10 +1269,24 @@ def _mark_zone_complement_role(
 def _preferred_region_for_family(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     cluster: ClusterProgram,
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
 ) -> str:
+    scenario_role = _scenario_role_for_cluster(
+        cluster=cluster,
+        primary_cluster_id=primary_cluster_id,
+        secondary_cluster_id=secondary_cluster_id,
+    )
+    if scenario_role == "primary":
+        return scenario.primary_zone_id
+    if scenario_role == "secondary":
+        return scenario.secondary_zone_id
+    if scenario_role == "storage":
+        return scenario.storage_zone_id
+    if scenario_role == "support" and cluster.role_kind not in {"work", "sleep"}:
+        return scenario.support_zone_id
     if family == "focal_axis":
         if cluster.cluster_id in {primary_cluster_id, secondary_cluster_id}:
             return "primary_focal_wall_zone"
@@ -1075,7 +1374,10 @@ def _topology_policy_for_family(
     }
     policy = dict(policies[family])
     layout_policy = _style_layout_policy(style_policy)
-    if _bias_level(layout_policy.get("center_openness_bias")) >= 3:
+    if (
+        _bias_level(layout_policy.get("center_openness_bias")) >= 3
+        and family != "zoned"
+    ):
         policy["reserve_center_degree"] = "very_high"
         policy["secondary_zone_placement_bias"] = "edge_recede"
     elif _bias_level(layout_policy.get("center_openness_bias")) <= 1:
@@ -1097,6 +1399,7 @@ def _topology_policy_for_family(
 def _macro_constraints_for_concept(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     room_model: Mapping[str, object],
     macro_region_map: Mapping[str, object],
     cluster_zone_plan: Sequence[Mapping[str, object]],
@@ -1166,19 +1469,37 @@ def _macro_constraints_for_concept(
                 "b": secondary_cluster_id,
                 "preference": "focal_face_axis"
                 if family == "focal_axis"
-                else "legible_primary_pair",
+                else scenario.pair_type,
                 "priority": "high",
             }
         )
+    anchor_region_constraints = [
+        {
+            "cluster_id": str(row.get("cluster_id")),
+            "required_region_ids": list(
+                _sequence_or_empty(row.get("required_region_ids"))
+            ),
+            "forbidden_region_ids": list(
+                _sequence_or_empty(row.get("forbidden_region_ids"))
+            ),
+            "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
+            "anchor_strength": str(row.get("anchor_strength") or "medium"),
+            "scenario_role": str(row.get("scenario_role") or "support"),
+        }
+        for row in cluster_zone_plan
+        if isinstance(row, Mapping) and _clean_str(row.get("cluster_id")) is not None
+    ]
     return {
         "keep_open_regions": keep_open_regions,
         "reserved_regions": reserved_regions,
         "protected_topology": _concept_protected_topology(
             protected,
             family=family,
+            scenario=scenario,
         ),
         "cluster_separation_preferences": separation,
         "cluster_alignment_preferences": alignment,
+        "anchor_region_constraints": anchor_region_constraints,
     }
 
 
@@ -1186,6 +1507,7 @@ def _concept_protected_topology(
     protected: Mapping[str, object],
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
 ) -> list[dict[str, object]]:
     zones = [
         dict(zone)
@@ -1204,6 +1526,15 @@ def _concept_protected_topology(
             and zone.get("zone_type") == "center_openness_core"
         ):
             zone["max_overlap_ratio"] = 0.12
+        elif (
+            scenario.allow_primary_center_overlap
+            and zone.get("zone_type") == "center_openness_core"
+        ):
+            zone["priority"] = "medium"
+            zone["enforcement"] = "soft"
+            zone["max_overlap_ratio"] = 0.35
+            zone["applies_to"] = ["support_clusters", "interaction_hulls"]
+            zone["violation_severity"] = "advisory"
     return zones
 
 
@@ -1279,6 +1610,127 @@ def _bounded_variant_family_list(families: Sequence[str]) -> list[str]:
     return out[:MAX_VARIANT_FAMILIES_PER_CLUSTER]
 
 
+def _anchor_region_preferences_by_cluster(
+    *,
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = {}
+    for row in cluster_zone_plan:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        region_candidates = [
+            dict(candidate)
+            for candidate in _sequence_or_empty(row.get("region_candidates"))
+            if isinstance(candidate, Mapping)
+        ]
+        out[cluster_id] = {
+            "zone_assignment": str(row.get("zone_assignment") or ""),
+            "required_region_ids": list(_string_list(row.get("required_region_ids"))),
+            "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
+            "preferred_region_ids": [
+                str(candidate.get("region_id") or "")
+                for candidate in region_candidates
+                if str(candidate.get("region_id") or "")
+            ],
+            "wall_claim": str(row.get("wall_claim") or "none"),
+            "center_usage": str(row.get("center_usage") or "none"),
+            "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
+            "anchor_strength": str(row.get("anchor_strength") or "medium"),
+            "scenario_role": str(row.get("scenario_role") or "support"),
+            "entry_relation": str(row.get("entry_relation") or ""),
+            "daylight_relation": str(row.get("daylight_relation") or ""),
+            "placement_bias": str(row.get("placement_bias") or "balanced"),
+        }
+    return out
+
+
+def _anchor_layout_hints_by_cluster(
+    *,
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = {}
+    for row in cluster_zone_plan:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        preferred_region_ids = [
+            str(candidate.get("region_id") or "")
+            for candidate in _sequence_or_empty(row.get("region_candidates"))
+            if isinstance(candidate, Mapping) and str(candidate.get("region_id") or "")
+        ]
+        out[cluster_id] = {
+            "zone_assignment": str(row.get("zone_assignment") or ""),
+            "required_region_ids": list(_string_list(row.get("required_region_ids"))),
+            "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
+            "preferred_region_ids": preferred_region_ids,
+            "role_kind": str(row.get("role_kind") or ""),
+            "wall_claim": str(row.get("wall_claim") or "none"),
+            "center_usage": str(row.get("center_usage") or "none"),
+            "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
+            "anchor_strength": str(row.get("anchor_strength") or "medium"),
+            "scenario_role": str(row.get("scenario_role") or "support"),
+            "placement_bias": str(row.get("placement_bias") or "balanced"),
+        }
+    return out
+
+
+def _anchor_pair_contracts_for_concept(
+    *,
+    primary_pair_contracts: Sequence[Mapping[str, object]],
+    primary_cluster_id: str | None,
+    secondary_cluster_id: str | None,
+) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for row in primary_pair_contracts:
+        if not isinstance(row, Mapping):
+            continue
+        out.append(dict(row))
+    if not out and primary_cluster_id and secondary_cluster_id:
+        out.append(
+            {
+                "pair_type": "face_each_other",
+                "cluster_a": primary_cluster_id,
+                "cluster_b": secondary_cluster_id,
+                "strength": "high",
+                "required": True,
+            }
+        )
+    return out
+
+
+def _object_solver_policy_for_concept(
+    *,
+    family: ConceptFamily,
+    cluster_programs: Sequence[ClusterProgram],
+) -> dict[str, object]:
+    protected_by_cluster: dict[str, list[str]] = {}
+    droppable_by_cluster: dict[str, list[str]] = {}
+    placement_order_by_cluster: dict[str, list[str]] = {}
+    for cluster in cluster_programs:
+        placement_order_by_cluster[cluster.cluster_id] = list(cluster.object_ids)
+        if cluster.dominant_anchor_object_id:
+            protected_by_cluster.setdefault(cluster.cluster_id, []).append(
+                cluster.dominant_anchor_object_id
+            )
+        optional_ids = [
+            object_id
+            for object_id in cluster.object_ids
+            if object_id not in protected_by_cluster.get(cluster.cluster_id, [])
+        ]
+        droppable_by_cluster[cluster.cluster_id] = optional_ids
+    return {
+        "placement_mode": "anchor_first_object_level",
+        "anchor_stage_first": True,
+        "family": family,
+        "support_stage_enabled": True,
+        "micro_refine_inside_solver": True,
+        "placement_order_by_cluster": placement_order_by_cluster,
+        "protected_ids_by_cluster": protected_by_cluster,
+        "droppable_ids_by_cluster": droppable_by_cluster,
+    }
+
+
 def _critical_object_orientations_for_concept(
     *,
     family: ConceptFamily,
@@ -1293,83 +1745,22 @@ def _critical_object_orientations_for_concept(
         if _clean_str(row.get("cluster_id")) is not None
     }
     out: list[dict[str, object]] = []
-    seen: set[tuple[str, str]] = set()
     for cluster in cluster_programs:
         row = rows_by_cluster.get(cluster.cluster_id)
         if row is None:
             continue
         object_id = _critical_object_id(cluster)
-        if object_id is not None and _object_orientation_is_critical(cluster, row):
-            target_cluster_id = _orientation_target_cluster_id(
-                cluster_id=cluster.cluster_id,
-                primary_cluster_id=primary_cluster_id,
-                secondary_cluster_id=secondary_cluster_id,
-            )
-            intents = _critical_object_orientation_intents(
-                family=family,
-                cluster=cluster,
-                row=row,
-                target_cluster_id=target_cluster_id,
-            )
-            if intents:
-                item: dict[str, object] = {
-                    "cluster_id": cluster.cluster_id,
-                    "object_id": object_id,
-                    "intents": intents,
-                    "priority": "high"
-                    if cluster.cluster_id in {primary_cluster_id, secondary_cluster_id}
-                    else "medium",
-                    "reason": "Critical object orientation emitted by macro concept.",
-                }
-                if target_cluster_id is not None and "face_cluster" in intents:
-                    item["target_cluster_id"] = target_cluster_id
-                else:
-                    item["target_region"] = str(row.get("zone_assignment") or "")
-                out.append(item)
-                seen.add((cluster.cluster_id, object_id))
-
-        for support_item in _support_orientation_items_for_cluster(
+        if object_id is None or not _object_orientation_is_critical(cluster, row):
+            continue
+        target_cluster_id = _orientation_target_cluster_id(
+            cluster_id=cluster.cluster_id,
+            primary_cluster_id=primary_cluster_id,
+            secondary_cluster_id=secondary_cluster_id,
+        )
+        intents = _critical_object_orientation_intents(
             family=family,
             cluster=cluster,
             row=row,
-            primary_cluster_id=primary_cluster_id,
-            secondary_cluster_id=secondary_cluster_id,
-        ):
-            key = (
-                str(support_item.get("cluster_id") or ""),
-                str(support_item.get("object_id") or ""),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(support_item)
-    return out
-
-
-def _support_orientation_items_for_cluster(
-    *,
-    family: ConceptFamily,
-    cluster: ClusterProgram,
-    row: Mapping[str, object],
-    primary_cluster_id: str | None,
-    secondary_cluster_id: str | None,
-) -> list[dict[str, object]]:
-    if not cluster.semantic_placements:
-        return []
-    target_cluster_id = _orientation_target_cluster_id(
-        cluster_id=cluster.cluster_id,
-        primary_cluster_id=primary_cluster_id,
-        secondary_cluster_id=secondary_cluster_id,
-    )
-    out: list[dict[str, object]] = []
-    for placement in cluster.semantic_placements:
-        object_id = _clean_str(placement.get("id"))
-        if object_id is None or object_id not in cluster.object_ids:
-            continue
-        intents = _support_role_intents_for_placement(
-            family=family,
-            cluster=cluster,
-            placement=placement,
             target_cluster_id=target_cluster_id,
         )
         if not intents:
@@ -1378,61 +1769,17 @@ def _support_orientation_items_for_cluster(
             "cluster_id": cluster.cluster_id,
             "object_id": object_id,
             "intents": intents,
-            "priority": "high" if cluster.priority == "core" else "medium",
-            "reason": "Support-object orientation emitted from semantic placement contract.",
+            "priority": "high"
+            if cluster.cluster_id in {primary_cluster_id, secondary_cluster_id}
+            else "medium",
+            "reason": "Critical object orientation emitted by macro concept.",
         }
-        relative_to = _clean_str(placement.get("relative_to"))
-        if relative_to is not None and relative_to in cluster.object_ids:
-            item["target_object_id"] = relative_to
-            item["target_object_cluster_id"] = cluster.cluster_id
-        if target_cluster_id is not None and any(
-            intent in {"face_cluster", "same_view_side_as_primary_pair"}
-            for intent in intents
-        ):
+        if target_cluster_id is not None and "face_cluster" in intents:
             item["target_cluster_id"] = target_cluster_id
         else:
             item["target_region"] = str(row.get("zone_assignment") or "")
         out.append(item)
     return out
-
-
-def _support_role_intents_for_placement(
-    *,
-    family: ConceptFamily,
-    cluster: ClusterProgram,
-    placement: Mapping[str, object],
-    target_cluster_id: str | None,
-) -> list[str]:
-    support_role = str(placement.get("support_role") or "").strip().lower()
-    band_intent = str(placement.get("band_intent") or "").strip().lower()
-    intents: list[str] = []
-    if support_role == "frontal_support" or band_intent == "front_band":
-        intents.extend(
-            [
-                "in_front_of_anchor",
-                "align_with_anchor_axis",
-                "same_view_side_as_primary_pair",
-                "preserve_front_access",
-            ]
-        )
-    elif support_role == "secondary_seat" or band_intent == "flank_band":
-        intents.extend(
-            [
-                "flank_anchor",
-                "face_cluster",
-                "not_behind_anchor_view",
-                "preserve_front_access",
-            ]
-        )
-    elif support_role == "side_support" or band_intent == "beside_base":
-        intents.append("beside_secondary_seat")
-    elif support_role == "wall_support" or band_intent == "wall_band":
-        intents.extend(["back_to_wall", "preserve_front_access"])
-
-    if target_cluster_id is not None and cluster.role_kind == "social_anchor":
-        if family in {"focal_axis", "zoned", "daylight_oriented", "open_center"}:
-            intents.append("face_cluster")
-    return _uniq(intents)
 
 
 def _critical_object_id(cluster: ClusterProgram) -> str | None:
@@ -1489,6 +1836,7 @@ def _critical_object_orientation_intents(
 def _primary_pair_contracts_for_concept(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     cluster_zone_plan: Sequence[Mapping[str, object]],
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
@@ -1513,6 +1861,7 @@ def _primary_pair_contracts_for_concept(
     )
     pair_type = _primary_pair_type_for_family(
         family=family,
+        scenario=scenario,
         primary_row=primary_row,
         secondary_row=secondary_row,
     )
@@ -1541,9 +1890,12 @@ def _primary_pair_contracts_for_concept(
 def _primary_pair_type_for_family(
     *,
     family: ConceptFamily,
+    scenario: MacroScenario,
     primary_row: Mapping[str, object],
     secondary_row: Mapping[str, object],
 ) -> str:
+    if scenario.pair_type:
+        return scenario.pair_type
     if family == "zoned":
         return "separate_but_legible"
     if family == "edge_weighted":
@@ -1576,20 +1928,6 @@ def _concept_readiness_requirements(
     ]
     if family in {"open_center", "edge_weighted"}:
         diagnostics.append("center_openness_preserved")
-    required_pairs = {
-        str(contract.get("pair_type") or "")
-        for contract in primary_pair_contracts
-        if bool(contract.get("required"))
-    }
-    if required_pairs.intersection(
-        {"face_each_other", "supports_use_axis", "ring_around_anchor"}
-    ):
-        diagnostics.extend(
-            [
-                "primary_pair_axis_aligned",
-                "anchor_front_matches_pair_direction",
-            ]
-        )
     return {
         "required_publishable_diagnostics": diagnostics,
         "required_pair_contracts": required_pair_contracts,
@@ -1767,6 +2105,21 @@ def _concept_to_solver_plan(
         "cluster_affinities": _dedupe_by_cluster(affinities),
         "cluster_orientations": _dedupe_by_cluster(orientations),
         "object_orientations": _concept_object_orientations_for_solver(concept),
+        "anchor_region_preferences_by_cluster": dict(
+            _mapping_or_empty(concept.get("anchor_region_preferences_by_cluster"))
+        ),
+        "anchor_layout_hints_by_cluster": _anchor_layout_hints_by_cluster(
+            cluster_zone_plan=cluster_zone_plan
+        ),
+        "anchor_pair_contracts": list(
+            _sequence_or_empty(concept.get("anchor_pair_contracts"))
+        ),
+        "object_solver_policy": dict(
+            _mapping_or_empty(concept.get("object_solver_policy"))
+        ),
+        "macro_region_map": dict(
+            _mapping_or_empty(concept.get("macro_region_map_snapshot"))
+        ),
         "allowed_variant_families_by_cluster": dict(
             _mapping_or_empty(concept.get("allowed_variant_families_by_cluster"))
         ),
@@ -2211,7 +2564,11 @@ def _center_usage_for(
     cluster: ClusterProgram,
     family: ConceptFamily,
     primary_cluster_id: str | None,
+    scenario: MacroScenario,
+    scenario_role: str,
 ) -> str:
+    if scenario.center_policy == "floating_primary" and scenario_role == "primary":
+        return "primary"
     if family in {"open_center", "edge_weighted"}:
         return "open_reserved"
     if family == "zoned" and cluster.cluster_id == primary_cluster_id:
@@ -2331,12 +2688,23 @@ def _diversity_signature(
     cluster_zone_plan: Sequence[Mapping[str, object]],
     topology_policy: Mapping[str, object],
 ) -> str:
+    scenario_id = next(
+        (
+            str(row.get("macro_scenario_id") or "")
+            for row in cluster_zone_plan
+            if str(row.get("macro_scenario_id") or "")
+        ),
+        "",
+    )
     assignments = ",".join(
-        f"{row.get('cluster_id')}:{row.get('zone_assignment')}:{row.get('center_usage')}:{row.get('wall_claim')}"
+        f"{row.get('cluster_id')}:{row.get('zone_assignment')}:"
+        f"{row.get('preferred_wall_side')}:{row.get('center_usage')}:"
+        f"{row.get('wall_claim')}"
         for row in cluster_zone_plan
     )
     return (
-        f"{family}|center={topology_policy.get('reserve_center_degree')}|"
+        f"{family}|scenario={scenario_id}|"
+        f"center={topology_policy.get('reserve_center_degree')}|"
         f"wall={topology_policy.get('wall_loading_bias')}|{assignments}"
     )
 

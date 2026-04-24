@@ -76,6 +76,7 @@ export type Placement = {
     method: string;
     target_instance_id?: string | null;
   } | null;
+  collision_layer?: string | null;
 };
 
 export type TopView = {
