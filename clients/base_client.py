@@ -21,6 +21,7 @@ class LLMClientProtocol(Protocol):
         *,
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
+        fallback_model_names: Sequence[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,

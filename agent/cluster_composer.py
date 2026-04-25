@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,7 @@ from layout.orientation_contract import (
 from layout.orientation_contract import (
     vec_to_side as _vec_to_side_contract,
 )
+from layout.variant_family import canonical_semantic_variant_family
 from prompt.cluster_composer import CLUSTER_COMPOSER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
@@ -471,6 +473,9 @@ def _generate_cluster_variant_bundle_payload(
     )
     primary_output["variant_bundle"] = kept_variants
     primary_output["canonical_variant_id"] = primary.get("variant_id")
+    primary_output["canonical_variant_family"] = primary.get(
+        "canonical_variant_family"
+    ) or canonical_semantic_variant_family(primary.get("variant_family"))
     primary_output["variant_summary"] = _build_variant_summary(kept_variants)
     primary_output["family_coverage"] = _family_coverage(kept_variants, families)
     primary_output["source_type"] = primary.get("source_type")
@@ -2218,6 +2223,7 @@ def _build_cluster_variant_payload(
     return {
         "variant_id": "",
         "variant_family": candidate.family,
+        "canonical_variant_family": canonical_semantic_variant_family(candidate.family),
         "source_type": candidate.source_type,
         "family_fidelity": _clamp01(contract.family_fidelity),
         "semantic_confidence": _clamp01(contract.semantic_confidence),
@@ -6988,6 +6994,7 @@ def _build_cluster_output_from_placements(
 ) -> dict[str, Any]:
     cluster_id = str(cluster.get("cluster_id") or "")
     grid_mm = _extract_grid_mm(cluster)
+    canonical_variant_family = canonical_semantic_variant_family(variant_family)
 
     canonical_placements = _canonicalize_local_placements(placements)
     spec_by_id = {
@@ -7067,6 +7074,7 @@ def _build_cluster_output_from_placements(
         "interaction_hull_polygon_mm": interaction_hull_polygon,
         "interaction_hull_polygons_mm": interaction_hull_polygons,
         "variant_family": variant_family,
+        "canonical_variant_family": canonical_variant_family,
         "family_fidelity": family_fidelity,
         "orientation_meta": orientation_meta,
         "notes": list(notes or []),
@@ -7915,6 +7923,7 @@ def _sanitize_cluster_output_payload(
         "orientation_meta",
         "variant_bundle",
         "canonical_variant_id",
+        "canonical_variant_family",
         "variant_summary",
         "family_coverage",
         "tight_hull_polygon_mm",

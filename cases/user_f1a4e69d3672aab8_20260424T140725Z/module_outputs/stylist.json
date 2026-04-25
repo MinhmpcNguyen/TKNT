@@ -1,0 +1,540 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 6000,
+        "y": 0
+      },
+      {
+        "x": 6000,
+        "y": 3050
+      },
+      {
+        "x": 3500,
+        "y": 3000
+      },
+      {
+        "x": 3500,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 2000,
+              "y": 0
+            },
+            {
+              "x": 4000,
+              "y": 0
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#F6F2EC",
+      "floor_color_hex": "#C6A47A",
+      "ceiling_color_hex": "#FCFAF6"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#8D8C84"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#E1EAF0"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "bed",
+      "object_type": "bed",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1960,
+          "y": 0
+        },
+        {
+          "x": 1960,
+          "y": 1690
+        },
+        {
+          "x": 0,
+          "y": 1690
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 1960,
+        "max_y": 1690
+      },
+      "color_hex": "#DDD6CB",
+      "material": "fabric",
+      "place_on": null
+    },
+    {
+      "instance_id": "wardrobe",
+      "object_type": "wardrobe",
+      "source": "existing",
+      "cluster_id": "storage_core",
+      "polygon_ccw": [
+        {
+          "x": 600,
+          "y": 3400
+        },
+        {
+          "x": 2350,
+          "y": 3400
+        },
+        {
+          "x": 2350,
+          "y": 3910
+        },
+        {
+          "x": 600,
+          "y": 3910
+        }
+      ],
+      "bbox": {
+        "min_x": 600,
+        "min_y": 3400,
+        "max_x": 2350,
+        "max_y": 3910
+      },
+      "color_hex": "#C2B8AA",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "nightstand",
+      "object_type": "nightstand",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 2000,
+          "y": 100
+        },
+        {
+          "x": 2430,
+          "y": 100
+        },
+        {
+          "x": 2430,
+          "y": 450
+        },
+        {
+          "x": 2000,
+          "y": 450
+        }
+      ],
+      "bbox": {
+        "min_x": 2000,
+        "min_y": 100,
+        "max_x": 2430,
+        "max_y": 450
+      },
+      "color_hex": "#C2B8AA",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "bench",
+      "object_type": "bench",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 100,
+          "y": 1850
+        },
+        {
+          "x": 500,
+          "y": 1850
+        },
+        {
+          "x": 500,
+          "y": 2780
+        },
+        {
+          "x": 100,
+          "y": 2780
+        }
+      ],
+      "bbox": {
+        "min_x": 100,
+        "min_y": 1850,
+        "max_x": 500,
+        "max_y": 2780
+      },
+      "color_hex": "#DDD6CB",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "bookshelf",
+      "object_type": "bookshelf",
+      "source": "existing",
+      "cluster_id": "storage_core",
+      "polygon_ccw": [
+        {
+          "x": 100,
+          "y": 3150
+        },
+        {
+          "x": 350,
+          "y": 3150
+        },
+        {
+          "x": 350,
+          "y": 3780
+        },
+        {
+          "x": 100,
+          "y": 3780
+        }
+      ],
+      "bbox": {
+        "min_x": 100,
+        "min_y": 3150,
+        "max_x": 350,
+        "max_y": 3780
+      },
+      "color_hex": "#55514C",
+      "material": "wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "rug_001",
+      "object_type": "rug",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2260,
+          "y": 0
+        },
+        {
+          "x": 2260,
+          "y": 2520
+        },
+        {
+          "x": 0,
+          "y": 2520
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 2260,
+        "max_y": 2520
+      },
+      "color_hex": "#BCA08A",
+      "material": "fabric",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "floor"
+      }
+    },
+    {
+      "instance_id": "throw_blanket_001",
+      "object_type": "throw_blanket",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 340,
+          "y": 40
+        },
+        {
+          "x": 1920,
+          "y": 40
+        },
+        {
+          "x": 1920,
+          "y": 1650
+        },
+        {
+          "x": 340,
+          "y": 1650
+        }
+      ],
+      "bbox": {
+        "min_x": 340,
+        "min_y": 40,
+        "max_x": 1920,
+        "max_y": 1650
+      },
+      "color_hex": "#BCA08A",
+      "material": "fabric",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "bedside_lamp_001",
+      "object_type": "bedside_lamp",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 2040,
+          "y": 140
+        },
+        {
+          "x": 2320,
+          "y": 140
+        },
+        {
+          "x": 2320,
+          "y": 340
+        },
+        {
+          "x": 2040,
+          "y": 340
+        }
+      ],
+      "bbox": {
+        "min_x": 2040,
+        "min_y": 140,
+        "max_x": 2320,
+        "max_y": 340
+      },
+      "color_hex": "#76736E",
+      "material": "fabric",
+      "place_on": {
+        "target_instance_id": "nightstand",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "wall_art_001",
+      "object_type": "wall_art",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 770,
+          "y": 20
+        },
+        {
+          "x": 1190,
+          "y": 20
+        },
+        {
+          "x": 1190,
+          "y": 460
+        },
+        {
+          "x": 770,
+          "y": 460
+        }
+      ],
+      "bbox": {
+        "min_x": 770,
+        "min_y": 20,
+        "max_x": 1190,
+        "max_y": 460
+      },
+      "color_hex": "#CFCAC2",
+      "material": "wood",
+      "place_on": {
+        "target_instance_id": "wall",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 890,
+          "y": 485
+        },
+        {
+          "x": 1070,
+          "y": 485
+        },
+        {
+          "x": 1070,
+          "y": 1205
+        },
+        {
+          "x": 890,
+          "y": 1205
+        }
+      ],
+      "bbox": {
+        "min_x": 890,
+        "min_y": 485,
+        "max_x": 1070,
+        "max_y": 1205
+      },
+      "color_hex": "#CFCAC2",
+      "material": "wood",
+      "place_on": {
+        "target_instance_id": "ceiling",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "final_style_plan": {
+    "style_name": "minimal",
+    "layout_policy_trace": {
+      "style_name": "minimal",
+      "style_tags": [
+        "minimal",
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "low_to_balanced",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "balanced",
+        "symmetry_bias": "medium",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "low_to_medium",
+        "material_weight_bias": "light",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "support_optional": {
+          "allow_only_if_space_surplus": true
+        },
+        "decor": {
+          "max_items_per_cluster": 1
+        },
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 0.82,
+        "optional_utility_bias": -0.45,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": false,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": [
+        "Bedroom correction raised restfulness and clutter control."
+      ]
+    },
+    "palette": {
+      "walls": "warm_off_white",
+      "floor": "light_oak",
+      "primary_wood": "natural_oak",
+      "metal": "matte_black_soft",
+      "textiles": "beige_sand_gray",
+      "walls_hex": "#F6F2EC",
+      "floor_hex": "#C6A47A",
+      "ceiling_hex": "#FCFAF6"
+    },
+    "surface_plan": {
+      "walls": {
+        "finish": "paint",
+        "color_hex": "#F6F2EC"
+      },
+      "floor": {
+        "finish": "floor_finish",
+        "color_hex": "#C6A47A"
+      },
+      "ceiling": {
+        "finish": "ceiling_paint",
+        "color_hex": "#FCFAF6"
+      }
+    },
+    "object_finish_plan": [],
+    "decor_plan": [
+      {
+        "type": "rug",
+        "placement_zone": "sleep_core",
+        "style_role": "quiet_minimal_accent"
+      }
+    ],
+    "lighting_mood": "soft_daylit_calm",
+    "rules": {
+      "layout_locked": true,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    }
+  },
+  "notes": [
+    "Accessory placement used deterministic support rules and fixed 50 mm spacing."
+  ],
+  "missing": []
+}

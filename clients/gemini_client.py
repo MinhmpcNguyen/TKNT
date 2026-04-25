@@ -70,6 +70,7 @@ class GeminiClient:
         *,
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
+        fallback_model_names: Sequence[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -83,6 +84,7 @@ class GeminiClient:
             return self._raw_tool_chat_completion(
                 messages,
                 model_name=resolved_model_name,
+                fallback_model_names=fallback_model_names,
                 temperature=temperature,
                 top_p=top_p,
                 max_tokens=max_tokens,
@@ -95,6 +97,7 @@ class GeminiClient:
         data = self._post_chat_payload_with_failover(
             messages,
             model_name=resolved_model_name,
+            fallback_model_names=fallback_model_names,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
@@ -203,11 +206,11 @@ class GeminiClient:
         self,
         messages: Sequence[ChatMessage],
         *,
-        temperature: float | None,
-        top_p: float | None,
-        max_tokens: int | None,
-        thinking_level: ThinkingLevel | None,
-        response_mime_type: str | None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        max_tokens: int | None = None,
+        thinking_level: ThinkingLevel | None = None,
+        response_mime_type: str | None = None,
     ) -> dict[str, object]:
         contents = self._to_gemini_contents(messages)
         payload: dict[str, object] = {"contents": contents}
@@ -277,13 +280,17 @@ class GeminiClient:
         messages: Sequence[ChatMessage],
         *,
         model_name: str,
+        fallback_model_names: Sequence[str] | None,
         temperature: float | None,
         top_p: float | None,
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
     ) -> dict[str, object]:
-        candidate_models = self._fallback_model_sequence(model_name)
+        candidate_models = self._fallback_model_sequence(
+            model_name,
+            fallback_model_names=fallback_model_names,
+        )
         last_retryable_error: httpx.HTTPStatusError | None = None
 
         for index, candidate_model_name in enumerate(candidate_models):
@@ -314,11 +321,25 @@ class GeminiClient:
         raise RuntimeError("Gemini fallback sequence produced no model candidates.")
 
     @classmethod
-    def _fallback_model_sequence(cls, requested_model_name: str) -> list[str]:
+    def _fallback_model_sequence(
+        cls,
+        requested_model_name: str,
+        *,
+        fallback_model_names: Sequence[str] | None = None,
+    ) -> list[str]:
         normalized_requested = cls._normalize_model_name(requested_model_name)
         ordered_candidates = [requested_model_name]
-        for candidate_name in cls._retryable_unavailable_fallback_pool:
+        fallback_pool = (
+            list(fallback_model_names)
+            if fallback_model_names is not None
+            else list(cls._retryable_unavailable_fallback_pool)
+        )
+        for candidate_name in fallback_pool:
             if cls._normalize_model_name(candidate_name) == normalized_requested:
+                continue
+            if cls._normalize_model_name(candidate_name) in {
+                cls._normalize_model_name(item) for item in ordered_candidates
+            }:
                 continue
             ordered_candidates.append(candidate_name)
         return ordered_candidates
@@ -463,6 +484,7 @@ class GeminiClient:
         messages: Sequence[ChatMessage],
         *,
         model_name: str,
+        fallback_model_names: Sequence[str] | None,
         temperature: float | None,
         top_p: float | None,
         max_tokens: int | None,
@@ -479,6 +501,7 @@ class GeminiClient:
         data = self._post_chat_payload_with_failover(
             [{"role": "user", "content": prompt}],
             model_name=model_name,
+            fallback_model_names=fallback_model_names,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,

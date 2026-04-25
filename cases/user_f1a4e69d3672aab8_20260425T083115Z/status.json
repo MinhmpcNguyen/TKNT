@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260425T083115Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-25T08:34:40.704094+00:00",
+  "error": "cannot access free variable 'cluster_ids' where it is not associated with a value in enclosing scope",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-25T08:31:15.680460+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-25T08:32:51.205884+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "cannot access free variable 'cluster_ids' where it is not associated with a value in enclosing scope",
+      "updated_at_utc": "2026-04-25T08:34:40.704094+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "cannot access free variable 'cluster_ids' where it is not associated with a value in enclosing scope"
+    }
+  ]
+}

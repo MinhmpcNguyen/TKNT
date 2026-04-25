@@ -64,6 +64,7 @@ class MistralClient:
         *,
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
+        fallback_model_names: Sequence[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -74,6 +75,7 @@ class MistralClient:
     ) -> object:
         _ = thinking_level
         _ = response_mime_type
+        _ = fallback_model_names
         resolved_model_name = model_name or self.get_model_name(model_key)
         if tools is not None:
             return self._raw_tool_chat_completion(

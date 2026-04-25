@@ -58,6 +58,7 @@ class OpenAIClient:
         *,
         model_key: LLMModelKey = "primary",
         model_name: str | None = None,
+        fallback_model_names: Sequence[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -68,6 +69,7 @@ class OpenAIClient:
     ) -> object:
         resolved_model_name = model_name or self.get_model_name(model_key)
         message_list = list(messages)
+        _ = fallback_model_names
         _ = thinking_level
         _ = response_mime_type
 

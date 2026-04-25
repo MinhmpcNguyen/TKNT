@@ -253,14 +253,12 @@
             "choose_exactly_one_from_if_kept": [],
             "choose_at_least_one_from": [],
             "optional": [
-              "nightstand",
-              "bench"
+              "nightstand"
             ],
             "optional_limits": {
               "global": null,
               "by_object": {
-                "nightstand": 2,
-                "bench": 1
+                "nightstand": 2
               }
             }
           },
@@ -283,7 +281,6 @@
             ],
             "drop_first": [
               "nightstand",
-              "bench"
             ]
           }
         },

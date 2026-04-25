@@ -41,6 +41,14 @@ from pathlib import Path
 from typing import Any
 
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from layout.variant_family import FALLBACK_GENERIC_VARIANT_FAMILY
+from layout.variant_family import GENERIC_VARIANT_FAMILIES
+from layout.variant_family import ROLE_VARIANT_FAMILY_ALLOWLISTS
+from layout.variant_family import (
+    SEMANTIC_VARIANT_FAMILIES as CORE_SEMANTIC_VARIANT_FAMILIES,
+)
+from layout.variant_family import SLEEP_VARIANT_FAMILIES
+from layout.variant_family import normalize_variant_family
 
 try:
     from ortools.sat.python import cp_model
@@ -107,114 +115,9 @@ PUBLISHABLE_BLOCKING_QUALITY_REASONS = frozenset(
     }
 )
 
-GENERIC_VARIANT_FAMILIES = frozenset(
-    {
-        "base",
-        "mirror_x",
-        "mirror_y",
-        "mirror_xy",
-        "front_flip",
-        "front_flip_mirror_x",
-        "front_flip_mirror_y",
-        "composer",
-        "variant",
-    }
+SEMANTIC_VARIANT_FAMILIES = CORE_SEMANTIC_VARIANT_FAMILIES | frozenset(
+    {FALLBACK_GENERIC_VARIANT_FAMILY}
 )
-
-SEMANTIC_VARIANT_FAMILIES = frozenset(
-    {
-        "open_center",
-        "perimeter_facing",
-        "conversation_facing",
-        "media_facing",
-        "wall_backed_focal",
-        "focal_media",
-        "focal_axis",
-        "focal_wall",
-        "window_oriented",
-        "daylight_work",
-        "work_core",
-        "workflow",
-        "storage_wall",
-        "edge_storage",
-        "perimeter_storage",
-        "support_edge",
-        "fallback_generic",
-    }
-)
-
-ROLE_VARIANT_FAMILY_ALLOWLISTS = {
-    "social_anchor": frozenset(
-        {
-            "open_center",
-            "perimeter_facing",
-            "conversation_facing",
-            "social_anchor",
-            "social",
-            "inward_facing",
-        }
-    ),
-    "lounge": frozenset(
-        {
-            "open_center",
-            "perimeter_facing",
-            "conversation_facing",
-            "social_anchor",
-            "social",
-            "inward_facing",
-        }
-    ),
-    "media": frozenset(
-        {
-            "media_facing",
-            "wall_backed_focal",
-            "focal_media",
-            "focal_axis",
-            "focal_wall",
-            "media",
-        }
-    ),
-    "focal": frozenset(
-        {
-            "media_facing",
-            "wall_backed_focal",
-            "focal_media",
-            "focal_axis",
-            "focal_wall",
-            "media",
-        }
-    ),
-    "work": frozenset(
-        {
-            "daylight_work",
-            "work_core",
-            "window_oriented",
-            "workflow",
-            "workstation",
-            "desk",
-        }
-    ),
-    "workflow": frozenset(
-        {
-            "daylight_work",
-            "work_core",
-            "window_oriented",
-            "workflow",
-            "workstation",
-            "desk",
-        }
-    ),
-    "storage": frozenset(
-        {
-            "storage_wall",
-            "wall_storage",
-            "edge_storage",
-            "perimeter_storage",
-            "storage",
-            "edge_weighted",
-        }
-    ),
-}
 
 STRICT_ROLE_KINDS = frozenset({"focal", "media", "work", "workflow"})
 
@@ -660,10 +563,23 @@ def _cluster_role_kind(
             row.get("priority"),
         )
     ).lower()
+    token_parts = {
+        part
+        for value in (
+            cluster_id,
+            row.get("semantic_role"),
+            row.get("zone_assignment"),
+            row.get("priority"),
+        )
+        for part in _normalized_policy_token(value).split("_")
+        if part
+    }
     if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
         return "social_anchor"
     if any(token in tokens for token in ("tv", "media", "screen", "fireplace")):
         return "media"
+    if {"sleep", "bed", "headboard"} & token_parts:
+        return "sleep"
     if any(token in tokens for token in ("desk", "work", "office", "study")):
         return "work"
     if any(token in tokens for token in ("storage", "cabinet", "shelf", "wardrobe")):
@@ -740,12 +656,12 @@ def _explicit_allowed_variant_families_by_cluster(
             else:
                 values = raw_value
             if isinstance(values, str):
-                families = {_normalized_policy_token(values)}
+                families = {normalize_variant_family(values)}
             elif isinstance(values, Sequence):
                 families = {
-                    _normalized_policy_token(value)
+                    normalize_variant_family(value)
                     for value in values
-                    if _normalized_policy_token(value)
+                    if normalize_variant_family(value)
                 }
             else:
                 families = set()
@@ -799,7 +715,7 @@ def _variant_family_compatibility_score(
 ) -> float:
     concept = _normalized_policy_token(concept_family)
     role = _normalized_policy_token(role_kind)
-    family = _normalized_policy_token(variant_family)
+    family = normalize_variant_family(variant_family)
     if family == "fallback_generic":
         return -1.2 if role in {"social_anchor", "media", "focal", "work"} else -0.7
     if family in GENERIC_VARIANT_FAMILIES:
@@ -845,16 +761,32 @@ def _variant_family_compatibility_score(
             "window_oriented",
         }:
             score += 0.95
+        elif role == "sleep" and family == "bed_plus_window_side_bench":
+            score += 0.95
+        elif role == "sleep" and family in {
+            "headboard_wall_balanced",
+            "headboard_wall_single_side",
+        }:
+            score += 0.35
         elif family == "window_oriented":
             score += 0.35
     elif concept == "edge_weighted":
         if family in {"storage_wall", "edge_storage", "perimeter_storage"}:
             score += 0.65
+        elif role == "sleep" and family == "bed_plus_storage_buffer":
+            score += 0.8
+        elif role == "sleep" and family in {
+            "headboard_wall_balanced",
+            "headboard_wall_single_side",
+        }:
+            score += 0.3
         elif family in {"open_center", "conversation_facing"}:
             score -= 0.25
     elif concept == "zoned":
         if role_allowed and family in role_allowed:
             score += 0.35
+        if role == "sleep" and family in SLEEP_VARIANT_FAMILIES:
+            score += 0.2
     return max(-1.5, min(1.5, score))
 
 
@@ -865,7 +797,7 @@ def _variant_family_allowed_for_cluster(
     variant_family: str,
     semantic_families_available: bool,
 ) -> bool:
-    family = _normalized_policy_token(variant_family)
+    family = normalize_variant_family(variant_family)
     if not family:
         return True
     if family == "fallback_generic":
@@ -898,7 +830,7 @@ def _filter_candidates_by_concept_variant_policy(
     out: dict[str, list[Candidate]] = {}
     for cluster_id, candidates in candidates_by_cluster.items():
         semantic_families_available = any(
-            _normalized_policy_token(candidate.variant_family)
+            normalize_variant_family(candidate.variant_family)
             in SEMANTIC_VARIANT_FAMILIES
             for candidate in candidates
         )
@@ -927,7 +859,7 @@ def _filter_variant_bundle_rows_for_concept(
     if not variant_rows:
         return rows
     semantic_families_available = any(
-        _normalized_policy_token(row.get("variant_family")) in SEMANTIC_VARIANT_FAMILIES
+        normalize_variant_family(row.get("variant_family")) in SEMANTIC_VARIANT_FAMILIES
         for row in variant_rows
     )
     filtered = [
@@ -2899,7 +2831,7 @@ def _expand_problem_clusters(
                 v for v in (row.get("variants") or []) if isinstance(v, Mapping)
             ]
             semantic_families_available = any(
-                _normalized_policy_token(v.get("family")) in SEMANTIC_VARIANT_FAMILIES
+                normalize_variant_family(v.get("family")) in SEMANTIC_VARIANT_FAMILIES
                 for v in raw_variants
             )
             vids = [
@@ -4573,7 +4505,7 @@ def _cluster_payload_from_variant_bundle(
         "local_placements": deepcopy(first_variant.get("local_placements") or []),
         "cluster_footprint": {
             "type": "union_of_rects",
-            "rects": [],
+            "rects": rects,
             "local_bbox": {
                 "min_x": min(xs),
                 "min_y": min(ys),

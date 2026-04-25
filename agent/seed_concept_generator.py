@@ -5,6 +5,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from layout.variant_family import SLEEP_VARIANT_FAMILIES
+
 logger = logging.getLogger(__name__)
 
 ConceptFamily = Literal[
@@ -1583,6 +1585,14 @@ def _allowed_variant_families_for_row(
         if wall_claim in {"strong", "medium"}:
             families.append("storage_wall")
         families.extend(["edge_storage", "perimeter_storage", "edge_weighted"])
+    elif role_kind == "sleep":
+        families.extend(
+            _sleep_variant_families_for_row(
+                family=family,
+                zone_assignment=zone_assignment,
+                wall_claim=wall_claim,
+            )
+        )
     else:
         if "daylight" in zone_assignment:
             families.append("window_oriented")
@@ -1590,14 +1600,70 @@ def _allowed_variant_families_for_row(
             families.append("support_edge")
         families.extend(["base", "perimeter_facing"])
 
-    if family == "open_center" and role_kind not in {"media", "focal", "storage"}:
+    if family == "open_center" and role_kind not in {
+        "media",
+        "focal",
+        "storage",
+        "sleep",
+    }:
         families.insert(0, "open_center")
     elif family == "edge_weighted" and role_kind in {"storage", "support"}:
         families.insert(0, "edge_weighted")
-    elif family == "daylight_oriented" and "daylight" in zone_assignment:
+    elif (
+        family == "daylight_oriented"
+        and role_kind != "sleep"
+        and "daylight" in zone_assignment
+    ):
         families.insert(0, "window_oriented")
 
     return _bounded_variant_family_list(_uniq(families))
+
+
+def _sleep_variant_families_for_row(
+    *,
+    family: ConceptFamily,
+    zone_assignment: str,
+    wall_claim: str,
+) -> list[str]:
+    families = list(SLEEP_VARIANT_FAMILIES)
+    if wall_claim == "strong":
+        families = _promote_variant_family(
+            families,
+            target_family="headboard_wall_balanced",
+        )
+    elif wall_claim == "medium":
+        families = _promote_variant_family(
+            families,
+            target_family="headboard_wall_single_side",
+        )
+
+    if "daylight" in zone_assignment or family == "daylight_oriented":
+        families = _promote_variant_family(
+            families,
+            target_family="bed_plus_window_side_bench",
+        )
+    elif family == "edge_weighted":
+        families = _promote_variant_family(
+            families,
+            target_family="bed_plus_storage_buffer",
+        )
+    elif family in {"focal_axis", "zoned"}:
+        families = _promote_variant_family(
+            families,
+            target_family="headboard_wall_balanced",
+        )
+
+    return _uniq(families)
+
+
+def _promote_variant_family(
+    families: Sequence[str],
+    *,
+    target_family: str,
+) -> list[str]:
+    promoted = [family for family in families if family != target_family]
+    promoted.insert(0, target_family)
+    return promoted
 
 
 def _bounded_variant_family_list(families: Sequence[str]) -> list[str]:

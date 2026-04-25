@@ -660,7 +660,7 @@ class SolverArchitectureTest(unittest.TestCase):
             ],
         }
 
-        filtered, debug = _solver._filter_candidates_by_concept_variant_policy(
+        filtered = _solver._filter_candidates_by_concept_variant_policy(
             candidates_by_cluster,
             relation_plan,
         )
@@ -673,9 +673,75 @@ class SolverArchitectureTest(unittest.TestCase):
             [candidate.variant_family for candidate in filtered["media"]],
             ["media_facing"],
         )
+
+    def test_cluster_role_kind_infers_sleep_without_zone_plan(self) -> None:
+        relation_plan = {"macro_concept": {"concept_family": "zoned"}}
+
         self.assertEqual(
-            debug["main_seating"]["policy_drop_reason"],
-            "candidate_pool_retained",
+            _solver._cluster_role_kind(relation_plan, "sleep_area"),
+            "sleep",
+        )
+        self.assertEqual(
+            _solver._cluster_priority_kind(relation_plan, "sleep_area"),
+            "core",
+        )
+
+    def test_concept_variant_policy_prefers_sleep_families_for_bedroom_cluster(
+        self,
+    ) -> None:
+        relation_plan = {
+            "macro_concept": {
+                "concept_family": "daylight_oriented",
+                "cluster_zone_plan": [
+                    {
+                        "cluster_id": "sleep_area",
+                        "priority": "core",
+                        "role_kind": "sleep",
+                    }
+                ],
+                "allowed_variant_families_by_cluster": {
+                    "sleep_area": [
+                        "headboard_wall_balanced",
+                        "bed_plus_window_side_bench",
+                    ]
+                },
+            }
+        }
+        candidates_by_cluster = {
+            "sleep_area": [
+                self._make_candidate(
+                    "sleep_area",
+                    variant_family="conversation_facing",
+                ),
+                self._make_candidate(
+                    "sleep_area",
+                    variant_family="headboard_wall_balanced",
+                ),
+                self._make_candidate(
+                    "sleep_area",
+                    variant_family="bed_plus_window_side_bench",
+                ),
+            ]
+        }
+
+        filtered = _solver._filter_candidates_by_concept_variant_policy(
+            candidates_by_cluster,
+            relation_plan,
+        )
+
+        self.assertEqual(
+            [candidate.variant_family for candidate in filtered["sleep_area"]],
+            ["headboard_wall_balanced", "bed_plus_window_side_bench"],
+        )
+        self.assertGreater(
+            _solver._candidate_variant_family_bonus(
+                filtered["sleep_area"][1],
+                relation_plan=relation_plan,
+            ),
+            _solver._candidate_variant_family_bonus(
+                filtered["sleep_area"][0],
+                relation_plan=relation_plan,
+            ),
         )
 
     def test_primary_seed_problem_clusters_limits_to_top_two(self) -> None:
@@ -694,9 +760,7 @@ class SolverArchitectureTest(unittest.TestCase):
                     {
                         "variant_id": "main_seating__open_center",
                         "variant_family": "open_center",
-                        "local_placements": [
-                            {"id": "sofa", "x": 0, "y": 0, "rot": 0}
-                        ],
+                        "local_placements": [{"id": "sofa", "x": 0, "y": 0, "rot": 0}],
                         "interaction_placements": [
                             {"id": "sofa", "x": 0, "y": 0, "w": 2200, "h": 900}
                         ],

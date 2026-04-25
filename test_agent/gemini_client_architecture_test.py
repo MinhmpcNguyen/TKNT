@@ -444,6 +444,51 @@ class GeminiClientArchitectureTest(unittest.TestCase):
         )
         self.assertEqual(response["modelVersion"], "gemini-3.1-flash-lite-preview")
 
+    def test_chat_completion_honors_explicit_fallback_sequence(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        attempted_urls: list[str] = []
+
+        def _fake_post_json(url: str, payload: dict[str, object]) -> dict[str, object]:
+            attempted_urls.append(url)
+            if "gemini-3.1-flash-lite-preview" in url:
+                request = httpx.Request("POST", url)
+                response = httpx.Response(
+                    503,
+                    request=request,
+                    text=(
+                        '{"error":{"code":503,"message":"This model is currently '
+                        'experiencing high demand.","status":"UNAVAILABLE"}}'
+                    ),
+                )
+                raise httpx.HTTPStatusError(
+                    "503 high demand",
+                    request=request,
+                    response=response,
+                )
+            return {"modelVersion": "gemini-2.5-flash-lite", "candidates": []}
+
+        client._post_json = _fake_post_json  # type: ignore[method-assign]
+        client._to_openai_style_response = lambda data: data  # type: ignore[assignment]
+        client._base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        response = client.chat_completion(
+            [{"role": "user", "content": "Hello"}],
+            model_name="gemini-3.1-flash-lite-preview",
+            fallback_model_names=[
+                "gemini-2.5-flash-lite",
+                "gemini-3-flash-preview",
+            ],
+        )
+
+        self.assertEqual(
+            attempted_urls,
+            [
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+            ],
+        )
+        self.assertEqual(response["modelVersion"], "gemini-2.5-flash-lite")
+
     def test_tool_chat_completion_falls_back_after_retryable_503(self) -> None:
         client = GeminiClient.__new__(GeminiClient)
         attempted_urls: list[str] = []

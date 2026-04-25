@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260425T082545Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-25T08:27:49.087197+00:00",
+  "error": "adaptive_cluster_semantics cluster `sleep_core` must set zone_claims",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-25T08:25:45.830069+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-25T08:26:42.460617+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "adaptive_cluster_semantics cluster `sleep_core` must set zone_claims",
+      "updated_at_utc": "2026-04-25T08:27:49.087197+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "adaptive_cluster_semantics cluster `sleep_core` must set zone_claims"
+    }
+  ]
+}

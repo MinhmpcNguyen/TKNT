@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +39,126 @@ _RELATION_INTENT_CAP_PER_CLUSTER = 6
 _ZONE_CLAIM_CAP_PER_CLUSTER = 4
 _GLOBAL_RELATION_CAP = 20
 _DEGRADATION_STEPS_CAP_PER_CLUSTER = 5
+_ADAPTIVE_SEMANTIC_LLM_ENV = "TKNT_SEMANTIC_ADAPTIVE_LLM"
+_ADAPTIVE_STAGE_NOTE = (
+    "Adaptive semantic LLM mode enabled via "
+    f"{_ADAPTIVE_SEMANTIC_LLM_ENV}; deterministic stage fallbacks are disabled."
+)
+
+
+@dataclass(frozen=True)
+class _AdaptiveStageSpec:
+    model_config_keys: tuple[str, str, str]
+    default_model_chain: tuple[str, str, str]
+    system_prompt: str
+    task_prompt: str
+    output_contract: str
+    repair_prompt: str
+
+
+_ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
+    "adaptive_room_rule": _AdaptiveStageSpec(
+        model_config_keys=(
+            "planner_adaptive_room_rule_primary",
+            "planner_adaptive_room_rule_fallback_primary",
+            "planner_adaptive_room_rule_fallback_secondary",
+        ),
+        default_model_chain=(
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.5-flash-lite",
+        ),
+        system_prompt=(
+            "You adapt semantic room rules for a deterministic interior layout pipeline. "
+            "Return exactly one JSON object. No markdown. No prose outside JSON. "
+            "Preserve schema validity and prefer minimal solver-friendly edits."
+        ),
+        task_prompt=(
+            "Adapt the canonical room rule to this exact room. "
+            "Keep existing cluster ids when possible. "
+            "Add a new cluster only when the brief, affordance, and inventory clearly require it. "
+            "Prefer the smallest object program that still covers the room's likely use."
+        ),
+        output_contract=(
+            "Top-level keys: `room_rule`, `notes`. "
+            "`room_rule` must be a full replacement object, not a patch. "
+            "`room_rule` must contain `room_type`, `policy`, `global_program`, and `clusters`. "
+            "Each cluster must contain `cluster_id`, `priority`, `activation`, `object_program`, `semantic`, and `degradation_hints`. "
+            "Use only object types already present in `inventory_summary` or `canonical_room_rule`. "
+            "Do not omit a required key just because the value is unchanged."
+        ),
+        repair_prompt=(
+            "Return exactly one valid JSON object with top-level keys `room_rule` and `notes`. "
+            "No markdown. Do not omit required fields."
+        ),
+    ),
+    "adaptive_candidate_overrides": _AdaptiveStageSpec(
+        model_config_keys=(
+            "planner_adaptive_candidate_overrides_primary",
+            "planner_adaptive_candidate_overrides_fallback_primary",
+            "planner_adaptive_candidate_overrides_fallback_secondary",
+        ),
+        default_model_chain=(
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.5-flash-lite",
+            "gemini-3-flash-preview",
+        ),
+        system_prompt=(
+            "You produce executable cluster candidate overrides for a deterministic planner. "
+            "Return exactly one JSON object. No markdown. No prose outside JSON. "
+            "Be conservative and keep the output easy for downstream validators."
+        ),
+        task_prompt=(
+            "For every cluster, decide only four things: `object_program`, `brief_support`, `useful`, and `active_by_rule`. "
+            "Treat `useful` as whether the cluster should realistically survive deterministic filtering for this room."
+        ),
+        output_contract=(
+            "Top-level keys: `candidate_overrides`, `notes`. "
+            "Return one entry for every cluster id in `room_rule_clusters`. "
+            "Each entry must contain `cluster_id`, `object_program`, `brief_support`, `useful`, and `active_by_rule`. "
+            "`object_program` must be a full replacement object program, not a patch. "
+            "`brief_support` must be a float from 0.0 to 1.0. "
+            "Do not omit a required key just because the value is unchanged."
+        ),
+        repair_prompt=(
+            "Return exactly one valid JSON object with top-level keys `candidate_overrides` and `notes`. "
+            "Include one override for every cluster id. No markdown."
+        ),
+    ),
+    "adaptive_cluster_semantics": _AdaptiveStageSpec(
+        model_config_keys=(
+            "planner_adaptive_cluster_semantics_primary",
+            "planner_adaptive_cluster_semantics_fallback_primary",
+            "planner_adaptive_cluster_semantics_fallback_secondary",
+        ),
+        default_model_chain=(
+            "gemini-3.1-flash-lite-preview",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash-lite",
+        ),
+        system_prompt=(
+            "You assign compact semantic intent for already-active clusters in a deterministic interior layout pipeline. "
+            "Return exactly one JSON object. No markdown. No prose outside JSON. "
+            "Prefer short, precise, solver-friendly semantics."
+        ),
+        task_prompt=(
+            "For every active cluster, produce semantic intent only: `semantic_role`, dominant anchors, zone claims, relation intents, and degradation ladder. "
+            "Use concise constraints rather than creative language."
+        ),
+        output_contract=(
+            "Top-level keys: `cluster_semantics`, `notes`. "
+            "Return one entry for every active cluster. "
+            "Each entry must contain `cluster_id`, `semantic_role`, `dominant_anchor_candidates`, `zone_claims`, `relation_intents`, and `degradation_ladder`. "
+            "Use only affordance region labels that already exist in `affordance_summary`. "
+            "Use only active cluster ids in `relation_intents.target_cluster`. "
+            "Do not omit a required key just because the value is unchanged."
+        ),
+        repair_prompt=(
+            "Return exactly one valid JSON object with top-level keys `cluster_semantics` and `notes`. "
+            "Include one entry for every active cluster. No markdown."
+        ),
+    ),
+}
 
 _MEDIA_TOKENS = ("tv", "media", "screen", "projector", "console")
 _WORK_TOKENS = ("work", "study", "desk", "office", "laptop", "computer")
@@ -69,14 +191,56 @@ class SemanticLayoutPlanner:
             room_type=room_type,
             semantic_program_rules=semantic_program_rules,
         )
-        inventory = _normalize_inventory_catalog(inventory_catalog, room_rules)
         affordance_summary = summarize_room_affordance(room_model_json)
-        candidates = build_cluster_candidates(
-            room_rules=room_rules,
-            inventory_catalog=inventory,
-            brief_text=brief_text,
-            room_model_json=room_model_json,
-        )
+        inventory = _normalize_inventory_catalog(inventory_catalog, room_rules)
+        adaptive_llm_mode = use_llm and _adaptive_semantic_llm_enabled()
+        adaptive_notes: list[str] = []
+
+        if adaptive_llm_mode:
+            logger.info(
+                "SemanticLayoutPlanner adaptive LLM mode enabled via %s",
+                _ADAPTIVE_SEMANTIC_LLM_ENV,
+            )
+            room_rules, room_rule_notes = self._generate_adaptive_room_rules(
+                room_type=room_type,
+                brief_text=brief_text,
+                room_rules=room_rules,
+                affordance_summary=affordance_summary,
+                inventory_catalog=inventory,
+                style_policy=style_policy,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+            )
+            adaptive_notes.extend(room_rule_notes)
+            inventory = _normalize_inventory_catalog(inventory_catalog, room_rules)
+            candidate_overrides, candidate_notes = (
+                self._generate_adaptive_candidate_overrides(
+                    room_type=room_type,
+                    brief_text=brief_text,
+                    room_rules=room_rules,
+                    affordance_summary=affordance_summary,
+                    inventory_catalog=inventory,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                )
+            )
+            adaptive_notes.extend(candidate_notes)
+            candidates = build_cluster_candidates(
+                room_rules=room_rules,
+                inventory_catalog=inventory,
+                brief_text=brief_text,
+                room_model_json=room_model_json,
+                llm_candidate_overrides=candidate_overrides,
+            )
+        else:
+            candidates = build_cluster_candidates(
+                room_rules=room_rules,
+                inventory_catalog=inventory,
+                brief_text=brief_text,
+                room_model_json=room_model_json,
+            )
         deterministic_program = _build_deterministic_program(
             room_type=room_type,
             room_rules=room_rules,
@@ -86,6 +250,31 @@ class SemanticLayoutPlanner:
             brief_text=brief_text,
             inventory_catalog=inventory,
         )
+
+        if adaptive_llm_mode:
+            if deterministic_program.get("active_clusters"):
+                deterministic_program, cluster_notes = (
+                    self._apply_llm_cluster_semantics(
+                        deterministic_program=deterministic_program,
+                        room_type=room_type,
+                        brief_text=brief_text,
+                        affordance_summary=affordance_summary,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                    )
+                )
+                adaptive_notes.extend(cluster_notes)
+            deterministic_program["notes"] = _merge_notes(
+                [_ADAPTIVE_STAGE_NOTE, *adaptive_notes],
+                deterministic_program.get("notes"),
+            )
+            deterministic_program = apply_style_policy_to_semantic_program(
+                deterministic_program,
+                style_policy,
+            )
+            return SemanticLayoutProgram.model_validate(deterministic_program)
+
         deterministic_program = apply_style_policy_to_semantic_program(
             deterministic_program,
             style_policy,
@@ -202,6 +391,206 @@ class SemanticLayoutPlanner:
                 )
         raise ValueError("SemanticLayoutPlanner returned invalid JSON")
 
+    def _generate_adaptive_room_rules(
+        self,
+        *,
+        room_type: str,
+        brief_text: str,
+        room_rules: Mapping[str, Any],
+        affordance_summary: Mapping[str, Any],
+        inventory_catalog: Mapping[str, Mapping[str, Any]],
+        style_policy: Mapping[str, Any] | None,
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        prompt_payload = {
+            "stage": "adaptive_room_rule",
+            "room_type": room_type,
+            "brief": {"text": brief_text},
+            "affordance_summary": affordance_summary,
+            "inventory_summary": _inventory_summary_for_llm(inventory_catalog),
+            "style_policy": dict(style_policy or {}),
+            "canonical_room_rule": room_rules,
+        }
+        response = self._call_adaptive_stage(
+            stage_name="adaptive_room_rule",
+            prompt_payload=prompt_payload,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            response_validator=lambda payload: _sanitize_adaptive_room_rule(
+                payload.get("room_rule"),
+                room_type=room_type,
+            ),
+        )
+        room_rule = _sanitize_adaptive_room_rule(
+            response.get("room_rule"),
+            room_type=room_type,
+        )
+        return room_rule, _sanitize_notes(response.get("notes"))
+
+    def _generate_adaptive_candidate_overrides(
+        self,
+        *,
+        room_type: str,
+        brief_text: str,
+        room_rules: Mapping[str, Any],
+        affordance_summary: Mapping[str, Any],
+        inventory_catalog: Mapping[str, Mapping[str, Any]],
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+    ) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        cluster_ids = [
+            str(cluster.get("cluster_id") or "").strip()
+            for cluster in room_rules.get("clusters") or []
+            if isinstance(cluster, Mapping)
+        ]
+        prompt_payload = {
+            "stage": "adaptive_candidate_overrides",
+            "room_type": room_type,
+            "brief": {"text": brief_text},
+            "affordance_summary": affordance_summary,
+            "inventory_summary": _inventory_summary_for_llm(inventory_catalog),
+            "room_rule_clusters": room_rules.get("clusters") or [],
+        }
+        response = self._call_adaptive_stage(
+            stage_name="adaptive_candidate_overrides",
+            prompt_payload=prompt_payload,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            response_validator=lambda payload: _sanitize_candidate_overrides(
+                payload.get("candidate_overrides"),
+                expected_cluster_ids=cluster_ids,
+            ),
+        )
+        overrides = _sanitize_candidate_overrides(
+            response.get("candidate_overrides"),
+            expected_cluster_ids=cluster_ids,
+        )
+        return overrides, _sanitize_notes(response.get("notes"))
+
+    def _apply_llm_cluster_semantics(
+        self,
+        *,
+        deterministic_program: Mapping[str, Any],
+        room_type: str,
+        brief_text: str,
+        affordance_summary: Mapping[str, Any],
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        prompt_payload = {
+            "stage": "adaptive_cluster_semantics",
+            "room_type": room_type,
+            "brief": {"text": brief_text},
+            "affordance_summary": affordance_summary,
+            "active_clusters": deterministic_program.get("active_clusters") or [],
+        }
+        response = self._call_adaptive_stage(
+            stage_name="adaptive_cluster_semantics",
+            prompt_payload=prompt_payload,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            response_validator=lambda payload: _sanitize_cluster_semantics(
+                payload.get("cluster_semantics"),
+                deterministic_program=deterministic_program,
+                affordance_summary=affordance_summary,
+            ),
+        )
+        merged = _sanitize_cluster_semantics(
+            response.get("cluster_semantics"),
+            deterministic_program=deterministic_program,
+            affordance_summary=affordance_summary,
+        )
+        return merged, _sanitize_notes(response.get("notes"))
+
+    def _call_adaptive_stage(
+        self,
+        *,
+        stage_name: str,
+        prompt_payload: Mapping[str, Any],
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+        response_validator: Callable[[dict[str, Any]], object] | None = None,
+    ) -> dict[str, Any]:
+        stage_spec = _adaptive_stage_spec(stage_name)
+        user_prompt = (
+            f"Stage: {stage_name}\n\n"
+            f"Task:\n{stage_spec.task_prompt}\n\n"
+            f"Output Contract:\n{stage_spec.output_contract}\n\n"
+            "Rules:\n"
+            "- Return exactly one JSON object.\n"
+            "- No markdown.\n"
+            "- No commentary outside JSON.\n"
+            "- Do not omit required keys.\n\n"
+            "Payload:\n"
+            f"{json.dumps(prompt_payload, ensure_ascii=True, indent=2)}"
+        )
+        base_messages: list[ChatMessage] = [
+            {"role": "system", "content": stage_spec.system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        client = get_llm_client(provider="gemini")
+        model_chain = _adaptive_stage_model_chain(stage_name)
+        last_error: Exception | None = None
+        for model_index, model_name in enumerate(model_chain):
+            messages = list(base_messages)
+            fallback_model_names = model_chain[model_index + 1 :]
+            try:
+                last_raw = ""
+                for attempt in range(2):
+                    response = client.chat_completion(
+                        messages,
+                        model_key="primary",
+                        model_name=model_name,
+                        fallback_model_names=fallback_model_names,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        response_mime_type=_RESPONSE_MIME_TYPE,
+                    )
+                    last_raw = _extract_content(response)
+                    try:
+                        parsed = _parse_json(last_raw)
+                        if response_validator is not None:
+                            response_validator(parsed)
+                        return parsed
+                    except ValueError as exc:
+                        if attempt == 1:
+                            raise ValueError(
+                                f"{stage_name} validation failed on {model_name}: {exc}"
+                            ) from exc
+                        messages.append({"role": "assistant", "content": last_raw})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"{stage_spec.repair_prompt}\n"
+                                    f"Validation error: {exc}"
+                                ),
+                            }
+                        )
+            except Exception as exc:
+                last_error = exc
+                if model_index == len(model_chain) - 1:
+                    break
+                logger.warning(
+                    "Adaptive stage %s failed on model %s; retrying with %s: %s",
+                    stage_name,
+                    model_name,
+                    model_chain[model_index + 1],
+                    exc,
+                )
+        if last_error is not None:
+            raise last_error
+        raise ValueError(f"{stage_name} produced no response")
+
 
 def build_cluster_candidates(
     *,
@@ -209,6 +598,7 @@ def build_cluster_candidates(
     inventory_catalog: Mapping[str, Mapping[str, Any]],
     brief_text: str,
     room_model_json: Mapping[str, Any],
+    llm_candidate_overrides: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     clusters = room_rules.get("clusters")
     if not isinstance(clusters, list):
@@ -223,6 +613,13 @@ def build_cluster_candidates(
             inventory_catalog=inventory_catalog,
             brief_text=brief_text,
             room_model_json=room_model_json,
+            llm_candidate_override=(
+                llm_candidate_overrides.get(
+                    str(cluster.get("cluster_id") or "").strip()
+                )
+                if llm_candidate_overrides is not None
+                else None
+            ),
         )
         if candidate is not None:
             candidates.append(candidate)
@@ -411,12 +808,17 @@ def _build_single_candidate(
     inventory_catalog: Mapping[str, Mapping[str, Any]],
     brief_text: str,
     room_model_json: Mapping[str, Any],
+    llm_candidate_override: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     cluster_id = str(cluster_rule.get("cluster_id") or "").strip()
     priority = _priority(cluster_rule.get("priority"))
     if not cluster_id:
         return None
-    object_program = _merged_object_program_for_brief(cluster_rule, brief_text)
+    object_program = (
+        deepcopy(dict(llm_candidate_override.get("object_program") or {}))
+        if isinstance(llm_candidate_override, Mapping)
+        else _merged_object_program_for_brief(cluster_rule, brief_text)
+    )
     objects, missing = _candidate_objects(
         object_program=object_program,
         cluster_rule=cluster_rule,
@@ -429,14 +831,22 @@ def _build_single_candidate(
         if isinstance(cluster_rule.get("activation"), Mapping)
         else {}
     )
-    active_by_rule = bool(activation.get("always_consider")) or priority == "core"
-    brief_support = _brief_support_score(cluster_id, objects, brief_text)
-    room_area = _room_area_m2(room_model_json)
-    useful = (
-        active_by_rule
-        or brief_support >= 0.45
-        or (priority == "support" and room_area >= 12.0 and objects)
-    )
+    if isinstance(llm_candidate_override, Mapping):
+        active_by_rule = bool(llm_candidate_override.get("active_by_rule"))
+        brief_support = _float_0_1(
+            llm_candidate_override.get("brief_support"),
+            default=0.35,
+        )
+        useful = bool(llm_candidate_override.get("useful"))
+    else:
+        active_by_rule = bool(activation.get("always_consider")) or priority == "core"
+        brief_support = _brief_support_score(cluster_id, objects, brief_text)
+        room_area = _room_area_m2(room_model_json)
+        useful = (
+            active_by_rule
+            or brief_support >= 0.45
+            or (priority == "support" and room_area >= 12.0 and objects)
+        )
     return {
         "cluster_id": cluster_id,
         "priority": priority,
@@ -1289,6 +1699,460 @@ def _normalize_relation_intents(
     return out[:_RELATION_INTENT_CAP_PER_CLUSTER]
 
 
+def _adaptive_stage_spec(stage_name: str) -> _AdaptiveStageSpec:
+    try:
+        return _ADAPTIVE_STAGE_SPECS[stage_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown adaptive stage: {stage_name}") from exc
+
+
+def _adaptive_stage_model_chain(stage_name: str) -> list[str]:
+    stage_spec = _adaptive_stage_spec(stage_name)
+    configured_chain = [
+        GeminiConfig.AGENT_MODELS.get(config_key)
+        for config_key in stage_spec.model_config_keys
+    ]
+    return _uniq_model_names(
+        [
+            model_name
+            for model_name in (*configured_chain, *stage_spec.default_model_chain)
+            if isinstance(model_name, str) and model_name.strip()
+        ]
+    )
+
+
+def _adaptive_semantic_llm_enabled() -> bool:
+    return os.getenv(_ADAPTIVE_SEMANTIC_LLM_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _sanitize_notes(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _merge_notes(primary: Any, secondary: Any) -> list[str]:
+    out: list[str] = []
+    for source in (primary, secondary):
+        for note in _sanitize_notes(source):
+            if note not in out:
+                out.append(note)
+    if _ADAPTIVE_STAGE_NOTE in out:
+        out = [
+            note
+            for note in out
+            if "compiled_semantic_program.json as the canonical rule source" not in note
+        ]
+    return out
+
+
+def _inventory_summary_for_llm(
+    inventory_catalog: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for object_type in sorted(inventory_catalog):
+        item = inventory_catalog.get(object_type) or {}
+        rows.append(
+            {
+                "object_type": object_type,
+                "available": bool(item.get("available", True)),
+                "size_profiles": _string_list(item.get("size_profiles")),
+                "functional_tags": _string_list(item.get("functional_tags")),
+            }
+        )
+    return rows
+
+
+def _sanitize_adaptive_room_rule(
+    value: Any,
+    *,
+    room_type: str,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("adaptive_room_rule must return a room_rule object")
+    clusters_raw = value.get("clusters")
+    if not isinstance(clusters_raw, list):
+        raise ValueError("adaptive_room_rule.room_rule.clusters must be a list")
+
+    clusters: list[dict[str, Any]] = []
+    seen_cluster_ids: set[str] = set()
+    for cluster in clusters_raw:
+        sanitized = _sanitize_adaptive_cluster_rule(cluster)
+        cluster_id = sanitized["cluster_id"]
+        if cluster_id in seen_cluster_ids:
+            continue
+        seen_cluster_ids.add(cluster_id)
+        clusters.append(sanitized)
+        if len(clusters) >= _CLUSTER_CANDIDATE_CAP:
+            break
+    if not clusters:
+        raise ValueError("adaptive_room_rule produced no valid clusters")
+
+    policy = value.get("policy")
+    return {
+        "room_type": room_type,
+        "policy": _clone_json_mapping(policy),
+        "clusters": clusters,
+        "global_program": _sanitize_global_program(value.get("global_program")),
+    }
+
+
+def _sanitize_adaptive_cluster_rule(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("adaptive_room_rule cluster entries must be objects")
+    cluster_id = str(value.get("cluster_id") or "").strip()
+    if not cluster_id:
+        raise ValueError("adaptive_room_rule cluster is missing cluster_id")
+    object_program = _sanitize_object_program(value.get("object_program"))
+    if not _object_program_has_content(object_program):
+        raise ValueError(
+            f"adaptive_room_rule cluster `{cluster_id}` has no usable object_program"
+        )
+    return {
+        "cluster_id": cluster_id,
+        "priority": _priority(value.get("priority")),
+        "activation": _sanitize_activation_rule(value.get("activation")),
+        "object_program": object_program,
+        "semantic": _sanitize_cluster_rule_semantic(value.get("semantic")),
+        "degradation_hints": _sanitize_degradation_hints(
+            value.get("degradation_hints")
+        ),
+    }
+
+
+def _clone_json_mapping(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(key): _clone_jsonish(child)
+        for key, child in value.items()
+        if isinstance(key, str)
+    }
+
+
+def _clone_jsonish(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return _clone_json_mapping(value)
+    if isinstance(value, list):
+        return [_clone_jsonish(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _sanitize_global_program(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {
+            "dominant_anchor_required": [],
+            "dominant_workflow_required": [],
+            "group_caps": [],
+            "group_minimums": [],
+        }
+    return {
+        "dominant_anchor_required": _string_list(value.get("dominant_anchor_required")),
+        "dominant_workflow_required": _string_list(
+            value.get("dominant_workflow_required")
+        ),
+        "group_caps": _sanitize_group_rules(
+            value.get("group_caps"),
+            count_key="max_keep",
+            default_count=1,
+        ),
+        "group_minimums": _sanitize_group_rules(
+            value.get("group_minimums"),
+            count_key="min_keep",
+            default_count=1,
+        ),
+    }
+
+
+def _sanitize_group_rules(
+    value: Any,
+    *,
+    count_key: str,
+    default_count: int,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        objects = _string_list(item.get("objects"))
+        if not objects:
+            continue
+        out.append(
+            {
+                "objects": objects,
+                count_key: max(
+                    0,
+                    _int_value(item.get(count_key), default=default_count),
+                ),
+            }
+        )
+    return out
+
+
+def _sanitize_activation_rule(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    if "always_consider" in value:
+        out["always_consider"] = bool(value.get("always_consider"))
+    conditions: list[dict[str, Any]] = []
+    for item in value.get("conditions") or []:
+        if not isinstance(item, Mapping):
+            continue
+        predicate = str(item.get("predicate") or "").strip()
+        effects = _sanitize_object_program(item.get("effects"))
+        if predicate and _object_program_has_content(effects):
+            conditions.append({"predicate": predicate, "effects": effects})
+    if conditions:
+        out["conditions"] = conditions
+    return out
+
+
+def _sanitize_object_program(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for key in (
+        "required",
+        "required_if_kept",
+        "optional",
+    ):
+        values = _string_list(value.get(key))
+        if values:
+            out[key] = values
+    for key in (
+        "choose_exactly_one_from",
+        "choose_exactly_one_from_if_kept",
+        "choose_at_least_one_from",
+    ):
+        groups = _list_of_string_lists(value.get(key))
+        if groups:
+            out[key] = groups
+    limits = value.get("optional_limits")
+    if isinstance(limits, Mapping):
+        clean_limits: dict[str, Any] = {}
+        if limits.get("global") is not None:
+            clean_limits["global"] = max(
+                0,
+                _int_value(limits.get("global"), default=0),
+            )
+        by_object = limits.get("by_object")
+        if isinstance(by_object, Mapping):
+            clean_by_object: dict[str, int] = {}
+            for object_type, limit in by_object.items():
+                normalized_object_type = _clean_object_type(object_type)
+                if normalized_object_type is None:
+                    continue
+                clean_by_object[normalized_object_type] = max(
+                    0,
+                    _int_value(limit, default=1),
+                )
+            if clean_by_object:
+                clean_limits["by_object"] = clean_by_object
+        if clean_limits:
+            out["optional_limits"] = clean_limits
+    return out
+
+
+def _object_program_has_content(value: Mapping[str, Any]) -> bool:
+    return any(
+        _string_list(value.get(key))
+        for key in ("required", "required_if_kept", "optional")
+    ) or any(
+        _list_of_string_lists(value.get(key))
+        for key in (
+            "choose_exactly_one_from",
+            "choose_exactly_one_from_if_kept",
+            "choose_at_least_one_from",
+        )
+    )
+
+
+def _sanitize_cluster_rule_semantic(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    dominant_anchor_candidates = _string_list(value.get("dominant_anchor_candidates"))
+    if not dominant_anchor_candidates:
+        return {}
+    return {"dominant_anchor_candidates": dominant_anchor_candidates}
+
+
+def _sanitize_degradation_hints(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    drop_first = _string_list(value.get("drop_first"))
+    shrink_before_drop = _string_list(value.get("shrink_before_drop"))
+    if drop_first:
+        out["drop_first"] = drop_first
+    if shrink_before_drop:
+        out["shrink_before_drop"] = shrink_before_drop
+    return out
+
+
+def _sanitize_candidate_overrides(
+    value: Any,
+    *,
+    expected_cluster_ids: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError("adaptive_candidate_overrides must return a list")
+    expected = [cluster_id for cluster_id in expected_cluster_ids if cluster_id]
+    expected_set = set(expected)
+    out: dict[str, dict[str, Any]] = {}
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        cluster_id = str(item.get("cluster_id") or "").strip()
+        if cluster_id not in expected_set or cluster_id in out:
+            continue
+        object_program = _sanitize_object_program(item.get("object_program"))
+        if not _object_program_has_content(object_program):
+            raise ValueError(
+                f"adaptive_candidate_overrides cluster `{cluster_id}` has no usable object_program"
+            )
+        if not isinstance(item.get("useful"), bool):
+            raise ValueError(
+                f"adaptive_candidate_overrides cluster `{cluster_id}` must set useful"
+            )
+        if not isinstance(item.get("active_by_rule"), bool):
+            raise ValueError(
+                f"adaptive_candidate_overrides cluster `{cluster_id}` must set active_by_rule"
+            )
+        if item.get("brief_support") is None:
+            raise ValueError(
+                f"adaptive_candidate_overrides cluster `{cluster_id}` must set brief_support"
+            )
+        out[cluster_id] = {
+            "object_program": object_program,
+            "brief_support": _float_0_1(item.get("brief_support"), default=0.35),
+            "useful": bool(item.get("useful")),
+            "active_by_rule": bool(item.get("active_by_rule")),
+        }
+    missing = [cluster_id for cluster_id in expected if cluster_id not in out]
+    if missing:
+        raise ValueError(
+            "adaptive_candidate_overrides omitted cluster ids: " + ", ".join(missing)
+        )
+    return out
+
+
+def _sanitize_cluster_semantics(
+    value: Any,
+    *,
+    deterministic_program: Mapping[str, Any],
+    affordance_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(value, list):
+        raise ValueError("adaptive_cluster_semantics must return a list")
+    base_clusters = [
+        deepcopy(cluster)
+        for cluster in deterministic_program.get("active_clusters") or []
+        if isinstance(cluster, Mapping)
+    ]
+    expected_order = [str(cluster.get("cluster_id") or "") for cluster in base_clusters]
+    base_by_id = {
+        str(cluster.get("cluster_id") or ""): cluster for cluster in base_clusters
+    }
+    allowed_cluster_ids = set(base_by_id)
+    merged_by_id: dict[str, dict[str, Any]] = {}
+
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        cluster_id = str(item.get("cluster_id") or "").strip()
+        if cluster_id not in allowed_cluster_ids or cluster_id in merged_by_id:
+            continue
+        semantic_role = str(item.get("semantic_role") or "").strip()
+        if not semantic_role:
+            raise ValueError(
+                f"adaptive_cluster_semantics cluster `{cluster_id}` is missing semantic_role"
+            )
+        if not isinstance(item.get("zone_claims"), Mapping):
+            raise ValueError(
+                f"adaptive_cluster_semantics cluster `{cluster_id}` must set zone_claims"
+            )
+        if not isinstance(item.get("relation_intents"), list):
+            raise ValueError(
+                f"adaptive_cluster_semantics cluster `{cluster_id}` must set relation_intents"
+            )
+        if not isinstance(item.get("degradation_ladder"), list):
+            raise ValueError(
+                f"adaptive_cluster_semantics cluster `{cluster_id}` must set degradation_ladder"
+            )
+        base = deepcopy(base_by_id[cluster_id])
+        member_types = set(_objects_from_active_cluster(base))
+        base["semantic_role"] = semantic_role
+        base["dominant_anchor_candidates"] = [
+            candidate
+            for candidate in _string_list(item.get("dominant_anchor_candidates"))
+            if candidate in member_types
+        ]
+        base["zone_claims"] = _normalize_zone_claims(
+            item.get("zone_claims"),
+            fallback={},
+            affordance_summary=affordance_summary,
+        )
+        base["relation_intents"] = _normalize_relation_intents(
+            item.get("relation_intents"),
+            allowed_cluster_ids=allowed_cluster_ids,
+        )
+        base["degradation_ladder"] = _string_list(item.get("degradation_ladder"))[
+            :_DEGRADATION_STEPS_CAP_PER_CLUSTER
+        ]
+        merged_by_id[cluster_id] = base
+
+    missing = [
+        cluster_id for cluster_id in expected_order if cluster_id not in merged_by_id
+    ]
+    if missing:
+        raise ValueError(
+            "adaptive_cluster_semantics omitted cluster ids: " + ", ".join(missing)
+        )
+
+    out = deepcopy(dict(deterministic_program))
+    out["active_clusters"] = [merged_by_id[cluster_id] for cluster_id in expected_order]
+    out["macro_relations"] = _build_macro_relations(
+        active_clusters=out["active_clusters"],
+        affordance_summary=affordance_summary,
+    )
+    out["controlled_degradation"] = _build_controlled_degradation(
+        active_clusters=out["active_clusters"],
+        global_program=out.get("selection_constraints") or {},
+    )
+    out["confidence"] = max(float(out.get("confidence") or 0.75), 0.82)
+    return out
+
+
+def _float_0_1(value: Any, *, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return max(0.0, min(1.0, float(value)))
+    if isinstance(value, str):
+        try:
+            return max(0.0, min(1.0, float(value.strip())))
+        except ValueError:
+            return default
+    return default
+
+
 def _parse_json(raw: str) -> dict[str, Any]:
     text = _coerce_json_text(raw)
     try:
@@ -1750,6 +2614,18 @@ def _uniq(values: Sequence[str]) -> list[str]:
     for value in values:
         if value and value not in out:
             out.append(value)
+    return out
+
+
+def _uniq_model_names(values: Sequence[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        out.append(value)
+        seen.add(normalized)
     return out
 
 

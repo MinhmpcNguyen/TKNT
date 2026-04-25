@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+SLEEP_VARIANT_FAMILIES = (
+    "headboard_wall_balanced",
+    "headboard_wall_single_side",
+    "bed_plus_storage_buffer",
+    "bed_plus_window_side_bench",
+)
+
 GENERIC_VARIANT_FAMILIES = frozenset(
     {
         "base",
@@ -37,7 +44,7 @@ SEMANTIC_VARIANT_FAMILIES = frozenset(
         "perimeter_storage",
         "support_edge",
     }
-)
+) | frozenset(SLEEP_VARIANT_FAMILIES)
 
 VARIANT_FAMILY_ALIASES = {
     "compact_storage_bank": "edge_storage",
@@ -60,6 +67,9 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "open_center",
             "perimeter_facing",
             "conversation_facing",
+            "social_anchor",
+            "social",
+            "inward_facing",
         }
     ),
     "lounge": frozenset(
@@ -67,6 +77,9 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "open_center",
             "perimeter_facing",
             "conversation_facing",
+            "social_anchor",
+            "social",
+            "inward_facing",
         }
     ),
     "media": frozenset(
@@ -75,6 +88,8 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "wall_backed_focal",
             "focal_media",
             "focal_axis",
+            "focal_wall",
+            "media",
         }
     ),
     "focal": frozenset(
@@ -83,6 +98,8 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "wall_backed_focal",
             "focal_media",
             "focal_axis",
+            "focal_wall",
+            "media",
         }
     ),
     "work": frozenset(
@@ -91,6 +108,8 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "work_core",
             "window_oriented",
             "workflow",
+            "workstation",
+            "desk",
         }
     ),
     "workflow": frozenset(
@@ -99,15 +118,21 @@ ROLE_VARIANT_FAMILY_ALLOWLISTS = {
             "work_core",
             "window_oriented",
             "workflow",
+            "workstation",
+            "desk",
         }
     ),
     "storage": frozenset(
         {
             "storage_wall",
+            "wall_storage",
             "edge_storage",
             "perimeter_storage",
+            "storage",
+            "edge_weighted",
         }
     ),
+    "sleep": frozenset(SLEEP_VARIANT_FAMILIES),
 }
 
 

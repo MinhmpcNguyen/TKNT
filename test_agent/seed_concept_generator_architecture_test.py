@@ -113,6 +113,52 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             ]
         )
 
+    def test_bedroom_concepts_emit_sleep_variant_guidance(self) -> None:
+        room_model = _bedroom_room_model()
+        clusters = _bedroom_clusters()
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=5,
+        )
+
+        concepts = bundle["concepts"]
+        self.assertEqual(len(concepts), 5)
+
+        for concept in concepts:
+            allowed = concept["allowed_variant_families_by_cluster"]
+            self.assertIn("sleep_area", allowed)
+            sleep_families = allowed["sleep_area"]
+            self.assertNotIn("base", sleep_families)
+            self.assertNotIn("perimeter_facing", sleep_families)
+            self.assertIn("headboard_wall_balanced", sleep_families)
+            self.assertIn("bed_plus_storage_buffer", sleep_families)
+
+            sleep_row = next(
+                row
+                for row in concept["cluster_zone_plan"]
+                if row["cluster_id"] == "sleep_area"
+            )
+            self.assertEqual(sleep_row["role_kind"], "sleep")
+
+        solver_plan = solver_plan_from_concept(
+            concept=concepts[0],
+            room_model_json=room_model,
+            room_type="bedroom",
+        )
+        self.assertEqual(
+            solver_plan["allowed_variant_families_by_cluster"],
+            concepts[0]["allowed_variant_families_by_cluster"],
+        )
+        self.assertTrue(
+            any(
+                item.get("object_id") == "bed"
+                for item in solver_plan["object_orientations"]
+                if isinstance(item, dict)
+            )
+        )
+
 
 def _zone_logic_class(zone: object) -> str:
     text = str(zone or "")
@@ -188,6 +234,75 @@ def _clusters() -> dict[str, object]:
                 "cluster_rules": {
                     "zone_claims": {
                         "wall_affinity": "high",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+        ]
+    }
+
+
+def _bedroom_room_model() -> dict[str, object]:
+    return {
+        "room": {
+            "room_id": "bedroom_test",
+            "polygon_ccw": [
+                {"x": 0, "y": 0},
+                {"x": 5200, "y": 0},
+                {"x": 5200, "y": 3900},
+                {"x": 0, "y": 3900},
+            ],
+        },
+        "meta": {"room_type": "bedroom"},
+        "openings": {
+            "doors": [{"id": "entry_door"}],
+            "windows": [{"id": "bedroom_window"}],
+        },
+        "affordance_map": {
+            "usable_wall_segments": ["wall_north", "wall_south", "wall_east"],
+            "entry_landing_zones": ["entry_landing"],
+            "primary_circulation_corridors": ["entry_to_bed"],
+            "center_openness_regions": ["room_center"],
+            "daylight_regions": ["window_zone"],
+            "wall_anchor_candidates": ["wall_north", "wall_east"],
+        },
+    }
+
+
+def _bedroom_clusters() -> dict[str, object]:
+    return {
+        "clusters": [
+            {
+                "cluster_id": "sleep_area",
+                "members": ["bed", "nightstand", "dresser"],
+                "anchors": ["bed"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "medium",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+            {
+                "cluster_id": "work_area",
+                "members": ["desk", "office_chair"],
+                "anchors": ["desk"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "medium",
+                        "daylight_affinity": "high",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+            {
+                "cluster_id": "storage_area",
+                "members": ["wardrobe"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "low",
                         "floating_allowed": False,
                     }
                 },
