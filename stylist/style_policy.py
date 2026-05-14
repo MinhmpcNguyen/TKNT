@@ -2,24 +2,45 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
-from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
+
+try:
+    from config.llm_config import TextLLMConfig
+except Exception:  # pragma: no cover
+    from config.gemini_config import GeminiConfig
+
+    class TextLLMConfig:
+        PROVIDER = "gemini"
+        STRICT_SINGLE_TEXT_MODEL = str(
+            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
+        ).strip()
+
+        @classmethod
+        def primary_model_name(cls) -> str:
+            return ""
+
 
 logger = logging.getLogger(__name__)
 
-STYLE_POLICY_COMPILER_SYSTEM_PROMPT = """You are a Style Policy Compiler.
+ChatMessage = dict[str, str]
 
-Your job is to convert the style brief into layout-level style policy,
-not into coordinates and not into final decoration.
+STYLE_POLICY_COMPILER_SYSTEM_PROMPT = """You are a Style Policy Compiler for a deterministic 2D interior layout pipeline.
 
-Return strict JSON only.
+Your job is to convert the style brief into layout-level policy knobs. These knobs steer object count, spacing, center openness, wall loading, daylight preference, and decor tolerance before the geometry solver runs.
 
-You must output:
+Return one compact strict JSON object only.
+Do not use markdown.
+Do not include comments.
+Do not include prose before or after the JSON object.
+Do not output partial strings.
+
+You must output exactly these top-level keys:
 - style_name
 - target_density
 - center_openness_bias
@@ -33,12 +54,177 @@ You must output:
 - material_weight_bias
 - visual_balance_bias
 
+Allowed style_name values:
+- minimal
+- japandi
+- scandinavian
+- industrial
+- boho
+- coastal
+- formal
+- cozy
+- social
+- balanced
+
+Allowed level-like values:
+- low
+- low_to_medium
+- low_to_balanced
+- medium
+- balanced
+- balanced_to_medium
+- medium_high
+- high
+- very_high
+
+Allowed wall_loading_bias values:
+- low
+- balanced
+- medium
+- medium_high
+- focal_balanced
+- perimeter
+
+Allowed cluster_spacing_bias values:
+- airy
+- balanced
+- structured
+- layered
+- soft
+- social
+
+Allowed material_weight_bias values:
+- light
+- balanced
+- heavy
+
+Allowed visual_balance_bias values:
+- calm
+- balanced
+- bright
+- contrast
+- expressive
+- formal
+- cozy
+- social
+
+Choose conservative, solver-friendly values. Functional requirements, room capacity, access clearance, and hard geometry constraints always outrank style.
+Use only the allowed enum-like values listed above.
+Keep every value short and lowercase.
 Do not place furniture.
 Do not invent geometry.
+Do not add object lists.
 Do not override functional requirements.
+Do not omit any key.
 """
 
+_STYLE_POLICY_REQUIRED_KEYS: tuple[str, ...] = (
+    "style_name",
+    "target_density",
+    "center_openness_bias",
+    "wall_loading_bias",
+    "symmetry_bias",
+    "cluster_spacing_bias",
+    "clutter_tolerance",
+    "decor_tolerance",
+    "daylight_bias",
+    "floating_cluster_tolerance",
+    "material_weight_bias",
+    "visual_balance_bias",
+)
+
+_STYLE_NAME_VALUES: tuple[str, ...] = (
+    "minimal",
+    "japandi",
+    "scandinavian",
+    "industrial",
+    "boho",
+    "coastal",
+    "formal",
+    "cozy",
+    "social",
+    "balanced",
+)
+_STYLE_LEVEL_VALUES: tuple[str, ...] = (
+    "low",
+    "low_to_medium",
+    "low_to_balanced",
+    "medium",
+    "balanced",
+    "balanced_to_medium",
+    "medium_high",
+    "high",
+    "very_high",
+)
+_WALL_LOADING_VALUES: tuple[str, ...] = (
+    "low",
+    "balanced",
+    "medium",
+    "medium_high",
+    "focal_balanced",
+    "perimeter",
+)
+_CLUSTER_SPACING_VALUES: tuple[str, ...] = (
+    "airy",
+    "balanced",
+    "structured",
+    "layered",
+    "soft",
+    "social",
+)
+_MATERIAL_WEIGHT_VALUES: tuple[str, ...] = (
+    "light",
+    "balanced",
+    "heavy",
+)
+_VISUAL_BALANCE_VALUES: tuple[str, ...] = (
+    "calm",
+    "balanced",
+    "bright",
+    "contrast",
+    "expressive",
+    "formal",
+    "cozy",
+    "social",
+)
+_STYLE_POLICY_ENUMS_BY_KEY: dict[str, tuple[str, ...]] = {
+    "style_name": _STYLE_NAME_VALUES,
+    "target_density": _STYLE_LEVEL_VALUES,
+    "center_openness_bias": _STYLE_LEVEL_VALUES,
+    "wall_loading_bias": _WALL_LOADING_VALUES,
+    "symmetry_bias": _STYLE_LEVEL_VALUES,
+    "cluster_spacing_bias": _CLUSTER_SPACING_VALUES,
+    "clutter_tolerance": _STYLE_LEVEL_VALUES,
+    "decor_tolerance": _STYLE_LEVEL_VALUES,
+    "daylight_bias": _STYLE_LEVEL_VALUES,
+    "floating_cluster_tolerance": _STYLE_LEVEL_VALUES,
+    "material_weight_bias": _MATERIAL_WEIGHT_VALUES,
+    "visual_balance_bias": _VISUAL_BALANCE_VALUES,
+}
+_STYLE_POLICY_RESPONSE_SCHEMA: dict[str, object] = {
+    "type": "OBJECT",
+    "properties": {
+        key: {"type": "STRING", "enum": list(values)}
+        for key, values in _STYLE_POLICY_ENUMS_BY_KEY.items()
+    },
+    "required": list(_STYLE_POLICY_REQUIRED_KEYS),
+}
+
+_STYLE_POLICY_REPAIR_PROMPT = (
+    "Return exactly one valid JSON object with all required top-level keys: "
+    + ", ".join(_STYLE_POLICY_REQUIRED_KEYS)
+    + ". No markdown. No prose outside JSON."
+)
+
 _RESPONSE_MIME_TYPE = "application/json"
+_STYLE_POLICY_REQUIRE_LLM_ENV = "TKNT_STYLE_POLICY_REQUIRE_LLM"
+_STYLE_POLICY_MAX_TOKENS = 2000
+_STYLE_POLICY_MODEL_NAMES: tuple[str, ...] = (
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+)
 _STYLE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("japandi", ("japandi", "wabi", "zen", "japanese", "japan")),
     ("industrial", ("industrial", "loft", "concrete", "steel", "brick")),
@@ -194,19 +380,32 @@ def compile_style_policy(
     use_llm: bool = True,
     model_name: str | None = None,
 ) -> dict[str, Any]:
-    llm_seed = (
-        _try_llm_style_policy_seed(
+    require_llm = _style_policy_requires_llm()
+    llm_seed: dict[str, Any] = {}
+    if use_llm and brief_text.strip():
+        llm_seed = _try_llm_style_policy_seed(
             room_type=room_type,
             brief_text=brief_text,
             room_model_json=room_model_json,
             semantic_program_rules=semantic_program_rules,
             model_name=model_name,
+            require_llm=require_llm,
         )
-        if use_llm and brief_text.strip()
-        else {}
+    elif require_llm:
+        raise ValueError(
+            "Style policy strict LLM mode is enabled, but no style brief was provided."
+        )
+
+    deterministic = (
+        {"style_name": "balanced"}
+        if require_llm
+        else _deterministic_style_policy_seed(brief_text)
     )
-    deterministic = _deterministic_style_policy_seed(brief_text)
-    style_name = _canonical_style_name(llm_seed, deterministic)
+    style_name = (
+        _canonical_llm_style_name(llm_seed)
+        if require_llm
+        else _canonical_style_name(llm_seed, deterministic)
+    )
     layout_policy = dict(_BASE_POLICY)
     layout_policy.update(_STYLE_ONTOLOGY.get(style_name, {}))
     layout_policy.update(_validated_layout_policy_seed(llm_seed))
@@ -239,6 +438,38 @@ def compile_style_policy(
             "validation": "deterministic_policy_normalization",
         },
         "notes": room_notes,
+    }
+
+
+def build_neutral_style_policy(
+    *,
+    room_type: str,
+    reason: str = "Neutral style policy.",
+) -> dict[str, Any]:
+    layout_policy = _normalize_layout_policy(_BASE_POLICY)
+    return {
+        "style_name": "balanced",
+        "style_tags": [],
+        "layout_policy": layout_policy,
+        "cluster_policy_overrides": _cluster_policy_overrides(
+            layout_policy,
+            room_type=room_type,
+        ),
+        "policy_weights": _policy_weights(layout_policy),
+        "search_settings": {
+            "style_policy_variants": 1,
+            "final_palette_candidates": 1,
+            "decor_plan_candidates": 1,
+            "max_decor_items_per_room": _max_decor_items_per_room(layout_policy),
+            "max_decor_items_per_cluster": 1,
+        },
+        "controller": {
+            "phase_early": "neutral_ablation_policy",
+            "phase_late": "final_stylist_decorator",
+            "llm_seed_used": False,
+            "validation": "neutral_base_policy",
+        },
+        "notes": [reason],
     }
 
 
@@ -372,6 +603,7 @@ def _try_llm_style_policy_seed(
     room_model_json: Mapping[str, Any] | None,
     semantic_program_rules: Mapping[str, Any] | None,
     model_name: str | None,
+    require_llm: bool,
 ) -> dict[str, Any]:
     payload = {
         "room_type": room_type,
@@ -392,21 +624,90 @@ def _try_llm_style_policy_seed(
             "role": "user",
             "content": "INPUT JSON:\n"
             + json.dumps(payload, ensure_ascii=True, indent=2)
-            + "\nReturn strict JSON only.",
+            + "\nReturn strict JSON only with these top-level keys: "
+            + ", ".join(_STYLE_POLICY_REQUIRED_KEYS)
+            + ". Every key must be present and every value must be a short string.",
         },
     ]
     try:
-        response = get_llm_client(provider="gemini").chat_completion(
-            messages,
-            model_key="helper",
-            model_name=model_name,
-            temperature=0.2,
-            top_p=0.9,
-            max_tokens=700,
-            response_mime_type=_RESPONSE_MIME_TYPE,
-        )
-        return _parse_json_object(_extract_content(response))
+        client = get_llm_client()
+        attempted_models: list[str] = []
+        last_error: Exception | None = None
+        for candidate_model_name in _style_policy_model_attempt_order(
+            client,
+            model_name,
+        ):
+            attempted_models.append(candidate_model_name)
+            candidate_messages = list(messages)
+            for attempt in range(2):
+                raw_text = ""
+                try:
+                    response = client.chat_completion(
+                        candidate_messages,
+                        model_key="helper",
+                        model_name=candidate_model_name,
+                        fallback_model_names=(),
+                        temperature=0.0,
+                        top_p=0.9,
+                        max_tokens=_STYLE_POLICY_MAX_TOKENS,
+                        response_mime_type=_RESPONSE_MIME_TYPE,
+                        response_schema=_STYLE_POLICY_RESPONSE_SCHEMA,
+                    )
+                    raw_text = _extract_content(response)
+                    parsed = _parse_json_object(raw_text)
+                    _validate_style_policy_seed(parsed)
+                    return parsed
+                except Exception as exc:
+                    last_error = exc
+                    if _is_retryable_model_unavailable_error(exc):
+                        _record_llm_retry(
+                            stage="style_policy",
+                            model_name=candidate_model_name,
+                            reason="model_unavailable",
+                        )
+                        logger.warning(
+                            "Style policy model %s is temporarily unavailable.",
+                            candidate_model_name,
+                        )
+                        break
+                    if attempt == 1:
+                        logger.warning(
+                            "Style policy model %s returned invalid JSON after repair. Error: %s",
+                            candidate_model_name,
+                            exc,
+                        )
+                        break
+                    _record_llm_retry(
+                        stage="style_policy",
+                        model_name=candidate_model_name,
+                        reason="invalid_json_or_schema",
+                    )
+                    candidate_messages.append(
+                        {"role": "assistant", "content": raw_text}
+                    )
+                    candidate_messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"{_STYLE_POLICY_REPAIR_PROMPT}\nValidation error: {exc}"
+                            ),
+                        }
+                    )
+        if last_error is not None:
+            if _is_retryable_model_unavailable_error(last_error):
+                raise RuntimeError(
+                    "Style policy model unavailable after attempting models: "
+                    f"{', '.join(attempted_models)}"
+                ) from last_error
+            raise ValueError(
+                "Style policy compiler could not produce valid JSON after "
+                f"attempting models: {', '.join(attempted_models)}"
+            ) from last_error
+        raise RuntimeError("Style policy compiler produced no model candidates.")
     except Exception as exc:  # pragma: no cover - external LLM/network fallback
+        if require_llm:
+            logger.warning("Style policy strict LLM mode failed: %s", exc)
+            raise
         logger.info(
             "Style policy LLM seed skipped; using deterministic compiler: %s", exc
         )
@@ -419,6 +720,75 @@ def _deterministic_style_policy_seed(brief_text: str) -> dict[str, str]:
         if any(keyword in text for keyword in keywords):
             return {"style_name": style_name}
     return {"style_name": "balanced"}
+
+
+def _style_policy_requires_llm() -> bool:
+    return os.getenv(_STYLE_POLICY_REQUIRE_LLM_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _record_llm_retry(*, stage: str, model_name: str, reason: str) -> None:
+    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
+        return
+    try:
+        from clients.gemini_client import GeminiClient
+
+        GeminiClient.record_retry_event(
+            stage=stage,
+            model_name=model_name,
+            reason=reason,
+        )
+    except Exception:
+        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+
+
+def _style_policy_model_attempt_order(
+    client: object,
+    model_name: str | None,
+) -> list[str]:
+    strict_model_name = str(TextLLMConfig.STRICT_SINGLE_TEXT_MODEL or "").strip()
+    if strict_model_name:
+        return [strict_model_name]
+    helper_model_name = ""
+    get_model_name = getattr(client, "get_model_name", None)
+    if callable(get_model_name):
+        helper_model_name = str(get_model_name("helper")).strip()
+    requested_model_name = str(model_name or helper_model_name).strip()
+    sequence = (
+        list(_STYLE_POLICY_MODEL_NAMES) if TextLLMConfig.PROVIDER == "gemini" else []
+    )
+    if not requested_model_name:
+        return sequence or [TextLLMConfig.primary_model_name()]
+    if requested_model_name in sequence:
+        start_index = sequence.index(requested_model_name)
+        return sequence[start_index:] + sequence[:start_index]
+    return [
+        requested_model_name,
+        *[name for name in sequence if name != requested_model_name],
+    ]
+
+
+def _is_retryable_model_unavailable_error(exc: Exception) -> bool:
+    error_text = str(exc).lower()
+    if not error_text:
+        return False
+    return (
+        "503 service unavailable" in error_text
+        or '"code": 503' in error_text
+        or '"status": "unavailable"' in error_text
+        or "currently experiencing high demand" in error_text
+    )
+
+
+def _canonical_llm_style_name(llm_seed: Mapping[str, Any]) -> str:
+    llm_name = str(llm_seed.get("style_name") or "").strip().lower()
+    if llm_name in _STYLE_ONTOLOGY or llm_name == "balanced":
+        return llm_name
+    return "balanced"
 
 
 def _canonical_style_name(
@@ -837,6 +1207,25 @@ def _extract_content(response: object) -> str:
 
 
 def _parse_json_object(raw: str) -> dict[str, Any]:
+    last_decode_error: json.JSONDecodeError | None = None
+    for text in _json_object_parse_candidates(raw):
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            last_decode_error = exc
+            continue
+        if not isinstance(payload, dict):
+            raise ValueError("Style policy compiler JSON must be an object")
+        return payload
+
+    if last_decode_error is not None:
+        raise ValueError(
+            f"Style policy compiler returned malformed JSON: {last_decode_error}"
+        ) from last_decode_error
+    raise ValueError("Style policy compiler response did not contain a JSON object")
+
+
+def _json_object_parse_candidates(raw: str) -> list[str]:
     text = raw.strip()
     if text.startswith("```"):
         parts = text.split("```")
@@ -851,10 +1240,46 @@ def _parse_json_object(raw: str) -> dict[str, Any]:
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match is not None:
             text = match.group(0)
-    payload = json.loads(text)
-    if not isinstance(payload, dict):
-        raise ValueError("Style policy compiler JSON must be an object")
-    return payload
+    candidates = [
+        text,
+        _strip_trailing_json_commas(text),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        cleaned = candidate.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+    return out
+
+
+def _strip_trailing_json_commas(text: str) -> str:
+    previous = text
+    while True:
+        cleaned = re.sub(r",(\s*[}\]])", r"\1", previous)
+        if cleaned == previous:
+            return cleaned
+        previous = cleaned
+
+
+def _validate_style_policy_seed(payload: Mapping[str, Any]) -> None:
+    missing = [key for key in _STYLE_POLICY_REQUIRED_KEYS if key not in payload]
+    if missing:
+        raise ValueError(
+            "Style policy compiler JSON omitted required keys: " + ", ".join(missing)
+        )
+    invalid: list[str] = []
+    for key, allowed_values in _STYLE_POLICY_ENUMS_BY_KEY.items():
+        value = payload.get(key)
+        normalized = value.strip().lower() if isinstance(value, str) else ""
+        if normalized not in allowed_values:
+            invalid.append(f"{key}={value!r}")
+    if invalid:
+        raise ValueError(
+            "Style policy compiler JSON used invalid enum values: " + ", ".join(invalid)
+        )
 
 
 def _str_list(value: Any) -> list[str]:

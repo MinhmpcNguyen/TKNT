@@ -1,0 +1,1053 @@
+{
+  "status": "OK",
+  "room": {
+    "unit": "mm",
+    "room_id": "room_1",
+    "name": "Main",
+    "room_type": "living_room",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 50
+      },
+      {
+        "x": 4650,
+        "y": 0
+      },
+      {
+        "x": 4600,
+        "y": 3600
+      },
+      {
+        "x": 50,
+        "y": 3650
+      }
+    ],
+    "area_mm2": 16560000,
+    "area_m2": 16.56,
+    "perimeter_mm": 16400,
+    "centroid_mm": {
+      "x": 2325,
+      "y": 1818
+    },
+    "principal_axis": {
+      "angle_deg": -1,
+      "vector": {
+        "x": 0.9999,
+        "y": -0.0108
+      },
+      "confidence": 0.284
+    },
+    "bbox_mm": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 4650,
+      "max_y": 3650
+    },
+    "ceiling_height_mm": 2800
+  },
+  "openings": {
+    "doors": [
+      {
+        "id": "door_1",
+        "kind": "door",
+        "segment_mm": [
+          {
+            "x": 22,
+            "y": 1633
+          },
+          {
+            "x": 36,
+            "y": 2633
+          }
+        ],
+        "original_segment_mm": [
+          {
+            "x": 22,
+            "y": 1633
+          },
+          {
+            "x": 36,
+            "y": 2633
+          }
+        ],
+        "wall_id": "wall_4",
+        "width_mm": 1000,
+        "wall_t_start_mm": 1017,
+        "wall_t_end_mm": 2017,
+        "snap_distance_mm": 0,
+        "swing_radius_mm": 900,
+        "hinge_hint": "UNKNOWN"
+      }
+    ],
+    "windows": [
+      {
+        "id": "window_1",
+        "kind": "window",
+        "segment_mm": [
+          {
+            "x": 2000,
+            "y": 28
+          },
+          {
+            "x": 4000,
+            "y": 7
+          }
+        ],
+        "original_segment_mm": [
+          {
+            "x": 2000,
+            "y": 28
+          },
+          {
+            "x": 4000,
+            "y": 7
+          }
+        ],
+        "wall_id": "wall_1",
+        "width_mm": 2000,
+        "wall_t_start_mm": 2000,
+        "wall_t_end_mm": 4000,
+        "snap_distance_mm": 0,
+        "clearance_mm": 150
+      }
+    ]
+  },
+  "hard_obstacles": [
+    {
+      "id": "door_1_swing",
+      "type": "door_swing",
+      "polygon_ccw": [
+        {
+          "x": 36,
+          "y": 2633
+        },
+        {
+          "x": 22,
+          "y": 1633
+        },
+        {
+          "x": 922,
+          "y": 1621
+        },
+        {
+          "x": 936,
+          "y": 2621
+        }
+      ],
+      "hard": true,
+      "source_id": "door_1"
+    },
+    {
+      "id": "door_1_entry_clearance",
+      "type": "entry_clearance",
+      "polygon_ccw": [
+        {
+          "x": 37,
+          "y": 2733
+        },
+        {
+          "x": 21,
+          "y": 1533
+        },
+        {
+          "x": 921,
+          "y": 1521
+        },
+        {
+          "x": 937,
+          "y": 2721
+        }
+      ],
+      "hard": true,
+      "source_id": "door_1"
+    },
+    {
+      "id": "window_1_clearance",
+      "type": "window_clearance",
+      "polygon_ccw": [
+        {
+          "x": 2000,
+          "y": 28
+        },
+        {
+          "x": 4000,
+          "y": 7
+        },
+        {
+          "x": 4002,
+          "y": 157
+        },
+        {
+          "x": 2002,
+          "y": 178
+        }
+      ],
+      "hard": true,
+      "source_id": "window_1"
+    }
+  ],
+  "affordance_map": {
+    "usable_walls": [
+      {
+        "id": "wall_1_usable_200_1850",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 48
+          },
+          {
+            "x": 1850,
+            "y": 30
+          }
+        ],
+        "length_mm": 1650,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 1850,
+        "inward_normal": {
+          "x": 0.010752066611409407,
+          "y": 0.9999421948610748
+        }
+      },
+      {
+        "id": "wall_2_usable_200_3400",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4647,
+            "y": 200
+          },
+          {
+            "x": 4603,
+            "y": 3400
+          }
+        ],
+        "length_mm": 3200,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 3400,
+        "inward_normal": {
+          "x": -0.9999035633345557,
+          "y": -0.013887549490757718
+        }
+      },
+      {
+        "id": "wall_3_usable_200_4350",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4400,
+            "y": 3602
+          },
+          {
+            "x": 250,
+            "y": 3648
+          }
+        ],
+        "length_mm": 4150,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 4350,
+        "inward_normal": {
+          "x": -0.010988347541611645,
+          "y": -0.9999396262866597
+        }
+      },
+      {
+        "id": "wall_4_usable_200_917",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 47,
+            "y": 3450
+          },
+          {
+            "x": 37,
+            "y": 2733
+          }
+        ],
+        "length_mm": 717,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 917,
+        "inward_normal": {
+          "x": 0.9999035633345557,
+          "y": -0.013887549490757718
+        }
+      },
+      {
+        "id": "wall_4_usable_2117_3400",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 21,
+            "y": 1533
+          },
+          {
+            "x": 3,
+            "y": 250
+          }
+        ],
+        "length_mm": 1283,
+        "wall_t_start_mm": 2117,
+        "wall_t_end_mm": 3400,
+        "inward_normal": {
+          "x": 0.9999035633345557,
+          "y": -0.013887549490757718
+        }
+      }
+    ],
+    "blocked_walls": [],
+    "entry_landing_zones": [
+      {
+        "id": "door_1_entry_clearance",
+        "type": "entry_clearance",
+        "polygon_ccw": [
+          {
+            "x": 37,
+            "y": 2733
+          },
+          {
+            "x": 21,
+            "y": 1533
+          },
+          {
+            "x": 921,
+            "y": 1521
+          },
+          {
+            "x": 937,
+            "y": 2721
+          }
+        ],
+        "hard": true,
+        "source_id": "door_1"
+      }
+    ],
+    "circulation_corridors": [
+      {
+        "id": "corridor_1",
+        "from": "entry",
+        "to": "room_center",
+        "polyline_mm": [
+          {
+            "x": 29,
+            "y": 2133
+          },
+          {
+            "x": 2325,
+            "y": 1818
+          }
+        ],
+        "width_mm": 900,
+        "score": 0.579
+      },
+      {
+        "id": "corridor_2",
+        "from": "entry",
+        "to": "deep_room",
+        "polyline_mm": [
+          {
+            "x": 29,
+            "y": 2133
+          },
+          {
+            "x": 4600,
+            "y": 200
+          }
+        ],
+        "width_mm": 900,
+        "score": 1.0
+      },
+      {
+        "id": "corridor_3",
+        "from": "entry",
+        "to": "window:window_1",
+        "polyline_mm": [
+          {
+            "x": 29,
+            "y": 2133
+          },
+          {
+            "x": 3000,
+            "y": 18
+          }
+        ],
+        "width_mm": 900,
+        "score": 0.912
+      }
+    ],
+    "daylight_regions": [
+      {
+        "id": "window_1_daylight",
+        "source_window_id": "window_1",
+        "near_polygon_ccw": [
+          {
+            "x": 1850,
+            "y": 30
+          },
+          {
+            "x": 4150,
+            "y": 5
+          },
+          {
+            "x": 4167,
+            "y": 1605
+          },
+          {
+            "x": 1867,
+            "y": 1630
+          }
+        ],
+        "mid_polygon_ccw": [
+          {
+            "x": 1700,
+            "y": 32
+          },
+          {
+            "x": 4300,
+            "y": 4
+          },
+          {
+            "x": 4332,
+            "y": 3004
+          },
+          {
+            "x": 1732,
+            "y": 3032
+          }
+        ],
+        "score": 1.0
+      }
+    ],
+    "privacy_regions": [
+      {
+        "id": "privacy_back_zone",
+        "bbox_mm": {
+          "min_x": 4400,
+          "min_y": 200,
+          "max_x": 4600,
+          "max_y": 3400
+        },
+        "centroid_mm": {
+          "x": 4550,
+          "y": 1250
+        },
+        "score": 0.993
+      }
+    ],
+    "focal_surfaces": [
+      {
+        "id": "wall_3_usable_200_4350_focal",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4400,
+            "y": 3602
+          },
+          {
+            "x": 250,
+            "y": 3648
+          }
+        ],
+        "score": 1.0,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_2_usable_200_3400_focal",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4647,
+            "y": 200
+          },
+          {
+            "x": 4603,
+            "y": 3400
+          }
+        ],
+        "score": 0.914,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_4_usable_2117_3400_focal",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 21,
+            "y": 1533
+          },
+          {
+            "x": 3,
+            "y": 250
+          }
+        ],
+        "score": 0.367,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_1_usable_200_1850_focal",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 48
+          },
+          {
+            "x": 1850,
+            "y": 30
+          }
+        ],
+        "score": 0.221,
+        "reason": "long usable wall with low opening interruption"
+      }
+    ],
+    "center_openness_regions": [
+      {
+        "id": "center_openness_core",
+        "centroid_mm": {
+          "x": 2300,
+          "y": 1800
+        },
+        "bbox_mm": {
+          "min_x": 2000,
+          "min_y": 1400,
+          "max_x": 2600,
+          "max_y": 2200
+        },
+        "score": 1.0
+      }
+    ],
+    "wall_anchor_candidates": [
+      {
+        "id": "wall_2_usable_200_3400_anchor",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4647,
+            "y": 200
+          },
+          {
+            "x": 4603,
+            "y": 3400
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 4647,
+            "y": 200
+          },
+          {
+            "x": 4603,
+            "y": 3400
+          },
+          {
+            "x": 3903,
+            "y": 3390
+          },
+          {
+            "x": 3947,
+            "y": 190
+          }
+        ],
+        "max_backed_width_mm": 3200,
+        "score": 1.0
+      },
+      {
+        "id": "wall_3_usable_200_4350_anchor",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4400,
+            "y": 3602
+          },
+          {
+            "x": 250,
+            "y": 3648
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 4400,
+            "y": 3602
+          },
+          {
+            "x": 250,
+            "y": 3648
+          },
+          {
+            "x": 242,
+            "y": 2948
+          },
+          {
+            "x": 4392,
+            "y": 2902
+          }
+        ],
+        "max_backed_width_mm": 4150,
+        "score": 1.0
+      },
+      {
+        "id": "wall_1_usable_200_1850_anchor",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 48
+          },
+          {
+            "x": 1850,
+            "y": 30
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 200,
+            "y": 48
+          },
+          {
+            "x": 1850,
+            "y": 30
+          },
+          {
+            "x": 1858,
+            "y": 730
+          },
+          {
+            "x": 208,
+            "y": 748
+          }
+        ],
+        "max_backed_width_mm": 1650,
+        "score": 0.55
+      },
+      {
+        "id": "wall_4_usable_2117_3400_anchor",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 21,
+            "y": 1533
+          },
+          {
+            "x": 3,
+            "y": 250
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 21,
+            "y": 1533
+          },
+          {
+            "x": 3,
+            "y": 250
+          },
+          {
+            "x": 703,
+            "y": 240
+          },
+          {
+            "x": 721,
+            "y": 1523
+          }
+        ],
+        "max_backed_width_mm": 1283,
+        "score": 0.428
+      },
+      {
+        "id": "wall_4_usable_200_917_anchor",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 47,
+            "y": 3450
+          },
+          {
+            "x": 37,
+            "y": 2733
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 47,
+            "y": 3450
+          },
+          {
+            "x": 37,
+            "y": 2733
+          },
+          {
+            "x": 737,
+            "y": 2723
+          },
+          {
+            "x": 747,
+            "y": 3440
+          }
+        ],
+        "max_backed_width_mm": 717,
+        "score": 0.239
+      }
+    ],
+    "floating_zone_candidates": [
+      {
+        "id": "floating_center_zone",
+        "centroid_mm": {
+          "x": 2300,
+          "y": 1800
+        },
+        "bbox_mm": {
+          "min_x": 2000,
+          "min_y": 1400,
+          "max_x": 2600,
+          "max_y": 2200
+        },
+        "score": 0.656
+      }
+    ],
+    "soft_usage_hints": {
+      "active_entry": false,
+      "prefer_private_back_zone": false,
+      "prefer_daylit_work_zone": false,
+      "prefer_open_center": false,
+      "likely_primary_focus": "media_wall"
+    }
+  },
+  "topology": {
+    "wall_graph": {
+      "nodes": [
+        {
+          "id": "wall_1",
+          "start_mm": {
+            "x": 0,
+            "y": 50
+          },
+          "end_mm": {
+            "x": 4650,
+            "y": 0
+          },
+          "length_mm": 4650,
+          "inward_normal": {
+            "x": 0.010752066611409407,
+            "y": 0.9999421948610748
+          }
+        },
+        {
+          "id": "wall_2",
+          "start_mm": {
+            "x": 4650,
+            "y": 0
+          },
+          "end_mm": {
+            "x": 4600,
+            "y": 3600
+          },
+          "length_mm": 3600,
+          "inward_normal": {
+            "x": -0.9999035633345557,
+            "y": -0.013887549490757718
+          }
+        },
+        {
+          "id": "wall_3",
+          "start_mm": {
+            "x": 4600,
+            "y": 3600
+          },
+          "end_mm": {
+            "x": 50,
+            "y": 3650
+          },
+          "length_mm": 4550,
+          "inward_normal": {
+            "x": -0.010988347541611645,
+            "y": -0.9999396262866597
+          }
+        },
+        {
+          "id": "wall_4",
+          "start_mm": {
+            "x": 50,
+            "y": 3650
+          },
+          "end_mm": {
+            "x": 0,
+            "y": 50
+          },
+          "length_mm": 3600,
+          "inward_normal": {
+            "x": 0.9999035633345557,
+            "y": -0.013887549490757718
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": "wall_1",
+          "to": "wall_4",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_1",
+          "to": "wall_2",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_2",
+          "to": "wall_3",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_3",
+          "to": "wall_4",
+          "type": "adjacent"
+        }
+      ]
+    },
+    "entry_node": {
+      "id": "entry",
+      "type": "entry",
+      "point_mm": {
+        "x": 29,
+        "y": 2133
+      }
+    },
+    "window_nodes": [
+      {
+        "id": "window:window_1",
+        "type": "window",
+        "point_mm": {
+          "x": 3000,
+          "y": 18
+        },
+        "opening_id": "window_1"
+      }
+    ],
+    "passage_graph": {
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "entry",
+          "point_mm": {
+            "x": 29,
+            "y": 2133
+          }
+        },
+        {
+          "id": "room_center",
+          "type": "center",
+          "point_mm": {
+            "x": 2325,
+            "y": 1818
+          }
+        },
+        {
+          "id": "window:window_1",
+          "type": "window",
+          "point_mm": {
+            "x": 3000,
+            "y": 18
+          },
+          "opening_id": "window_1"
+        }
+      ],
+      "edges": [
+        {
+          "from": "entry",
+          "to": "room_center",
+          "corridor_id": "corridor_1",
+          "width_mm": 900
+        },
+        {
+          "from": "entry",
+          "to": "deep_room",
+          "corridor_id": "corridor_2",
+          "width_mm": 900
+        },
+        {
+          "from": "entry",
+          "to": "window:window_1",
+          "corridor_id": "corridor_3",
+          "width_mm": 900
+        }
+      ]
+    },
+    "room_subzones": [
+      {
+        "id": "zone_front_right",
+        "label": "front_right",
+        "centroid_mm": {
+          "x": 3500,
+          "y": 1000
+        },
+        "bbox_mm": {
+          "min_x": 2400,
+          "min_y": 200,
+          "max_x": 4600,
+          "max_y": 1800
+        },
+        "sample_count": 108
+      },
+      {
+        "id": "zone_back_right",
+        "label": "back_right",
+        "centroid_mm": {
+          "x": 3490,
+          "y": 2793
+        },
+        "bbox_mm": {
+          "min_x": 2400,
+          "min_y": 2000,
+          "max_x": 4600,
+          "max_y": 3600
+        },
+        "sample_count": 107
+      },
+      {
+        "id": "zone_front_left",
+        "label": "front_left",
+        "centroid_mm": {
+          "x": 1262,
+          "y": 938
+        },
+        "bbox_mm": {
+          "min_x": 200,
+          "min_y": 200,
+          "max_x": 2200,
+          "max_y": 1800
+        },
+        "sample_count": 91
+      },
+      {
+        "id": "zone_back_left",
+        "label": "back_left",
+        "centroid_mm": {
+          "x": 1335,
+          "y": 2896
+        },
+        "bbox_mm": {
+          "min_x": 200,
+          "min_y": 2000,
+          "max_x": 2200,
+          "max_y": 3600
+        },
+        "sample_count": 83
+      }
+    ]
+  },
+  "quality_meta": {
+    "missing": [],
+    "conflicts": [],
+    "confidence": 1.0,
+    "notes": [],
+    "settings": {
+      "grid_mm": 50,
+      "opening_snap_tolerance_mm": 120,
+      "corner_exclusion_mm": 200,
+      "door_front_clearance_mm": 900,
+      "door_side_margin_mm": 100,
+      "window_clearance_mm": 150,
+      "daylight_near_depth_mm": 1600,
+      "daylight_near_side_margin_mm": 150,
+      "daylight_mid_depth_mm": 3000,
+      "daylight_mid_side_margin_mm": 300,
+      "min_wall_len_mm": 150,
+      "min_usable_wall_len_mm": 700,
+      "affordance_field_resolution_mm": 200,
+      "corridor_candidate_max": 4,
+      "zone_split_max": 4,
+      "llm_temperature": 0.1,
+      "llm_retry_max": 1
+    }
+  },
+  "obstacles": [
+    {
+      "id": "door_1_swing",
+      "type": "door_swing",
+      "polygon_ccw": [
+        {
+          "x": 36,
+          "y": 2633
+        },
+        {
+          "x": 22,
+          "y": 1633
+        },
+        {
+          "x": 922,
+          "y": 1621
+        },
+        {
+          "x": 936,
+          "y": 2621
+        }
+      ],
+      "hard": true,
+      "source_id": "door_1"
+    },
+    {
+      "id": "door_1_entry_clearance",
+      "type": "entry_clearance",
+      "polygon_ccw": [
+        {
+          "x": 37,
+          "y": 2733
+        },
+        {
+          "x": 21,
+          "y": 1533
+        },
+        {
+          "x": 921,
+          "y": 1521
+        },
+        {
+          "x": 937,
+          "y": 2721
+        }
+      ],
+      "hard": true,
+      "source_id": "door_1"
+    },
+    {
+      "id": "window_1_clearance",
+      "type": "window_clearance",
+      "polygon_ccw": [
+        {
+          "x": 2000,
+          "y": 28
+        },
+        {
+          "x": 4000,
+          "y": 7
+        },
+        {
+          "x": 4002,
+          "y": 157
+        },
+        {
+          "x": 2002,
+          "y": 178
+        }
+      ],
+      "hard": true,
+      "source_id": "window_1"
+    }
+  ],
+  "meta": {
+    "room_type": "living_room",
+    "style": "modern",
+    "height_mm": 2800,
+    "window_direction": "",
+    "grid_mm": 50,
+    "llm_temperature": 0.1,
+    "llm_retry_max": 1
+  },
+  "notes": [
+    "Design target room type: living_room.",
+    "Requested style: modern.",
+    "Could you please design a Living Room for me? The room is 4.0m x 5.0m. Designed for relaxation and socializing, the living room should feature a comfortable sofa arrangement, ample lighting for different activities, and a designated movie area with a large screen and surround sound for an immersive experience. Include a sofa facing a TV console, a coffee table, a rug, and one or two armchairs if they fit while keeping the room easy to move through.",
+    "Soft usage hint: likely_primary_focus=media_wall."
+  ],
+  "missing": [],
+  "conflicts": []
+}

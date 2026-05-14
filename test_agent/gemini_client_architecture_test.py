@@ -489,6 +489,47 @@ class GeminiClientArchitectureTest(unittest.TestCase):
         )
         self.assertEqual(response["modelVersion"], "gemini-2.5-flash-lite")
 
+    def test_post_json_retries_once_on_malformed_json_body(self) -> None:
+        client = GeminiClient.__new__(GeminiClient)
+        if "_post_json" in client.__dict__:
+            delattr(client, "_post_json")
+        attempts = {"count": 0}
+
+        class _FakeHttpClient:
+            def post(
+                self,
+                url: str,
+                json: dict[str, object],
+                headers: dict[str, str],
+            ) -> httpx.Response:
+                _ = json, headers
+                attempts["count"] += 1
+                request = httpx.Request("POST", url)
+                if attempts["count"] == 1:
+                    return httpx.Response(
+                        200,
+                        request=request,
+                        text='{"broken": ',
+                        headers={"content-type": "application/json"},
+                    )
+                return httpx.Response(
+                    200,
+                    request=request,
+                    text='{"ok": true}',
+                    headers={"content-type": "application/json"},
+                )
+
+        client._http_client = _FakeHttpClient()  # type: ignore[assignment]
+        client._api_key = "gemini-key"
+
+        payload = client._post_json(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+            {"contents": []},
+        )
+
+        self.assertEqual(attempts["count"], 2)
+        self.assertEqual(payload, {"ok": True})
+
     def test_tool_chat_completion_falls_back_after_retryable_503(self) -> None:
         client = GeminiClient.__new__(GeminiClient)
         attempted_urls: list[str] = []

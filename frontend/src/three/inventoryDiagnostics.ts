@@ -101,6 +101,17 @@ function itemMaterial(item: InventoryItem): string | null {
   return fromAttributes ? fromAttributes.toLowerCase() : null;
 }
 
+function isTrustedDemoInventoryItem(item: InventoryItem): boolean {
+  const attributes = readRecord(item.attributes);
+  const source = readString(attributes?.source)?.toLowerCase() ?? null;
+  const sourceDataset = readString(attributes?.source_dataset)?.toLowerCase() ?? null;
+  return (
+    item.asset_id.startsWith('demo_inventory_') ||
+    source === 'demo_inventory' ||
+    sourceDataset === 'demo_inventory'
+  );
+}
+
 function scoreDimensionFit(
   item: InventoryItem,
   targetWidthMm?: number,
@@ -420,9 +431,11 @@ export function resolveInventoryItemForPreview(params: {
   ]);
   const hasDescriptor = Boolean(best.modelResolution.descriptor);
   const hasStyleSpecificModel = best.modelResolution.status === 'resolved_style_variant';
+  const hasTrustedDemoModel = hasDescriptor && isTrustedDemoInventoryItem(best.item);
   const glbEligible =
     hasDescriptor &&
-    (strongMatchSources.has(best.source) ||
+    (hasTrustedDemoModel ||
+      strongMatchSources.has(best.source) ||
       (moderateMatchSources.has(best.source) &&
         hasStyleSpecificModel &&
         best.dimensionScore >= 26));

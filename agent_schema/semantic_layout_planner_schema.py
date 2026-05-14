@@ -6,6 +6,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PlannerStatus = Literal["OK", "NEEDS_REVIEW", "UNSAT"]
 ClusterPriority = Literal["core", "support", "optional"]
+LayoutRole = Literal["primary", "secondary", "support", "optional"]
+BundleClass = Literal["indispensable", "strong_support", "optional", "decor_light"]
+PreserveLevel = Literal["highest", "high", "medium", "low"]
+DropOrderBias = Literal[
+    "drop_first",
+    "drop_early",
+    "neutral",
+    "drop_late",
+    "drop_last",
+]
+SizeTier = Literal["S", "M", "L"]
 ObjectRole = Literal[
     "dominant_anchor",
     "workflow_anchor",
@@ -76,10 +87,35 @@ class ViabilityScore(BaseModel):
     score: float = 1.0
 
 
+class TierCountObjectHint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    object_type: str
+    min_keep: int = 0
+    max_keep: int | None = None
+    keep_if_space_surplus: bool = False
+    space_surplus_threshold: float = 0.45
+    drop_order_bias: DropOrderBias = "neutral"
+    preserve_level: PreserveLevel = "medium"
+    preferred_size_tier: SizeTier | None = None
+
+
+class TierCountHints(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_class: BundleClass
+    preserve_level: PreserveLevel
+    keep_if_space_surplus: bool = False
+    space_surplus_threshold: float = 0.45
+    drop_order_bias: DropOrderBias = "neutral"
+    object_hints: list[TierCountObjectHint] = Field(default_factory=list)
+
+
 class ActiveSemanticCluster(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cluster_id: str
+    layout_role: LayoutRole
     priority: ClusterPriority
     activation_reason: str
     semantic_role: str
@@ -88,6 +124,7 @@ class ActiveSemanticCluster(BaseModel):
     zone_claims: ZoneClaims = Field(default_factory=ZoneClaims)
     relation_intents: list[RelationIntent] = Field(default_factory=list)
     degradation_ladder: list[str] = Field(default_factory=list)
+    tier_count_hints: TierCountHints | None = None
     viability_score: ViabilityScore = Field(default_factory=ViabilityScore)
 
 
@@ -143,6 +180,7 @@ class SemanticLayoutProgram(BaseModel):
     status: PlannerStatus
     room_type: str
     style_policy: dict[str, object] | None = None
+    request_contract: dict[str, object] | None = None
     active_clusters: list[ActiveSemanticCluster] = Field(default_factory=list)
     global_layout_intent: GlobalLayoutIntent = Field(default_factory=GlobalLayoutIntent)
     macro_relations: MacroRelations = Field(default_factory=MacroRelations)

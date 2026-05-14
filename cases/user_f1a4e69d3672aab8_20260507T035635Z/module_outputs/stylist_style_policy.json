@@ -1,0 +1,63 @@
+{
+  "style_name": "balanced",
+  "style_tags": [
+    "minimal",
+    "cozy"
+  ],
+  "layout_policy": {
+    "target_density": "low_to_balanced",
+    "center_openness_bias": "very_high",
+    "wall_loading_bias": "focal_balanced",
+    "symmetry_bias": "balanced",
+    "cluster_spacing_bias": "soft",
+    "clutter_tolerance": "low",
+    "decor_tolerance": "low",
+    "daylight_bias": "high",
+    "floating_cluster_tolerance": "low_to_medium",
+    "material_weight_bias": "light",
+    "visual_balance_bias": "calm"
+  },
+  "cluster_policy_overrides": {
+    "sleep_core": {
+      "prefer_breathing_room": true
+    },
+    "primary_core": {
+      "prefer_breathing_room": true
+    },
+    "support_optional": {
+      "allow_only_if_space_surplus": true
+    },
+    "decor": {
+      "max_items_per_cluster": 1
+    },
+    "lounge_reading": {
+      "allow_only_if_space_surplus": true
+    }
+  },
+  "policy_weights": {
+    "density_multiplier": 0.82,
+    "optional_utility_bias": -0.45,
+    "decor_utility_bias": -0.9,
+    "openness_weight": 1.15,
+    "symmetry_weight": 1.0,
+    "naturalness_weight": 1.12,
+    "semantic_coherence_weight": 1.06,
+    "spatial_quality_weight": 1.15
+  },
+  "search_settings": {
+    "style_policy_variants": 1,
+    "final_palette_candidates": 3,
+    "decor_plan_candidates": 3,
+    "max_decor_items_per_room": 1,
+    "max_decor_items_per_cluster": 1
+  },
+  "controller": {
+    "phase_early": "style_policy_compiler",
+    "phase_late": "final_stylist_decorator",
+    "llm_seed_used": true,
+    "validation": "deterministic_policy_normalization"
+  },
+  "notes": [
+    "Bedroom correction raised restfulness and clutter control."
+  ]
+}

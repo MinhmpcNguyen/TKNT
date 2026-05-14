@@ -73,7 +73,7 @@ config_file = os.path.join(os.path.dirname(__file__), os.pardir, APP_CONFIG_FILE
 # Load the application configuration
 try:
     root_config: RootConfig = load_config(app_config_path=config_file)
-    logger.info(f"Application configuration: {root_config.model_dump_json(indent=4)}")
+    logger.info("Application configuration loaded from %s", config_file)
 except Exception as e:
     logger.critical("Failed to load application configuration: %s", e)
     raise e

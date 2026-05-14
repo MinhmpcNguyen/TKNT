@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def setup_logging(level: str | None = None) -> None:
@@ -86,6 +86,10 @@ def _setup_extra_loggers() -> None:
     pairwise_logger.setLevel(logging.INFO)
     pairwise_logger.propagate = False
 
+    image_flow_logger = logging.getLogger("image_flow")
+    image_flow_logger.setLevel(logging.INFO)
+    image_flow_logger.propagate = False
+
     rag_log_path = str((base_dir / f"rag_{run_id}.log").resolve())
     if not _has_file_handler(rag_logger, rag_log_path):
         rag_handler = logging.FileHandler(rag_log_path, encoding="utf-8")
@@ -115,6 +119,12 @@ def _setup_extra_loggers() -> None:
         pairwise_handler = logging.FileHandler(pairwise_path, encoding="utf-8")
         pairwise_handler.setFormatter(formatter)
         pairwise_logger.addHandler(pairwise_handler)
+
+    image_flow_path = str((base_dir / f"image_flow_{run_id}.jsonl").resolve())
+    if not _has_file_handler(image_flow_logger, image_flow_path):
+        image_flow_handler = logging.FileHandler(image_flow_path, encoding="utf-8")
+        image_flow_handler.setFormatter(logging.Formatter("%(message)s"))
+        image_flow_logger.addHandler(image_flow_handler)
 
 
 def _has_file_handler(logger: logging.Logger, path: str) -> bool:

@@ -12,15 +12,38 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agent.cluster_composer import (
+    ClusterComposer,
+    _build_cluster_output_from_placements,
+)
 from agent.cluster_forge import ClusterForge
+from agent.cluster_placer import build_phase2_payload
+from agent.phase2_controller import Phase2Controller, build_phase2_preview_candidate
 from agent.cluster_relation_planner import ClusterRelationPlanner
 from agent.room_interpreter import RoomInterpreter
 from agent.seed_concept_generator import solver_plan_from_concept
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist, stylist_model_name_for_variant
 from agent.tier_count_director import TierCountDirector
+from agent.request_contract import (
+    canonical_object_type,
+    missing_functional_contract_types,
+    missing_non_functional_contract_items,
+    request_contract_from_payload,
+)
 from cluster_composer.merge import merge_cluster_outputs
+from cluster_composer.outline import compute_cluster_outline
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from pipeline.ablation_modes import (
+    AblationMode,
+    ablation_metadata,
+    apply_tier_output_for_mode,
+    resolve_ablation_mode,
+    skip_accessory_refill,
+    style_policy_for_mode,
+    target_final_count_for_mode,
+    uses_neutral_style_policy,
+)
 from pipeline.compose_feedback import (
     apply_compose_backoff,
     apply_variant_diversification,
@@ -53,6 +76,24 @@ logger = logging.getLogger(__name__)
 _PRIMARY_SEED_CACHE_VERSION = "v1"
 _PRIMARY_SEED_LAYOUT_CACHE: dict[str, dict[str, Any]] = {}
 _LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
+_REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
+    "rug": {
+        "width_ratio": 0.56,
+        "height_ratio": 0.44,
+        "min_w": 900,
+        "min_h": 700,
+        "max_w": 2400,
+        "max_h": 2800,
+        "collision_layer": "floor_underlay",
+        "place_on": {"target_instance_id": "floor", "method": "floor"},
+    },
+    "ceiling_lamp": {
+        "width": 450,
+        "height": 450,
+        "collision_layer": "ceiling",
+        "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
+    },
+}
 
 try:
     from shapely.geometry import Polygon
@@ -246,6 +287,13 @@ ORCHESTRATOR_MODULE_SPECS: tuple[OrchestratorModuleSpec, ...] = (
         output="semantic layout program and cluster definitions with anchor-first policies",
         output_artifact="module_outputs/cluster_forge.json",
         legacy_artifact="02_cluster_forge.json",
+    ),
+    OrchestratorModuleSpec(
+        name="request_contract",
+        implementation="agent.request_contract.request_contract_from_payload",
+        inputs=("planning_guidance_text", "cluster_output"),
+        output="request-aware object contract inferred before tier count",
+        output_artifact="module_outputs/request_contract.json",
     ),
     OrchestratorModuleSpec(
         name="tier_count_director",
@@ -865,7 +913,9 @@ def run_case(
     special_notes: str | None = None,
     cases_root: str | Path = "cases",
     case_id: str | None = None,
+    ablation_mode: str | None = None,
 ) -> dict[str, Any]:
+    resolved_ablation_mode = resolve_ablation_mode(ablation_mode)
     prepared_input_payload, manual_placements = (
         prepare_input_payload_for_manual_placements(input_payload)
     )
@@ -880,7 +930,12 @@ def run_case(
 
     _write_json(
         paths.meta,
-        {"case_id": case_id, "user_id": user_id, "created_at_utc": _now_utc_iso()},
+        {
+            "case_id": case_id,
+            "user_id": user_id,
+            "created_at_utc": _now_utc_iso(),
+            **ablation_metadata(resolved_ablation_mode),
+        },
     )
     _write_module_io_manifest(paths)
     _update_status(paths, "room_interpreter")
@@ -928,10 +983,20 @@ def run_case(
         else {},
     }
 
-    style_policy = stylist.compile_style_policy(
+    _update_status(paths, "stylist_style_policy")
+    compiled_style_policy = (
+        {}
+        if uses_neutral_style_policy(resolved_ablation_mode)
+        else stylist.compile_style_policy(
+            room_type=room_type,
+            brief_text=planning_guidance_text,
+            room_model_json=room_output,
+        )
+    )
+    style_policy = style_policy_for_mode(
+        mode=resolved_ablation_mode,
         room_type=room_type,
-        brief_text=planning_guidance_text,
-        room_model_json=room_output,
+        current_policy=compiled_style_policy,
     )
     stylist_user_context["style_policy"] = style_policy
     _write_module_json(paths, "stylist_style_policy", style_policy)
@@ -958,6 +1023,9 @@ def run_case(
     _write_module_json(
         paths, "cluster_forge", cluster_output, legacy_path=paths.cluster_forge
     )
+    request_contract = request_contract_from_payload(cluster_output)
+    if request_contract:
+        _write_module_json(paths, "request_contract", request_contract)
 
     _update_status(paths, "tier_count")
     tier_output = tier_count.generate(
@@ -971,6 +1039,10 @@ def run_case(
     tier_output = apply_manual_placements_to_tier_output(
         tier_output, manual_placements, clusters_json=cluster_output
     )
+    tier_output = apply_tier_output_for_mode(
+        mode=resolved_ablation_mode,
+        tier_output=tier_output,
+    )
     _write_module_json(
         paths, "tier_count_director", tier_output, legacy_path=paths.tier_count
     )
@@ -982,7 +1054,7 @@ def run_case(
         paths, "cluster_output_merger", merged_output, legacy_path=paths.cluster_merged
     )
 
-    target_final_count = 5
+    target_final_count = target_final_count_for_mode(resolved_ablation_mode, 5)
     _update_status(
         paths,
         "cluster_relation_planner",
@@ -996,6 +1068,7 @@ def run_case(
         room_model_json=room_output,
         clusters_json=merged_output,
         target_count=target_final_count,
+        description=planning_guidance_text or None,
     )
     seed_relation_plans = _strip_raw_text(seed_relation_plans)
     _write_module_json(
@@ -1056,6 +1129,7 @@ def run_case(
             solver=solver,
             manual_placements=manual_placements,
             variant_index=concept_index,
+            ablation_mode=resolved_ablation_mode,
         )
         if not concept_bundles:
             continue
@@ -1064,6 +1138,7 @@ def run_case(
                 bundle=solved_bundle,
                 room_output=room_output,
                 variant_index=len(solved_bundles) + 1,
+                ablation_mode=resolved_ablation_mode,
             )
             solved_bundles.append(solved_bundle)
             if concept_index == 1 and solution_offset == 1:
@@ -1241,6 +1316,7 @@ def _solve_object_level_variant_bundle(
     solver: MacroClusterSolver,
     manual_placements: list[dict[str, Any]] | None,
     variant_index: int,
+    ablation_mode: AblationMode,
 ) -> list[dict[str, Any]]:
     try:
         solver_output = solver.generate_object_layout(
@@ -1370,6 +1446,7 @@ def _solve_object_level_variant_bundle(
                         or concept.get("concept_family")
                         or variant_index
                     ),
+                    "ablation_mode": ablation_mode,
                 }
             )
         return bundles
@@ -2325,6 +2402,7 @@ def _plan_seed_variant_bundles(
         room_model_json=room_output,
         clusters_json=planner_clusters_json,
         target_count=target_count,
+        description=guidance_text or None,
     )
     planned_bundles: list[dict[str, Any]] = []
     payload_variants: list[dict[str, Any]] = []
@@ -2984,12 +3062,274 @@ def _bundle_signature(bundle: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def _ensure_requested_non_functional_contract_objects(
+    *,
+    absolute_layout: dict[str, Any],
+    room_output: dict[str, Any],
+    cluster_output: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    objects = [
+        row for row in absolute_layout.get("objects") or [] if isinstance(row, dict)
+    ]
+    missing_items = missing_non_functional_contract_items(
+        contract=request_contract_from_payload(cluster_output),
+        objects=objects,
+    )
+    if not missing_items:
+        return absolute_layout, {"added_count": 0, "added_object_types": []}
+
+    room_bbox = _room_bbox_for_non_functional_refill(
+        room_output=room_output,
+        absolute_layout=absolute_layout,
+    )
+    if room_bbox is None:
+        return absolute_layout, {
+            "added_count": 0,
+            "added_object_types": [],
+            "skipped_reason": "missing_room_polygon",
+        }
+
+    updated_layout = deepcopy(absolute_layout)
+    updated_objects = [
+        dict(row)
+        for row in updated_layout.get("objects") or []
+        if isinstance(row, dict)
+    ]
+    added_types: list[str] = []
+    for item in missing_items:
+        object_type = canonical_object_type(str(item.get("object_type") or ""))
+        spec = _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.get(object_type)
+        if not spec:
+            continue
+        layout_object = _requested_non_functional_layout_object(
+            object_type=object_type,
+            spec=spec,
+            room_bbox=room_bbox,
+            existing_objects=updated_objects,
+        )
+        if layout_object is None:
+            continue
+        updated_objects.append(layout_object)
+        added_types.append(object_type)
+
+    if not added_types:
+        return absolute_layout, {"added_count": 0, "added_object_types": []}
+
+    updated_layout["objects"] = updated_objects
+    return updated_layout, {
+        "added_count": len(added_types),
+        "added_object_types": added_types,
+        "source": "request_contract_non_functional",
+    }
+
+
+def _room_bbox_for_non_functional_refill(
+    *,
+    room_output: dict[str, Any],
+    absolute_layout: dict[str, Any],
+) -> dict[str, int] | None:
+    room = room_output.get("room") if isinstance(room_output.get("room"), dict) else {}
+    layout_room = (
+        absolute_layout.get("room")
+        if isinstance(absolute_layout.get("room"), dict)
+        else {}
+    )
+    for candidate in (
+        room.get("polygon_ccw"),
+        layout_room.get("polygon_ccw"),
+        absolute_layout.get("polygon_ccw"),
+    ):
+        points = _non_functional_refill_points(candidate)
+        if len(points) >= 3:
+            return _bbox_from_world_points(points)
+    return None
+
+
+def _non_functional_refill_points(value: Any) -> list[tuple[float, float]]:
+    if not isinstance(value, list):
+        return []
+    points: list[tuple[float, float]] = []
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        try:
+            points.append((float(row.get("x") or 0.0), float(row.get("y") or 0.0)))
+        except (TypeError, ValueError):
+            continue
+    return points
+
+
+def _requested_non_functional_layout_object(
+    *,
+    object_type: str,
+    spec: dict[str, Any],
+    room_bbox: dict[str, int],
+    existing_objects: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    room_width = max(0, int(room_bbox["max_x"]) - int(room_bbox["min_x"]))
+    room_height = max(0, int(room_bbox["max_y"]) - int(room_bbox["min_y"]))
+    if room_width <= 0 or room_height <= 0:
+        return None
+
+    width = _request_refill_dimension(
+        spec=spec,
+        fixed_key="width",
+        ratio_key="width_ratio",
+        min_key="min_w",
+        max_key="max_w",
+        room_span=room_width,
+    )
+    height = _request_refill_dimension(
+        spec=spec,
+        fixed_key="height",
+        ratio_key="height_ratio",
+        min_key="min_h",
+        max_key="max_h",
+        room_span=room_height,
+    )
+    if width <= 0 or height <= 0:
+        return None
+
+    center_x = int(round((int(room_bbox["min_x"]) + int(room_bbox["max_x"])) / 2.0))
+    center_y = int(round((int(room_bbox["min_y"]) + int(room_bbox["max_y"])) / 2.0))
+    min_x = _clamp_int(
+        center_x - width // 2,
+        int(room_bbox["min_x"]),
+        int(room_bbox["max_x"]) - width,
+    )
+    min_y = _clamp_int(
+        center_y - height // 2,
+        int(room_bbox["min_y"]),
+        int(room_bbox["max_y"]) - height,
+    )
+    max_x = min_x + width
+    max_y = min_y + height
+    instance_id = _unique_refill_instance_id(object_type, existing_objects)
+    place_on = deepcopy(
+        spec.get("place_on") if isinstance(spec.get("place_on"), dict) else {}
+    )
+    if place_on.get("target_instance_id") == "floor":
+        target_id = _largest_existing_layout_object_id(existing_objects)
+        if target_id:
+            place_on["target_instance_id"] = target_id
+
+    return {
+        "cluster_id": _preferred_existing_cluster_id(existing_objects),
+        "object_id": instance_id,
+        "instance_id": instance_id,
+        "object_type": object_type,
+        "category": object_type,
+        "source": "request_contract",
+        "x": min_x,
+        "y": min_y,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": width,
+        "h": height,
+        "rect": [min_x, min_y, width, height],
+        "bbox": {
+            "min_x": min_x,
+            "min_y": min_y,
+            "max_x": max_x,
+            "max_y": max_y,
+        },
+        "center": {
+            "x": int(round((min_x + max_x) / 2.0)),
+            "y": int(round((min_y + max_y) / 2.0)),
+        },
+        "polygon_ccw": [
+            {"x": min_x, "y": min_y},
+            {"x": max_x, "y": min_y},
+            {"x": max_x, "y": max_y},
+            {"x": min_x, "y": max_y},
+        ],
+        "place_on": place_on or None,
+        "collision_layer": str(spec.get("collision_layer") or "floor_underlay"),
+        "priority": "request_non_functional",
+        "role": "decor_light",
+    }
+
+
+def _request_refill_dimension(
+    *,
+    spec: dict[str, Any],
+    fixed_key: str,
+    ratio_key: str,
+    min_key: str,
+    max_key: str,
+    room_span: int,
+) -> int:
+    fixed_value = spec.get(fixed_key)
+    if isinstance(fixed_value, (int, float)) and fixed_value > 0:
+        return min(int(round(float(fixed_value))), max(1, room_span))
+    ratio = float(spec.get(ratio_key) or 0.35)
+    value = int(round(float(room_span) * ratio))
+    lower = min(int(spec.get(min_key) or 1), max(1, room_span))
+    upper = min(int(spec.get(max_key) or room_span), max(1, room_span))
+    if upper < lower:
+        lower = upper
+    return _clamp_int(value, lower, upper)
+
+
+def _unique_refill_instance_id(
+    object_type: str,
+    existing_objects: list[dict[str, Any]],
+) -> str:
+    existing = {
+        str(row.get("instance_id") or row.get("object_id") or "")
+        for row in existing_objects
+        if isinstance(row, dict)
+    }
+    for index in range(1, 1000):
+        candidate = f"{object_type}_{index:03d}"
+        if candidate not in existing:
+            return candidate
+    return f"{object_type}_999"
+
+
+def _largest_existing_layout_object_id(objects: list[dict[str, Any]]) -> str | None:
+    candidates: list[tuple[float, str]] = []
+    for row in objects:
+        bbox = row.get("bbox")
+        if not isinstance(bbox, dict):
+            continue
+        object_id = row.get("instance_id") or row.get("object_id")
+        if not isinstance(object_id, str) or not object_id.strip():
+            continue
+        try:
+            width = float(bbox.get("max_x") or 0.0) - float(bbox.get("min_x") or 0.0)
+            height = float(bbox.get("max_y") or 0.0) - float(bbox.get("min_y") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        candidates.append((max(0.0, width * height), object_id.strip()))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda row: row[0])[1]
+
+
+def _preferred_existing_cluster_id(objects: list[dict[str, Any]]) -> str | None:
+    for row in objects:
+        cluster_id = row.get("cluster_id")
+        if isinstance(cluster_id, str) and cluster_id.strip():
+            return cluster_id.strip()
+    return None
+
+
+def _clamp_int(value: int, lower: int, upper: int) -> int:
+    if upper < lower:
+        return lower
+    return max(lower, min(upper, value))
+
+
 def _refill_judged_variant_accessories(
     *,
     bundle: dict[str, Any],
     room_output: dict[str, Any],
     variant_index: int,
+    ablation_mode: AblationMode,
 ) -> dict[str, Any]:
+    if skip_accessory_refill(ablation_mode):
+        return bundle
     absolute_layout = bundle.get("absolute_layout")
     cluster_output = bundle.get("cluster_output")
     dropped_inventory = bundle.get("dropped_inventory_by_cluster")
@@ -2997,15 +3337,50 @@ def _refill_judged_variant_accessories(
         return bundle
     if not isinstance(cluster_output, dict):
         return bundle
-    if not isinstance(dropped_inventory, dict) or not dropped_inventory:
-        return bundle
 
-    phase2_result = bundle.get("phase2_result")
+    updated_layout, request_refill_summary = (
+        _ensure_requested_non_functional_contract_objects(
+            absolute_layout=absolute_layout,
+            room_output=room_output,
+            cluster_output=cluster_output,
+        )
+    )
+    working_bundle = bundle
+    request_refill_count = int(request_refill_summary.get("added_count") or 0)
+    if request_refill_count > 0:
+        working_bundle = deepcopy(bundle)
+        working_bundle["absolute_layout"] = updated_layout
+        working_bundle["request_non_functional_refill_summary"] = request_refill_summary
+        working_bundle["notes"] = _collect_unique_notes(
+            working_bundle.get("notes"),
+            [
+                "Request Contract Refill added "
+                f"{request_refill_count} non-blocking requested object(s) to final layout {variant_index}."
+            ],
+        )
+        absolute_layout = updated_layout
+
+    if not isinstance(dropped_inventory, dict) or not dropped_inventory:
+        return working_bundle
+
+    phase2_result = working_bundle.get("phase2_result")
     refined_layout_solution = (
         phase2_result.get("refined_layout_solution")
         if isinstance(phase2_result, dict)
         else None
     )
+    refill_policy = decor_refill_policy(extract_style_policy(cluster_output))
+    missing_contract_types = missing_functional_contract_types(
+        contract=request_contract_from_payload(cluster_output),
+        objects=[
+            row for row in absolute_layout.get("objects") or [] if isinstance(row, dict)
+        ],
+    )
+    if missing_contract_types:
+        refill_policy["max_refills_total"] = 0
+        refill_policy["disabled_reason"] = "functional_request_contract_unmet"
+        refill_policy["missing_request_object_types"] = missing_contract_types
+
     updated_layout, refill_summary = controlled_accessory_refill(
         room_output=room_output,
         absolute_layout=absolute_layout,
@@ -3016,10 +3391,10 @@ def _refill_judged_variant_accessories(
             if isinstance(refined_layout_solution, dict)
             else None
         ),
-        refill_policy=decor_refill_policy(extract_style_policy(cluster_output)),
+        refill_policy=refill_policy,
         grid_mm=25,
     )
-    updated_bundle = deepcopy(bundle)
+    updated_bundle = deepcopy(working_bundle)
     updated_bundle["absolute_layout"] = updated_layout
     updated_bundle["accessory_refill_summary"] = refill_summary
     refill_count = int(refill_summary.get("refill_count") or 0)

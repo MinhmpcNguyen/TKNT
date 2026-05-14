@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchRenderPresets,
+  getGeneratedRenderDetail,
   renderSnapshotImage,
+  updateGeneratedRenderMeta,
   type SnapshotImageEditOperation,
   type SnapshotImagePresetOption,
   type SnapshotImagePresetSelection,
@@ -10,6 +12,12 @@ import {
   type SnapshotImageRenderResult,
 } from '../api';
 import { useEditorStore } from '../store';
+import {
+  DesignPlanV1,
+  FloorplanGeometry,
+  GeneratedRenderRecord,
+  SavedLayoutRecord,
+} from '../types';
 import { polygonBounds } from '../utils/geometry';
 import { getNumericBbox, getWorldBboxFromPlacement, placementMatchesStyledObject } from '../utils/styledLayout';
 import {
@@ -20,7 +28,7 @@ import {
   type ThreeSnapshotRenderState,
   type VisibleSnapshotObject,
 } from '../utils/threeSnapshot';
-import { buildLayoutReferenceImageDataUrl } from '../utils/layoutReferenceImage';
+import { buildStructuralPerspectiveReferenceImageDataUrl } from '../utils/annotatedPerspectiveReference';
 import {
   resolvePlanObjectYawRad,
   yawRadToPlanRotationDeg,
@@ -29,6 +37,8 @@ import {
   applyInventoryModelPreviewOverride,
   buildGlbPreviewModel,
   disposeThreeObject,
+  type GlbFitStrategy,
+  type InventoryModelDescriptor,
 } from '../three/models';
 import {
   collectReintroducedObjects,
@@ -85,9 +95,56 @@ type ObjectVisualDiagnostic = {
 };
 
 type RenderPresetGroupName = 'styles' | 'lights' | 'sceneries';
+type CameraPresetGroupName = 'mid' | 'ceiling';
+type RoomPointMm = {
+  x: number;
+  y: number;
+};
+type CameraPreset = {
+  id: string;
+  label: string;
+  group: CameraPresetGroupName;
+  description: string;
+  fovDeg: number;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  target: {
+    x: number;
+    y: number;
+    z: number;
+  };
+};
+type OrbitControlLike = {
+  minDistance: number;
+  maxDistance: number;
+  zoomSpeed: number;
+  enableDamping: boolean;
+  dampingFactor: number;
+  minTargetRadius?: number;
+  maxTargetRadius?: number;
+};
 
 const MM_TO_M = 0.001;
 const SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD = 0.5;
+const MAX_RENDERER_PIXEL_RATIO = 2;
+const SNAPSHOT_REFERENCE_MIN_LONG_EDGE_PX = 3072;
+const SNAPSHOT_REFERENCE_MAX_LONG_EDGE_PX = 4096;
+const STRUCTURAL_EDGE_COLOR_HEX = '#111827';
+const STRUCTURAL_EDGE_OPACITY = 0.72;
+const EDIT_BOX_COLORS = [
+  '#f97316',
+  '#2563eb',
+  '#16a34a',
+  '#dc2626',
+  '#9333ea',
+  '#0891b2',
+];
+const ORBIT_MIN_DISTANCE_M = 0.35;
+const ORBIT_MAX_DISTANCE_ROOM_MULTIPLIER = 1.8;
+const ORBIT_MAX_TARGET_RADIUS_ROOM_MULTIPLIER = 1.35;
 const REFILL_ASSET_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
 
 function defaultHeightMm(type: string): number {
@@ -105,6 +162,686 @@ function defaultHeightMm(type: string): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function pointsEqualMm(left: RoomPointMm, right: RoomPointMm, epsilon = 1): boolean {
+  return Math.abs(left.x - right.x) <= epsilon && Math.abs(left.y - right.y) <= epsilon;
+}
+
+function normalizeRoomPolygon(points: RoomPointMm[]): RoomPointMm[] {
+  const filtered = points.filter(
+    (point) => Number.isFinite(point.x) && Number.isFinite(point.y)
+  );
+  if (filtered.length === 0) {
+    return [];
+  }
+
+  const deduped: RoomPointMm[] = [];
+  for (const point of filtered) {
+    const previous = deduped[deduped.length - 1];
+    if (!previous || !pointsEqualMm(previous, point)) {
+      deduped.push(point);
+    }
+  }
+  if (deduped.length >= 2 && pointsEqualMm(deduped[0], deduped[deduped.length - 1])) {
+    deduped.pop();
+  }
+  if (deduped.length < 3) {
+    return deduped;
+  }
+
+  return deduped.filter((point, index) => {
+    const previous = deduped[(index - 1 + deduped.length) % deduped.length];
+    const next = deduped[(index + 1) % deduped.length];
+    const toPrevious = { x: previous.x - point.x, y: previous.y - point.y };
+    const toNext = { x: next.x - point.x, y: next.y - point.y };
+    const cross = toPrevious.x * toNext.y - toPrevious.y * toNext.x;
+    const dot = toPrevious.x * toNext.x + toPrevious.y * toNext.y;
+    return Math.abs(cross) > 1 || dot >= 0;
+  });
+}
+
+function normalizeVector2D(vector: RoomPointMm): RoomPointMm | null {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length <= 1e-6) {
+    return null;
+  }
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+  };
+}
+
+function normalizeVector3D(vector: { x: number; y: number; z: number }):
+  | { x: number; y: number; z: number }
+  | null {
+  const length = Math.hypot(vector.x, vector.y, vector.z);
+  if (length <= 1e-6) {
+    return null;
+  }
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length,
+  };
+}
+
+function crossVector3D(
+  left: { x: number; y: number; z: number },
+  right: { x: number; y: number; z: number }
+): { x: number; y: number; z: number } {
+  return {
+    x: left.y * right.z - left.z * right.y,
+    y: left.z * right.x - left.x * right.z,
+    z: left.x * right.y - left.y * right.x,
+  };
+}
+
+function dotVector3D(
+  left: { x: number; y: number; z: number },
+  right: { x: number; y: number; z: number }
+): number {
+  return left.x * right.x + left.y * right.y + left.z * right.z;
+}
+
+function computePolygonCentroidMm(points: RoomPointMm[]): RoomPointMm {
+  if (points.length === 0) {
+    return { x: 0, y: 0 };
+  }
+  if (points.length < 3) {
+    const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+    return { x, y };
+  }
+
+  let signedArea = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const cross = current.x * next.y - next.x * current.y;
+    signedArea += cross;
+    cx += (current.x + next.x) * cross;
+    cy += (current.y + next.y) * cross;
+  }
+  if (Math.abs(signedArea) <= 1e-6) {
+    const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+    return { x, y };
+  }
+  const areaFactor = signedArea * 3;
+  return {
+    x: cx / areaFactor,
+    y: cy / areaFactor,
+  };
+}
+
+function distancePointToSegmentMm(
+  point: RoomPointMm,
+  start: RoomPointMm,
+  end: RoomPointMm
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-6) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+  const rawT =
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
+  const t = clamp(rawT, 0, 1);
+  const projectedX = start.x + dx * t;
+  const projectedY = start.y + dy * t;
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+}
+
+function distanceToPolygonEdgesMm(point: RoomPointMm, polygon: RoomPointMm[]): number {
+  if (polygon.length < 2) {
+    return 0;
+  }
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index];
+    const end = polygon[(index + 1) % polygon.length];
+    bestDistance = Math.min(
+      bestDistance,
+      distancePointToSegmentMm(point, start, end)
+    );
+  }
+  return Number.isFinite(bestDistance) ? bestDistance : 0;
+}
+
+function dedupeDirections(directions: RoomPointMm[]): RoomPointMm[] {
+  const unique: RoomPointMm[] = [];
+  for (const direction of directions) {
+    const normalized = normalizeVector2D(direction);
+    if (!normalized) {
+      continue;
+    }
+    const alreadyPresent = unique.some(
+      (candidate) =>
+        Math.abs(candidate.x - normalized.x) <= 0.01 &&
+        Math.abs(candidate.y - normalized.y) <= 0.01
+    );
+    if (!alreadyPresent) {
+      unique.push(normalized);
+    }
+  }
+  return unique;
+}
+
+function findInteriorCornerAnchorMm(params: {
+  corner: RoomPointMm;
+  previous: RoomPointMm;
+  next: RoomPointMm;
+  polygon: RoomPointMm[];
+  insetMm: number;
+  fallbackFocusPointMm: RoomPointMm;
+}): RoomPointMm | null {
+  const { corner, previous, next, polygon, insetMm, fallbackFocusPointMm } = params;
+  const toPrevious = normalizeVector2D({
+    x: previous.x - corner.x,
+    y: previous.y - corner.y,
+  });
+  const toNext = normalizeVector2D({
+    x: next.x - corner.x,
+    y: next.y - corner.y,
+  });
+  const toFocus = normalizeVector2D({
+    x: fallbackFocusPointMm.x - corner.x,
+    y: fallbackFocusPointMm.y - corner.y,
+  });
+  const directions = dedupeDirections([
+    toPrevious && toNext
+      ? { x: toPrevious.x + toNext.x, y: toPrevious.y + toNext.y }
+      : { x: 0, y: 0 },
+    toPrevious && toNext
+      ? { x: -(toPrevious.x + toNext.x), y: -(toPrevious.y + toNext.y) }
+      : { x: 0, y: 0 },
+    toPrevious ? { x: -toPrevious.y, y: toPrevious.x } : { x: 0, y: 0 },
+    toPrevious ? { x: toPrevious.y, y: -toPrevious.x } : { x: 0, y: 0 },
+    toNext ? { x: -toNext.y, y: toNext.x } : { x: 0, y: 0 },
+    toNext ? { x: toNext.y, y: -toNext.x } : { x: 0, y: 0 },
+    toPrevious && toNext
+      ? {
+          x: -toPrevious.y - toNext.y,
+          y: toPrevious.x + toNext.x,
+        }
+      : { x: 0, y: 0 },
+    toPrevious && toNext
+      ? {
+          x: toPrevious.y + toNext.y,
+          y: -toPrevious.x - toNext.x,
+        }
+      : { x: 0, y: 0 },
+    toFocus ?? { x: 0, y: 0 },
+  ]);
+
+  const distanceSteps = [
+    insetMm,
+    insetMm * 0.82,
+    insetMm * 0.66,
+    insetMm * 0.5,
+    insetMm * 0.36,
+    insetMm * 0.24,
+    insetMm * 0.12,
+  ].filter((distance) => distance > 0);
+
+  let bestCandidate: { point: RoomPointMm; score: number } | null = null;
+  for (const direction of directions) {
+    for (const distance of distanceSteps) {
+      const candidate = {
+        x: corner.x + direction.x * distance,
+        y: corner.y + direction.y * distance,
+      };
+      if (!pointInPolygon(candidate, polygon)) {
+        continue;
+      }
+      const edgeClearanceMm = distanceToPolygonEdgesMm(candidate, polygon);
+      const focusDistanceMm = Math.hypot(
+        fallbackFocusPointMm.x - candidate.x,
+        fallbackFocusPointMm.y - candidate.y
+      );
+      const score = edgeClearanceMm * 4 + distance - focusDistanceMm * 0.05;
+      if (!bestCandidate || score > bestCandidate.score) {
+        bestCandidate = { point: candidate, score };
+      }
+    }
+  }
+
+  return bestCandidate?.point ?? null;
+}
+
+function findInteriorWallAnchorMm(params: {
+  start: RoomPointMm;
+  end: RoomPointMm;
+  polygon: RoomPointMm[];
+  insetMm: number;
+  fallbackFocusPointMm: RoomPointMm;
+}): RoomPointMm | null {
+  const { start, end, polygon, insetMm, fallbackFocusPointMm } = params;
+  const midpoint = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  };
+  const wallDirection = normalizeVector2D({
+    x: end.x - start.x,
+    y: end.y - start.y,
+  });
+  const toFocus = normalizeVector2D({
+    x: fallbackFocusPointMm.x - midpoint.x,
+    y: fallbackFocusPointMm.y - midpoint.y,
+  });
+
+  const directions = dedupeDirections([
+    toFocus ?? { x: 0, y: 0 },
+    wallDirection ? { x: -wallDirection.y, y: wallDirection.x } : { x: 0, y: 0 },
+    wallDirection ? { x: wallDirection.y, y: -wallDirection.x } : { x: 0, y: 0 },
+    wallDirection && toFocus
+      ? { x: -wallDirection.y + toFocus.x, y: wallDirection.x + toFocus.y }
+      : { x: 0, y: 0 },
+    wallDirection && toFocus
+      ? { x: wallDirection.y + toFocus.x, y: -wallDirection.x + toFocus.y }
+      : { x: 0, y: 0 },
+  ]);
+  const distanceSteps = [
+    insetMm,
+    insetMm * 0.82,
+    insetMm * 0.66,
+    insetMm * 0.5,
+    insetMm * 0.36,
+    insetMm * 0.24,
+  ].filter((distance) => distance > 0);
+
+  let bestCandidate: { point: RoomPointMm; score: number } | null = null;
+  for (const direction of directions) {
+    for (const distance of distanceSteps) {
+      const candidate = {
+        x: midpoint.x + direction.x * distance,
+        y: midpoint.y + direction.y * distance,
+      };
+      if (!pointInPolygon(candidate, polygon)) {
+        continue;
+      }
+      const edgeClearanceMm = distanceToPolygonEdgesMm(candidate, polygon);
+      const focusDistanceMm = Math.hypot(
+        fallbackFocusPointMm.x - candidate.x,
+        fallbackFocusPointMm.y - candidate.y
+      );
+      const score = edgeClearanceMm * 3 + distance - focusDistanceMm * 0.04;
+      if (!bestCandidate || score > bestCandidate.score) {
+        bestCandidate = { point: candidate, score };
+      }
+    }
+  }
+
+  return bestCandidate?.point ?? null;
+}
+
+function resolveCameraFocusPointMm(params: {
+  roomPolygonMm: RoomPointMm[];
+  objects: ResolvedRenderObject[];
+  fallbackPointMm: RoomPointMm;
+}): RoomPointMm {
+  const { roomPolygonMm, objects, fallbackPointMm } = params;
+  const objectCenters = objects
+    .map((object) => ({
+      x: (object.bbox.minX + object.bbox.maxX) / 2,
+      y: (object.bbox.minY + object.bbox.maxY) / 2,
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  const averageObjectCenter =
+    objectCenters.length > 0
+      ? {
+          x:
+            objectCenters.reduce((sum, point) => sum + point.x, 0) /
+            objectCenters.length,
+          y:
+            objectCenters.reduce((sum, point) => sum + point.y, 0) /
+            objectCenters.length,
+        }
+      : null;
+  const averageVertexCenter =
+    roomPolygonMm.length > 0
+      ? {
+          x:
+            roomPolygonMm.reduce((sum, point) => sum + point.x, 0) /
+            roomPolygonMm.length,
+          y:
+            roomPolygonMm.reduce((sum, point) => sum + point.y, 0) /
+            roomPolygonMm.length,
+        }
+      : null;
+  const candidates = [
+    roomPolygonMm.length >= 3 ? computePolygonCentroidMm(roomPolygonMm) : null,
+    averageVertexCenter,
+    averageObjectCenter,
+    fallbackPointMm,
+  ].filter((point): point is RoomPointMm => point !== null);
+
+  if (roomPolygonMm.length < 3) {
+    return candidates[0] ?? fallbackPointMm;
+  }
+  for (const candidate of candidates) {
+    if (pointInPolygon(candidate, roomPolygonMm)) {
+      return candidate;
+    }
+  }
+  return candidates[0] ?? fallbackPointMm;
+}
+
+function formatPlanCoordinateMm(valueMm: number): string {
+  return `${(valueMm * MM_TO_M).toFixed(1)}m`;
+}
+
+function buildRoomCoverageSamplePoints(params: {
+  roomPolygonMm: RoomPointMm[];
+  roomCenterMm: RoomPointMm;
+  wallHeightM: number;
+}): Array<{ x: number; y: number; z: number }> {
+  const { roomPolygonMm, roomCenterMm, wallHeightM } = params;
+  const midWallHeightM = clamp(wallHeightM * 0.58, 0.95, wallHeightM - 0.32);
+  return roomPolygonMm.flatMap((point) => {
+    const x = (point.x - roomCenterMm.x) * MM_TO_M;
+    const z = -(point.y - roomCenterMm.y) * MM_TO_M;
+    return [
+      { x, y: 0.1, z },
+      { x, y: midWallHeightM, z },
+    ];
+  });
+}
+
+function computePresetFovDeg(params: {
+  position: { x: number; y: number; z: number };
+  target: { x: number; y: number; z: number };
+  aspect: number;
+  coveragePoints: Array<{ x: number; y: number; z: number }>;
+  frameLimit: number;
+}): number {
+  const { position, target, aspect, coveragePoints, frameLimit } = params;
+  const forward = normalizeVector3D({
+    x: target.x - position.x,
+    y: target.y - position.y,
+    z: target.z - position.z,
+  });
+  if (!forward) {
+    return 68;
+  }
+  const worldUp = { x: 0, y: 1, z: 0 };
+  const right =
+    normalizeVector3D(crossVector3D(forward, worldUp)) ??
+    normalizeVector3D({ x: 1, y: 0, z: 0 });
+  if (!right) {
+    return 68;
+  }
+  const up =
+    normalizeVector3D(crossVector3D(right, forward)) ??
+    worldUp;
+
+  let maxTanX = 0;
+  let maxTanY = 0;
+  for (const point of coveragePoints) {
+    const relative = {
+      x: point.x - position.x,
+      y: point.y - position.y,
+      z: point.z - position.z,
+    };
+    const depth = dotVector3D(relative, forward);
+    if (depth <= 0.05) {
+      continue;
+    }
+    const horizontal = Math.abs(dotVector3D(relative, right));
+    const vertical = Math.abs(dotVector3D(relative, up));
+    maxTanX = Math.max(maxTanX, horizontal / depth);
+    maxTanY = Math.max(maxTanY, vertical / depth);
+  }
+
+  const safeAspect = Math.max(0.75, aspect);
+  const safeFrameLimit = clamp(frameLimit, 0.55, 0.92);
+  const halfFovFromWidth = Math.atan(maxTanX / (safeAspect * safeFrameLimit));
+  const halfFovFromHeight = Math.atan(maxTanY / safeFrameLimit);
+  const fovDeg = (Math.max(halfFovFromWidth, halfFovFromHeight) * 360) / Math.PI;
+  return clamp(fovDeg, 58, 84);
+}
+
+function buildCameraPresets(params: {
+  roomPolygonMm: RoomPointMm[];
+  roomBoundsMm: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  };
+  roomCenterMm: RoomPointMm;
+  focusPointMm: RoomPointMm;
+  wallHeightMm: number;
+  aspect: number;
+}): CameraPreset[] {
+  const {
+    roomPolygonMm,
+    roomBoundsMm,
+    roomCenterMm,
+    focusPointMm,
+    wallHeightMm,
+    aspect,
+  } = params;
+  if (roomPolygonMm.length < 3) {
+    return [];
+  }
+
+  const spanX = Math.max(1, roomBoundsMm.maxX - roomBoundsMm.minX);
+  const spanY = Math.max(1, roomBoundsMm.maxY - roomBoundsMm.minY);
+  const insetMm = clamp(Math.min(spanX, spanY) * 0.05, 90, 240);
+  const wallHeightM = Math.max(1.8, wallHeightMm * MM_TO_M);
+  const nearCeilingY = clamp(
+    wallHeightM - Math.min(0.18, wallHeightM * 0.08),
+    1.45,
+    wallHeightM - 0.06
+  );
+  const midHeightY = clamp(wallHeightM * 0.5, 1.15, wallHeightM - 0.45);
+  const focusTargetY = clamp(wallHeightM * 0.38, 0.95, wallHeightM * 0.55);
+  const coveragePoints = buildRoomCoverageSamplePoints({
+    roomPolygonMm,
+    roomCenterMm,
+    wallHeightM,
+  });
+
+  const cornerPresets = roomPolygonMm.flatMap((corner, index) => {
+    const previous = roomPolygonMm[(index - 1 + roomPolygonMm.length) % roomPolygonMm.length];
+    const next = roomPolygonMm[(index + 1) % roomPolygonMm.length];
+    const anchor = findInteriorCornerAnchorMm({
+      corner,
+      previous,
+      next,
+      polygon: roomPolygonMm,
+      insetMm,
+      fallbackFocusPointMm: focusPointMm,
+    });
+    if (!anchor) {
+      return [];
+    }
+
+    const basePosition = {
+      x: (anchor.x - roomCenterMm.x) * MM_TO_M,
+      z: -(anchor.y - roomCenterMm.y) * MM_TO_M,
+    };
+    const target = {
+      x: (focusPointMm.x - roomCenterMm.x) * MM_TO_M,
+      y: focusTargetY,
+      z: -(focusPointMm.y - roomCenterMm.y) * MM_TO_M,
+    };
+    const label = `Corner ${index + 1}`;
+    const description = `X ${formatPlanCoordinateMm(corner.x)} · Y ${formatPlanCoordinateMm(corner.y)}`;
+
+    return [
+      {
+        id: `mid-corner-${index + 1}`,
+        label,
+        group: 'mid' as const,
+        description,
+        fovDeg: computePresetFovDeg({
+          position: {
+            x: basePosition.x,
+            y: midHeightY,
+            z: basePosition.z,
+          },
+          target,
+          aspect,
+          coveragePoints,
+          frameLimit: 0.72,
+        }),
+        position: {
+          x: basePosition.x,
+          y: midHeightY,
+          z: basePosition.z,
+        },
+        target,
+      },
+      {
+        id: `ceiling-corner-${index + 1}`,
+        label,
+        group: 'ceiling' as const,
+        description,
+        fovDeg: computePresetFovDeg({
+          position: {
+            x: basePosition.x,
+            y: nearCeilingY,
+            z: basePosition.z,
+          },
+          target,
+          aspect,
+          coveragePoints,
+          frameLimit: 0.74,
+        }),
+        position: {
+          x: basePosition.x,
+          y: nearCeilingY,
+          z: basePosition.z,
+        },
+        target,
+      },
+    ];
+  });
+  const wallCenterPresets = roomPolygonMm.flatMap((start, index) => {
+    const end = roomPolygonMm[(index + 1) % roomPolygonMm.length];
+    const anchor = findInteriorWallAnchorMm({
+      start,
+      end,
+      polygon: roomPolygonMm,
+      insetMm,
+      fallbackFocusPointMm: focusPointMm,
+    });
+    if (!anchor) {
+      return [];
+    }
+
+    const basePosition = {
+      x: (anchor.x - roomCenterMm.x) * MM_TO_M,
+      z: -(anchor.y - roomCenterMm.y) * MM_TO_M,
+    };
+    const target = {
+      x: (focusPointMm.x - roomCenterMm.x) * MM_TO_M,
+      y: focusTargetY,
+      z: -(focusPointMm.y - roomCenterMm.y) * MM_TO_M,
+    };
+    const label = `Wall Center ${index + 1}`;
+    const description = 'center of wall looking inward';
+
+    return [
+      {
+        id: `mid-wall-${index + 1}`,
+        label,
+        group: 'mid' as const,
+        description,
+        fovDeg: computePresetFovDeg({
+          position: {
+            x: basePosition.x,
+            y: midHeightY,
+            z: basePosition.z,
+          },
+          target,
+          aspect,
+          coveragePoints,
+          frameLimit: 0.72,
+        }),
+        position: {
+          x: basePosition.x,
+          y: midHeightY,
+          z: basePosition.z,
+        },
+        target,
+      },
+      {
+        id: `ceiling-wall-${index + 1}`,
+        label,
+        group: 'ceiling' as const,
+        description,
+        fovDeg: computePresetFovDeg({
+          position: {
+            x: basePosition.x,
+            y: nearCeilingY,
+            z: basePosition.z,
+          },
+          target,
+          aspect,
+          coveragePoints,
+          frameLimit: 0.74,
+        }),
+        position: {
+          x: basePosition.x,
+          y: nearCeilingY,
+          z: basePosition.z,
+        },
+        target,
+      },
+    ];
+  });
+
+  return [...cornerPresets, ...wallCenterPresets];
+}
+
+function applyOrbitCameraPose(
+  camera: any,
+  controls: any,
+  pose: Pick<CameraPreset, 'position' | 'target' | 'fovDeg'>
+): void {
+  camera.fov = pose.fovDeg;
+  camera.updateProjectionMatrix();
+  camera.position.set(pose.position.x, pose.position.y, pose.position.z);
+  controls.target.set(pose.target.x, pose.target.y, pose.target.z);
+  camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
+  controls.update();
+}
+
+function configureRoomOrbitControls(
+  controls: OrbitControlLike,
+  roomMaxDimM: number
+): void {
+  const safeRoomMaxDimM = Math.max(1, Number.isFinite(roomMaxDimM) ? roomMaxDimM : 1);
+  const minDistanceM = Math.max(
+    ORBIT_MIN_DISTANCE_M,
+    Math.min(0.8, safeRoomMaxDimM * 0.06)
+  );
+
+  controls.minDistance = minDistanceM;
+  controls.maxDistance = Math.max(
+    minDistanceM * 4,
+    safeRoomMaxDimM * ORBIT_MAX_DISTANCE_ROOM_MULTIPLIER
+  );
+  controls.zoomSpeed = 0.65;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  if ('minTargetRadius' in controls) {
+    controls.minTargetRadius = 0;
+  }
+  if ('maxTargetRadius' in controls) {
+    controls.maxTargetRadius = Math.max(
+      controls.maxDistance,
+      safeRoomMaxDimM * ORBIT_MAX_TARGET_RADIUS_ROOM_MULTIPLIER
+    );
+  }
 }
 
 function sanitizeSnapshotFileSegment(value: string | null | undefined): string {
@@ -126,6 +863,160 @@ function normalizeRenderAssetId(value: unknown): string | null {
   }
   const normalized = raw.replace(REFILL_ASSET_ID_PATTERN, '').trim();
   return normalized || raw;
+}
+
+function readOpeningAssetId(
+  opening: any,
+  kind: 'door' | 'window'
+): string | null {
+  const idKeys =
+    kind === 'door'
+      ? [
+          'asset_id',
+          'assetId',
+          'model_asset_id',
+          'modelAssetId',
+          'door_asset_id',
+          'doorAssetId',
+          'door_id',
+          'id',
+        ]
+      : [
+          'asset_id',
+          'assetId',
+          'model_asset_id',
+          'modelAssetId',
+          'window_asset_id',
+          'windowAssetId',
+          'window_id',
+          'id',
+        ];
+  for (const key of idKeys) {
+    const value = opening?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      const normalized = normalizeRenderAssetId(value) ?? value.trim();
+      if (kind === 'window' && /^win(?:[_-]|$)/i.test(normalized)) {
+        return 'window';
+      }
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function replaceThreeObjectChildren(root: any, nextChild: any): void {
+  const previousChildren = [...(root?.children ?? [])];
+  for (const child of previousChildren) {
+    root.remove(child);
+  }
+  for (const child of previousChildren) {
+    disposeThreeObject(child);
+  }
+  root.add(nextChild);
+}
+
+function addStructuralEdgeOverlay(
+  THREE: any,
+  root: any,
+  options: {
+    colorHex?: string;
+    opacity?: number;
+    renderOrder?: number;
+    thresholdAngleDeg?: number;
+  } = {}
+): void {
+  const meshes: any[] = [];
+  const collectMesh = (node: any): void => {
+    if (!node?.isMesh || !node.geometry || node.userData?.structuralEdgeOverlay) {
+      return;
+    }
+    meshes.push(node);
+  };
+
+  if (typeof root?.traverse === 'function') {
+    root.traverse(collectMesh);
+  } else {
+    collectMesh(root);
+  }
+
+  for (const mesh of meshes) {
+    if (mesh.userData?.structuralEdgeOverlayAdded) {
+      continue;
+    }
+    const geometry = mesh.geometry;
+    if (!geometry?.attributes?.position) {
+      continue;
+    }
+    const edgesGeometry = new THREE.EdgesGeometry(
+      geometry,
+      options.thresholdAngleDeg ?? 18
+    );
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: new THREE.Color(options.colorHex ?? STRUCTURAL_EDGE_COLOR_HEX),
+      depthTest: true,
+      depthWrite: false,
+      opacity: options.opacity ?? STRUCTURAL_EDGE_OPACITY,
+      toneMapped: false,
+      transparent: true,
+    });
+    const edges = new THREE.LineSegments(edgesGeometry, edgeMaterial);
+    edges.name = 'structural-edge-overlay';
+    edges.renderOrder = options.renderOrder ?? 4;
+    edges.userData = {
+      aiStructuralEdge: true,
+      structuralEdgeOverlay: true,
+    };
+    mesh.add(edges);
+    mesh.userData.structuralEdgeOverlayAdded = true;
+  }
+}
+
+function safeInventoryModelPathSegment(value: string): string {
+  return (
+    value.trim().replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') ||
+    'asset'
+  );
+}
+
+function canonicalizeInventoryStyle(value: string | null | undefined): string | null {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized || null;
+}
+
+function buildOpeningFallbackModelDescriptor(
+  resolution: InventoryPreviewResolution,
+  preferredStyle: string | null | undefined
+): InventoryModelDescriptor | null {
+  const item = resolution.item;
+  if (!item) {
+    return null;
+  }
+
+  const preferredStyleKey = canonicalizeInventoryStyle(preferredStyle);
+  const styleTags = item.style_tags
+    .map((style) => canonicalizeInventoryStyle(style))
+    .filter((style): style is string => style !== null);
+  const styleKey =
+    (preferredStyleKey && styleTags.includes(preferredStyleKey) ? preferredStyleKey : null) ??
+    styleTags[0] ??
+    null;
+  if (!styleKey) {
+    return null;
+  }
+
+  const stylePath = safeInventoryModelPathSegment(styleKey);
+  const assetPath = safeInventoryModelPathSegment(item.asset_id);
+  return {
+    url: `/assets/inventory_models/demo_tenant/${stylePath}/${assetPath}.glb`,
+    source: 'opening_public_inventory_fallback',
+    fit: 'contain',
+    scale: 1,
+    rotationDeg: 0,
+    rotationXDeg: 0,
+    rotationZDeg: 0,
+    previewCalibration: null,
+    previewOverride: null,
+  };
 }
 
 function buildSnapshotFileStem(variantId: string | null, capturedAt: string): string {
@@ -196,20 +1087,39 @@ function downloadBlob(blob: Blob, filename: string): void {
   }, 0);
 }
 
-function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-        return;
-      }
-      reject(new Error('Unable to encode the 3D canvas as PNG.'));
-    }, 'image/png');
-  });
-}
-
 function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
+}
+
+function resolveSnapshotReferenceRenderSize(canvas: HTMLCanvasElement): {
+  height: number;
+  width: number;
+} {
+  const currentWidth = Math.max(1, Math.round(canvas.width || canvas.clientWidth || 1));
+  const currentHeight = Math.max(1, Math.round(canvas.height || canvas.clientHeight || 1));
+  const currentLongEdge = Math.max(currentWidth, currentHeight);
+  const targetLongEdge = clamp(
+    Math.max(currentLongEdge, SNAPSHOT_REFERENCE_MIN_LONG_EDGE_PX),
+    currentLongEdge,
+    SNAPSHOT_REFERENCE_MAX_LONG_EDGE_PX
+  );
+  const scale = targetLongEdge / currentLongEdge;
+  return {
+    width: Math.max(1, Math.round(currentWidth * scale)),
+    height: Math.max(1, Math.round(currentHeight * scale)),
+  };
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64Payload] = dataUrl.split(',', 2);
+  const mimeMatch = /^data:([^;]+);base64$/i.exec(header);
+  const mimeType = mimeMatch?.[1] ?? 'image/png';
+  const binary = window.atob(base64Payload ?? '');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -225,6 +1135,488 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('Unable to read the reference image.'));
     reader.readAsDataURL(file);
   });
+}
+
+function withAlphaColor(hexColor: string, alpha: number): string {
+  const hex = hexColor.replace('#', '');
+  if (hex.length !== 6) {
+    return `rgba(249, 115, 22, ${alpha})`;
+  }
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function editBoxModeLabel(mode: EditBoxMode): string {
+  if (mode === 'add') {
+    return 'Add';
+  }
+  if (mode === 'replace') {
+    return 'Replace';
+  }
+  if (mode === 'recolor') {
+    return 'Color';
+  }
+  return 'Prompt';
+}
+
+function normalizeEditBoxRect(draft: EditBoxDraft): EditBoxRect | null {
+  const x = Math.min(draft.startX, draft.currentX);
+  const y = Math.min(draft.startY, draft.currentY);
+  const width = Math.abs(draft.currentX - draft.startX);
+  const height = Math.abs(draft.currentY - draft.startY);
+  if (width < 0.012 || height < 0.012) {
+    return null;
+  }
+  return {
+    x: clamp(x, 0, 1),
+    y: clamp(y, 0, 1),
+    width: clamp(width, 0, 1 - x),
+    height: clamp(height, 0, 1 - y),
+  };
+}
+
+function loadDataUrlImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Unable to load the generated image.'));
+    image.src = dataUrl;
+  });
+}
+
+async function buildEditBoxGuideImageDataUrl(params: {
+  sourceImageDataUrl: string;
+  boxes: RenderEditBox[];
+}): Promise<string | null> {
+  if (typeof document === 'undefined' || params.boxes.length === 0) {
+    return null;
+  }
+
+  const sourceImage = await loadDataUrlImage(params.sourceImageDataUrl);
+  const width = Math.max(1, sourceImage.naturalWidth || sourceImage.width);
+  const height = Math.max(1, sourceImage.naturalHeight || sourceImage.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.drawImage(sourceImage, 0, 0, width, height);
+  context.fillStyle = 'rgba(15, 23, 42, 0.16)';
+  context.fillRect(0, 0, width, height);
+
+  params.boxes.forEach((box, index) => {
+    const color = EDIT_BOX_COLORS[index % EDIT_BOX_COLORS.length];
+    const x = box.rect.x * width;
+    const y = box.rect.y * height;
+    const boxWidth = box.rect.width * width;
+    const boxHeight = box.rect.height * height;
+    const lineWidth = Math.max(4, Math.min(width, height) * 0.006);
+    const label = `${box.id} ${editBoxModeLabel(box.mode)}`;
+    const fontSize = Math.max(
+      18,
+      Math.min(34, Math.round(Math.min(width, height) * 0.032))
+    );
+    context.save();
+    context.lineWidth = lineWidth;
+    context.strokeStyle = color;
+    context.fillStyle = withAlphaColor(color, 0.14);
+    context.fillRect(x, y, boxWidth, boxHeight);
+    context.strokeRect(x, y, boxWidth, boxHeight);
+    context.font = `800 ${fontSize}px sans-serif`;
+    const labelPaddingX = Math.round(fontSize * 0.55);
+    const labelPaddingY = Math.round(fontSize * 0.34);
+    const labelWidth = Math.ceil(
+      context.measureText(label).width + labelPaddingX * 2
+    );
+    const labelHeight = fontSize + labelPaddingY * 2;
+    const labelX = clamp(x + 6, 6, Math.max(6, width - labelWidth - 6));
+    const labelY = clamp(y + 6, 6, Math.max(6, height - labelHeight - 6));
+    context.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    context.fillRect(labelX, labelY, labelWidth, labelHeight);
+    context.strokeStyle = color;
+    context.lineWidth = Math.max(2, lineWidth * 0.45);
+    context.strokeRect(labelX, labelY, labelWidth, labelHeight);
+    context.fillStyle = '#111827';
+    context.fillText(
+      label,
+      labelX + labelPaddingX,
+      labelY + labelPaddingY + fontSize - 2
+    );
+    context.restore();
+  });
+  return canvas.toDataURL('image/png');
+}
+
+async function cropObjectAppearanceReference(params: {
+  imageDataUrl: string;
+  object: VisibleSnapshotObject;
+  snapshot: ThreeSnapshotArtifact;
+}): Promise<string | null> {
+  if (typeof document === 'undefined' || !params.object.screenBboxPx) {
+    return null;
+  }
+
+  const image = await loadDataUrlImage(params.imageDataUrl);
+  const imageWidth = Math.max(1, image.naturalWidth || image.width);
+  const imageHeight = Math.max(1, image.naturalHeight || image.height);
+  const scaleX = imageWidth / Math.max(1, params.snapshot.canvas.widthPx);
+  const scaleY = imageHeight / Math.max(1, params.snapshot.canvas.heightPx);
+  const box = params.object.screenBboxPx;
+  const rawX = box.minX * scaleX;
+  const rawY = box.minY * scaleY;
+  const rawWidth = box.width * scaleX;
+  const rawHeight = box.height * scaleY;
+  if (rawWidth < 10 || rawHeight < 10) {
+    return null;
+  }
+
+  const padding = Math.max(18, Math.max(rawWidth, rawHeight) * 0.18);
+  const cropX = clamp(Math.floor(rawX - padding), 0, imageWidth - 1);
+  const cropY = clamp(Math.floor(rawY - padding), 0, imageHeight - 1);
+  const cropRight = clamp(Math.ceil(rawX + rawWidth + padding), cropX + 1, imageWidth);
+  const cropBottom = clamp(Math.ceil(rawY + rawHeight + padding), cropY + 1, imageHeight);
+  const cropWidth = cropRight - cropX;
+  const cropHeight = cropBottom - cropY;
+  if (cropWidth < 12 || cropHeight < 12) {
+    return null;
+  }
+
+  const maxOutputSide = 768;
+  const outputScale = Math.min(1, maxOutputSide / Math.max(cropWidth, cropHeight));
+  const outputWidth = Math.max(1, Math.round(cropWidth * outputScale));
+  const outputHeight = Math.max(1, Math.round(cropHeight * outputScale));
+  const canvas = document.createElement('canvas');
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.drawImage(
+    image,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    outputWidth,
+    outputHeight
+  );
+  return canvas.toDataURL('image/jpeg', 0.86);
+}
+
+function normalizeRootLayoutId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readObjectAppearanceReferencesFromRender(
+  render: GeneratedRenderRecord
+): Record<string, ObjectAppearanceReference> {
+  const rawMemory = render.meta[OBJECT_APPEARANCE_REFERENCES_META_KEY];
+  const rawReferences = isRecord(rawMemory)
+    ? rawMemory.references
+    : Array.isArray(rawMemory)
+      ? rawMemory
+      : null;
+  if (!Array.isArray(rawReferences)) {
+    return {};
+  }
+
+  const rootLayoutId = isRecord(rawMemory)
+    ? normalizeRootLayoutId(rawMemory.root_layout_id)
+    : null;
+  const references: Record<string, ObjectAppearanceReference> = {};
+  for (const item of rawReferences) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const objectId =
+      typeof item.object_id === 'string' && item.object_id.trim()
+        ? item.object_id.trim()
+        : typeof item.objectId === 'string' && item.objectId.trim()
+          ? item.objectId.trim()
+          : '';
+    const imageDataUrl =
+      typeof item.image_data_url === 'string' && item.image_data_url.startsWith('data:')
+        ? item.image_data_url
+        : typeof item.imageDataUrl === 'string' && item.imageDataUrl.startsWith('data:')
+          ? item.imageDataUrl
+          : '';
+    if (!objectId || !imageDataUrl) {
+      continue;
+    }
+    const savedAtMs =
+      typeof item.saved_at_ms === 'number' && Number.isFinite(item.saved_at_ms)
+        ? item.saved_at_ms
+        : typeof item.savedAtMs === 'number' && Number.isFinite(item.savedAtMs)
+          ? item.savedAtMs
+          : Date.now();
+    references[objectId] = {
+      objectId,
+      imageDataUrl,
+      fileName:
+        typeof item.file_name === 'string' && item.file_name.trim()
+          ? item.file_name.trim()
+          : typeof item.fileName === 'string' && item.fileName.trim()
+            ? item.fileName.trim()
+            : `edited-${objectId}.jpg`,
+      savedAtMs,
+      rootLayoutId: normalizeRootLayoutId(item.root_layout_id) ?? rootLayoutId,
+      sourceRenderId: normalizeRootLayoutId(item.source_render_id),
+    };
+  }
+  return references;
+}
+
+function buildObjectAppearanceReferencesMeta(params: {
+  references: Record<string, ObjectAppearanceReference>;
+  rootLayoutId: string | null;
+}): Record<string, unknown> {
+  const { references, rootLayoutId } = params;
+  const filteredReferences = Object.values(references)
+    .filter((reference) => (reference.rootLayoutId ?? null) === (rootLayoutId ?? null))
+    .sort((left, right) => left.objectId.localeCompare(right.objectId));
+  return {
+    version: OBJECT_APPEARANCE_REFERENCES_VERSION,
+    root_layout_id: rootLayoutId,
+    references: filteredReferences.map((reference) => ({
+      object_id: reference.objectId,
+      image_data_url: reference.imageDataUrl,
+      file_name: reference.fileName,
+      saved_at_ms: reference.savedAtMs,
+      root_layout_id: reference.rootLayoutId,
+      source_render_id: reference.sourceRenderId,
+    })),
+  };
+}
+
+function resolveCanvasSizeFromAspectRatio(
+  aspectRatio: string | null | undefined
+): { widthPx: number; heightPx: number } {
+  const rawValue = aspectRatio?.trim() ?? '';
+  const [rawWidth, rawHeight] = rawValue.split(':');
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { widthPx: 1600, heightPx: 1200 };
+  }
+  return {
+    widthPx: Math.round(width * 400),
+    heightPx: Math.round(height * 400),
+  };
+}
+
+function readSavedRenderVisibleObjects(
+  render: GeneratedRenderRecord
+): VisibleSnapshotObject[] {
+  const rawVisibleObjects = render.meta.visible_objects;
+  if (!Array.isArray(rawVisibleObjects)) {
+    return [];
+  }
+  return rawVisibleObjects.filter((item): item is VisibleSnapshotObject => {
+    if (!isRecord(item)) {
+      return false;
+    }
+    return (
+      typeof item.id === 'string' &&
+      item.id.trim().length > 0 &&
+      typeof item.type === 'string' &&
+      item.type.trim().length > 0
+    );
+  });
+}
+
+function isSavedRenderReusable(render: GeneratedRenderRecord): boolean {
+  return render.source === 'snapshot_render' && readSavedRenderVisibleObjects(render).length > 0;
+}
+
+function buildSavedRenderSnapshotArtifact(
+  render: GeneratedRenderRecord
+): ThreeSnapshotArtifact | null {
+  const visibleObjects = readSavedRenderVisibleObjects(render);
+  if (visibleObjects.length === 0) {
+    return null;
+  }
+
+  const cameraPayload = isRecord(render.meta.camera)
+    ? (render.meta.camera as ThreeSnapshotArtifact['camera'])
+    : {
+        positionM: { x: 0, y: 0, z: 0 },
+        positionRoomMm: { x: 0, y: 0, z: 0 },
+        targetM: null,
+        targetRoomMm: null,
+        fovDeg: 50,
+        aspect: 4 / 3,
+        near: 0.1,
+        far: 100,
+      };
+  const { widthPx, heightPx } = resolveCanvasSizeFromAspectRatio(
+    typeof render.meta.aspect_ratio === 'string' ? render.meta.aspect_ratio : null
+  );
+
+  return {
+    capturedAt: render.created_at ?? new Date().toISOString(),
+    variantId: null,
+    selection: {
+      selectedObjectId: visibleObjects[0]?.id ?? null,
+      selectedWallId: null,
+      editMode: 'idle',
+    },
+    canvas: {
+      widthPx,
+      heightPx,
+    },
+    room: {
+      boundsMm: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+      polygonMm: [],
+      surfaceColors: {
+        wallColorHex: null,
+        floorColorHex: null,
+        ceilingColorHex: null,
+      },
+      openings: {
+        doors: [],
+        windows: [],
+      },
+    },
+    camera: cameraPayload,
+    totalObjectCount: visibleObjects.length,
+    visibleObjectCount: visibleObjects.length,
+    hiddenObjectCount: 0,
+    visibilityMethod: 'saved_render_metadata',
+    wallOcclusionOpacityThreshold: SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD,
+    allObjects: visibleObjects,
+    visibleObjects,
+  };
+}
+
+function readSavedRenderEditOperations(
+  render: GeneratedRenderRecord
+): SnapshotImageRenderResult['request']['edit_operations'] {
+  const rawOperations = render.meta.edit_operations;
+  if (!Array.isArray(rawOperations)) {
+    return [];
+  }
+  return rawOperations.filter(
+    (item): item is NonNullable<SnapshotImageRenderResult['request']['edit_operations']>[number] =>
+      isRecord(item) && typeof item.object_id === 'string' && item.object_id.trim().length > 0
+  );
+}
+
+function buildSavedRenderPreviewResult(
+  render: GeneratedRenderRecord,
+  imageDataUrl: string,
+  snapshotArtifact: ThreeSnapshotArtifact
+): SnapshotImageRenderResult {
+  const rawPresetSelection = isRecord(render.meta.preset_selection)
+    ? render.meta.preset_selection
+    : {};
+  const presetSelection: SnapshotImagePresetSelection = {
+    style:
+      typeof rawPresetSelection.style === 'string' ? rawPresetSelection.style : null,
+    lighting:
+      typeof rawPresetSelection.lighting === 'string'
+        ? rawPresetSelection.lighting
+        : null,
+    scenery:
+      typeof rawPresetSelection.scenery === 'string'
+        ? rawPresetSelection.scenery
+        : null,
+  };
+  const imageBase64 = imageDataUrl.split(',', 2)[1] ?? '';
+  const aspectRatio =
+    typeof render.meta.aspect_ratio === 'string' ? render.meta.aspect_ratio : '4:3';
+  const editOperations = readSavedRenderEditOperations(render);
+  const renderMode = render.meta.render_mode === 'edit' ? 'edit' : 'generate';
+  const rawUserPrompt =
+    typeof render.meta.raw_user_prompt === 'string'
+      ? render.meta.raw_user_prompt
+      : render.prompt;
+
+  return {
+    request: {
+      render_mode: renderMode,
+      system_prompt: 'Reloaded from saved render.',
+      user_prompt: render.prompt,
+      raw_user_prompt: rawUserPrompt,
+      preset_prompt: null,
+      preset_selection: presetSelection,
+      aspect_ratio: aspectRatio,
+      source_image_mime_type: render.mime_type,
+      structural_image_mime_type: render.mime_type,
+      layout_reference_enabled: Boolean(render.meta.layout_reference_enabled),
+      layout_reference_used: Boolean(render.meta.layout_reference_used),
+      layout_reference_image_mime_type: null,
+      annotated_reference_used: Boolean(render.meta.annotated_reference_used),
+      annotated_reference_image_mime_type: null,
+      scene_reference_mode:
+        render.meta.scene_reference_mode === 'target_layout_with_scene_reference' ||
+        render.meta.scene_reference_mode === 'scene_reference_camera_transfer'
+          ? render.meta.scene_reference_mode
+          : 'none',
+      scene_reference_used: Boolean(render.meta.scene_reference_used),
+      reference_only_camera_transfer_used: Boolean(
+        render.meta.reference_only_camera_transfer_used
+      ),
+      scene_reference_image_mime_type: null,
+      reference_image_count: 0,
+      edit_operations: editOperations,
+    },
+    image: {
+      mime_type: render.mime_type,
+      image_base64: imageBase64,
+      data_url: imageDataUrl,
+      size: 'saved',
+      aspect_ratio: aspectRatio,
+      raw_response: {},
+    },
+    models: {
+      image_model_name: render.model_name,
+      max_tokens: 0,
+    },
+    metadata: {
+      camera: snapshotArtifact.camera,
+      visible_objects: snapshotArtifact.visibleObjects as Array<Record<string, unknown>>,
+      visible_object_ids: snapshotArtifact.visibleObjects.map((object) => object.id),
+      render_mode: renderMode,
+      preset_selection: presetSelection,
+      edit_operations: editOperations,
+    },
+  };
+}
+
+function resolveRootLayoutIdFromRender(
+  render: GeneratedRenderRecord
+): string | null {
+  const rawValue = render.meta.root_layout_id;
+  return typeof rawValue === 'string' && rawValue.trim() ? rawValue.trim() : null;
+}
+
+function resolveSavedLayoutForRender(params: {
+  render: GeneratedRenderRecord;
+  savedLayouts: SavedLayoutRecord[];
+  activeRootLayoutId: string | null;
+}): SavedLayoutRecord | null {
+  const { render, savedLayouts, activeRootLayoutId } = params;
+  const explicitRootLayoutId = resolveRootLayoutIdFromRender(render);
+  if (explicitRootLayoutId) {
+    return savedLayouts.find((layout) => layout.id === explicitRootLayoutId) ?? null;
+  }
+  if (activeRootLayoutId) {
+    return savedLayouts.find((layout) => layout.id === activeRootLayoutId) ?? null;
+  }
+  return null;
 }
 
 function firstPresetKey(
@@ -245,6 +1637,13 @@ function optionLabel(rawKey: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function normalizeHexColor(value: unknown, fallback: string): string {
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())) {
+    return value.trim();
+  }
+  return fallback;
+}
+
 function visibleObjectName(object: VisibleSnapshotObject | null): string {
   if (!object) {
     return 'object';
@@ -260,90 +1659,327 @@ function hasPresetSelection(selection: SnapshotImagePresetSelection): boolean {
   return Boolean(selection.style || selection.lighting || selection.scenery);
 }
 
-type RenderPresetSelectorProps = {
-  title: string;
-  group: Record<string, SnapshotImagePresetOption>;
+function mergePresetSelections(
+  base: SnapshotImagePresetSelection | null | undefined,
+  delta: SnapshotImagePresetSelection
+): SnapshotImagePresetSelection {
+  return {
+    style: delta.style ?? base?.style ?? null,
+    lighting: delta.lighting ?? base?.lighting ?? null,
+    scenery: delta.scenery ?? base?.scenery ?? null,
+  };
+}
+
+function resolveEditPromptDelta(
+  sourceRender: SnapshotImageRenderResult,
+  currentPrompt: string
+): string {
+  const trimmedPrompt = currentPrompt.trim();
+  if (!trimmedPrompt) {
+    return '';
+  }
+  const previousPrompt = sourceRender.request.raw_user_prompt?.trim() ?? '';
+  return trimmedPrompt === previousPrompt ? '' : currentPrompt;
+}
+
+function withEffectivePresetSelection(
+  render: SnapshotImageRenderResult,
+  presetSelection: SnapshotImagePresetSelection,
+  rawUserPrompt: string | null
+): SnapshotImageRenderResult {
+  return {
+    ...render,
+    request: {
+      ...render.request,
+      raw_user_prompt: rawUserPrompt,
+      preset_selection: presetSelection,
+    },
+    metadata: {
+      ...render.metadata,
+      preset_selection: presetSelection,
+    },
+  };
+}
+
+type ReferencePresetDropdownOption = {
+  value: string | null;
+  label: string;
+  referenceImage: string | null;
+};
+
+type ObjectReplacementReference = {
+  objectId: string;
+  imageDataUrl: string;
+  fileName: string;
+  savedAtMs: number;
+};
+
+type EditBoxMode = 'prompt' | 'add' | 'replace' | 'recolor';
+
+type EditBoxRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type RenderEditBox = {
+  id: string;
+  mode: EditBoxMode;
+  rect: EditBoxRect;
+  prompt: string;
+  imageDataUrl: string | null;
+  fileName: string | null;
+  targetColor: string;
+};
+
+type EditBoxDraft = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+};
+
+type ObjectAppearanceReference = ObjectReplacementReference & {
+  rootLayoutId: string | null;
+  sourceRenderId: string | null;
+};
+
+const OBJECT_APPEARANCE_REFERENCES_META_KEY = 'object_appearance_references';
+const OBJECT_APPEARANCE_REFERENCES_VERSION = 1;
+const RENDER_STATE_META_KEY = 'render_state';
+const EDIT_DELTA_META_KEY = 'edit_delta';
+
+function buildReferencePresetDropdownOptions(
+  group: Record<string, SnapshotImagePresetOption>
+): ReferencePresetDropdownOption[] {
+  return Object.entries(group).map(([key, option]) => ({
+    value: key,
+    label: option.label || optionLabel(key),
+    referenceImage: option.reference_image ?? null,
+  }));
+}
+
+type ReferencePresetDropdownProps = {
+  label: string;
+  options: ReferencePresetDropdownOption[];
   value: string | null | undefined;
   disabled: boolean;
   onChange: (value: string | null) => void;
   allowEmpty?: boolean;
   emptyLabel?: string;
-  compact?: boolean;
 };
 
-function RenderPresetSelector({
-  title,
-  group,
+function ReferencePresetDropdown({
+  label,
+  options,
   value,
   disabled,
   onChange,
   allowEmpty = false,
   emptyLabel = 'No change',
-  compact = false,
-}: RenderPresetSelectorProps): React.ReactElement {
-  const entries = Object.entries(group);
-  const className = compact
-    ? 'reference-preset-group compact'
-    : 'reference-preset-group';
+}: ReferencePresetDropdownProps): React.ReactElement {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const normalizedValue = value ?? null;
+  const resolvedOptions = allowEmpty
+    ? [
+        {
+          value: null,
+          label: emptyLabel,
+          referenceImage: null,
+        },
+        ...options,
+      ]
+    : options;
+  const selectedOption =
+    resolvedOptions.find((option) => option.value === normalizedValue) ??
+    resolvedOptions[0] ??
+    null;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
 
   return (
-    <fieldset className={className}>
-      <legend>{title}</legend>
-      <div className="reference-preset-options">
-        {allowEmpty ? (
-          <button
-            type="button"
-            className={!value ? 'reference-preset-card selected' : 'reference-preset-card'}
-            disabled={disabled}
-            aria-pressed={!value}
-            onClick={() => onChange(null)}
-          >
-            <span className="reference-preset-image is-empty">
-              <span>{emptyLabel}</span>
-            </span>
-            <span className="reference-preset-label">{emptyLabel}</span>
-          </button>
-        ) : null}
-        {entries.length === 0 && !allowEmpty ? (
-          <div className="reference-preset-card disabled">
-            <span className="reference-preset-image is-empty">
-              <span>Loading</span>
-            </span>
-            <span className="reference-preset-label">{title}</span>
+    <div className="three-dropdown-field reference-dropdown" ref={rootRef}>
+      <span>{label}</span>
+      <button
+        type="button"
+        className="reference-dropdown-trigger"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selectedOption?.referenceImage ? (
+          <img
+            className="reference-dropdown-thumb"
+            src={selectedOption.referenceImage}
+            alt={`${selectedOption.label} reference`}
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <span className="reference-dropdown-thumb is-empty">
+            <span>No image</span>
+          </span>
+        )}
+        <span className="reference-dropdown-meta">
+          <span className="reference-dropdown-value">
+            {selectedOption?.label ?? (options.length > 0 ? 'Select option' : 'Loading')}
+          </span>
+          <span className="reference-dropdown-note">
+            {options.length > 0 ? `${options.length} presets` : 'Preset list'}
+          </span>
+        </span>
+        <span className="reference-dropdown-caret">{open ? '▲' : '▼'}</span>
+      </button>
+      {open ? (
+        <div className="reference-dropdown-panel" role="listbox" aria-label={label}>
+          <div className="reference-dropdown-grid">
+            {resolvedOptions.map((option) => {
+              const isSelected = option.value === normalizedValue;
+              return (
+                <button
+                  key={option.value ?? '__empty__'}
+                  type="button"
+                  className={isSelected ? 'reference-preset-card selected' : 'reference-preset-card'}
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  {option.referenceImage ? (
+                    <img
+                      className="reference-preset-image"
+                      src={option.referenceImage}
+                      alt={`${option.label} reference`}
+                      loading="lazy"
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className="reference-preset-image is-empty">
+                      <span>{option.label}</span>
+                    </span>
+                  )}
+                  <span className="reference-preset-label">{option.label}</span>
+                </button>
+              );
+            })}
           </div>
-        ) : null}
-        {entries.map(([key, option]) => {
-          const label = option.label || optionLabel(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              className={
-                value === key ? 'reference-preset-card selected' : 'reference-preset-card'
-              }
-              disabled={disabled}
-              aria-pressed={value === key}
-              onClick={() => onChange(key)}
-            >
-              {option.reference_image ? (
-                <img
-                  className="reference-preset-image"
-                  src={option.reference_image}
-                  alt={`${label} reference`}
-                  loading="lazy"
-                  draggable={false}
-                />
-              ) : (
-                <span className="reference-preset-image is-empty">
-                  <span>No image</span>
-                </span>
-              )}
-              <span className="reference-preset-label">{label}</span>
-            </button>
-          );
-        })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type CameraPresetSelectProps = {
+  value: string | null;
+  disabled: boolean;
+  midHeightOptions: CameraPreset[];
+  ceilingOptions: CameraPreset[];
+  onChange: (value: string | null) => void;
+};
+
+function CameraPresetStepper({
+  value,
+  disabled,
+  midHeightOptions,
+  ceilingOptions,
+  onChange,
+}: CameraPresetSelectProps): React.ReactElement {
+  const options = [...midHeightOptions, ...ceilingOptions];
+  const activeIndex = options.findIndex((preset) => preset.id === value);
+  const activePreset = activeIndex >= 0 ? options[activeIndex] : null;
+  const handleStep = (delta: number): void => {
+    if (options.length === 0) {
+      return;
+    }
+    const startIndex = activeIndex >= 0 ? activeIndex : delta > 0 ? -1 : 0;
+    const nextIndex = (startIndex + delta + options.length) % options.length;
+    onChange(options[nextIndex].id);
+  };
+
+  return (
+    <div className="three-dropdown-field three-dropdown-field-wide three-camera-stepper">
+      <span>Quick Camera View</span>
+      <div className="three-camera-stepper-row">
+        <button
+          type="button"
+          className="three-camera-stepper-button"
+          disabled={disabled || options.length === 0}
+          onClick={() => handleStep(-1)}
+          aria-label="Previous camera view"
+        >
+          ‹
+        </button>
+        <div className="three-camera-stepper-current" aria-live="polite">
+          <strong>{activePreset?.label ?? 'Custom orbit'}</strong>
+          <span>
+            {activePreset
+              ? `${activePreset.group === 'mid' ? 'Mid-height' : 'Ceiling'} · ${activePreset.description}`
+              : options.length > 0
+                ? `${options.length} saved camera views`
+                : 'No camera views available'}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="three-camera-stepper-button"
+          disabled={disabled || options.length === 0}
+          onClick={() => handleStep(1)}
+          aria-label="Next camera view"
+        >
+          ›
+        </button>
       </div>
-    </fieldset>
+    </div>
+  );
+}
+
+type ColorSwatchFieldProps = {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+};
+
+function ColorSwatchField({
+  label,
+  value,
+  disabled = false,
+  onChange,
+}: ColorSwatchFieldProps): React.ReactElement {
+  return (
+    <label className="three-color-field">
+      <span>{label}</span>
+      <input
+        type="color"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <span className="three-color-value">{value}</span>
+    </label>
   );
 }
 
@@ -358,10 +1994,20 @@ export const ThreeDPreviewPanel: React.FC = () => {
     userInput,
     selectedVariantId,
     selectedWallId,
+    savedLayouts,
+    savedRenders,
+    activeRootLayoutId,
+    selectedSavedRenderId,
     selectWall,
+    selectPlacement,
+    setActiveRootLayoutId,
+    selectSavedRender,
     updatePlacement,
     removePlacement,
+    setFloorplan,
     setDesign,
+    setStyledResult,
+    clearLayoutVariants,
     upsertSavedRender,
   } = useEditorStore();
   const [error, setError] = useState<string | null>(null);
@@ -402,12 +2048,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
     });
   const [lastRenderedSnapshot, setLastRenderedSnapshot] =
     useState<ThreeSnapshotArtifact | null>(null);
-  const [lastRenderedSnapshotImageDataUrl, setLastRenderedSnapshotImageDataUrl] =
+  const [, setLastRenderedSnapshotImageDataUrl] =
     useState<string | null>(null);
-  const [editSelectedObjectId, setEditSelectedObjectId] = useState<string>('');
-  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+  const [objectAppearanceReferences, setObjectAppearanceReferences] = useState<
+    Record<string, ObjectAppearanceReference>
+  >({});
+  const [editBoxes, setEditBoxes] = useState<RenderEditBox[]>([]);
+  const [activeEditBoxId, setActiveEditBoxId] = useState<string | null>(null);
+  const [editBoxDraft, setEditBoxDraft] = useState<EditBoxDraft | null>(null);
   const [targetColor, setTargetColor] = useState('#c8a26a');
-  const [replaceEnabled, setReplaceEnabled] = useState(false);
   const [colorEnabled, setColorEnabled] = useState(false);
   const [editPresetSelection, setEditPresetSelection] =
     useState<SnapshotImagePresetSelection>({
@@ -418,6 +2067,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const [objectVisualDiagnostics, setObjectVisualDiagnostics] = useState<
     Record<string, ObjectVisualDiagnostic>
   >({});
+  const [cameraPresets, setCameraPresets] = useState<CameraPreset[]>([]);
+  const [activeCameraPresetId, setActiveCameraPresetId] = useState<string | null>(null);
+  const applyingCameraPresetRef = useRef(false);
 
   useEffect(() => {
     editModeRef.current = editMode;
@@ -653,33 +2305,328 @@ export const ThreeDPreviewPanel: React.FC = () => {
         .sort((left, right) => left.label.localeCompare(right.label)),
     [objectVisualDiagnostics]
   );
+  const midHeightCameraPresets = useMemo(
+    () => cameraPresets.filter((preset) => preset.group === 'mid'),
+    [cameraPresets]
+  );
+  const ceilingCameraPresets = useMemo(
+    () => cameraPresets.filter((preset) => preset.group === 'ceiling'),
+    [cameraPresets]
+  );
+  const activeCameraPreset = useMemo(
+    () => cameraPresets.find((preset) => preset.id === activeCameraPresetId) ?? null,
+    [activeCameraPresetId, cameraPresets]
+  );
+  const stylePresetOptions = useMemo(
+    () => buildReferencePresetDropdownOptions(renderPresets?.styles ?? {}),
+    [renderPresets]
+  );
+  const lightingPresetOptions = useMemo(
+    () => buildReferencePresetDropdownOptions(renderPresets?.lights ?? {}),
+    [renderPresets]
+  );
+  const sceneryPresetOptions = useMemo(
+    () => buildReferencePresetDropdownOptions(renderPresets?.sceneries ?? {}),
+    [renderPresets]
+  );
 
   const lastVisibleObjects = lastRenderedSnapshot?.visibleObjects ?? [];
   const visibleObjectById = useMemo(
     () => new Map(lastVisibleObjects.map((object) => [object.id, object])),
     [lastVisibleObjects]
   );
-  const effectiveEditObject =
-    visibleObjectById.get(editSelectedObjectId) ??
-    (lastVisibleObjects.length > 0 ? lastVisibleObjects[0] : null);
+  const activeObjectAppearanceEntries = useMemo(
+    () =>
+      Object.values(objectAppearanceReferences)
+        .filter(
+          (reference) =>
+            (reference.rootLayoutId ?? null) === (activeRootLayoutId ?? null)
+        )
+        .sort((left, right) => right.savedAtMs - left.savedAtMs),
+    [activeRootLayoutId, objectAppearanceReferences]
+  );
   const selectedObjectIsEditable = Boolean(
     selectedId && visibleObjectById.has(selectedId)
   );
   const editPresetActive = hasPresetSelection(editPresetSelection);
-  const hasEditOperation =
-    (replaceEnabled && replacementFile !== null && effectiveEditObject !== null) ||
-    (colorEnabled && effectiveEditObject !== null) ||
-    editPresetActive;
+  const configuredEditBoxes = useMemo(
+    () =>
+      editBoxes.filter((box) => {
+        if (box.mode === 'recolor') {
+          return Boolean(box.targetColor);
+        }
+        if (box.mode === 'add' || box.mode === 'replace') {
+          return Boolean(box.imageDataUrl || box.prompt.trim());
+        }
+        return Boolean(box.prompt.trim());
+      }),
+    [editBoxes]
+  );
+  const activeEditBox =
+    activeEditBoxId !== null
+      ? editBoxes.find((box) => box.id === activeEditBoxId) ?? null
+      : editBoxes[editBoxes.length - 1] ?? null;
+  const roomSurfaces =
+    styledResult?.room?.surfaces && typeof styledResult.room.surfaces === 'object'
+      ? styledResult.room.surfaces
+      : {};
+  const wallSurfaceColor = normalizeHexColor(
+    roomSurfaces.wall_color_hex ?? roomSurfaces.wallColorHex,
+    '#555555'
+  );
+  const floorSurfaceColor = normalizeHexColor(
+    roomSurfaces.floor_color_hex ??
+      roomSurfaces.floorColorHex ??
+      activeFloorplan?.room?.floor_color_hex,
+    '#f0ece4'
+  );
+  const ceilingSurfaceColor = normalizeHexColor(
+    roomSurfaces.ceiling_color_hex ?? roomSurfaces.ceilingColorHex,
+    '#fbf7f2'
+  );
+  const selectedObjectForAppearance =
+    selectedId !== null
+      ? objects.find((object) => object.id === selectedId) ?? null
+      : null;
 
-  useEffect(() => {
-    if (selectedId && visibleObjectById.has(selectedId)) {
-      setEditSelectedObjectId(selectedId);
+  function updateRoomSurfaceColor(
+    key: 'wall_color_hex' | 'floor_color_hex' | 'ceiling_color_hex',
+    value: string
+  ): void {
+    const nextColor = normalizeHexColor(value, '#ffffff');
+    const existingStyledResult =
+      styledResult && typeof styledResult === 'object'
+        ? (styledResult as Record<string, any>)
+        : {};
+    const existingRoom =
+      existingStyledResult.room && typeof existingStyledResult.room === 'object'
+        ? existingStyledResult.room
+        : {};
+    const existingSurfaces =
+      existingRoom.surfaces && typeof existingRoom.surfaces === 'object'
+        ? existingRoom.surfaces
+        : {};
+    setStyledResult({
+      ...existingStyledResult,
+      room: {
+        ...existingRoom,
+        surfaces: {
+          ...existingSurfaces,
+          [key]: nextColor,
+        },
+      },
+    });
+
+    if (key === 'floor_color_hex' && activeFloorplan) {
+      setFloorplan({
+        ...activeFloorplan,
+        room: {
+          ...activeFloorplan.room,
+          floor_color_hex: nextColor,
+        },
+      });
+    }
+  }
+
+  function updateStyledObjectColor(objectId: string, value: string): void {
+    const nextColor = normalizeHexColor(value, '#cfcac2');
+    if (
+      !styledResult ||
+      typeof styledResult !== 'object' ||
+      !Array.isArray((styledResult as { objects?: unknown[] }).objects)
+    ) {
       return;
     }
-    if (!editSelectedObjectId && lastVisibleObjects.length > 0) {
-      setEditSelectedObjectId(lastVisibleObjects[0].id);
+    setStyledResult({
+      ...(styledResult as Record<string, unknown>),
+      objects: (styledResult as { objects: unknown[] }).objects.map((item) => {
+        if (!item || typeof item !== 'object') {
+          return item;
+        }
+        const objectRow = item as Record<string, unknown>;
+        const currentId =
+          typeof objectRow.instance_id === 'string'
+            ? objectRow.instance_id
+            : typeof objectRow.id === 'string'
+              ? objectRow.id
+              : null;
+        if (currentId !== objectId) {
+          return item;
+        }
+        return {
+          ...objectRow,
+          color_hex: nextColor,
+        };
+      }),
+    });
+  }
+
+  function handleObjectColorChange(objectId: string, value: string): void {
+    const nextColor = normalizeHexColor(value, '#cfcac2');
+    const placement = design?.placements.find(
+      (candidate) =>
+        String(candidate.placement_id ?? candidate.id ?? candidate.object_id ?? '') === objectId
+    );
+    if (placement) {
+      updatePlacement({
+        ...placement,
+        color_hex: nextColor,
+      });
+      return;
     }
-  }, [editSelectedObjectId, lastVisibleObjects, selectedId, visibleObjectById]);
+    updateStyledObjectColor(objectId, nextColor);
+  }
+
+  function buildAppearanceMemoryOperations(
+    snapshotArtifact: ThreeSnapshotArtifact
+  ): SnapshotImageEditOperation[] {
+    const visibleWithReferences = snapshotArtifact.visibleObjects
+      .map((object) => {
+        const reference = objectAppearanceReferences[object.id] ?? null;
+        if (!reference) {
+          return null;
+        }
+        if ((reference.rootLayoutId ?? null) !== (activeRootLayoutId ?? null)) {
+          return null;
+        }
+        const box = object.screenBboxPx;
+        const screenArea = box ? Math.max(0, box.width * box.height) : 0;
+        return { object, reference, screenArea };
+      })
+      .filter(
+        (
+          entry
+        ): entry is {
+          object: VisibleSnapshotObject;
+          reference: ObjectAppearanceReference;
+          screenArea: number;
+        } => entry !== null
+      )
+      .sort((left, right) => right.screenArea - left.screenArea)
+      .slice(0, 6);
+
+    return visibleWithReferences.map(({ object, reference }) => ({
+      object_id: object.id,
+      object_name: visibleObjectName(object),
+      replacement_image_data_url: reference.imageDataUrl,
+      target_color: null,
+    }));
+  }
+
+  function buildEditBoxOperations(boxes: RenderEditBox[]): SnapshotImageEditOperation[] {
+    return boxes.map((box) => ({
+      object_id: box.id,
+      object_name: box.prompt.trim() || editBoxModeLabel(box.mode).toLowerCase(),
+      operation_type: box.mode,
+      prompt: box.prompt.trim() || null,
+      bbox_norm: box.rect,
+      replacement_image_data_url: box.imageDataUrl,
+      target_color: box.mode === 'recolor' ? box.targetColor : null,
+    }));
+  }
+
+  function updateEditBox(
+    boxId: string,
+    updater: (box: RenderEditBox) => RenderEditBox
+  ): void {
+    setEditBoxes((current) =>
+      current.map((box) => (box.id === boxId ? updater(box) : box))
+    );
+  }
+
+  function resolveEditBoxPoint(event: React.PointerEvent<HTMLDivElement>): {
+    x: number;
+    y: number;
+  } {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1),
+      y: clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1),
+    };
+  }
+
+  function handleEditBoxPointerDown(
+    event: React.PointerEvent<HTMLDivElement>
+  ): void {
+    if (!renderedSnapshotImage || isRenderingImage) {
+      return;
+    }
+    event.preventDefault();
+    const point = resolveEditBoxPoint(event);
+    setEditBoxDraft({
+      startX: point.x,
+      startY: point.y,
+      currentX: point.x,
+      currentY: point.y,
+    });
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleEditBoxPointerMove(
+    event: React.PointerEvent<HTMLDivElement>
+  ): void {
+    if (!editBoxDraft) {
+      return;
+    }
+    const point = resolveEditBoxPoint(event);
+    setEditBoxDraft((current) =>
+      current
+        ? {
+            ...current,
+            currentX: point.x,
+            currentY: point.y,
+          }
+        : null
+    );
+  }
+
+  function handleEditBoxPointerUp(
+    event: React.PointerEvent<HTMLDivElement>
+  ): void {
+    if (!editBoxDraft) {
+      return;
+    }
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    const rect = normalizeEditBoxRect(editBoxDraft);
+    setEditBoxDraft(null);
+    if (!rect) {
+      return;
+    }
+    const nextIndex =
+      Math.max(
+        0,
+        ...editBoxes.map((box) => Number(/^R(\d+)$/i.exec(box.id)?.[1] ?? 0))
+      ) + 1;
+    const nextBox: RenderEditBox = {
+      id: `R${nextIndex}`,
+      mode: 'prompt',
+      rect,
+      prompt: '',
+      imageDataUrl: null,
+      fileName: null,
+      targetColor,
+    };
+    setEditBoxes((current) => [...current, nextBox]);
+    setActiveEditBoxId(nextBox.id);
+  }
+
+  async function persistObjectAppearanceReferencesForRender(
+    render: GeneratedRenderRecord,
+    references: Record<string, ObjectAppearanceReference>,
+    metaPatch: Record<string, unknown> = {}
+  ): Promise<GeneratedRenderRecord> {
+    const memoryMeta = buildObjectAppearanceReferencesMeta({
+      references,
+      rootLayoutId: activeRootLayoutId,
+    });
+    const rawReferences = memoryMeta.references;
+    const referenceCount = Array.isArray(rawReferences) ? rawReferences.length : 0;
+    return updateGeneratedRenderMeta(render.id, {
+      ...metaPatch,
+      [OBJECT_APPEARANCE_REFERENCES_META_KEY]: memoryMeta,
+      object_appearance_reference_count: referenceCount,
+    });
+  }
 
   useEffect(() => {
     const nextDiagnostics = Object.fromEntries(
@@ -719,44 +2666,47 @@ export const ThreeDPreviewPanel: React.FC = () => {
     setObjectVisualDiagnostics(nextDiagnostics);
   }, [resolvedObjects]);
 
-  async function handleCaptureSnapshot(): Promise<void> {
+  function handleApplyCameraPreset(preset: CameraPreset): void {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderState = renderStateRef.current;
-    if (
-      !renderer ||
-      !scene ||
-      !camera ||
-      !renderState ||
-      !(renderer.domElement instanceof HTMLCanvasElement)
-    ) {
-      setCaptureStatus({
-        tone: 'error',
-        text: '3D preview is not ready yet. Please wait for the scene to finish loading.',
-      });
+    if (!camera || !controls) {
       return;
     }
 
+    applyingCameraPresetRef.current = true;
+    applyOrbitCameraPose(camera, controls, preset);
+    renderer?.render?.(scene, camera);
+    setActiveCameraPresetId(preset.id);
+    window.requestAnimationFrame(() => {
+      applyingCameraPresetRef.current = false;
+    });
+  }
+
+  function handleCameraPresetSelection(presetId: string | null): void {
+    if (!presetId) {
+      setActiveCameraPresetId(null);
+      return;
+    }
+    const preset = cameraPresets.find((candidate) => candidate.id === presetId) ?? null;
+    if (!preset) {
+      return;
+    }
+    handleApplyCameraPreset(preset);
+  }
+
+  async function handleCaptureSnapshot(): Promise<void> {
     setIsCapturing(true);
     setCaptureStatus({
       tone: 'neutral',
       text: 'Capturing the current 3D view...',
     });
 
-    const rotatorGroup = rotatorGroupRef.current;
-    const previousRotatorVisibility =
-      typeof rotatorGroup?.visible === 'boolean' ? rotatorGroup.visible : null;
-
     try {
-      if (rotatorGroup && previousRotatorVisibility !== null) {
-        rotatorGroup.visible = false;
-      }
-      controlsRef.current?.update?.();
-      renderer.render(scene, camera);
-
-      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
-      const pngBlob = await canvasToPngBlob(renderer.domElement);
+      const { snapshotArtifact, snapshotImageDataUrl } =
+        await captureCurrentAiSnapshot();
+      const pngBlob = dataUrlToBlob(snapshotImageDataUrl);
       const jsonBlob = new Blob([JSON.stringify(snapshotArtifact, null, 2)], {
         type: 'application/json',
       });
@@ -781,10 +2731,105 @@ export const ThreeDPreviewPanel: React.FC = () => {
             : 'Failed to capture the current 3D snapshot.',
       });
     } finally {
-      if (rotatorGroup && previousRotatorVisibility !== null) {
-        rotatorGroup.visible = previousRotatorVisibility;
-      }
       setIsCapturing(false);
+    }
+  }
+
+  async function captureCurrentAiSnapshot(): Promise<{
+    snapshotArtifact: ThreeSnapshotArtifact;
+    snapshotImageDataUrl: string;
+    cleanSnapshotImageDataUrl: string;
+  }> {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderState = renderStateRef.current;
+    if (
+      !renderer ||
+      !scene ||
+      !camera ||
+      !renderState ||
+      !(renderer.domElement instanceof HTMLCanvasElement)
+    ) {
+      throw new Error(
+        '3D preview is not ready yet. Please wait for the scene to finish loading.'
+      );
+    }
+
+    const hiddenNodes: Array<{ visible: boolean; node: { visible: boolean } }> = [];
+    const hideNode = (node: unknown): void => {
+      if (!node || typeof node !== 'object' || !('visible' in node)) {
+        return;
+      }
+      const visible = (node as { visible: boolean }).visible;
+      hiddenNodes.push({ node: node as { visible: boolean }, visible });
+      (node as { visible: boolean }).visible = false;
+    };
+
+    try {
+      const rotatorGroup = rotatorGroupRef.current;
+      if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
+        hideNode(rotatorGroup);
+      }
+      scene.traverse((node: any) => {
+        if (node?.userData?.aiRenderHide === true && typeof node.visible === 'boolean') {
+          hideNode(node);
+        }
+      });
+      controlsRef.current?.update?.();
+      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
+      const renderSize = resolveSnapshotReferenceRenderSize(renderer.domElement);
+      const previousPixelRatio =
+        typeof renderer.getPixelRatio === 'function' ? renderer.getPixelRatio() : null;
+      const previousCameraAspect =
+        typeof camera.aspect === 'number' ? camera.aspect : null;
+
+      if (typeof renderer.setPixelRatio === 'function') {
+        renderer.setPixelRatio(1);
+      }
+      renderer.setSize(renderSize.width, renderSize.height, false);
+      if (previousCameraAspect !== null) {
+        camera.aspect = renderSize.width / renderSize.height;
+        camera.updateProjectionMatrix?.();
+      }
+      renderer.render(scene, camera);
+      const sourceImageDataUrl = canvasToDataUrl(renderer.domElement);
+
+      if (previousPixelRatio !== null && typeof renderer.setPixelRatio === 'function') {
+        renderer.setPixelRatio(previousPixelRatio);
+      }
+      const restoreRect = renderer.domElement.parentElement?.getBoundingClientRect();
+      const restoreWidth = Math.max(
+        1,
+        Math.round(restoreRect?.width || renderer.domElement.clientWidth || 1)
+      );
+      const restoreHeight = Math.max(
+        1,
+        Math.round(restoreRect?.height || renderer.domElement.clientHeight || 1)
+      );
+      renderer.setSize(restoreWidth, restoreHeight, false);
+      if (previousCameraAspect !== null) {
+        camera.aspect = previousCameraAspect;
+        camera.updateProjectionMatrix?.();
+      }
+      const labeledImageDataUrl = await buildStructuralPerspectiveReferenceImageDataUrl({
+        sourceImageDataUrl,
+        snapshot: snapshotArtifact,
+      });
+      if (!labeledImageDataUrl) {
+        throw new Error('Unable to build the labeled 3D snapshot image.');
+      }
+      return {
+        snapshotArtifact,
+        snapshotImageDataUrl: labeledImageDataUrl,
+        cleanSnapshotImageDataUrl: sourceImageDataUrl,
+      };
+    } finally {
+      for (let index = hiddenNodes.length - 1; index >= 0; index -= 1) {
+        hiddenNodes[index].node.visible = hiddenNodes[index].visible;
+      }
+      controlsRef.current?.update?.();
+      renderer.render(scene, camera);
     }
   }
 
@@ -810,60 +2855,57 @@ export const ThreeDPreviewPanel: React.FC = () => {
     setIsRenderingImage(true);
     setRenderStatus({
       tone: 'neutral',
-      text: 'Capturing the current view and sending it to Nano Banana...',
+      text: 'Capturing the clean 3D view plus structural guide and generating image...',
     });
 
-    const hiddenNodes: Array<{ visible: boolean; node: { visible: boolean } }> = [];
-    const hideNode = (node: unknown): void => {
-      if (!node || typeof node !== 'object' || !('visible' in node)) {
-        return;
-      }
-      const visible = (node as { visible: boolean }).visible;
-      hiddenNodes.push({ node: node as { visible: boolean }, visible });
-      (node as { visible: boolean }).visible = false;
-    };
-
     try {
-      const rotatorGroup = rotatorGroupRef.current;
-      if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
-        hideNode(rotatorGroup);
-      }
-      scene.traverse((node: any) => {
-        if (node?.userData?.aiRenderHide === true && typeof node.visible === 'boolean') {
-          hideNode(node);
-        }
-      });
-      controlsRef.current?.update?.();
-      renderer.render(scene, camera);
-      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
-      const snapshotImageDataUrl = canvasToDataUrl(renderer.domElement);
-      const layoutReferenceImageDataUrl = buildLayoutReferenceImageDataUrl({
-        floorplan: activeFloorplan,
-        design,
-      });
+      const {
+        snapshotArtifact,
+        snapshotImageDataUrl,
+        cleanSnapshotImageDataUrl,
+      } =
+        await captureCurrentAiSnapshot();
+      const appearanceMemoryOperations = buildAppearanceMemoryOperations(snapshotArtifact);
       const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
           snapshotPayload: snapshotArtifact as Record<string, unknown>,
-          snapshotImageDataUrl,
-          layoutReferenceImageDataUrl,
+          snapshotImageDataUrl: cleanSnapshotImageDataUrl,
+          layoutReferenceImageDataUrl: null,
+          annotatedReferenceImageDataUrl: snapshotImageDataUrl,
+          sceneReferenceImageDataUrl: null,
+          sceneReferenceMode: 'none',
           userPrompt: renderPrompt,
           renderMode: 'generate',
           presetSelection,
+          rootLayoutId: activeRootLayoutId,
+          editOperations: appearanceMemoryOperations,
         }
       );
       setRenderedSnapshotImage(renderResult.render);
       setLastRenderedSnapshot(snapshotArtifact);
-      setLastRenderedSnapshotImageDataUrl(snapshotImageDataUrl);
-      setEditSelectedObjectId(snapshotArtifact.visibleObjects[0]?.id ?? '');
+      setLastRenderedSnapshotImageDataUrl(cleanSnapshotImageDataUrl);
+      setEditBoxes([]);
+      setActiveEditBoxId(null);
+      setEditBoxDraft(null);
       if (renderResult.saved_render) {
-        upsertSavedRender(renderResult.saved_render);
-        setSavedRenderId(renderResult.saved_render.id);
+        const savedWithMemory = await persistObjectAppearanceReferencesForRender(
+          renderResult.saved_render,
+          objectAppearanceReferences
+        );
+        upsertSavedRender(savedWithMemory);
+        setSavedRenderId(savedWithMemory.id);
+        selectSavedRender(savedWithMemory.id);
       } else {
         setSavedRenderId(null);
+        selectSavedRender(null);
       }
+      const successMessage =
+        appearanceMemoryOperations.length > 0
+          ? `Generated image with ${appearanceMemoryOperations.length} object memory reference(s).`
+          : `Generated image with ${renderResult.render.models.image_model_name}.`;
       setRenderStatus({
         tone: 'success',
-        text: `Generated image with ${renderResult.render.models.image_model_name}.`,
+        text: successMessage,
       });
     } catch (renderError) {
       setRenderStatus({
@@ -874,78 +2916,144 @@ export const ThreeDPreviewPanel: React.FC = () => {
             : 'Failed to generate an image from the current snapshot.',
       });
     } finally {
-      for (let index = hiddenNodes.length - 1; index >= 0; index -= 1) {
-        hiddenNodes[index].node.visible = hiddenNodes[index].visible;
-      }
-      controlsRef.current?.update?.();
-      renderer.render(scene, camera);
       setIsRenderingImage(false);
     }
   }
 
   async function handleEditSnapshotImage(): Promise<void> {
-    if (!renderedSnapshotImage || !lastRenderedSnapshot || !lastRenderedSnapshotImageDataUrl) {
+    if (!renderedSnapshotImage) {
       setRenderStatus({
         tone: 'error',
         text: 'Generate an image before applying edits.',
       });
       return;
     }
-    if (!hasEditOperation) {
-      setRenderStatus({
-        tone: 'error',
-        text: 'Choose at least one edit operation.',
-      });
-      return;
-    }
-    if ((replaceEnabled || colorEnabled) && !effectiveEditObject) {
-      setRenderStatus({
-        tone: 'error',
-        text: 'Choose a visible object from the generated image.',
-      });
-      return;
-    }
-
     setIsRenderingImage(true);
     setRenderStatus({
       tone: 'neutral',
-      text: 'Applying the requested edit with Nano Banana...',
+      text: 'Applying the requested edit...',
     });
 
     try {
-      const editOperations: SnapshotImageEditOperation[] = [];
-      if (effectiveEditObject && (replaceEnabled || colorEnabled)) {
-        const replacementImageDataUrl =
-          replaceEnabled && replacementFile ? await fileToDataUrl(replacementFile) : null;
-        editOperations.push({
-          object_id: effectiveEditObject.id,
-          object_name: visibleObjectName(effectiveEditObject),
-          replacement_image_data_url: replacementImageDataUrl,
-          target_color: colorEnabled ? targetColor : null,
-        });
-      }
+      const {
+        snapshotArtifact: targetSnapshotArtifact,
+        snapshotImageDataUrl: targetSnapshotImageDataUrl,
+      } = await captureCurrentAiSnapshot();
+      const editOperations = buildEditBoxOperations(configuredEditBoxes);
+      const editBoxGuideImageDataUrl = await buildEditBoxGuideImageDataUrl({
+        sourceImageDataUrl: renderedSnapshotImage.image.data_url,
+        boxes: configuredEditBoxes,
+      });
+      const effectivePresetSelection = mergePresetSelections(
+        renderedSnapshotImage.request.preset_selection,
+        editPresetSelection
+      );
+      const editPromptDelta = resolveEditPromptDelta(
+        renderedSnapshotImage,
+        renderPrompt
+      );
+      const effectiveRawUserPrompt =
+        editPromptDelta.trim() || renderedSnapshotImage.request.raw_user_prompt || null;
 
       const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
-          snapshotPayload: lastRenderedSnapshot as unknown as Record<string, unknown>,
-          snapshotImageDataUrl: lastRenderedSnapshotImageDataUrl,
+          snapshotPayload: targetSnapshotArtifact as unknown as Record<string, unknown>,
+          snapshotImageDataUrl: targetSnapshotImageDataUrl,
+          layoutReferenceImageDataUrl: targetSnapshotImageDataUrl,
+          annotatedReferenceImageDataUrl: editBoxGuideImageDataUrl,
           editSourceImageDataUrl: renderedSnapshotImage.image.data_url,
-          userPrompt: renderPrompt,
+          userPrompt: editPromptDelta,
           renderMode: 'edit',
           presetSelection: editPresetSelection,
+          rootLayoutId: activeRootLayoutId,
           editOperations,
         }
       );
-      setRenderedSnapshotImage(renderResult.render);
+      const savedAtMs = Date.now();
+      const editedObjectsForMemory: VisibleSnapshotObject[] = [];
+      const memoryEntries = (
+        await Promise.all(
+          editedObjectsForMemory.map(async (object) => {
+            const imageDataUrl = await cropObjectAppearanceReference({
+              imageDataUrl: renderResult.render.image.data_url,
+              object,
+              snapshot: targetSnapshotArtifact,
+            });
+            if (!imageDataUrl) {
+              return null;
+            }
+            return {
+              objectId: object.id,
+              imageDataUrl,
+              fileName: `edited-${object.id}.jpg`,
+              savedAtMs,
+              rootLayoutId: activeRootLayoutId,
+              sourceRenderId: renderResult.saved_render?.id ?? savedRenderId,
+            } satisfies ObjectAppearanceReference;
+          })
+        )
+      ).filter(
+        (entry): entry is ObjectAppearanceReference => entry !== null
+      );
+      const mergedObjectAppearanceReferences = {
+        ...objectAppearanceReferences,
+        ...Object.fromEntries(
+          memoryEntries.map((reference) => [reference.objectId, reference])
+        ),
+      };
+      const renderWithEffectiveState = withEffectivePresetSelection(
+        renderResult.render,
+        effectivePresetSelection,
+        effectiveRawUserPrompt
+      );
+      setRenderedSnapshotImage(renderWithEffectiveState);
+      setLastRenderedSnapshot(targetSnapshotArtifact);
+      setLastRenderedSnapshotImageDataUrl(targetSnapshotImageDataUrl);
+      setObjectAppearanceReferences(mergedObjectAppearanceReferences);
+      setEditBoxes([]);
+      setActiveEditBoxId(null);
+      setEditBoxDraft(null);
+      setColorEnabled(false);
+      setEditPresetSelection({
+        style: null,
+        lighting: null,
+        scenery: null,
+      });
       if (renderResult.saved_render) {
-        upsertSavedRender(renderResult.saved_render);
-        setSavedRenderId(renderResult.saved_render.id);
+        const savedWithMemory = await persistObjectAppearanceReferencesForRender(
+          renderResult.saved_render,
+          mergedObjectAppearanceReferences,
+          {
+            preset_selection: effectivePresetSelection,
+            raw_user_prompt: effectiveRawUserPrompt,
+            [RENDER_STATE_META_KEY]: {
+              version: 1,
+              preset_selection: effectivePresetSelection,
+              raw_user_prompt: effectiveRawUserPrompt,
+              root_layout_id: activeRootLayoutId,
+              source_render_id: savedRenderId,
+            },
+            [EDIT_DELTA_META_KEY]: {
+              user_prompt: editPromptDelta || null,
+              preset_selection: editPresetSelection,
+              edit_operations: editOperations,
+              layout_reference_used: true,
+            },
+          }
+        );
+        upsertSavedRender(savedWithMemory);
+        setSavedRenderId(savedWithMemory.id);
+        selectSavedRender(savedWithMemory.id);
       } else {
         setSavedRenderId(null);
+        selectSavedRender(null);
       }
       setRenderStatus({
         tone: 'success',
-        text: `Edited image with ${renderResult.render.models.image_model_name}.`,
+        text:
+          memoryEntries.length > 0
+            ? `Edited image and saved ${memoryEntries.length} object appearance memory reference(s).`
+            : `Edited image with ${renderResult.render.models.image_model_name}.`,
       });
     } catch (editError) {
       setRenderStatus({
@@ -961,10 +3069,129 @@ export const ThreeDPreviewPanel: React.FC = () => {
   }
 
   useEffect(() => {
+    if (!selectedSavedRenderId) {
+      return;
+    }
+
+    const selectedRender =
+      savedRenders.find((render) => render.id === selectedSavedRenderId) ?? null;
+    if (!selectedRender || !isSavedRenderReusable(selectedRender)) {
+      return;
+    }
+    const inferredRootLayout = resolveSavedLayoutForRender({
+      render: selectedRender,
+      savedLayouts,
+      activeRootLayoutId,
+    });
+    if (
+      savedRenderId === selectedRender.id &&
+      renderedSnapshotImage !== null &&
+      lastRenderedSnapshot !== null &&
+      (!inferredRootLayout || activeRootLayoutId === inferredRootLayout.id)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadSavedRender = async () => {
+      setRenderStatus({
+        tone: 'neutral',
+        text: `Loading saved render ${selectedRender.id} for editing...`,
+      });
+      try {
+        const renderDetail = await getGeneratedRenderDetail(selectedRender.id);
+        if (cancelled) {
+          return;
+        }
+        const hydratedRender = renderDetail.render;
+        const snapshotArtifact = buildSavedRenderSnapshotArtifact(hydratedRender);
+        if (!snapshotArtifact) {
+          throw new Error('This saved render does not include enough metadata to edit again.');
+        }
+        if (inferredRootLayout) {
+          const nextFloorplan =
+            inferredRootLayout.floorplan_json as unknown as FloorplanGeometry;
+          const nextDesign =
+            inferredRootLayout.design_json as unknown as DesignPlanV1 | null;
+          setFloorplan(nextFloorplan);
+          setDesign(
+            nextDesign ?? {
+              floorplan_geometry: nextFloorplan,
+              placements: [],
+            }
+          );
+          setStyledResult(inferredRootLayout.styled_result_json ?? null);
+          clearLayoutVariants();
+          setActiveRootLayoutId(inferredRootLayout.id);
+        }
+        const imageDataUrl = renderDetail.image_data_url;
+        setRenderedSnapshotImage(
+          buildSavedRenderPreviewResult(
+            hydratedRender,
+            imageDataUrl,
+            snapshotArtifact
+          )
+        );
+        setLastRenderedSnapshot(snapshotArtifact);
+        setLastRenderedSnapshotImageDataUrl(imageDataUrl);
+        setSavedRenderId(hydratedRender.id);
+        setEditBoxes([]);
+        setActiveEditBoxId(null);
+        setEditBoxDraft(null);
+        setObjectAppearanceReferences(
+          readObjectAppearanceReferencesFromRender(hydratedRender)
+        );
+        setColorEnabled(false);
+        setEditPresetSelection({
+          style: null,
+          lighting: null,
+          scenery: null,
+        });
+        setRenderStatus({
+          tone: 'success',
+          text: inferredRootLayout
+            ? `Loaded saved render ${hydratedRender.id} with its root layout.`
+            : `Loaded saved render ${hydratedRender.id}. No linked root layout was found, so the current room stays in place.`,
+        });
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+        setRenderStatus({
+          tone: 'error',
+          text:
+            loadError instanceof Error
+              ? loadError.message
+              : 'Failed to load the saved render.',
+        });
+      }
+    };
+
+    void loadSavedRender();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeRootLayoutId,
+    clearLayoutVariants,
+    lastRenderedSnapshot,
+    renderedSnapshotImage,
+    savedRenderId,
+    savedLayouts,
+    savedRenders,
+    setActiveRootLayoutId,
+    setFloorplan,
+    setStyledResult,
+    setDesign,
+    selectedSavedRenderId,
+  ]);
+
+  useEffect(() => {
     if (viewMode !== '3d') return;
     if (!containerRef.current) return;
     if (!activeFloorplan) {
       setError('Missing floorplan data for 3D preview.');
+      setCameraPresets([]);
       return;
     }
 
@@ -985,16 +3212,27 @@ export const ThreeDPreviewPanel: React.FC = () => {
           '../vendor/three/loaders/GLTFLoader.js',
           import.meta.url
         ).toString();
+        const KTX2_LOADER_URL = new URL(
+          '../vendor/three/loaders/KTX2Loader.js',
+          import.meta.url
+        ).toString();
 
         const THREE: any = await import(/* @vite-ignore */ THREE_URL);
         const controlsMod: any = await import(/* @vite-ignore */ ORBIT_URL);
         const OrbitControls = controlsMod.OrbitControls;
         let GLTFLoader: any = null;
+        let KTX2Loader: any = null;
         try {
           const gltfLoaderMod: any = await import(/* @vite-ignore */ GLTF_LOADER_URL);
           GLTFLoader = gltfLoaderMod.GLTFLoader ?? null;
         } catch {
           GLTFLoader = null;
+        }
+        try {
+          const ktx2LoaderMod: any = await import(/* @vite-ignore */ KTX2_LOADER_URL);
+          KTX2Loader = ktx2LoaderMod.KTX2Loader ?? null;
+        } catch {
+          KTX2Loader = null;
         }
 
         if (disposed || !el.isConnected) return;
@@ -1006,7 +3244,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           antialias: true,
           preserveDrawingBuffer: true,
         });
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.setPixelRatio(
+          Math.min(window.devicePixelRatio || 1, MAX_RENDERER_PIXEL_RATIO)
+        );
         renderer.setSize(width, height);
         renderer.setClearColor(0xf6f4ef, 1);
         renderer.domElement.style.touchAction = 'none';
@@ -1047,11 +3287,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
           styledResult?.room?.polygon_mm ??
           styledResult?.room?.polygon_ccw ??
           [];
-        const roomPts = Array.isArray(roomPtsRaw)
-          ? roomPtsRaw
-              .map((p: any) => ({ x: Number(p?.x ?? 0), y: Number(p?.y ?? 0) }))
-              .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
-          : [];
+        const roomPts = normalizeRoomPolygon(
+          Array.isArray(roomPtsRaw)
+            ? roomPtsRaw
+                .map((p: any) => ({ x: Number(p?.x ?? 0), y: Number(p?.y ?? 0) }))
+                .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+            : []
+        );
         if (!initialDesignRef.current && design) {
           initialDesignRef.current = JSON.parse(JSON.stringify(design));
         }
@@ -1107,6 +3349,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
           setError('Invalid floorplan bounds for 3D preview.');
           return;
         }
+        const wallHeightMm = Number(userInput.height ?? 2800);
+        const wallHeight = wallHeightMm * MM_TO_M;
         const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 500);
         camera.far = Math.max(500, maxDimM * 8);
         camera.updateProjectionMatrix();
@@ -1117,19 +3361,24 @@ export const ThreeDPreviewPanel: React.FC = () => {
         controls.enableRotate = true;
         controls.enablePan = true;
         controls.enableZoom = true;
+        configureRoomOrbitControls(controls, maxDimM);
         controlsRef.current = controls;
-        controls.target.set(0, 0.4, 0);
+        controls.target.set(0, clamp(wallHeight * 0.42, 1.0, wallHeight * 0.6), 0);
         controls.update();
-        camera.lookAt(0, 0.4, 0);
+        camera.lookAt(0, clamp(wallHeight * 0.42, 1.0, wallHeight * 0.6), 0);
 
-        const floorColorHex =
+        const floorColorHex = normalizeHexColor(
           styledResult?.room?.surfaces?.floor_color_hex ??
           styledResult?.room?.surfaces?.floorColorHex ??
-          '#f0ece4';
-        const ceilingColorHex =
+          activeFloorplan.room?.floor_color_hex,
+          '#f0ece4'
+        );
+        const ceilingColorHex = normalizeHexColor(
           styledResult?.room?.surfaces?.ceiling_color_hex ??
           styledResult?.room?.surfaces?.ceilingColorHex ??
-          null;
+          null,
+          '#fbf7f2'
+        );
 
         const floorPts =
           roomPts.length >= 3
@@ -1140,6 +3389,36 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 { x: maxX, y: maxY },
                 { x: minX, y: maxY },
               ];
+        const roomPolygonMm = normalizeRoomPolygon(floorPts);
+        const focusPointMm = resolveCameraFocusPointMm({
+          roomPolygonMm,
+          objects: resolvedObjects,
+          fallbackPointMm: { x: centerXmm, y: centerYmm },
+        });
+        const nextCameraPresets = buildCameraPresets({
+          roomPolygonMm,
+          roomBoundsMm: roomBounds ?? bounds,
+          roomCenterMm: { x: centerXmm, y: centerYmm },
+          focusPointMm,
+          wallHeightMm,
+          aspect: width / Math.max(height, 1),
+        });
+        if (!disposed) {
+          setCameraPresets(nextCameraPresets);
+        }
+        const preferredCameraPreset =
+          nextCameraPresets.find((preset) => preset.id === activeCameraPresetId) ??
+          nextCameraPresets.find((preset) => preset.group === 'mid') ??
+          nextCameraPresets[0] ??
+          null;
+        if (preferredCameraPreset) {
+          applyingCameraPresetRef.current = true;
+          applyOrbitCameraPose(camera, controls, preferredCameraPreset);
+          setActiveCameraPresetId(preferredCameraPreset.id);
+          window.requestAnimationFrame(() => {
+            applyingCameraPresetRef.current = false;
+          });
+        }
         if (floorPts.length >= 3) {
           const shapePts = floorPts.map(
             (p) => new THREE.Vector2((p.x - centerXmm) * MM_TO_M, (p.y - centerYmm) * MM_TO_M)
@@ -1152,6 +3431,26 @@ export const ThreeDPreviewPanel: React.FC = () => {
           floor.receiveShadow = true;
           floor.castShadow = false;
           scene.add(floor);
+          const outlinePoints = floorPts.map(
+            (p) =>
+              new THREE.Vector3(
+                (p.x - centerXmm) * MM_TO_M,
+                0.006,
+                -(p.y - centerYmm) * MM_TO_M
+              )
+          );
+          const outlineGeometry = new THREE.BufferGeometry().setFromPoints(outlinePoints);
+          const outline = new THREE.LineLoop(
+            outlineGeometry,
+            new THREE.LineBasicMaterial({
+              color: new THREE.Color('#111827'),
+              depthWrite: false,
+              opacity: 0.72,
+              transparent: true,
+            })
+          );
+          outline.renderOrder = 5;
+          scene.add(outline);
         }
 
         const grid = new THREE.GridHelper(Math.max(spanX, spanY) * MM_TO_M * 1.2, 20, 0xd6d1c7, 0xd6d1c7);
@@ -1159,12 +3458,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
         grid.userData.aiRenderHide = true;
         scene.add(grid);
 
-        const wallHeightMm = Number(userInput.height ?? 2800);
-        const wallHeight = wallHeightMm * MM_TO_M;
-        const wallColorHex =
+        const wallColorHex = normalizeHexColor(
           styledResult?.room?.surfaces?.wall_color_hex ??
           styledResult?.room?.surfaces?.wallColorHex ??
-          '#555555';
+          '#555555',
+          '#555555'
+        );
 
         const wallPts = roomPts.length >= 2 ? roomPts : floorPts;
         const wallsRaw = activeFloorplan.walls ?? [];
@@ -1210,10 +3509,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const wallId = String(wall.wall_id ?? '');
           const wallOpacity = clamp(Number(wall.opacity ?? 1), 0, 1);
           const isSelectedWall = !!wallId && selectedWallId === wallId;
+          const wallMeshColorHex = normalizeHexColor(wall.color_hex, wallColorHex);
 
           const geom = new THREE.BoxGeometry(lenMm * MM_TO_M, wallHeight, thicknessMm * MM_TO_M);
           const mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(isSelectedWall ? '#d58c54' : wallColorHex),
+            color: new THREE.Color(isSelectedWall ? '#d58c54' : wallMeshColorHex),
             transparent: wallOpacity < 1,
             opacity: wallOpacity,
           });
@@ -1228,6 +3528,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
           // 2D plan uses +Y "up". Our 3D preview maps plan Y to -Z so 3D matches the 2D canvas orientation.
           mesh.position.set((midX - centerXmm) * MM_TO_M, wallHeight / 2, -(midY - centerYmm) * MM_TO_M);
           mesh.rotation.y = angle;
+          if (wallOpacity > 0.05) {
+            addStructuralEdgeOverlay(THREE, mesh, {
+              opacity: Math.max(0.62, Math.min(0.94, wallOpacity * 0.9)),
+              renderOrder: 6,
+              thresholdAngleDeg: 1,
+            });
+          }
           wallGroup.add(mesh);
         }
 
@@ -1407,7 +3714,59 @@ export const ThreeDPreviewPanel: React.FC = () => {
           }
         }
 
-        // Doors (simple leaf proxy) + Windows (frame + glass proxy)
+        const tryLoadOpeningGlb = (params: {
+          root: any;
+          resolution: InventoryPreviewResolution;
+          wM: number;
+          dM: number;
+          hM: number;
+          fitStrategy: GlbFitStrategy;
+        }): void => {
+          const descriptor =
+            params.resolution.modelResolution?.descriptor ??
+            buildOpeningFallbackModelDescriptor(params.resolution, userInput.style);
+          if (!GLTFLoader || !descriptor) {
+            return;
+          }
+          const previewOverride = applyInventoryModelPreviewOverride({
+            descriptor,
+            context: 'panel',
+            fitStrategy: params.fitStrategy,
+            wM: params.wM,
+            dM: params.dM,
+            hM: params.hM,
+          });
+          void buildGlbPreviewModel({
+            THREE,
+            GLTFLoader,
+            KTX2Loader,
+            renderer,
+            descriptor: previewOverride.descriptor,
+            wM: previewOverride.wM,
+            dM: previewOverride.dM,
+            hM: previewOverride.hM,
+            fitStrategy: previewOverride.fitStrategy,
+            colorHex: null,
+            preserveMaterialTextures: true,
+          })
+            .then((model) => {
+              if (disposed || !params.root.parent) {
+                disposeThreeObject(model);
+                return;
+              }
+              addStructuralEdgeOverlay(THREE, model, {
+                opacity: 0.58,
+                renderOrder: 7,
+                thresholdAngleDeg: 18,
+              });
+              replaceThreeObjectChildren(params.root, model);
+            })
+            .catch(() => {
+              // Keep the procedural opening proxy when the model cannot be loaded.
+            });
+        };
+
+        // Doors and windows start as procedural proxies, then upgrade to GLB models when available.
         for (const door of openings.doors ?? []) {
           const seg = resolveSegment(door);
           const p1 = seg?.p1 ?? null;
@@ -1426,7 +3785,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const midY = (y1 + y2) / 2;
           const angle = Math.atan2(dy, dx);
           const doorId = String(door?.door_id ?? door?.id ?? 'door');
-          const doorColor = doorColorById.get(doorId) ?? '#8c7a63';
+          const doorColor = normalizeHexColor(
+            door?.color_hex ?? doorColorById.get(doorId),
+            '#8c7a63'
+          );
           const attachedWallOpacity = clamp(
             Number(wallOpacityById.get(String(door?.wall_id ?? '')) ?? 1),
             0,
@@ -1442,6 +3804,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const hM = Math.min(2.05, Math.max(1.8, wallHeight - 0.1));
           const wM = lenMm * MM_TO_M;
 
+          const root = new THREE.Group();
+          root.position.set((pxMm - centerXmm) * MM_TO_M, 0, -(pyMm - centerYmm) * MM_TO_M);
+          root.rotation.y = angle;
+          openingsGroup.add(root);
+
           const leaf = new THREE.Mesh(
             new THREE.BoxGeometry(wM, hM, thicknessM),
             new THREE.MeshStandardMaterial({
@@ -1454,9 +3821,32 @@ export const ThreeDPreviewPanel: React.FC = () => {
           );
           leaf.castShadow = true;
           leaf.receiveShadow = true;
-          leaf.position.set((pxMm - centerXmm) * MM_TO_M, hM / 2, -(pyMm - centerYmm) * MM_TO_M);
-          leaf.rotation.y = angle;
-          openingsGroup.add(leaf);
+          leaf.position.y = hM / 2;
+          addStructuralEdgeOverlay(THREE, leaf, {
+            opacity: 0.7,
+            renderOrder: 7,
+            thresholdAngleDeg: 1,
+          });
+          root.add(leaf);
+
+          const resolution = resolveInventoryItemForPreview({
+            inventory,
+            assetId: readOpeningAssetId(door, 'door') ?? doorId,
+            objectType: 'door',
+            material: typeof door?.material === 'string' ? door.material : null,
+            preferredStyle: userInput.style,
+            targetWidthMm: lenMm,
+            targetDepthMm: thicknessM / MM_TO_M,
+            targetHeightMm: hM / MM_TO_M,
+          });
+          tryLoadOpeningGlb({
+            root,
+            resolution,
+            wM,
+            dM: thicknessM,
+            hM,
+            fitStrategy: 'wall-plane',
+          });
         }
 
         for (const win of openings.windows ?? []) {
@@ -1477,7 +3867,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const midY = (y1 + y2) / 2;
           const angle = Math.atan2(dy, dx);
           const winId = String(win?.window_id ?? win?.id ?? 'window');
-          const frameColor = winColorById.get(winId) ?? '#c0c0c0';
+          const frameColor = normalizeHexColor(
+            win?.color_hex ?? winColorById.get(winId),
+            '#c0c0c0'
+          );
           const attachedWallOpacity = clamp(
             Number(wallOpacityById.get(String(win?.wall_id ?? '')) ?? 1),
             0,
@@ -1496,16 +3889,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const pxMm = anchor?.xMm ?? midX;
           const pyMm = anchor?.yMm ?? midY;
 
+          const wM = lenMm * MM_TO_M;
+          const hM = actualHeightMm * MM_TO_M;
           const group = new THREE.Group();
           group.position.set(
             (pxMm - centerXmm) * MM_TO_M,
-            (bottomMm + actualHeightMm / 2) * MM_TO_M,
+            bottomMm * MM_TO_M,
             -(pyMm - centerYmm) * MM_TO_M
           );
           group.rotation.y = angle;
 
           const frame = new THREE.Mesh(
-            new THREE.BoxGeometry(lenMm * MM_TO_M, actualHeightMm * MM_TO_M, frameDepthM),
+            new THREE.BoxGeometry(wM, hM, frameDepthM),
             new THREE.MeshStandardMaterial({
               color: new THREE.Color(frameColor),
               roughness: 0.35,
@@ -1516,10 +3911,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
           );
           frame.castShadow = true;
           frame.receiveShadow = true;
+          frame.position.y = hM / 2;
+          addStructuralEdgeOverlay(THREE, frame, {
+            opacity: 0.7,
+            renderOrder: 7,
+            thresholdAngleDeg: 1,
+          });
           group.add(frame);
 
           const glass = new THREE.Mesh(
-            new THREE.BoxGeometry(lenMm * MM_TO_M * 0.92, actualHeightMm * MM_TO_M * 0.9, 0.01),
+            new THREE.BoxGeometry(wM * 0.92, hM * 0.9, 0.01),
             new THREE.MeshStandardMaterial({
               color: new THREE.Color('#9fc9e8'),
               roughness: 0.12,
@@ -1528,12 +3929,36 @@ export const ThreeDPreviewPanel: React.FC = () => {
               opacity: attachedWallOpacity >= 1 ? 0.35 : attachedWallOpacity * 0.35,
             })
           );
-          glass.position.z = frameDepthM / 2 - 0.006;
+          glass.position.set(0, hM / 2, frameDepthM / 2 - 0.006);
           glass.castShadow = false;
           glass.receiveShadow = false;
+          addStructuralEdgeOverlay(THREE, glass, {
+            opacity: 0.48,
+            renderOrder: 7,
+            thresholdAngleDeg: 1,
+          });
           group.add(glass);
 
           openingsGroup.add(group);
+
+          const resolution = resolveInventoryItemForPreview({
+            inventory,
+            assetId: readOpeningAssetId(win, 'window') ?? winId,
+            objectType: 'window',
+            material: typeof win?.material === 'string' ? win.material : null,
+            preferredStyle: userInput.style,
+            targetWidthMm: lenMm,
+            targetDepthMm: frameDepthM / MM_TO_M,
+            targetHeightMm: actualHeightMm,
+          });
+          tryLoadOpeningGlb({
+            root: group,
+            resolution,
+            wM,
+            dM: frameDepthM,
+            hM,
+            fitStrategy: 'wall-plane',
+          });
         }
 
         const draggableById = new Map<string, boolean>();
@@ -1649,11 +4074,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
             colorHex: obj.colorHex,
             material: obj.material ?? null,
           });
+          addStructuralEdgeOverlay(THREE, fallbackProxy, {
+            opacity: 0.66,
+            renderOrder: 7,
+            thresholdAngleDeg: 10,
+          });
           objectRoot.add(fallbackProxy);
           objectGroup.add(objectRoot);
           proxyById.set(obj.id, objectRoot);
           objectMetadataById.set(obj.id, {
             id: obj.id,
+            assetId: obj.assetId ?? null,
+            rawAssetId: obj.rawAssetId ?? null,
             type: obj.type,
             colorHex: obj.colorHex,
             material: obj.material ?? null,
@@ -1728,6 +4160,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
             void buildGlbPreviewModel({
                 THREE,
                 GLTFLoader,
+                KTX2Loader,
+                renderer,
                 descriptor: descriptorForPanel,
                 wM: previewOverride.wM,
                 dM: previewOverride.dM,
@@ -1771,6 +4205,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 for (const child of previousChildren) {
                   disposeThreeObject(child);
                 }
+                addStructuralEdgeOverlay(THREE, model, {
+                  opacity: 0.56,
+                  renderOrder: 7,
+                  thresholdAngleDeg: 18,
+                });
                 objectRoot.add(model);
               })
               .catch((modelError: unknown) => {
@@ -1840,7 +4279,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             maxX: Math.round(bounds.maxX),
             maxY: Math.round(bounds.maxY),
           },
-          roomPolygonMm: roomPts.map((point) => ({
+          roomPolygonMm: roomPolygonMm.map((point) => ({
             x: Number(point.x),
             y: Number(point.y),
           })),
@@ -1898,6 +4337,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
           | null = null;
         let orbitClickStart: { x: number; y: number } | null = null;
         let orbitMoved = false;
+        const handleControlsChange = () => {
+          if (applyingCameraPresetRef.current) {
+            return;
+          }
+          setActiveCameraPresetId((current) => (current === null ? current : null));
+        };
+        controls.addEventListener?.('change', handleControlsChange);
 
         const getPointer = (evt: PointerEvent) => {
           const rect = renderer.domElement.getBoundingClientRect();
@@ -2023,7 +4469,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           snappedXmm = clamp(snappedXmm, bounds.minX + halfW, bounds.maxX - halfW);
           snappedYmm = clamp(snappedYmm, bounds.minY + halfD, bounds.maxY - halfD);
 
-          const inside = pointInPolygon({ x: snappedXmm, y: snappedYmm }, roomPts);
+          const inside = pointInPolygon({ x: snappedXmm, y: snappedYmm }, roomPolygonMm);
           if (inside) {
             const snappedX = (snappedXmm - centerXmm) * MM_TO_M;
             const snappedZ = -(snappedYmm - centerYmm) * MM_TO_M;
@@ -2071,7 +4517,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
               if (intersects.length) {
                 const hit = findDraggableRoot(intersects[0].object);
                 if (hit?.userData?.objectId) {
-                  setSelectedId(hit.userData.objectId);
+                  const objectId = String(hit.userData.objectId);
+                  setSelectedId(objectId);
+                  selectPlacement(objectId);
                   selectWall(null);
                   return;
                 }
@@ -2082,12 +4530,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 const wallId = String(wallHit?.userData?.wallId ?? '');
                 if (wallId) {
                   setSelectedId(null);
+                  selectPlacement(null);
                   setEditMode('idle');
                   selectWall(wallId);
                   return;
                 }
               }
               setSelectedId(null);
+              selectPlacement(null);
               selectWall(null);
             }
           }
@@ -2131,6 +4581,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
         return () => {
           window.removeEventListener('resize', handleResize);
+          controls.removeEventListener?.('change', handleControlsChange);
           renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
           renderer.domElement.removeEventListener('pointermove', handlePointerMove);
           renderer.domElement.removeEventListener('pointerup', handlePointerUp);
@@ -2226,11 +4677,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
     activeFloorplan,
     resolvedObjects,
     styledResult,
+    inventory,
     userInput.height,
+    userInput.style,
     design,
     updatePlacement,
     selectedWallId,
     selectWall,
+    selectPlacement,
   ]);
 
   if (viewMode !== '3d') return null;
@@ -2279,6 +4733,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 removePlacement(placement.placement_id);
               }
               setSelectedId(null);
+              selectPlacement(null);
             }}
           >
             Delete
@@ -2312,10 +4767,19 @@ export const ThreeDPreviewPanel: React.FC = () => {
             </div>
           ) : null}
           <div className="three-panel-prompt">
-            <div className="reference-preset-stack">
-              <RenderPresetSelector
-                title="Style"
-                group={renderPresets?.styles ?? {}}
+            <div className="three-control-grid">
+              {midHeightCameraPresets.length > 0 || ceilingCameraPresets.length > 0 ? (
+                <CameraPresetStepper
+                  value={activeCameraPresetId}
+                  disabled={isRenderingImage}
+                  midHeightOptions={midHeightCameraPresets}
+                  ceilingOptions={ceilingCameraPresets}
+                  onChange={handleCameraPresetSelection}
+                />
+              ) : null}
+              <ReferencePresetDropdown
+                label="Style"
+                options={stylePresetOptions}
                 value={presetSelection.style}
                 disabled={isRenderingImage || !renderPresets}
                 onChange={(value) =>
@@ -2325,9 +4789,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   }))
                 }
               />
-              <RenderPresetSelector
-                title="Lighting"
-                group={renderPresets?.lights ?? {}}
+              <ReferencePresetDropdown
+                label="Lighting"
+                options={lightingPresetOptions}
                 value={presetSelection.lighting}
                 disabled={isRenderingImage || !renderPresets}
                 onChange={(value) =>
@@ -2337,9 +4801,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   }))
                 }
               />
-              <RenderPresetSelector
-                title="Scenery"
-                group={renderPresets?.sceneries ?? {}}
+              <ReferencePresetDropdown
+                label="Scenery"
+                options={sceneryPresetOptions}
                 value={presetSelection.scenery}
                 disabled={isRenderingImage || !renderPresets}
                 onChange={(value) =>
@@ -2349,6 +4813,59 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   }))
                 }
               />
+            </div>
+            <div className="three-appearance-panel">
+              <div className="three-appearance-title">Appearance</div>
+              <div className="three-color-grid">
+                <ColorSwatchField
+                  label="Walls"
+                  value={wallSurfaceColor}
+                  disabled={isRenderingImage}
+                  onChange={(value) => updateRoomSurfaceColor('wall_color_hex', value)}
+                />
+                <ColorSwatchField
+                  label="Floor"
+                  value={floorSurfaceColor}
+                  disabled={isRenderingImage}
+                  onChange={(value) => updateRoomSurfaceColor('floor_color_hex', value)}
+                />
+                <ColorSwatchField
+                  label="Ceiling"
+                  value={ceilingSurfaceColor}
+                  disabled={isRenderingImage}
+                  onChange={(value) => updateRoomSurfaceColor('ceiling_color_hex', value)}
+                />
+              </div>
+              {selectedObjectForAppearance ? (
+                <ColorSwatchField
+                  label={`Selected: ${selectedObjectForAppearance.type.replace(/_/g, ' ')}`}
+                  value={normalizeHexColor(selectedObjectForAppearance.colorHex, '#cfcac2')}
+                  disabled={isRenderingImage}
+                  onChange={(value) =>
+                    handleObjectColorChange(selectedObjectForAppearance.id, value)
+                  }
+                />
+              ) : null}
+              {objects.length > 0 ? (
+                <div className="three-object-color-list" aria-label="Object colors">
+                  {objects.map((object) => (
+                    <ColorSwatchField
+                      key={object.id}
+                      label={`${object.type.replace(/_/g, ' ')} · ${object.id}`}
+                      value={normalizeHexColor(object.colorHex, '#cfcac2')}
+                      disabled={isRenderingImage}
+                      onChange={(value) => handleObjectColorChange(object.id, value)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="three-panel-prompt-note">
+              Current view:{' '}
+              {activeCameraPreset
+                ? `${activeCameraPreset.label} · ${activeCameraPreset.group === 'mid' ? 'mid-height' : 'ceiling'} · ${Math.round(activeCameraPreset.fovDeg)}deg FOV`
+                : 'custom orbit'}.
+              Generate Image always uses the current 3D camera.
             </div>
             <label htmlFor="three-render-prompt">Image Prompt</label>
             <textarea
@@ -2361,35 +4878,189 @@ export const ThreeDPreviewPanel: React.FC = () => {
               onChange={(event) => setRenderPrompt(event.target.value)}
             />
             <div className="three-panel-prompt-note">
-              The current 3D view is captured as the structural source image. Floor grid lines are removed before sending it to Nano Banana.
+              {selectedSavedRenderId && savedRenderId === selectedSavedRenderId
+                ? 'The selected saved render is the edit source. Apply Edit uses the current labeled 3D view as the target camera reference.'
+                : 'Generate Image sends a clean 3D snapshot as the source plus a labeled structural guide. Labels guide the model but must not appear in the render.'}
             </div>
+            {activeObjectAppearanceEntries.length > 0 ? (
+              <div className="three-memory-strip">
+                <span>
+                  Object memory: {activeObjectAppearanceEntries.length} saved
+                </span>
+                <button
+                  className="ghost"
+                  disabled={isRenderingImage}
+                  onClick={() => setObjectAppearanceReferences({})}
+                  type="button"
+                >
+                  Clear memory
+                </button>
+              </div>
+            ) : null}
             {renderedSnapshotImage ? (
               <div className="three-edit-controls">
                 <div className="three-edit-object-field">
-                  <label>
-                    Object
-                    <select
-                      disabled={isRenderingImage || lastVisibleObjects.length === 0}
-                      value={effectiveEditObject?.id ?? ''}
-                      onChange={(event) => setEditSelectedObjectId(event.target.value)}
-                    >
-                      {lastVisibleObjects.map((object) => (
-                        <option key={object.id} value={object.id}>
-                          {visibleObjectLabel(object)}
-                        </option>
+                  <div className="three-edit-object-label-row">
+                    <label>Drawn edit boxes</label>
+                    <span className="three-edit-object-count">
+                      {configuredEditBoxes.length}/{editBoxes.length} configured
+                    </span>
+                  </div>
+                  {editBoxes.length === 0 ? (
+                    <div className="three-panel-prompt-note">
+                      Draw one or more boxes directly on the generated image below.
+                    </div>
+                  ) : (
+                    <div className="three-edit-box-list">
+                      {editBoxes.map((box) => (
+                        <div
+                          key={box.id}
+                          className={[
+                            'three-edit-box-card',
+                            activeEditBox?.id === box.id ? 'selected' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        >
+                          <div className="three-edit-box-card-header">
+                            <button
+                              className="ghost"
+                              disabled={isRenderingImage}
+                              onClick={() => setActiveEditBoxId(box.id)}
+                              type="button"
+                            >
+                              {box.id}
+                            </button>
+                            <select
+                              disabled={isRenderingImage}
+                              value={box.mode}
+                              onChange={(event) => {
+                                updateEditBox(box.id, (current) => ({
+                                  ...current,
+                                  mode: event.target.value as EditBoxMode,
+                                }));
+                              }}
+                            >
+                              <option value="prompt">Prompt edit</option>
+                              <option value="add">Add object</option>
+                              <option value="replace">Replace object</option>
+                              <option value="recolor">Change color</option>
+                            </select>
+                            <button
+                              className="ghost"
+                              disabled={isRenderingImage}
+                              onClick={() => {
+                                setEditBoxes((current) =>
+                                  current.filter((candidate) => candidate.id !== box.id)
+                                );
+                                if (activeEditBoxId === box.id) {
+                                  setActiveEditBoxId(null);
+                                }
+                              }}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <textarea
+                            className="three-panel-prompt-input three-edit-box-prompt"
+                            disabled={isRenderingImage}
+                            placeholder={
+                              box.mode === 'add'
+                                ? 'Describe the object to add, or upload a reference image.'
+                                : box.mode === 'replace'
+                                  ? 'Describe what to replace this region with.'
+                                  : box.mode === 'recolor'
+                                    ? 'Optional color/material note for this region.'
+                                    : 'Describe the edit for this boxed region.'
+                            }
+                            rows={2}
+                            value={box.prompt}
+                            onChange={(event) => {
+                              updateEditBox(box.id, (current) => ({
+                                ...current,
+                                prompt: event.target.value,
+                              }));
+                            }}
+                          />
+                          {box.mode === 'add' || box.mode === 'replace' ? (
+                            <div className="three-edit-box-reference-row">
+                              {box.imageDataUrl ? (
+                                <img
+                                  className="three-edit-reference-thumb"
+                                  src={box.imageDataUrl}
+                                  alt={`${box.id} reference`}
+                                  draggable={false}
+                                />
+                              ) : (
+                                <span className="three-edit-reference-thumb is-empty">
+                                  No image
+                                </span>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                disabled={isRenderingImage}
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0] ?? null;
+                                  if (!file) {
+                                    return;
+                                  }
+                                  void fileToDataUrl(file).then((imageDataUrl) => {
+                                    updateEditBox(box.id, (current) => ({
+                                      ...current,
+                                      imageDataUrl,
+                                      fileName: file.name,
+                                    }));
+                                  });
+                                }}
+                              />
+                            </div>
+                          ) : null}
+                          {box.mode === 'recolor' ? (
+                            <div className="three-edit-box-color-row">
+                              <input
+                                type="color"
+                                disabled={isRenderingImage}
+                                value={box.targetColor}
+                                onChange={(event) => {
+                                  updateEditBox(box.id, (current) => ({
+                                    ...current,
+                                    targetColor: event.target.value,
+                                  }));
+                                }}
+                                aria-label={`${box.id} target color`}
+                              />
+                              <span>{box.targetColor}</span>
+                            </div>
+                          ) : null}
+                        </div>
                       ))}
-                    </select>
-                  </label>
+                    </div>
+                  )}
+                  <div className="three-edit-object-actions">
+                    <button
+                      className="ghost"
+                      disabled={isRenderingImage || editBoxes.length === 0}
+                      onClick={() => {
+                        setEditBoxes([]);
+                        setActiveEditBoxId(null);
+                        setEditBoxDraft(null);
+                      }}
+                      type="button"
+                    >
+                      Clear boxes
+                    </button>
+                  </div>
                 </div>
-                <div className="reference-preset-stack compact">
-                  <RenderPresetSelector
-                    title="Edit Style"
-                    group={renderPresets?.styles ?? {}}
+                <div className="three-control-grid three-control-grid-compact">
+                  <ReferencePresetDropdown
+                    label="Edit Style"
+                    options={stylePresetOptions}
                     value={editPresetSelection.style}
                     disabled={isRenderingImage || !renderPresets}
                     allowEmpty
                     emptyLabel="No change"
-                    compact
                     onChange={(value) =>
                       setEditPresetSelection((current) => ({
                         ...current,
@@ -2397,14 +5068,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
                       }))
                     }
                   />
-                  <RenderPresetSelector
-                    title="Edit Lighting"
-                    group={renderPresets?.lights ?? {}}
+                  <ReferencePresetDropdown
+                    label="Edit Lighting"
+                    options={lightingPresetOptions}
                     value={editPresetSelection.lighting}
                     disabled={isRenderingImage || !renderPresets}
                     allowEmpty
                     emptyLabel="No change"
-                    compact
                     onChange={(value) =>
                       setEditPresetSelection((current) => ({
                         ...current,
@@ -2412,14 +5082,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
                       }))
                     }
                   />
-                  <RenderPresetSelector
-                    title="Edit Scenery"
-                    group={renderPresets?.sceneries ?? {}}
+                  <ReferencePresetDropdown
+                    label="Edit Scenery"
+                    options={sceneryPresetOptions}
                     value={editPresetSelection.scenery}
                     disabled={isRenderingImage || !renderPresets}
                     allowEmpty
                     emptyLabel="No change"
-                    compact
                     onChange={(value) =>
                       setEditPresetSelection((current) => ({
                         ...current,
@@ -2429,40 +5098,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   />
                 </div>
                 <div className="three-edit-row">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={replaceEnabled}
-                      onChange={(event) => setReplaceEnabled(event.target.checked)}
-                    />
-                    Replace
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    disabled={!replaceEnabled || isRenderingImage}
-                    onChange={(event) => {
-                      setReplacementFile(event.target.files?.[0] ?? null);
-                    }}
-                  />
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={colorEnabled}
-                      onChange={(event) => setColorEnabled(event.target.checked)}
-                    />
-                    Color
-                  </label>
-                  <input
-                    type="color"
-                    disabled={!colorEnabled || isRenderingImage}
-                    value={targetColor}
-                    onChange={(event) => setTargetColor(event.target.value)}
-                    aria-label="Target color"
-                  />
                   <button
                     className="ghost"
-                    disabled={isRenderingImage || !hasEditOperation}
+                    disabled={isRenderingImage || !renderedSnapshotImage}
                     onClick={() => {
                       void handleEditSnapshotImage();
                     }}
@@ -2473,6 +5111,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 {selectedId && !selectedObjectIsEditable ? (
                   <div className="three-panel-prompt-note">
                     Selected 3D object is not visible in this generated image.
+                  </div>
+                ) : null}
+                {configuredEditBoxes.length === 0 && !editPresetActive ? (
+                  <div className="three-panel-prompt-note">
+                    Current labeled 3D view will be used as the target camera and layout reference.
                   </div>
                 ) : null}
               </div>
@@ -2578,12 +5221,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
               <div className="muted">
                 Image: {renderedSnapshotImage.models.image_model_name} | Aspect:{' '}
                 {renderedSnapshotImage.image.aspect_ratio} | Max tokens:{' '}
-                {renderedSnapshotImage.models.max_tokens} | 2D reference:{' '}
-                {renderedSnapshotImage.request.layout_reference_used ? 'on' : 'off'}
+                {renderedSnapshotImage.models.max_tokens} | Target ref:{' '}
+                {renderedSnapshotImage.request.layout_reference_used ? 'on' : 'off'} | Object refs:{' '}
+                {renderedSnapshotImage.request.reference_image_count ?? 0}
               </div>
             </div>
             <div className="three-render-chip-row">
-              <span className="three-render-chip">Gemini API Nano Banana</span>
+              <span className="three-render-chip">{renderedSnapshotImage.models.image_model_name}</span>
               <span className="three-render-chip fallback">
                 {renderedSnapshotImage.request.render_mode === 'edit' ? 'Edit' : 'Generate'}
               </span>
@@ -2594,14 +5238,62 @@ export const ThreeDPreviewPanel: React.FC = () => {
               ) : null}
             </div>
           </div>
-          <div className="three-render-output-grid">
-            <div className="three-render-image-wrap">
-              <img
-                className="three-render-image"
-                src={renderedSnapshotImage.image.data_url}
-                alt="Generated architectural render from the current 3D snapshot"
-              />
-            </div>
+            <div className="three-render-output-grid">
+              <div className="three-render-image-wrap">
+                <img
+                  className="three-render-image"
+                  src={renderedSnapshotImage.image.data_url}
+                  alt="Generated architectural render from the current 3D snapshot"
+                  draggable={false}
+                />
+                <div
+                  className="three-edit-box-overlay"
+                  onPointerDown={handleEditBoxPointerDown}
+                  onPointerMove={handleEditBoxPointerMove}
+                  onPointerUp={handleEditBoxPointerUp}
+                  onPointerCancel={() => setEditBoxDraft(null)}
+                >
+                  {editBoxes.map((box, index) => (
+                    <button
+                      key={box.id}
+                      className={[
+                        'three-edit-box-rect',
+                        activeEditBox?.id === box.id ? 'selected' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setActiveEditBoxId(box.id);
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      style={{
+                        borderColor: EDIT_BOX_COLORS[index % EDIT_BOX_COLORS.length],
+                        left: `${box.rect.x * 100}%`,
+                        top: `${box.rect.y * 100}%`,
+                        width: `${box.rect.width * 100}%`,
+                        height: `${box.rect.height * 100}%`,
+                      }}
+                      type="button"
+                    >
+                      <span>{box.id}</span>
+                    </button>
+                  ))}
+                  {editBoxDraft ? (
+                    <div
+                      className="three-edit-box-rect draft"
+                      style={{
+                        left: `${Math.min(editBoxDraft.startX, editBoxDraft.currentX) * 100}%`,
+                        top: `${Math.min(editBoxDraft.startY, editBoxDraft.currentY) * 100}%`,
+                        width: `${Math.abs(editBoxDraft.currentX - editBoxDraft.startX) * 100}%`,
+                        height: `${Math.abs(editBoxDraft.currentY - editBoxDraft.startY) * 100}%`,
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </div>
             <div className="three-render-meta">
               <div className="three-render-section">
                 <strong>User Prompt</strong>
@@ -2609,15 +5301,30 @@ export const ThreeDPreviewPanel: React.FC = () => {
               </div>
               <div className="three-render-section">
                 <strong>System Prompt Source</strong>
-                <p>Nano Banana system prompt + preset prompt + source image.</p>
+                <p>
+                  {renderedSnapshotImage.request.render_mode === 'edit'
+                    ? 'Edit prompt + source render image'
+                    : 'Generate prompt + labeled 3D source image'}
+                  {renderedSnapshotImage.request.layout_reference_used
+                    ? ' + labeled 3D target-view reference.'
+                    : '.'}
+                </p>
               </div>
-              {renderedSnapshotImage.request.layout_reference_enabled ? (
+              {renderedSnapshotImage.request.layout_reference_used ? (
                 <div className="three-render-section">
-                  <strong>2D Layout Reference</strong>
+                  <strong>Target View Reference</strong>
                   <p>
-                    {renderedSnapshotImage.request.layout_reference_used
-                      ? 'Enabled from backend env and sent as an extra reference image.'
-                      : 'Enabled in code path, but no 2D reference image was used for this render.'}
+                    The current labeled 3D view was sent as the camera and layout
+                    reference for the edit. Labels and guides are instructions only.
+                  </p>
+                </div>
+              ) : null}
+              {(renderedSnapshotImage.request.reference_image_count ?? 0) > 0 ? (
+                <div className="three-render-section">
+                  <strong>Object Memory</strong>
+                  <p>
+                    {renderedSnapshotImage.request.reference_image_count} object
+                    reference image(s) were paired by object id for appearance only.
                   </p>
                 </div>
               ) : null}

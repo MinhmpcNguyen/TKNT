@@ -32,13 +32,18 @@ def _layout(x_pos: int) -> dict[str, object]:
     }
 
 
-def _candidate(source: str, layout: dict[str, object]) -> dict[str, object]:
+def _candidate(
+    source: str,
+    layout: dict[str, object],
+    *,
+    score: int = 100,
+) -> dict[str, object]:
     return {
         "absolute_layout": layout,
         "styled_result": {"objects": []},
         "source": source,
         "reason": "Object-level layout candidate.",
-        "layout_score": 100,
+        "layout_score": score,
         "hard_valid": True,
         "complete": True,
         "gallery_eligible": True,
@@ -48,7 +53,25 @@ def _candidate(source: str, layout: dict[str, object]) -> dict[str, object]:
 
 
 class LayoutVariantsSelectorTest(unittest.TestCase):
-    def test_selector_does_not_backfill_same_macro_layouts(self) -> None:
+    def test_selector_prefers_distinct_visual_family_before_backfill(self) -> None:
+        selected = layout_variants.select_distinct_final_gallery_candidates(
+            candidates=[
+                _candidate("option_1", _layout(0), score=100),
+                _candidate("tiny_nudge", _layout(50), score=110),
+                _candidate("option_2", _layout(3600), score=90),
+            ],
+            max_variants=2,
+        )
+
+        self.assertEqual(
+            [row["source"] for row in selected], ["tiny_nudge", "option_2"]
+        )
+        self.assertEqual(
+            [row["gallery_selection_mode"] for row in selected],
+            ["distinct", "distinct"],
+        )
+
+    def test_selector_backfills_same_visual_family_to_preserve_count(self) -> None:
         candidates = [
             _candidate("option_1", _layout(0)),
             _candidate("exact_duplicate", _layout(0)),
@@ -65,17 +88,22 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
             max_variants=5,
         )
 
-        self.assertEqual(len(selected), 1)
+        self.assertEqual(len(selected), 5)
         self.assertNotIn("exact_duplicate", {row["source"] for row in selected})
         self.assertEqual(
             len({row["state_signature"] for row in selected}),
             len(selected),
         )
         self.assertEqual(
-            len({row["macro_layout_signature"] for row in selected}),
-            1,
+            [row["gallery_selection_mode"] for row in selected].count("distinct"),
+            2,
         )
-        self.assertEqual(selected[0]["gallery_selection_mode"], "distinct")
+        self.assertEqual(
+            [row["gallery_selection_mode"] for row in selected].count(
+                "fallback_near_distinct"
+            ),
+            3,
+        )
 
 
 if __name__ == "__main__":

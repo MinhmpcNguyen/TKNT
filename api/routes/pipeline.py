@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_optional_current_user
-from config import root_config
+from config import config_file, load_config
 from db.models import UserAccount
 from pipeline.orchestrator import (
     run_case,
@@ -26,6 +27,7 @@ from pipeline.snapshot_image_renderer import (
     render_snapshot_image,
     render_snapshot_image_from_path,
 )
+from pipeline.image_flow_logging import log_image_flow_event
 from services.user_content_service import UserContentService
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -90,6 +92,9 @@ class SnapshotImagePresetSelection(BaseModel):
 class SnapshotImageEditOperationRequest(BaseModel):
     object_id: str
     object_name: str | None = None
+    operation_type: Literal["prompt", "add", "replace", "recolor"] | None = None
+    prompt: str | None = None
+    bbox_norm: dict[str, float] | None = None
     replacement_image_data_url: str | None = None
     target_color: str | None = None
 
@@ -99,11 +104,19 @@ class SnapshotImageRenderRequest(BaseModel):
     snapshot_path: str | None = None
     snapshot_image_data_url: str | None = None
     layout_reference_image_data_url: str | None = None
+    annotated_reference_image_data_url: str | None = None
+    scene_reference_image_data_url: str | None = None
+    scene_reference_mode: Literal[
+        "none",
+        "target_layout_with_scene_reference",
+        "scene_reference_camera_transfer",
+    ] = "none"
     user_prompt: str | None = None
     render_mode: Literal["generate", "edit"] = "generate"
     preset_selection: SnapshotImagePresetSelection = Field(
         default_factory=lambda: SnapshotImagePresetSelection()
     )
+    root_layout_id: str | None = None
     edit_operations: list[SnapshotImageEditOperationRequest] = Field(
         default_factory=list
     )
@@ -350,7 +363,25 @@ def render_snapshot_image_route(
     current_user: UserAccount | None = Depends(get_optional_current_user),
     user_content_service: UserContentService = Depends(get_user_content_service),
 ) -> SnapshotImageRenderResponse:
+    trace_id = uuid4().hex
+    log_image_flow_event(
+        "snapshot_image.api_input",
+        {
+            "trace_id": trace_id,
+            "route": "/pipeline/render-snapshot-image",
+            "authenticated": current_user is not None,
+            "request": req.model_dump(),
+        },
+    )
     if req.snapshot_payload is None and not req.snapshot_path:
+        log_image_flow_event(
+            "snapshot_image.api_error",
+            {
+                "trace_id": trace_id,
+                "status_code": 400,
+                "error_message": "Provide either snapshot_payload or snapshot_path.",
+            },
+        )
         raise HTTPException(
             status_code=400,
             detail="Provide either snapshot_payload or snapshot_path.",
@@ -361,6 +392,9 @@ def render_snapshot_image_route(
             SnapshotEditOperation(
                 object_id=item.object_id,
                 object_name=item.object_name,
+                operation_type=item.operation_type,
+                prompt=item.prompt,
+                bbox_norm=item.bbox_norm,
                 replacement_image_data_url=item.replacement_image_data_url,
                 target_color=item.target_color,
             )
@@ -369,6 +403,17 @@ def render_snapshot_image_route(
         preset_selection = req.preset_selection.model_dump()
         if req.snapshot_payload is not None:
             if not req.snapshot_image_data_url:
+                log_image_flow_event(
+                    "snapshot_image.api_error",
+                    {
+                        "trace_id": trace_id,
+                        "status_code": 400,
+                        "error_message": (
+                            "Provide snapshot_image_data_url when rendering from "
+                            "snapshot_payload."
+                        ),
+                    },
+                )
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -380,28 +425,67 @@ def render_snapshot_image_route(
                 req.snapshot_payload,
                 snapshot_image_data_url=req.snapshot_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
+                annotated_reference_image_data_url=(
+                    req.annotated_reference_image_data_url
+                ),
+                scene_reference_image_data_url=req.scene_reference_image_data_url,
+                scene_reference_mode=req.scene_reference_mode,
                 user_prompt=req.user_prompt,
                 render_mode=req.render_mode,
                 preset_selection=preset_selection,
                 edit_operations=edit_operations,
                 edit_source_image_data_url=req.edit_source_image_data_url,
+                trace_id=trace_id,
             )
         else:
             render = render_snapshot_image_from_path(
                 req.snapshot_path or "",
                 snapshot_image_data_url=req.snapshot_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
+                annotated_reference_image_data_url=(
+                    req.annotated_reference_image_data_url
+                ),
+                scene_reference_image_data_url=req.scene_reference_image_data_url,
+                scene_reference_mode=req.scene_reference_mode,
                 user_prompt=req.user_prompt,
                 render_mode=req.render_mode,
                 preset_selection=preset_selection,
                 edit_operations=edit_operations,
                 edit_source_image_data_url=req.edit_source_image_data_url,
+                trace_id=trace_id,
             )
     except FileNotFoundError as exc:
+        log_image_flow_event(
+            "snapshot_image.api_error",
+            {
+                "trace_id": trace_id,
+                "status_code": 404,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            },
+        )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        log_image_flow_event(
+            "snapshot_image.api_error",
+            {
+                "trace_id": trace_id,
+                "status_code": 400,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            },
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
+        log_image_flow_event(
+            "snapshot_image.api_error",
+            {
+                "trace_id": trace_id,
+                "status_code": 502,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            },
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     saved_render: dict[str, Any] | None = None
@@ -417,6 +501,7 @@ def render_snapshot_image_route(
                 negative_prompt=None,
                 meta={
                     "user_prompt": str(render["request"]["user_prompt"]),
+                    "raw_user_prompt": render["request"].get("raw_user_prompt"),
                     "render_mode": str(
                         render["request"].get("render_mode", "generate")
                     ),
@@ -435,13 +520,48 @@ def render_snapshot_image_route(
                     "layout_reference_used": bool(
                         render["request"]["layout_reference_used"]
                     ),
+                    "annotated_reference_used": bool(
+                        render["request"]["annotated_reference_used"]
+                    ),
+                    "scene_reference_mode": str(
+                        render["request"].get("scene_reference_mode", "none")
+                    ),
+                    "scene_reference_used": bool(
+                        render["request"].get("scene_reference_used", False)
+                    ),
+                    "reference_only_camera_transfer_used": bool(
+                        render["request"].get(
+                            "reference_only_camera_transfer_used",
+                            False,
+                        )
+                    ),
+                    "root_layout_id": req.root_layout_id,
                 },
             )
             saved_render = user_content_service.serialize_generated_render(
                 saved,
                 file_url=f"/account/renders/{saved.id}/file",
             )
-        except Exception:
+            log_image_flow_event(
+                "snapshot_image.saved_render.output",
+                {
+                    "trace_id": trace_id,
+                    "render_id": str(saved.id),
+                    "model_name": saved.model_name,
+                    "mime_type": saved.mime_type,
+                    "storage_path": saved.storage_path,
+                    "meta": dict(saved.meta or {}),
+                },
+            )
+        except Exception as exc:
+            log_image_flow_event(
+                "snapshot_image.saved_render.error",
+                {
+                    "trace_id": trace_id,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
             saved_render = None
 
     return SnapshotImageRenderResponse(render=render, saved_render=saved_render)
@@ -449,7 +569,7 @@ def render_snapshot_image_route(
 
 @router.get("/render-presets", response_model=SnapshotImagePresetsResponse)
 def get_render_presets() -> SnapshotImagePresetsResponse:
-    presets = root_config.presets
+    presets = load_config(config_file).presets
     return SnapshotImagePresetsResponse(
         styles={
             key: SnapshotImagePresetOptionResponse(**value.model_dump())

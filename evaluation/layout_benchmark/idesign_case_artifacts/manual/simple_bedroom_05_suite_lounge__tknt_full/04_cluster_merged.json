@@ -1,0 +1,2939 @@
+{
+  "status": "OK",
+  "planner_kind": "merged_object_program",
+  "clusters": [
+    {
+      "cluster_id": "sleep_core",
+      "tag": "sleep",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "bed",
+          "b": "nightstand"
+        },
+        {
+          "type": "requires_access",
+          "id": "bed",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "nightstand",
+          "b": "bed",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "bed": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "nightstand": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "bed": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "bed",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "nightstand",
+            "relative_to": "bed",
+            "kind": "anchor_side",
+            "side_options": [
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 0,
+            "gap_max": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "support_role": "side_support",
+            "band_intent": "beside_base",
+            "orientation": "same_direction"
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "bed"
+        ],
+        "allow_empty_cluster": false,
+        "zone_claims": {
+          "preferred_regions": [
+            "privacy_back_zone",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "high",
+          "floating_allowed": false
+        },
+        "layout_role": "primary",
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_nightstand",
+          "reduce_nightstand_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.3,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "bed",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.3,
+              "drop_order_bias": "neutral",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "nightstand",
+              "min_keep": 0,
+              "max_keep": 2,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.55,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "bed",
+          "dominant_anchor_candidates": [
+            "bed"
+          ],
+          "placement_order": [
+            "bed",
+            "nightstand"
+          ],
+          "support_chain": [
+            {
+              "object_id": "nightstand",
+              "relative_to": "bed",
+              "support_role": "side_support",
+              "band_intent": "beside_base",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            }
+          ],
+          "protected_ids": [
+            "bed"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "bedroom",
+          "cluster_id": "sleep_core"
+        }
+      },
+      "decisions": [
+        {
+          "object_type": "bed",
+          "category": "bed",
+          "cluster_id": "sleep_core",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "bundle_id": "sleep_core_bundle",
+          "role": "dominant_anchor",
+          "semantic_support_role": "",
+          "band_intent": "",
+          "protected": true,
+          "droppable": false,
+          "drop_order_bias": "drop_last",
+          "min_keep": 1,
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.3,
+          "preferred_size_tier": "M",
+          "request_contract_intent": "must_keep",
+          "request_contract_reason": "explicitly requested in the brief",
+          "request_contract_evidence": "with a bed",
+          "rationale": "highest functional utility and semantic anchor value",
+          "utility_score": 11.852,
+          "rep_dims_m": {
+            "L": 1.96,
+            "W": 1.69,
+            "H": 0.48,
+            "A": 3.3124,
+            "R": 1.1597633136094674,
+            "source_id": "bed_014"
+          }
+        },
+        {
+          "object_type": "nightstand",
+          "category": "nightstand",
+          "cluster_id": "sleep_core",
+          "quantity": 2,
+          "size_tier": "S",
+          "priority": "secondary",
+          "preserve_level": "high",
+          "bundle_id": "sleep_core_bundle",
+          "role": "support",
+          "semantic_support_role": "side_support",
+          "band_intent": "beside_base",
+          "protected": false,
+          "droppable": true,
+          "drop_order_bias": "drop_late",
+          "min_keep": 0,
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.35,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "target_if_viable",
+          "request_contract_reason": "requested as a viable target, not a hard requirement",
+          "request_contract_evidence": "two nightstands if they fit",
+          "rationale": "kept because the room still has spatial surplus after core layout needs",
+          "utility_score": 8.477,
+          "rep_dims_m": {
+            "L": 0.43,
+            "W": 0.35,
+            "H": 0.53,
+            "A": 0.1505,
+            "R": 1.2285714285714286,
+            "source_id": "nightstand_003"
+          }
+        }
+      ],
+      "object_program": {
+        "cluster_id": "sleep_core",
+        "members": [
+          "bed",
+          "nightstand"
+        ],
+        "anchors": [
+          "bed"
+        ],
+        "dominant_anchor_id": "bed",
+        "dominant_anchor_candidates": [
+          "bed"
+        ],
+        "placement_order": [
+          "bed",
+          "nightstand"
+        ],
+        "support_edges": [
+          {
+            "object_id": "nightstand",
+            "relative_to": "bed",
+            "kind": "anchor_side",
+            "side_options": [
+              "head_left",
+              "head_right"
+            ],
+            "gap_min_mm": 0,
+            "gap_max_mm": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "support_role": "side_support",
+            "band_intent": "beside_base",
+            "orientation": "same_direction"
+          }
+        ],
+        "protected_ids": [
+          "bed"
+        ],
+        "droppable_ids": [],
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_nightstand",
+          "reduce_nightstand_count"
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "privacy_back_zone",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "high",
+          "floating_allowed": false
+        },
+        "required_object_ids": [
+          "bed"
+        ],
+        "optional_object_ids": [
+          "nightstand"
+        ],
+        "object_specs_by_id": {
+          "bed": {
+            "object_id": "bed",
+            "cluster_id": "sleep_core",
+            "category": "bed",
+            "role": "dominant_anchor",
+            "priority": "anchor",
+            "preserve_level": "highest",
+            "size_tier": "M",
+            "rep_dims_mm": {
+              "L": 1960,
+              "W": 1690,
+              "H": 480
+            },
+            "source_id": "bed_014",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          },
+          "nightstand": {
+            "object_id": "nightstand",
+            "cluster_id": "sleep_core",
+            "category": "nightstand",
+            "role": "support",
+            "priority": "secondary",
+            "preserve_level": "high",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 430,
+              "W": 350,
+              "H": 530
+            },
+            "source_id": "nightstand_003",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": null
+          }
+        }
+      }
+    },
+    {
+      "cluster_id": "storage_core",
+      "tag": "storage",
+      "members": [
+        "wardrobe",
+        "bookshelf"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "wardrobe",
+          "b": "bookshelf"
+        },
+        {
+          "type": "requires_access",
+          "id": "wardrobe",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "bookshelf",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "bookshelf",
+          "b": "wardrobe",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "wardrobe": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "bookshelf": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "wardrobe": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "bookshelf": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "wardrobe",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "bookshelf",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "bookshelf",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 100,
+            "gap_max": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "support_role": "wall_support",
+            "band_intent": "wall_band"
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "wardrobe"
+        ],
+        "allow_empty_cluster": false,
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor",
+            "wall_1_usable_2850_4400_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "layout_role": "secondary",
+        "degradation_ladder": [
+          "drop_bookshelf",
+          "drop_storage_cabinet"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.35,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "wardrobe",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.35,
+              "drop_order_bias": "neutral",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "bookshelf",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.6,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "wardrobe",
+          "dominant_anchor_candidates": [
+            "wardrobe"
+          ],
+          "placement_order": [
+            "wardrobe",
+            "bookshelf"
+          ],
+          "support_chain": [
+            {
+              "object_id": "bookshelf",
+              "relative_to": "wardrobe",
+              "support_role": "wall_support",
+              "band_intent": "wall_band",
+              "orientation": "",
+              "kind": "anchor_side"
+            }
+          ],
+          "protected_ids": [
+            "wardrobe"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "bedroom",
+          "cluster_id": "storage_core"
+        }
+      },
+      "decisions": [
+        {
+          "object_type": "wardrobe",
+          "category": "wardrobe",
+          "cluster_id": "storage_core",
+          "quantity": 1,
+          "size_tier": "M",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "bundle_id": "storage_core_bundle",
+          "role": "dominant_anchor",
+          "semantic_support_role": "",
+          "band_intent": "",
+          "protected": true,
+          "droppable": false,
+          "drop_order_bias": "drop_last",
+          "min_keep": 1,
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.35,
+          "preferred_size_tier": "M",
+          "request_contract_intent": "must_keep",
+          "request_contract_reason": "explicitly requested in the brief",
+          "request_contract_evidence": "a wardrobe",
+          "rationale": "highest functional utility and semantic anchor value",
+          "utility_score": 13.24,
+          "rep_dims_m": {
+            "L": 1.75,
+            "W": 0.51,
+            "H": 2.02,
+            "A": 0.8925000000000001,
+            "R": 3.4313725490196076,
+            "source_id": "wardrobe_007"
+          }
+        },
+        {
+          "object_type": "bookshelf",
+          "category": "bookshelf",
+          "cluster_id": "storage_core",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "preserve_level": "medium",
+          "bundle_id": "storage_core_bundle",
+          "role": "support",
+          "semantic_support_role": "wall_support",
+          "band_intent": "wall_band",
+          "protected": false,
+          "droppable": false,
+          "drop_order_bias": "drop_early",
+          "min_keep": 0,
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.6,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "",
+          "request_contract_reason": "",
+          "request_contract_evidence": "",
+          "rationale": "positive utility after room-fit and circulation penalties",
+          "utility_score": 5.362,
+          "rep_dims_m": {
+            "L": 0.63,
+            "W": 0.25,
+            "H": 2.22,
+            "A": 0.1575,
+            "R": 2.52,
+            "source_id": "bookshelf_001"
+          }
+        }
+      ],
+      "object_program": {
+        "cluster_id": "storage_core",
+        "members": [
+          "wardrobe",
+          "bookshelf"
+        ],
+        "anchors": [
+          "wardrobe"
+        ],
+        "dominant_anchor_id": "wardrobe",
+        "dominant_anchor_candidates": [
+          "wardrobe"
+        ],
+        "placement_order": [
+          "wardrobe",
+          "bookshelf"
+        ],
+        "support_edges": [
+          {
+            "object_id": "bookshelf",
+            "relative_to": "wardrobe",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min_mm": 100,
+            "gap_max_mm": 450,
+            "proximity": "loose",
+            "selection": "best_fit",
+            "support_role": "wall_support",
+            "band_intent": "wall_band",
+            "orientation": ""
+          }
+        ],
+        "protected_ids": [
+          "wardrobe"
+        ],
+        "droppable_ids": [],
+        "degradation_ladder": [
+          "drop_bookshelf",
+          "drop_storage_cabinet"
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor",
+            "wall_1_usable_2850_4400_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "required_object_ids": [
+          "wardrobe"
+        ],
+        "optional_object_ids": [
+          "bookshelf"
+        ],
+        "object_specs_by_id": {
+          "wardrobe": {
+            "object_id": "wardrobe",
+            "cluster_id": "storage_core",
+            "category": "wardrobe",
+            "role": "dominant_anchor",
+            "priority": "anchor",
+            "preserve_level": "highest",
+            "size_tier": "M",
+            "rep_dims_mm": {
+              "L": 1750,
+              "W": 510,
+              "H": 2020
+            },
+            "source_id": "wardrobe_007",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          },
+          "bookshelf": {
+            "object_id": "bookshelf",
+            "cluster_id": "storage_core",
+            "category": "bookshelf",
+            "role": "support",
+            "priority": "secondary",
+            "preserve_level": "medium",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 630,
+              "W": 250,
+              "H": 2220
+            },
+            "source_id": "bookshelf_001",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          }
+        }
+      }
+    },
+    {
+      "cluster_id": "work_study",
+      "tag": "living",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "desk",
+          "b": "chair"
+        },
+        {
+          "type": "requires_access",
+          "id": "desk",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "chair",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "chair",
+          "b": "desk",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "desk": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "desk": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "chair": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "desk",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "chair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "b_edge": "front",
+            "span": "center",
+            "gap_min": 0,
+            "gap_max": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "support_role": "secondary_seat",
+            "band_intent": "flank_band",
+            "orientation": "face_base"
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "desk"
+        ],
+        "allow_empty_cluster": true,
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "layout_role": "optional",
+        "degradation_ladder": [
+          "drop_bookshelf"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.62,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "desk",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.62,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "chair",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.68,
+              "drop_order_bias": "neutral",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "bookshelf",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.75,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "desk",
+          "dominant_anchor_candidates": [
+            "desk"
+          ],
+          "placement_order": [
+            "desk",
+            "chair"
+          ],
+          "support_chain": [
+            {
+              "object_id": "chair",
+              "relative_to": "desk",
+              "support_role": "secondary_seat",
+              "band_intent": "flank_band",
+              "orientation": "face_base",
+              "kind": "dock_to_edge"
+            }
+          ],
+          "protected_ids": [
+            "desk"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "bedroom",
+          "cluster_id": "work_study"
+        }
+      },
+      "decisions": [
+        {
+          "object_type": "desk",
+          "category": "desk",
+          "cluster_id": "work_study",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "preserve_level": "high",
+          "bundle_id": "work_study_bundle",
+          "role": "dominant_anchor",
+          "semantic_support_role": "",
+          "band_intent": "",
+          "protected": true,
+          "droppable": false,
+          "drop_order_bias": "drop_late",
+          "min_keep": 0,
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.32,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "optional_if_surplus",
+          "request_contract_reason": "requested only when surplus space exists",
+          "request_contract_evidence": "and a small desk or vanity only if there is enough space",
+          "rationale": "highest functional utility and semantic anchor value",
+          "utility_score": 10.521,
+          "rep_dims_m": {
+            "L": 0.98,
+            "W": 0.51,
+            "H": 0.78,
+            "A": 0.4998,
+            "R": 1.9215686274509802,
+            "source_id": "desk_004"
+          }
+        },
+        {
+          "object_type": "chair",
+          "category": "chair",
+          "cluster_id": "work_study",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "preserve_level": "medium",
+          "bundle_id": "work_study_bundle",
+          "role": "secondary_support",
+          "semantic_support_role": "secondary_seat",
+          "band_intent": "flank_band",
+          "protected": false,
+          "droppable": false,
+          "drop_order_bias": "neutral",
+          "min_keep": 0,
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.68,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "",
+          "request_contract_reason": "",
+          "request_contract_evidence": "",
+          "rationale": "high completeness utility under clutter budget",
+          "utility_score": 5.383,
+          "rep_dims_m": {
+            "L": 0.45,
+            "W": 0.45,
+            "H": 0.85,
+            "A": 0.2025,
+            "R": 1.0,
+            "source_id": "chair_008"
+          }
+        }
+      ],
+      "object_program": {
+        "cluster_id": "work_study",
+        "members": [
+          "desk",
+          "chair"
+        ],
+        "anchors": [
+          "desk"
+        ],
+        "dominant_anchor_id": "desk",
+        "dominant_anchor_candidates": [
+          "desk"
+        ],
+        "placement_order": [
+          "desk",
+          "chair"
+        ],
+        "support_edges": [
+          {
+            "object_id": "chair",
+            "relative_to": "desk",
+            "kind": "dock_to_edge",
+            "side_options": [],
+            "gap_min_mm": 0,
+            "gap_max_mm": 100,
+            "proximity": "compact",
+            "selection": "best_fit",
+            "support_role": "secondary_seat",
+            "band_intent": "flank_band",
+            "orientation": "face_base"
+          }
+        ],
+        "protected_ids": [
+          "desk"
+        ],
+        "droppable_ids": [],
+        "degradation_ladder": [
+          "drop_bookshelf"
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "required_object_ids": [
+          "desk"
+        ],
+        "optional_object_ids": [
+          "chair"
+        ],
+        "object_specs_by_id": {
+          "desk": {
+            "object_id": "desk",
+            "cluster_id": "work_study",
+            "category": "desk",
+            "role": "dominant_anchor",
+            "priority": "anchor",
+            "preserve_level": "high",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 980,
+              "W": 510,
+              "H": 780
+            },
+            "source_id": "desk_004",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          },
+          "chair": {
+            "object_id": "chair",
+            "cluster_id": "work_study",
+            "category": "chair",
+            "role": "secondary_support",
+            "priority": "secondary",
+            "preserve_level": "medium",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 450,
+              "W": 450,
+              "H": 850
+            },
+            "source_id": "chair_008",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          }
+        }
+      }
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "tag": "living",
+      "members": [
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "armchair"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "side_table"
+        },
+        {
+          "type": "no_overlap",
+          "a": "armchair",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "no_overlap",
+          "a": "side_table",
+          "b": "floor_lamp"
+        },
+        {
+          "type": "requires_access",
+          "id": "armchair",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "side_table",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "side_table",
+          "b": "armchair",
+          "weight": 6
+        },
+        {
+          "type": "prefer_near",
+          "a": "floor_lamp",
+          "b": "armchair",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "armchair": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "side_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "armchair": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "side_table": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "armchair",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "side_table",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction"
+          },
+          {
+            "id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min": 50,
+            "gap_max": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "support_role": "side_support",
+            "band_intent": "beside_base",
+            "orientation": "same_direction"
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "armchair"
+        ],
+        "allow_empty_cluster": true,
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "layout_role": "optional",
+        "degradation_ladder": [
+          "drop_side_table",
+          "drop_floor_lamp"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.58,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "armchair",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.58,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "side_table",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "floor_lamp",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.62,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "armchair",
+          "dominant_anchor_candidates": [
+            "armchair"
+          ],
+          "placement_order": [
+            "armchair",
+            "side_table",
+            "floor_lamp"
+          ],
+          "support_chain": [
+            {
+              "object_id": "floor_lamp",
+              "relative_to": "armchair",
+              "support_role": "",
+              "band_intent": "",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            },
+            {
+              "object_id": "side_table",
+              "relative_to": "armchair",
+              "support_role": "side_support",
+              "band_intent": "beside_base",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            }
+          ],
+          "protected_ids": [
+            "armchair"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "bedroom",
+          "cluster_id": "lounge_reading"
+        }
+      },
+      "decisions": [
+        {
+          "object_type": "armchair",
+          "category": "armchair",
+          "cluster_id": "lounge_reading",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "bundle_id": "lounge_reading_bundle",
+          "role": "dominant_anchor",
+          "semantic_support_role": "",
+          "band_intent": "",
+          "protected": true,
+          "droppable": false,
+          "drop_order_bias": "drop_last",
+          "min_keep": 1,
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.58,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "must_keep",
+          "request_contract_reason": "explicitly requested in the brief",
+          "request_contract_evidence": "a lounge armchair with a floor lamp",
+          "rationale": "highest functional utility and semantic anchor value",
+          "utility_score": 13.685,
+          "rep_dims_m": {
+            "L": 0.84,
+            "W": 0.71,
+            "H": 0.85,
+            "A": 0.5963999999999999,
+            "R": 1.1830985915492958,
+            "source_id": "armchair_007"
+          }
+        },
+        {
+          "object_type": "side_table",
+          "category": "side_table",
+          "cluster_id": "lounge_reading",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "secondary",
+          "preserve_level": "high",
+          "bundle_id": "lounge_reading_bundle",
+          "role": "support",
+          "semantic_support_role": "side_support",
+          "band_intent": "beside_base",
+          "protected": false,
+          "droppable": true,
+          "drop_order_bias": "drop_late",
+          "min_keep": 0,
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.35,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "target_if_viable",
+          "request_contract_reason": "requested as a viable target, not a hard requirement",
+          "request_contract_evidence": "two nightstands if they fit",
+          "rationale": "kept because the room still has spatial surplus after core layout needs",
+          "utility_score": 9.499,
+          "rep_dims_m": {
+            "L": 0.39,
+            "W": 0.37,
+            "H": 0.58,
+            "A": 0.1443,
+            "R": 1.0540540540540542,
+            "source_id": "side_table_007"
+          }
+        },
+        {
+          "object_type": "floor_lamp",
+          "category": "floor_lamp",
+          "cluster_id": "lounge_reading",
+          "quantity": 1,
+          "size_tier": "S",
+          "priority": "primary",
+          "preserve_level": "highest",
+          "bundle_id": "lounge_reading_bundle",
+          "role": "decor",
+          "semantic_support_role": "",
+          "band_intent": "",
+          "protected": true,
+          "droppable": false,
+          "drop_order_bias": "drop_last",
+          "min_keep": 1,
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.62,
+          "preferred_size_tier": "S",
+          "request_contract_intent": "must_keep",
+          "request_contract_reason": "explicitly requested in the brief",
+          "request_contract_evidence": "a lounge armchair with a floor lamp",
+          "rationale": "positive utility after room-fit and circulation penalties",
+          "utility_score": 9.799,
+          "rep_dims_m": {
+            "L": 0.35,
+            "W": 0.32,
+            "H": 1.51,
+            "A": 0.11199999999999999,
+            "R": 1.09375,
+            "source_id": "floor_lamp_004"
+          }
+        }
+      ],
+      "object_program": {
+        "cluster_id": "lounge_reading",
+        "members": [
+          "armchair",
+          "side_table",
+          "floor_lamp"
+        ],
+        "anchors": [
+          "armchair"
+        ],
+        "dominant_anchor_id": "armchair",
+        "dominant_anchor_candidates": [
+          "armchair"
+        ],
+        "placement_order": [
+          "armchair",
+          "side_table",
+          "floor_lamp"
+        ],
+        "support_edges": [
+          {
+            "object_id": "floor_lamp",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right"
+            ],
+            "gap_min_mm": 50,
+            "gap_max_mm": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "support_role": "",
+            "band_intent": "",
+            "orientation": "same_direction"
+          },
+          {
+            "object_id": "side_table",
+            "relative_to": "armchair",
+            "kind": "anchor_side",
+            "side_options": [
+              "left",
+              "right",
+              "head_left",
+              "head_right"
+            ],
+            "gap_min_mm": 50,
+            "gap_max_mm": 200,
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "support_role": "side_support",
+            "band_intent": "beside_base",
+            "orientation": "same_direction"
+          }
+        ],
+        "protected_ids": [
+          "armchair"
+        ],
+        "droppable_ids": [],
+        "degradation_ladder": [
+          "drop_side_table",
+          "drop_floor_lamp"
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "required_object_ids": [
+          "armchair",
+          "floor_lamp"
+        ],
+        "optional_object_ids": [
+          "side_table"
+        ],
+        "object_specs_by_id": {
+          "armchair": {
+            "object_id": "armchair",
+            "cluster_id": "lounge_reading",
+            "category": "armchair",
+            "role": "dominant_anchor",
+            "priority": "anchor",
+            "preserve_level": "highest",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 840,
+              "W": 710,
+              "H": 850
+            },
+            "source_id": "armchair_007",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          },
+          "side_table": {
+            "object_id": "side_table",
+            "cluster_id": "lounge_reading",
+            "category": "side_table",
+            "role": "support",
+            "priority": "secondary",
+            "preserve_level": "high",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 390,
+              "W": 370,
+              "H": 580
+            },
+            "source_id": "side_table_007",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": "top"
+          },
+          "floor_lamp": {
+            "object_id": "floor_lamp",
+            "cluster_id": "lounge_reading",
+            "category": "floor_lamp",
+            "role": "decor",
+            "priority": "primary",
+            "preserve_level": "highest",
+            "size_tier": "S",
+            "rep_dims_mm": {
+              "L": 350,
+              "W": 320,
+              "H": 1510
+            },
+            "source_id": "floor_lamp_004",
+            "allowed_rotations": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "front": null
+          }
+        }
+      }
+    }
+  ],
+  "active_cluster_ids": [
+    "sleep_core",
+    "storage_core",
+    "work_study",
+    "lounge_reading"
+  ],
+  "object_program_by_cluster": {
+    "sleep_core": {
+      "cluster_id": "sleep_core",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "anchors": [
+        "bed"
+      ],
+      "dominant_anchor_id": "bed",
+      "dominant_anchor_candidates": [
+        "bed"
+      ],
+      "placement_order": [
+        "bed",
+        "nightstand"
+      ],
+      "support_edges": [
+        {
+          "object_id": "nightstand",
+          "relative_to": "bed",
+          "kind": "anchor_side",
+          "side_options": [
+            "head_left",
+            "head_right"
+          ],
+          "gap_min_mm": 0,
+          "gap_max_mm": 100,
+          "proximity": "compact",
+          "selection": "best_fit",
+          "support_role": "side_support",
+          "band_intent": "beside_base",
+          "orientation": "same_direction"
+        }
+      ],
+      "protected_ids": [
+        "bed"
+      ],
+      "droppable_ids": [],
+      "degradation_ladder": [
+        "shrink_optional_support",
+        "drop_nightstand",
+        "reduce_nightstand_count"
+      ],
+      "zone_claims": {
+        "preferred_regions": [
+          "privacy_back_zone",
+          "wall_2_usable_200_4000_anchor",
+          "wall_4_usable_200_4000_anchor",
+          "wall_1_usable_200_1750_anchor"
+        ],
+        "avoid_regions": [
+          "door_1_entry_clearance",
+          "entry_to_center_corridor",
+          "center_openness_core"
+        ],
+        "wall_affinity": "high",
+        "daylight_affinity": "medium",
+        "privacy_affinity": "high",
+        "floating_allowed": false
+      },
+      "required_object_ids": [
+        "bed"
+      ],
+      "optional_object_ids": [
+        "nightstand"
+      ],
+      "object_specs_by_id": {
+        "bed": {
+          "object_id": "bed",
+          "cluster_id": "sleep_core",
+          "category": "bed",
+          "role": "dominant_anchor",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "size_tier": "M",
+          "rep_dims_mm": {
+            "L": 1960,
+            "W": 1690,
+            "H": 480
+          },
+          "source_id": "bed_014",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        },
+        "nightstand": {
+          "object_id": "nightstand",
+          "cluster_id": "sleep_core",
+          "category": "nightstand",
+          "role": "support",
+          "priority": "secondary",
+          "preserve_level": "high",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 430,
+            "W": 350,
+            "H": 530
+          },
+          "source_id": "nightstand_003",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": null
+        }
+      }
+    },
+    "storage_core": {
+      "cluster_id": "storage_core",
+      "members": [
+        "wardrobe",
+        "bookshelf"
+      ],
+      "anchors": [
+        "wardrobe"
+      ],
+      "dominant_anchor_id": "wardrobe",
+      "dominant_anchor_candidates": [
+        "wardrobe"
+      ],
+      "placement_order": [
+        "wardrobe",
+        "bookshelf"
+      ],
+      "support_edges": [
+        {
+          "object_id": "bookshelf",
+          "relative_to": "wardrobe",
+          "kind": "anchor_side",
+          "side_options": [
+            "left",
+            "right",
+            "head_left",
+            "head_right"
+          ],
+          "gap_min_mm": 100,
+          "gap_max_mm": 450,
+          "proximity": "loose",
+          "selection": "best_fit",
+          "support_role": "wall_support",
+          "band_intent": "wall_band",
+          "orientation": ""
+        }
+      ],
+      "protected_ids": [
+        "wardrobe"
+      ],
+      "droppable_ids": [],
+      "degradation_ladder": [
+        "drop_bookshelf",
+        "drop_storage_cabinet"
+      ],
+      "zone_claims": {
+        "preferred_regions": [
+          "wall_2_usable_200_4000_anchor",
+          "wall_4_usable_200_4000_anchor",
+          "wall_1_usable_200_1750_anchor",
+          "wall_1_usable_2850_4400_anchor"
+        ],
+        "avoid_regions": [
+          "center_openness_core",
+          "entry_to_center_corridor",
+          "door_1_entry_clearance"
+        ],
+        "wall_affinity": "high",
+        "daylight_affinity": "medium",
+        "privacy_affinity": "medium",
+        "floating_allowed": false
+      },
+      "required_object_ids": [
+        "wardrobe"
+      ],
+      "optional_object_ids": [
+        "bookshelf"
+      ],
+      "object_specs_by_id": {
+        "wardrobe": {
+          "object_id": "wardrobe",
+          "cluster_id": "storage_core",
+          "category": "wardrobe",
+          "role": "dominant_anchor",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "size_tier": "M",
+          "rep_dims_mm": {
+            "L": 1750,
+            "W": 510,
+            "H": 2020
+          },
+          "source_id": "wardrobe_007",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        },
+        "bookshelf": {
+          "object_id": "bookshelf",
+          "cluster_id": "storage_core",
+          "category": "bookshelf",
+          "role": "support",
+          "priority": "secondary",
+          "preserve_level": "medium",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 630,
+            "W": 250,
+            "H": 2220
+          },
+          "source_id": "bookshelf_001",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        }
+      }
+    },
+    "work_study": {
+      "cluster_id": "work_study",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "anchors": [
+        "desk"
+      ],
+      "dominant_anchor_id": "desk",
+      "dominant_anchor_candidates": [
+        "desk"
+      ],
+      "placement_order": [
+        "desk",
+        "chair"
+      ],
+      "support_edges": [
+        {
+          "object_id": "chair",
+          "relative_to": "desk",
+          "kind": "dock_to_edge",
+          "side_options": [],
+          "gap_min_mm": 0,
+          "gap_max_mm": 100,
+          "proximity": "compact",
+          "selection": "best_fit",
+          "support_role": "secondary_seat",
+          "band_intent": "flank_band",
+          "orientation": "face_base"
+        }
+      ],
+      "protected_ids": [
+        "desk"
+      ],
+      "droppable_ids": [],
+      "degradation_ladder": [
+        "drop_bookshelf"
+      ],
+      "zone_claims": {
+        "preferred_regions": [
+          "window_1_daylight",
+          "wall_2_usable_200_4000_anchor",
+          "wall_4_usable_200_4000_anchor",
+          "wall_1_usable_200_1750_anchor"
+        ],
+        "avoid_regions": [
+          "door_1_entry_clearance",
+          "center_openness_core"
+        ],
+        "wall_affinity": "high",
+        "daylight_affinity": "high",
+        "privacy_affinity": "medium",
+        "floating_allowed": false
+      },
+      "required_object_ids": [
+        "desk"
+      ],
+      "optional_object_ids": [
+        "chair"
+      ],
+      "object_specs_by_id": {
+        "desk": {
+          "object_id": "desk",
+          "cluster_id": "work_study",
+          "category": "desk",
+          "role": "dominant_anchor",
+          "priority": "anchor",
+          "preserve_level": "high",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 980,
+            "W": 510,
+            "H": 780
+          },
+          "source_id": "desk_004",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        },
+        "chair": {
+          "object_id": "chair",
+          "cluster_id": "work_study",
+          "category": "chair",
+          "role": "secondary_support",
+          "priority": "secondary",
+          "preserve_level": "medium",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 450,
+            "W": 450,
+            "H": 850
+          },
+          "source_id": "chair_008",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        }
+      }
+    },
+    "lounge_reading": {
+      "cluster_id": "lounge_reading",
+      "members": [
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "anchors": [
+        "armchair"
+      ],
+      "dominant_anchor_id": "armchair",
+      "dominant_anchor_candidates": [
+        "armchair"
+      ],
+      "placement_order": [
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "support_edges": [
+        {
+          "object_id": "floor_lamp",
+          "relative_to": "armchair",
+          "kind": "anchor_side",
+          "side_options": [
+            "left",
+            "right"
+          ],
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "proximity": "balanced",
+          "selection": "best_fit",
+          "support_role": "",
+          "band_intent": "",
+          "orientation": "same_direction"
+        },
+        {
+          "object_id": "side_table",
+          "relative_to": "armchair",
+          "kind": "anchor_side",
+          "side_options": [
+            "left",
+            "right",
+            "head_left",
+            "head_right"
+          ],
+          "gap_min_mm": 50,
+          "gap_max_mm": 200,
+          "proximity": "balanced",
+          "selection": "best_fit",
+          "support_role": "side_support",
+          "band_intent": "beside_base",
+          "orientation": "same_direction"
+        }
+      ],
+      "protected_ids": [
+        "armchair"
+      ],
+      "droppable_ids": [],
+      "degradation_ladder": [
+        "drop_side_table",
+        "drop_floor_lamp"
+      ],
+      "zone_claims": {
+        "preferred_regions": [
+          "window_1_daylight",
+          "wall_2_usable_200_4000_anchor",
+          "wall_4_usable_200_4000_anchor",
+          "wall_1_usable_200_1750_anchor"
+        ],
+        "avoid_regions": [
+          "door_1_entry_clearance",
+          "center_openness_core"
+        ],
+        "wall_affinity": "high",
+        "daylight_affinity": "high",
+        "privacy_affinity": "medium",
+        "floating_allowed": false
+      },
+      "required_object_ids": [
+        "armchair",
+        "floor_lamp"
+      ],
+      "optional_object_ids": [
+        "side_table"
+      ],
+      "object_specs_by_id": {
+        "armchair": {
+          "object_id": "armchair",
+          "cluster_id": "lounge_reading",
+          "category": "armchair",
+          "role": "dominant_anchor",
+          "priority": "anchor",
+          "preserve_level": "highest",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 840,
+            "W": 710,
+            "H": 850
+          },
+          "source_id": "armchair_007",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        },
+        "side_table": {
+          "object_id": "side_table",
+          "cluster_id": "lounge_reading",
+          "category": "side_table",
+          "role": "support",
+          "priority": "secondary",
+          "preserve_level": "high",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 390,
+            "W": 370,
+            "H": 580
+          },
+          "source_id": "side_table_007",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": "top"
+        },
+        "floor_lamp": {
+          "object_id": "floor_lamp",
+          "cluster_id": "lounge_reading",
+          "category": "floor_lamp",
+          "role": "decor",
+          "priority": "primary",
+          "preserve_level": "highest",
+          "size_tier": "S",
+          "rep_dims_mm": {
+            "L": 350,
+            "W": 320,
+            "H": 1510
+          },
+          "source_id": "floor_lamp_004",
+          "allowed_rotations": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "front": null
+        }
+      }
+    }
+  },
+  "notes": [
+    "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
+    "Kept the canonical bedroom structure and added a small daylit work-zone cluster because the brief explicitly requests a desk or vanity only if space allows and the room has a daylight region.",
+    "Nightstands are supported up to two, but the deterministic tier step should prefer one or two only if clearance around the bed remains strong.",
+    "No new storage or media requirement was introduced beyond the canonical rule.",
+    "Room area is comfortable for a full bedroom suite, so bed, wardrobe, and at least one nightstand should survive filtering.",
+    "Desk/work zone is plausible only with surplus; keep it longer than decorative extras but below sleep and storage priorities.",
+    "Lounge armchair and floor lamp are desirable in this room size, but side table is the first lounge item to drop.",
+    "Media and utility clusters are not strongly supported by the brief and should usually be filtered out.",
+    "sleep_core promoted to primary because bed is the room's main anchor.",
+    "work_study and daylit_work_zone kept optional due to brief preference, but they must not block entry or center openness.",
+    "storage_core remains wall-bound and should avoid circulation and center openness.",
+    "lounge_reading should stay near daylight if retained, but is subordinate to sleep and storage.",
+    "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
+    "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+    "Request contract attached before tier count so explicit functional objects are protected from silent pruning.",
+    "Tier Count used deterministic utility, capacity, and bundle-preserving rules, plus Forge semantic tier-count hints when available.",
+    "Tier Count itself did not run an additional LLM call.",
+    "Output is synchronized for the object-level anchor-first solver handoff.",
+    "Merged into solver-ready object program for object-level anchor-first placement."
+  ],
+  "missing": [],
+  "semantic_layout_program": {
+    "status": "OK",
+    "room_type": "bedroom",
+    "style_policy": {
+      "style_name": "balanced",
+      "style_tags": [
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "balanced_to_medium",
+        "center_openness_bias": "medium_high",
+        "wall_loading_bias": "focal_balanced",
+        "symmetry_bias": "balanced",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "medium",
+        "decor_tolerance": "low_to_medium",
+        "daylight_bias": "medium_high",
+        "floating_cluster_tolerance": "low_to_medium",
+        "material_weight_bias": "balanced",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 1.06,
+        "optional_utility_bias": 0.0,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": [
+        "Bedroom correction raised restfulness and clutter control."
+      ]
+    },
+    "request_contract": {
+      "version": 1,
+      "source": "brief_text_heuristic",
+      "objects": [
+        {
+          "object_type": "armchair",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a lounge armchair with a floor lamp",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "bed",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "with a bed",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "floor_lamp",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a lounge armchair with a floor lamp",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "rug",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a soft rug",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": false
+        },
+        {
+          "object_type": "wardrobe",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a wardrobe",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "nightstand",
+          "intent": "target_if_viable",
+          "min_keep": 0,
+          "target_count": 2,
+          "preferred_count": 2,
+          "max_keep": 2,
+          "evidence": "two nightstands if they fit",
+          "reason": "requested as a viable target, not a hard requirement",
+          "available_in_program": true
+        },
+        {
+          "object_type": "desk",
+          "intent": "optional_if_surplus",
+          "min_keep": 0,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "and a small desk or vanity only if there is enough space",
+          "reason": "requested only when surplus space exists",
+          "available_in_program": true
+        }
+      ],
+      "groups": [],
+      "notes": [
+        "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+      ]
+    },
+    "active_clusters": [
+      {
+        "cluster_id": "sleep_core",
+        "layout_role": "primary",
+        "priority": "core",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "primary_anchor_zone",
+        "dominant_anchor_candidates": [
+          "bed"
+        ],
+        "required_bundles": [
+          {
+            "bundle_id": "sleep_core_bundle",
+            "objects": [
+              {
+                "object_type": "bed",
+                "role": "dominant_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "nightstand",
+                "role": "secondary_support",
+                "required": false,
+                "max_keep": 2
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "privacy_back_zone",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "high",
+          "floating_allowed": false
+        },
+        "relation_intents": [
+          {
+            "type": "separate",
+            "target": null,
+            "target_cluster": "work_study",
+            "strength": "soft"
+          }
+        ],
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_nightstand",
+          "reduce_nightstand_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.3,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "bed",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.3,
+              "drop_order_bias": "neutral",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "nightstand",
+              "min_keep": 0,
+              "max_keep": 2,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.55,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
+      },
+      {
+        "cluster_id": "storage_core",
+        "layout_role": "secondary",
+        "priority": "core",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "core_function_zone",
+        "dominant_anchor_candidates": [
+          "wardrobe"
+        ],
+        "required_bundles": [
+          {
+            "bundle_id": "storage_core_bundle",
+            "objects": [
+              {
+                "object_type": "wardrobe",
+                "role": "dominant_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "bookshelf",
+                "role": "support",
+                "required": false,
+                "max_keep": null
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor",
+            "wall_1_usable_2850_4400_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "drop_bookshelf",
+          "drop_storage_cabinet"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.35,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "wardrobe",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.35,
+              "drop_order_bias": "neutral",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "bookshelf",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.6,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
+      },
+      {
+        "cluster_id": "work_study",
+        "layout_role": "optional",
+        "priority": "support",
+        "activation_reason": "activated because brief or room capacity makes this support cluster useful",
+        "semantic_role": "support_workflow_zone",
+        "dominant_anchor_candidates": [],
+        "required_bundles": [
+          {
+            "bundle_id": "work_study_bundle",
+            "objects": [
+              {
+                "object_type": "desk",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "chair",
+                "role": "support",
+                "required": true,
+                "max_keep": null
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "drop_bookshelf"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.62,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "desk",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.62,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "chair",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.68,
+              "drop_order_bias": "neutral",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "bookshelf",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.75,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.95,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.99
+        }
+      },
+      {
+        "cluster_id": "lounge_reading",
+        "layout_role": "optional",
+        "priority": "support",
+        "activation_reason": "activated because brief or room capacity makes this support cluster useful",
+        "semantic_role": "secondary_support_zone",
+        "dominant_anchor_candidates": [],
+        "required_bundles": [
+          {
+            "bundle_id": "lounge_reading_bundle",
+            "objects": [
+              {
+                "object_type": "armchair",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "side_table",
+                "role": "secondary_support",
+                "required": false,
+                "max_keep": null
+              },
+              {
+                "object_type": "floor_lamp",
+                "role": "decor",
+                "required": false,
+                "max_keep": null
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "drop_side_table",
+          "drop_floor_lamp"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.58,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "armchair",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.58,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "side_table",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "floor_lamp",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.62,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.9,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.98
+        }
+      },
+      {
+        "cluster_id": "daylit_work_zone",
+        "layout_role": "optional",
+        "priority": "support",
+        "activation_reason": "activated because brief or room capacity makes this support cluster useful",
+        "semantic_role": "support_workflow_zone",
+        "dominant_anchor_candidates": [],
+        "required_bundles": [
+          {
+            "bundle_id": "daylit_work_zone_bundle",
+            "objects": []
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "window_1_daylight",
+            "wall_2_usable_200_4000_anchor",
+            "wall_4_usable_200_4000_anchor",
+            "wall_1_usable_200_1750_anchor"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "high",
+          "privacy_affinity": "medium",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_chair",
+          "drop_office_chair",
+          "reduce_chair_count",
+          "reduce_office_chair_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.64,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "desk",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.64,
+              "drop_order_bias": "neutral",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "chair",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.72,
+              "drop_order_bias": "neutral",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.95,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.99
+        }
+      }
+    ],
+    "global_layout_intent": {
+      "primary_focus": "sleep",
+      "space_character": "calm_balanced_functional_restful_uncluttered",
+      "prefer_open_center": true,
+      "prefer_core_before_support": true,
+      "prefer_clear_primary_circulation": true,
+      "style_name": "balanced",
+      "style_policy_summary": {
+        "target_density": "balanced_to_medium",
+        "center_openness_bias": "medium_high",
+        "clutter_tolerance": "medium",
+        "decor_tolerance": "low_to_medium"
+      }
+    },
+    "macro_relations": {
+      "adjacency_preferences": [],
+      "separation_preferences": [
+        {
+          "a": "sleep_core",
+          "b": "work_study",
+          "relation": "separate",
+          "priority": "medium"
+        }
+      ],
+      "orientation_preferences": [],
+      "keep_open_regions": [
+        {
+          "region": "center_openness_core",
+          "reason": "preserve open center and circulation"
+        },
+        {
+          "type": "center_lane",
+          "near": "room_center",
+          "priority": "high",
+          "reason": "Style policy reserves center openness."
+        }
+      ],
+      "reserved_regions": [
+        {
+          "region": "door_1_entry_clearance",
+          "reason": "entry and primary circulation stay clear"
+        },
+        {
+          "region": "entry_to_center_corridor",
+          "reason": "entry and primary circulation stay clear"
+        },
+        {
+          "region": "room_center",
+          "reason": "Very high openness bias from style policy."
+        }
+      ]
+    },
+    "selection_constraints": {
+      "dominant_anchor_required": [
+        "bed"
+      ],
+      "dominant_workflow_required": [],
+      "group_caps": [
+        {
+          "objects": [
+            "wardrobe",
+            "dresser"
+          ],
+          "max_keep": 2
+        },
+        {
+          "objects": [
+            "bookshelf",
+            "storage_cabinet"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "chair",
+            "office_chair"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "armchair"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "nightstand"
+          ],
+          "max_keep": 2
+        },
+        {
+          "objects": [
+            "desk"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "floor_lamp"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "side_table"
+          ],
+          "max_keep": 1
+        }
+      ],
+      "group_minimums": []
+    },
+    "controlled_degradation": {
+      "cluster_drop_order": [
+        "daylit_work_zone",
+        "lounge_reading",
+        "work_study",
+        "sleep_core",
+        "storage_core"
+      ],
+      "bundle_drop_order": [
+        "daylit_work_zone_bundle",
+        "lounge_reading_bundle",
+        "work_study_bundle",
+        "sleep_core_bundle",
+        "storage_core_bundle"
+      ],
+      "never_drop_first": [
+        "bed"
+      ]
+    },
+    "quality_targets": {
+      "functionality_weight": 1.0,
+      "naturalness_weight": 1.12,
+      "semantic_coherence_weight": 1.06,
+      "spatial_quality_weight": 1.15
+    },
+    "missing": [],
+    "conflicts": [],
+    "confidence": 0.86,
+    "notes": [
+      "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
+      "Kept the canonical bedroom structure and added a small daylit work-zone cluster because the brief explicitly requests a desk or vanity only if space allows and the room has a daylight region.",
+      "Nightstands are supported up to two, but the deterministic tier step should prefer one or two only if clearance around the bed remains strong.",
+      "No new storage or media requirement was introduced beyond the canonical rule.",
+      "Room area is comfortable for a full bedroom suite, so bed, wardrobe, and at least one nightstand should survive filtering.",
+      "Desk/work zone is plausible only with surplus; keep it longer than decorative extras but below sleep and storage priorities.",
+      "Lounge armchair and floor lamp are desirable in this room size, but side table is the first lounge item to drop.",
+      "Media and utility clusters are not strongly supported by the brief and should usually be filtered out.",
+      "sleep_core promoted to primary because bed is the room's main anchor.",
+      "work_study and daylit_work_zone kept optional due to brief preference, but they must not block entry or center openness.",
+      "storage_core remains wall-bound and should avoid circulation and center openness.",
+      "lounge_reading should stay near daylight if retained, but is subordinate to sleep and storage.",
+      "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
+      "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+      "Request contract attached before tier count so explicit functional objects are protected from silent pruning."
+    ]
+  },
+  "style_policy": {
+    "style_name": "balanced",
+    "style_tags": [
+      "cozy"
+    ],
+    "layout_policy": {
+      "target_density": "balanced_to_medium",
+      "center_openness_bias": "medium_high",
+      "wall_loading_bias": "focal_balanced",
+      "symmetry_bias": "balanced",
+      "cluster_spacing_bias": "soft",
+      "clutter_tolerance": "medium",
+      "decor_tolerance": "low_to_medium",
+      "daylight_bias": "medium_high",
+      "floating_cluster_tolerance": "low_to_medium",
+      "material_weight_bias": "balanced",
+      "visual_balance_bias": "calm"
+    },
+    "cluster_policy_overrides": {
+      "sleep_core": {
+        "prefer_breathing_room": true
+      },
+      "primary_core": {
+        "prefer_breathing_room": true
+      },
+      "lounge_reading": {
+        "allow_only_if_space_surplus": true
+      }
+    },
+    "policy_weights": {
+      "density_multiplier": 1.06,
+      "optional_utility_bias": 0.0,
+      "decor_utility_bias": -0.9,
+      "openness_weight": 1.15,
+      "symmetry_weight": 1.0,
+      "naturalness_weight": 1.12,
+      "semantic_coherence_weight": 1.06,
+      "spatial_quality_weight": 1.15
+    },
+    "search_settings": {
+      "style_policy_variants": 1,
+      "final_palette_candidates": 3,
+      "decor_plan_candidates": 3,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    },
+    "controller": {
+      "phase_early": "style_policy_compiler",
+      "phase_late": "final_stylist_decorator",
+      "llm_seed_used": true,
+      "validation": "deterministic_policy_normalization"
+    },
+    "notes": [
+      "Bedroom correction raised restfulness and clutter control."
+    ]
+  }
+}

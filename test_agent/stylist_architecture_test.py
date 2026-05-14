@@ -6,6 +6,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -185,6 +186,20 @@ _stylist = importlib.import_module("agent.stylist")
 Stylist = _stylist.Stylist
 
 
+class _GeminiStyleConfig:
+    PROVIDER = "gemini"
+    STRICT_SINGLE_TEXT_MODEL = ""
+
+    @classmethod
+    def agent_model(cls, key: str) -> str | None:
+        _ = key
+        return None
+
+    @classmethod
+    def primary_model_name(cls) -> str:
+        return ""
+
+
 def _sample_layout() -> dict[str, object]:
     return {
         "status": "OK",
@@ -342,10 +357,11 @@ class StylistArchitectureTest(unittest.TestCase):
         self.assertEqual(LAST_CHAT_KWARGS.get("model_name"), "gemma-4-31b-it")
 
     def test_variant_five_wraps_back_to_gemma_four(self) -> None:
-        self.assertEqual(
-            _stylist.stylist_model_name_for_variant(5),
-            "gemma-4-31b-it",
-        )
+        with mock.patch.object(_stylist, "TextLLMConfig", _GeminiStyleConfig):
+            self.assertEqual(
+                _stylist.stylist_model_name_for_variant(5),
+                "gemma-4-31b-it",
+            )
 
     def test_generate_style_plan_retries_next_model_on_503_unavailable(self) -> None:
         CHAT_COMPLETION_OUTCOMES.extend(
@@ -359,12 +375,13 @@ class StylistArchitectureTest(unittest.TestCase):
             ]
         )
 
-        style_plan = Stylist().generate_style_plan(
-            layout_json=_sample_layout(),
-            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
-            tenant_id="demo_tenant",
-            model_name="gemini-2.5-flash",
-        )
+        with mock.patch.object(_stylist, "TextLLMConfig", _GeminiStyleConfig):
+            style_plan = Stylist().generate_style_plan(
+                layout_json=_sample_layout(),
+                user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+                tenant_id="demo_tenant",
+                model_name="gemini-2.5-flash",
+            )
 
         self.assertEqual(len(CHAT_COMPLETION_CALLS), 2)
         self.assertEqual(
@@ -399,7 +416,7 @@ class StylistArchitectureTest(unittest.TestCase):
             [call.get("model_name") for call in CHAT_COMPLETION_CALLS],
             [
                 "gemma-4-31b-it",
-                "gemini-3.1-flash-lite-preview",
+                "gemma-4-31b-it",
             ],
         )
         self.assertEqual(

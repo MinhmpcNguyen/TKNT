@@ -41,6 +41,8 @@ const devLogMiddleware = () => ({
 
 export default defineConfig({
   plugins: [react(), devLogMiddleware()],
+  envDir: '..',
+  envPrefix: ['VITE_', 'TKNT_DEMO_INVENTORY_ENABLED'],
   server: {
     port: 5173,
   },

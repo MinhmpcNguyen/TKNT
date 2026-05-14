@@ -1,0 +1,1773 @@
+{
+  "status": "PARTIAL",
+  "layout_kind": "object_level_anchor_first",
+  "room_id": "room_1",
+  "room_type": "bedroom",
+  "room": {
+    "unit": "mm",
+    "room_id": "room_1",
+    "name": "Main",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 4650,
+        "y": 0
+      },
+      {
+        "x": 4700,
+        "y": 3650
+      },
+      {
+        "x": 0,
+        "y": 3700
+      }
+    ],
+    "area_mm2": 17181250,
+    "area_m2": 17.181,
+    "perimeter_mm": 16700,
+    "centroid_mm": {
+      "x": 2332,
+      "y": 1841
+    },
+    "principal_axis": {
+      "angle_deg": 179,
+      "vector": {
+        "x": -0.9999,
+        "y": 0.0106
+      },
+      "confidence": 0.281
+    },
+    "bbox_mm": {
+      "min_x": 0,
+      "min_y": 0,
+      "max_x": 4700,
+      "max_y": 3700
+    },
+    "ceiling_height_mm": 2800
+  },
+  "openings": {
+    "doors": [
+      {
+        "id": "door_1",
+        "kind": "door",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 1625
+          },
+          {
+            "x": 0,
+            "y": 2625
+          }
+        ],
+        "original_segment_mm": [
+          {
+            "x": 0,
+            "y": 1625
+          },
+          {
+            "x": 0,
+            "y": 2625
+          }
+        ],
+        "wall_id": "wall_4",
+        "width_mm": 1000,
+        "wall_t_start_mm": 1075,
+        "wall_t_end_mm": 2075,
+        "snap_distance_mm": 0,
+        "swing_radius_mm": 900,
+        "hinge_hint": "LEFT"
+      }
+    ],
+    "windows": [
+      {
+        "id": "window_1",
+        "kind": "window",
+        "segment_mm": [
+          {
+            "x": 2000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          }
+        ],
+        "original_segment_mm": [
+          {
+            "x": 2000,
+            "y": 25
+          },
+          {
+            "x": 4000,
+            "y": 25
+          }
+        ],
+        "wall_id": "wall_1",
+        "width_mm": 2000,
+        "wall_t_start_mm": 2000,
+        "wall_t_end_mm": 4000,
+        "snap_distance_mm": 25,
+        "clearance_mm": 150
+      }
+    ]
+  },
+  "affordance_map": {
+    "usable_walls": [
+      {
+        "id": "wall_1_usable_200_1850",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 1850,
+            "y": 0
+          }
+        ],
+        "length_mm": 1650,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 1850,
+        "inward_normal": {
+          "x": -0.0,
+          "y": 1.0
+        }
+      },
+      {
+        "id": "wall_2_usable_200_3450",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4653,
+            "y": 200
+          },
+          {
+            "x": 4697,
+            "y": 3450
+          }
+        ],
+        "length_mm": 3250,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 3450,
+        "inward_normal": {
+          "x": -0.9999061869691637,
+          "y": 0.013697345026974844
+        }
+      },
+      {
+        "id": "wall_3_usable_200_4500",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4500,
+            "y": 3652
+          },
+          {
+            "x": 200,
+            "y": 3698
+          }
+        ],
+        "length_mm": 4300,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 4500,
+        "inward_normal": {
+          "x": -0.010637695937359757,
+          "y": -0.9999434181118171
+        }
+      },
+      {
+        "id": "wall_4_usable_200_975",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 3500
+          },
+          {
+            "x": 0,
+            "y": 2725
+          }
+        ],
+        "length_mm": 775,
+        "wall_t_start_mm": 200,
+        "wall_t_end_mm": 975,
+        "inward_normal": {
+          "x": 1.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "wall_4_usable_2175_3500",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 1525
+          },
+          {
+            "x": 0,
+            "y": 200
+          }
+        ],
+        "length_mm": 1325,
+        "wall_t_start_mm": 2175,
+        "wall_t_end_mm": 3500,
+        "inward_normal": {
+          "x": 1.0,
+          "y": 0.0
+        }
+      }
+    ],
+    "blocked_walls": [],
+    "entry_landing_zones": [
+      {
+        "id": "door_1_entry_clearance",
+        "type": "entry_clearance",
+        "polygon_ccw": [
+          {
+            "x": 0,
+            "y": 2725
+          },
+          {
+            "x": 0,
+            "y": 1525
+          },
+          {
+            "x": 900,
+            "y": 1525
+          },
+          {
+            "x": 900,
+            "y": 2725
+          }
+        ],
+        "hard": true,
+        "source_id": "door_1"
+      }
+    ],
+    "circulation_corridors": [
+      {
+        "id": "corridor_1",
+        "from": "entry",
+        "to": "room_center",
+        "polyline_mm": [
+          {
+            "x": 0,
+            "y": 2125
+          },
+          {
+            "x": 2332,
+            "y": 1841
+          }
+        ],
+        "width_mm": 900,
+        "score": 0.587
+      },
+      {
+        "id": "corridor_2",
+        "from": "entry",
+        "to": "deep_room",
+        "polyline_mm": [
+          {
+            "x": 0,
+            "y": 2125
+          },
+          {
+            "x": 4600,
+            "y": 0
+          }
+        ],
+        "width_mm": 900,
+        "score": 1.0
+      },
+      {
+        "id": "corridor_3",
+        "from": "entry",
+        "to": "window:window_1",
+        "polyline_mm": [
+          {
+            "x": 0,
+            "y": 2125
+          },
+          {
+            "x": 3000,
+            "y": 0
+          }
+        ],
+        "width_mm": 900,
+        "score": 0.919
+      }
+    ],
+    "daylight_regions": [
+      {
+        "id": "window_1_daylight",
+        "source_window_id": "window_1",
+        "near_polygon_ccw": [
+          {
+            "x": 1850,
+            "y": 0
+          },
+          {
+            "x": 4150,
+            "y": 0
+          },
+          {
+            "x": 4150,
+            "y": 1600
+          },
+          {
+            "x": 1850,
+            "y": 1600
+          }
+        ],
+        "mid_polygon_ccw": [
+          {
+            "x": 1700,
+            "y": 0
+          },
+          {
+            "x": 4300,
+            "y": 0
+          },
+          {
+            "x": 4300,
+            "y": 3000
+          },
+          {
+            "x": 1700,
+            "y": 3000
+          }
+        ],
+        "score": 1.0
+      }
+    ],
+    "privacy_regions": [
+      {
+        "id": "privacy_back_zone",
+        "bbox_mm": {
+          "min_x": 4400,
+          "min_y": 0,
+          "max_x": 4600,
+          "max_y": 3600
+        },
+        "centroid_mm": {
+          "x": 4550,
+          "y": 1150
+        },
+        "score": 1.0
+      }
+    ],
+    "focal_surfaces": [
+      {
+        "id": "wall_3_usable_200_4500_focal",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4500,
+            "y": 3652
+          },
+          {
+            "x": 200,
+            "y": 3698
+          }
+        ],
+        "score": 1.0,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_2_usable_200_3450_focal",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4653,
+            "y": 200
+          },
+          {
+            "x": 4697,
+            "y": 3450
+          }
+        ],
+        "score": 0.929,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_4_usable_2175_3500_focal",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 1525
+          },
+          {
+            "x": 0,
+            "y": 200
+          }
+        ],
+        "score": 0.379,
+        "reason": "long usable wall with low opening interruption"
+      },
+      {
+        "id": "wall_1_usable_200_1850_focal",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 1850,
+            "y": 0
+          }
+        ],
+        "score": 0.221,
+        "reason": "long usable wall with low opening interruption"
+      }
+    ],
+    "center_openness_regions": [
+      {
+        "id": "center_openness_core",
+        "centroid_mm": {
+          "x": 2325,
+          "y": 1850
+        },
+        "bbox_mm": {
+          "min_x": 2000,
+          "min_y": 1400,
+          "max_x": 2600,
+          "max_y": 2200
+        },
+        "score": 1.0
+      }
+    ],
+    "wall_anchor_candidates": [
+      {
+        "id": "wall_2_usable_200_3450_anchor",
+        "wall_id": "wall_2",
+        "segment_mm": [
+          {
+            "x": 4653,
+            "y": 200
+          },
+          {
+            "x": 4697,
+            "y": 3450
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 4653,
+            "y": 200
+          },
+          {
+            "x": 4697,
+            "y": 3450
+          },
+          {
+            "x": 3997,
+            "y": 3460
+          },
+          {
+            "x": 3953,
+            "y": 210
+          }
+        ],
+        "max_backed_width_mm": 3250,
+        "score": 1.0
+      },
+      {
+        "id": "wall_3_usable_200_4500_anchor",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 4500,
+            "y": 3652
+          },
+          {
+            "x": 200,
+            "y": 3698
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 4500,
+            "y": 3652
+          },
+          {
+            "x": 200,
+            "y": 3698
+          },
+          {
+            "x": 193,
+            "y": 2998
+          },
+          {
+            "x": 4493,
+            "y": 2952
+          }
+        ],
+        "max_backed_width_mm": 4300,
+        "score": 1.0
+      },
+      {
+        "id": "wall_1_usable_200_1850_anchor",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 1850,
+            "y": 0
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 1850,
+            "y": 0
+          },
+          {
+            "x": 1850,
+            "y": 700
+          },
+          {
+            "x": 200,
+            "y": 700
+          }
+        ],
+        "max_backed_width_mm": 1650,
+        "score": 0.55
+      },
+      {
+        "id": "wall_4_usable_2175_3500_anchor",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 1525
+          },
+          {
+            "x": 0,
+            "y": 200
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 0,
+            "y": 1525
+          },
+          {
+            "x": 0,
+            "y": 200
+          },
+          {
+            "x": 700,
+            "y": 200
+          },
+          {
+            "x": 700,
+            "y": 1525
+          }
+        ],
+        "max_backed_width_mm": 1325,
+        "score": 0.442
+      },
+      {
+        "id": "wall_4_usable_200_975_anchor",
+        "wall_id": "wall_4",
+        "segment_mm": [
+          {
+            "x": 0,
+            "y": 3500
+          },
+          {
+            "x": 0,
+            "y": 2725
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 0,
+            "y": 3500
+          },
+          {
+            "x": 0,
+            "y": 2725
+          },
+          {
+            "x": 700,
+            "y": 2725
+          },
+          {
+            "x": 700,
+            "y": 3500
+          }
+        ],
+        "max_backed_width_mm": 775,
+        "score": 0.258
+      }
+    ],
+    "floating_zone_candidates": [
+      {
+        "id": "floating_center_zone",
+        "centroid_mm": {
+          "x": 2325,
+          "y": 1850
+        },
+        "bbox_mm": {
+          "min_x": 2000,
+          "min_y": 1400,
+          "max_x": 2600,
+          "max_y": 2200
+        },
+        "score": 0.669
+      }
+    ],
+    "soft_usage_hints": {
+      "active_entry": true,
+      "prefer_private_back_zone": true,
+      "prefer_daylit_work_zone": true,
+      "prefer_open_center": true,
+      "likely_primary_focus": "window_view"
+    }
+  },
+  "topology": {
+    "wall_graph": {
+      "nodes": [
+        {
+          "id": "wall_1",
+          "start_mm": {
+            "x": 0,
+            "y": 0
+          },
+          "end_mm": {
+            "x": 4650,
+            "y": 0
+          },
+          "length_mm": 4650,
+          "inward_normal": {
+            "x": -0.0,
+            "y": 1.0
+          }
+        },
+        {
+          "id": "wall_2",
+          "start_mm": {
+            "x": 4650,
+            "y": 0
+          },
+          "end_mm": {
+            "x": 4700,
+            "y": 3650
+          },
+          "length_mm": 3650,
+          "inward_normal": {
+            "x": -0.9999061869691637,
+            "y": 0.013697345026974844
+          }
+        },
+        {
+          "id": "wall_3",
+          "start_mm": {
+            "x": 4700,
+            "y": 3650
+          },
+          "end_mm": {
+            "x": 0,
+            "y": 3700
+          },
+          "length_mm": 4700,
+          "inward_normal": {
+            "x": -0.010637695937359757,
+            "y": -0.9999434181118171
+          }
+        },
+        {
+          "id": "wall_4",
+          "start_mm": {
+            "x": 0,
+            "y": 3700
+          },
+          "end_mm": {
+            "x": 0,
+            "y": 0
+          },
+          "length_mm": 3700,
+          "inward_normal": {
+            "x": 1.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": "wall_1",
+          "to": "wall_4",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_1",
+          "to": "wall_2",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_2",
+          "to": "wall_3",
+          "type": "adjacent"
+        },
+        {
+          "from": "wall_3",
+          "to": "wall_4",
+          "type": "adjacent"
+        }
+      ]
+    },
+    "entry_node": {
+      "id": "entry",
+      "type": "entry",
+      "point_mm": {
+        "x": 0,
+        "y": 2125
+      }
+    },
+    "window_nodes": [
+      {
+        "id": "window:window_1",
+        "type": "window",
+        "point_mm": {
+          "x": 3000,
+          "y": 0
+        },
+        "opening_id": "window_1"
+      }
+    ],
+    "passage_graph": {
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "entry",
+          "point_mm": {
+            "x": 0,
+            "y": 2125
+          }
+        },
+        {
+          "id": "room_center",
+          "type": "center",
+          "point_mm": {
+            "x": 2332,
+            "y": 1841
+          }
+        },
+        {
+          "id": "window:window_1",
+          "type": "window",
+          "point_mm": {
+            "x": 3000,
+            "y": 0
+          },
+          "opening_id": "window_1"
+        }
+      ],
+      "edges": [
+        {
+          "from": "entry",
+          "to": "room_center",
+          "corridor_id": "corridor_1",
+          "width_mm": 900
+        },
+        {
+          "from": "entry",
+          "to": "deep_room",
+          "corridor_id": "corridor_2",
+          "width_mm": 900
+        },
+        {
+          "from": "entry",
+          "to": "window:window_1",
+          "corridor_id": "corridor_3",
+          "width_mm": 900
+        }
+      ]
+    },
+    "room_subzones": [
+      {
+        "id": "zone_front_right",
+        "label": "front_right",
+        "centroid_mm": {
+          "x": 3529,
+          "y": 964
+        },
+        "bbox_mm": {
+          "min_x": 2400,
+          "min_y": 0,
+          "max_x": 4600,
+          "max_y": 1800
+        },
+        "sample_count": 112
+      },
+      {
+        "id": "zone_front_left",
+        "label": "front_left",
+        "centroid_mm": {
+          "x": 1146,
+          "y": 843
+        },
+        "bbox_mm": {
+          "min_x": 0,
+          "min_y": 0,
+          "max_x": 2200,
+          "max_y": 1800
+        },
+        "sample_count": 108
+      },
+      {
+        "id": "zone_back_right",
+        "label": "back_right",
+        "centroid_mm": {
+          "x": 3500,
+          "y": 2800
+        },
+        "bbox_mm": {
+          "min_x": 2400,
+          "min_y": 2000,
+          "max_x": 4600,
+          "max_y": 3600
+        },
+        "sample_count": 108
+      },
+      {
+        "id": "zone_back_left",
+        "label": "back_left",
+        "centroid_mm": {
+          "x": 1259,
+          "y": 2914
+        },
+        "bbox_mm": {
+          "min_x": 0,
+          "min_y": 2000,
+          "max_x": 2200,
+          "max_y": 3600
+        },
+        "sample_count": 88
+      }
+    ]
+  },
+  "objects": [
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "bed",
+      "category": "bed",
+      "x": 2350,
+      "y": 650,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 2306,
+      "h": 2319,
+      "rect": [
+        2350,
+        650,
+        4656,
+        2969
+      ],
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 650,
+        "max_x": 4656,
+        "max_y": 2969
+      },
+      "center": {
+        "x": 3503,
+        "y": 1810
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "object_id": "side_table",
+      "category": "side_table",
+      "x": 150,
+      "y": 650,
+      "rot": 90,
+      "rotation_ccw": 90,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        150,
+        650,
+        551,
+        1100
+      ],
+      "bbox": {
+        "min_x": 150,
+        "min_y": 650,
+        "max_x": 551,
+        "max_y": 1100
+      },
+      "center": {
+        "x": 350,
+        "y": 875
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 1,
+        "dy": 0
+      },
+      "front_side_world": "right",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "storage_core",
+      "object_id": "wardrobe",
+      "category": "wardrobe",
+      "x": 1550,
+      "y": 3000,
+      "rot": 180,
+      "rotation_ccw": 180,
+      "w": 1601,
+      "h": 612,
+      "rect": [
+        1550,
+        3000,
+        3151,
+        3612
+      ],
+      "bbox": {
+        "min_x": 1550,
+        "min_y": 3000,
+        "max_x": 3151,
+        "max_y": 3612
+      },
+      "center": {
+        "x": 2350,
+        "y": 3306
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": -1
+      },
+      "front_side_world": "bottom",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "desk",
+      "category": "desk",
+      "x": 400,
+      "y": 50,
+      "rot": 0,
+      "rotation_ccw": 0,
+      "w": 1208,
+      "h": 600,
+      "rect": [
+        400,
+        50,
+        1608,
+        650
+      ],
+      "bbox": {
+        "min_x": 400,
+        "min_y": 50,
+        "max_x": 1608,
+        "max_y": 650
+      },
+      "center": {
+        "x": 1004,
+        "y": 350
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": 1
+      },
+      "front_side_world": "top",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "nightstand",
+      "category": "nightstand",
+      "x": 4100,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        4100,
+        100,
+        4501,
+        550
+      ],
+      "bbox": {
+        "min_x": 4100,
+        "min_y": 100,
+        "max_x": 4501,
+        "max_y": 550
+      },
+      "center": {
+        "x": 4300,
+        "y": 325
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "bed",
+      "role": "support",
+      "priority": "secondary"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "chair",
+      "category": "chair",
+      "x": 1700,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 496,
+      "h": 512,
+      "rect": [
+        1700,
+        100,
+        2196,
+        612
+      ],
+      "bbox": {
+        "min_x": 1700,
+        "min_y": 100,
+        "max_x": 2196,
+        "max_y": 612
+      },
+      "center": {
+        "x": 1948,
+        "y": 356
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "desk",
+      "role": "secondary_support",
+      "priority": "secondary"
+    }
+  ],
+  "placements": [
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "bed",
+      "category": "bed",
+      "x": 2350,
+      "y": 650,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 2306,
+      "h": 2319,
+      "rect": [
+        2350,
+        650,
+        4656,
+        2969
+      ],
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 650,
+        "max_x": 4656,
+        "max_y": 2969
+      },
+      "center": {
+        "x": 3503,
+        "y": 1810
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "object_id": "side_table",
+      "category": "side_table",
+      "x": 150,
+      "y": 650,
+      "rot": 90,
+      "rotation_ccw": 90,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        150,
+        650,
+        551,
+        1100
+      ],
+      "bbox": {
+        "min_x": 150,
+        "min_y": 650,
+        "max_x": 551,
+        "max_y": 1100
+      },
+      "center": {
+        "x": 350,
+        "y": 875
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 1,
+        "dy": 0
+      },
+      "front_side_world": "right",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "storage_core",
+      "object_id": "wardrobe",
+      "category": "wardrobe",
+      "x": 1550,
+      "y": 3000,
+      "rot": 180,
+      "rotation_ccw": 180,
+      "w": 1601,
+      "h": 612,
+      "rect": [
+        1550,
+        3000,
+        3151,
+        3612
+      ],
+      "bbox": {
+        "min_x": 1550,
+        "min_y": 3000,
+        "max_x": 3151,
+        "max_y": 3612
+      },
+      "center": {
+        "x": 2350,
+        "y": 3306
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": -1
+      },
+      "front_side_world": "bottom",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "desk",
+      "category": "desk",
+      "x": 400,
+      "y": 50,
+      "rot": 0,
+      "rotation_ccw": 0,
+      "w": 1208,
+      "h": 600,
+      "rect": [
+        400,
+        50,
+        1608,
+        650
+      ],
+      "bbox": {
+        "min_x": 400,
+        "min_y": 50,
+        "max_x": 1608,
+        "max_y": 650
+      },
+      "center": {
+        "x": 1004,
+        "y": 350
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": 1
+      },
+      "front_side_world": "top",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "nightstand",
+      "category": "nightstand",
+      "x": 4100,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        4100,
+        100,
+        4501,
+        550
+      ],
+      "bbox": {
+        "min_x": 4100,
+        "min_y": 100,
+        "max_x": 4501,
+        "max_y": 550
+      },
+      "center": {
+        "x": 4300,
+        "y": 325
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "bed",
+      "role": "support",
+      "priority": "secondary"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "chair",
+      "category": "chair",
+      "x": 1700,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 496,
+      "h": 512,
+      "rect": [
+        1700,
+        100,
+        2196,
+        612
+      ],
+      "bbox": {
+        "min_x": 1700,
+        "min_y": 100,
+        "max_x": 2196,
+        "max_y": 612
+      },
+      "center": {
+        "x": 1948,
+        "y": 356
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "desk",
+      "role": "secondary_support",
+      "priority": "secondary"
+    }
+  ],
+  "object_placements": [
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "bed",
+      "category": "bed",
+      "x": 2350,
+      "y": 650,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 2306,
+      "h": 2319,
+      "rect": [
+        2350,
+        650,
+        4656,
+        2969
+      ],
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 650,
+        "max_x": 4656,
+        "max_y": 2969
+      },
+      "center": {
+        "x": 3503,
+        "y": 1810
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "object_id": "side_table",
+      "category": "side_table",
+      "x": 150,
+      "y": 650,
+      "rot": 90,
+      "rotation_ccw": 90,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        150,
+        650,
+        551,
+        1100
+      ],
+      "bbox": {
+        "min_x": 150,
+        "min_y": 650,
+        "max_x": 551,
+        "max_y": 1100
+      },
+      "center": {
+        "x": 350,
+        "y": 875
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 1,
+        "dy": 0
+      },
+      "front_side_world": "right",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "storage_core",
+      "object_id": "wardrobe",
+      "category": "wardrobe",
+      "x": 1550,
+      "y": 3000,
+      "rot": 180,
+      "rotation_ccw": 180,
+      "w": 1601,
+      "h": 612,
+      "rect": [
+        1550,
+        3000,
+        3151,
+        3612
+      ],
+      "bbox": {
+        "min_x": 1550,
+        "min_y": 3000,
+        "max_x": 3151,
+        "max_y": 3612
+      },
+      "center": {
+        "x": 2350,
+        "y": 3306
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": -1
+      },
+      "front_side_world": "bottom",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "desk",
+      "category": "desk",
+      "x": 400,
+      "y": 50,
+      "rot": 0,
+      "rotation_ccw": 0,
+      "w": 1208,
+      "h": 600,
+      "rect": [
+        400,
+        50,
+        1608,
+        650
+      ],
+      "bbox": {
+        "min_x": 400,
+        "min_y": 50,
+        "max_x": 1608,
+        "max_y": 650
+      },
+      "center": {
+        "x": 1004,
+        "y": 350
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": 0,
+        "dy": 1
+      },
+      "front_side_world": "top",
+      "relative_to": null,
+      "role": "dominant_anchor",
+      "priority": "anchor"
+    },
+    {
+      "cluster_id": "sleep_core",
+      "object_id": "nightstand",
+      "category": "nightstand",
+      "x": 4100,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 401,
+      "h": 450,
+      "rect": [
+        4100,
+        100,
+        4501,
+        550
+      ],
+      "bbox": {
+        "min_x": 4100,
+        "min_y": 100,
+        "max_x": 4501,
+        "max_y": 550
+      },
+      "center": {
+        "x": 4300,
+        "y": 325
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "bed",
+      "role": "support",
+      "priority": "secondary"
+    },
+    {
+      "cluster_id": "work_study",
+      "object_id": "chair",
+      "category": "chair",
+      "x": 1700,
+      "y": 100,
+      "rot": 270,
+      "rotation_ccw": 270,
+      "w": 496,
+      "h": 512,
+      "rect": [
+        1700,
+        100,
+        2196,
+        612
+      ],
+      "bbox": {
+        "min_x": 1700,
+        "min_y": 100,
+        "max_x": 2196,
+        "max_y": 612
+      },
+      "center": {
+        "x": 1948,
+        "y": 356
+      },
+      "front_token": "top",
+      "front_world": {
+        "dx": -1,
+        "dy": 0
+      },
+      "front_side_world": "left",
+      "relative_to": "desk",
+      "role": "secondary_support",
+      "priority": "secondary"
+    }
+  ],
+  "clusters": [
+    {
+      "cluster_id": "sleep_core",
+      "object_ids": [
+        "bed",
+        "nightstand"
+      ],
+      "dominant_anchor_id": "bed",
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 100,
+        "max_x": 4656,
+        "max_y": 2969
+      }
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "object_ids": [
+        "side_table"
+      ],
+      "dominant_anchor_id": "side_table",
+      "bbox": {
+        "min_x": 150,
+        "min_y": 650,
+        "max_x": 551,
+        "max_y": 1100
+      }
+    },
+    {
+      "cluster_id": "storage_core",
+      "object_ids": [
+        "wardrobe"
+      ],
+      "dominant_anchor_id": "wardrobe",
+      "bbox": {
+        "min_x": 1550,
+        "min_y": 3000,
+        "max_x": 3151,
+        "max_y": 3612
+      }
+    },
+    {
+      "cluster_id": "work_study",
+      "object_ids": [
+        "desk",
+        "chair"
+      ],
+      "dominant_anchor_id": "desk",
+      "bbox": {
+        "min_x": 400,
+        "min_y": 50,
+        "max_x": 2196,
+        "max_y": 650
+      }
+    }
+  ],
+  "cluster_instances": [
+    {
+      "cluster_id": "sleep_core",
+      "object_ids": [
+        "bed",
+        "nightstand"
+      ],
+      "dominant_anchor_id": "bed",
+      "bbox": {
+        "min_x": 2350,
+        "min_y": 100,
+        "max_x": 4656,
+        "max_y": 2969
+      }
+    },
+    {
+      "cluster_id": "lounge_reading",
+      "object_ids": [
+        "side_table"
+      ],
+      "dominant_anchor_id": "side_table",
+      "bbox": {
+        "min_x": 150,
+        "min_y": 650,
+        "max_x": 551,
+        "max_y": 1100
+      }
+    },
+    {
+      "cluster_id": "storage_core",
+      "object_ids": [
+        "wardrobe"
+      ],
+      "dominant_anchor_id": "wardrobe",
+      "bbox": {
+        "min_x": 1550,
+        "min_y": 3000,
+        "max_x": 3151,
+        "max_y": 3612
+      }
+    },
+    {
+      "cluster_id": "work_study",
+      "object_ids": [
+        "desk",
+        "chair"
+      ],
+      "dominant_anchor_id": "desk",
+      "bbox": {
+        "min_x": 400,
+        "min_y": 50,
+        "max_x": 2196,
+        "max_y": 650
+      }
+    }
+  ],
+  "coverage": {
+    "expected_cluster_ids": [
+      "sleep_core",
+      "storage_core",
+      "work_study",
+      "lounge_reading"
+    ],
+    "present_cluster_ids": [
+      "lounge_reading",
+      "sleep_core",
+      "storage_core",
+      "work_study"
+    ],
+    "missing_cluster_ids": []
+  },
+  "complete": true,
+  "gallery_eligible": false,
+  "coverage_ratio": 1.0,
+  "missing_cluster_ids": [],
+  "notes": [
+    "Absolute layout was emitted directly by the object-level solver.",
+    "Cluster local composition and phase-2 repair were bypassed in this flow."
+  ],
+  "solver_debug": {
+    "selected_concept_id": "concept_01",
+    "dropped_inventory_by_cluster": {},
+    "verify_summary": {
+      "geometry_valid": true,
+      "hard_valid": false,
+      "complete": true,
+      "gallery_eligible": false,
+      "coverage_ratio": 1.0,
+      "missing_cluster_ids": [],
+      "present_cluster_ids": [
+        "lounge_reading",
+        "sleep_core",
+        "storage_core",
+        "work_study"
+      ],
+      "offending_clusters": [
+        "sleep_core"
+      ],
+      "primary_pair_ok": true,
+      "orientation_issues": [],
+      "blocking_orientation_issues": [],
+      "protected_region_issues": [
+        {
+          "cluster_id": "sleep_core",
+          "object_id": "bed",
+          "region_id": "door_1_to_room_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "violation_severity": "blocking",
+          "overlap_ratio": 0.096,
+          "max_overlap_ratio": 0.05,
+          "excess_overlap_ratio": 0.046,
+          "overlap_area_mm2": 511488,
+          "blocking": true
+        }
+      ],
+      "blocking_protected_region_issues": [
+        {
+          "cluster_id": "sleep_core",
+          "object_id": "bed",
+          "region_id": "door_1_to_room_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "violation_severity": "blocking",
+          "overlap_ratio": 0.096,
+          "max_overlap_ratio": 0.05,
+          "excess_overlap_ratio": 0.046,
+          "overlap_area_mm2": 511488,
+          "blocking": true
+        }
+      ],
+      "forbidden_region_issues": [
+        {
+          "cluster_id": "sleep_core",
+          "object_id": "bed",
+          "region_id": "entry_to_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "violation_severity": "blocking",
+          "overlap_ratio": 0.096,
+          "max_overlap_ratio": 0.05,
+          "excess_overlap_ratio": 0.046,
+          "overlap_area_mm2": 511488,
+          "blocking": true
+        }
+      ],
+      "blocking_forbidden_region_issues": [
+        {
+          "cluster_id": "sleep_core",
+          "object_id": "bed",
+          "region_id": "entry_to_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "violation_severity": "blocking",
+          "overlap_ratio": 0.096,
+          "max_overlap_ratio": 0.05,
+          "excess_overlap_ratio": 0.046,
+          "overlap_area_mm2": 511488,
+          "blocking": true
+        }
+      ],
+      "functional_geometry_issues": [],
+      "blocking_functional_geometry_issues": [],
+      "face_pair_issues": [],
+      "critical_issue_count": 0,
+      "blocking_issue_count": 2,
+      "view_corridor_ok": true,
+      "front_access_ok": true,
+      "protected_region_penalty": 1047.053,
+      "forbidden_region_penalty": 1047.053,
+      "soft_issue_count": 0,
+      "soft_constraint_score": 12,
+      "quality_gate_reasons": [
+        "blocking_forbidden_region_overlap",
+        "blocking_protected_region_overlap"
+      ],
+      "layout_score": -2594,
+      "geometry_repair": {
+        "status": "clean",
+        "moved_objects": [],
+        "total_shift_mm": 0,
+        "penalty": 0
+      },
+      "geometry_repair_penalty": 0
+    },
+    "geometry_repair": {
+      "status": "clean",
+      "moved_objects": [],
+      "total_shift_mm": 0,
+      "penalty": 0
+    }
+  },
+  "geometry_valid": true
+}

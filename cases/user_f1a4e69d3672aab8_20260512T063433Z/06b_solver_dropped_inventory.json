@@ -1,0 +1,24 @@
+{
+  "status": "OK",
+  "total_dropped_items": 2,
+  "clusters": [
+    {
+      "cluster_id": "media",
+      "items": [
+        {
+          "object_id": "media_shelf",
+          "reason": "support_slot_failed"
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_display_support",
+      "items": [
+        {
+          "object_id": "console_table",
+          "reason": "optional_trial_anchor_cluster_not_placed"
+        }
+      ]
+    }
+  ]
+}

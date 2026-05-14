@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "source": "brief_text_heuristic",
+  "objects": [
+    {
+      "object_type": "armchair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "and one or two armchairs arranged as a social seating group with enough open floor area between pieces",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "coffee_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a coffee table",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a rug",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "sofa",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a sofa",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a tv console",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    }
+  ],
+  "groups": [],
+  "notes": [
+    "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+  ]
+}

@@ -4,6 +4,10 @@ import logging
 import re
 from typing import Any, Dict, List
 
+from config.demo_inventory import (
+    is_demo_inventory_tenant,
+    is_enabled_demo_inventory_tenant,
+)
 from config.semantic_search_config import SemanticSearchConfig
 from db.models import AssetFilter, DesignKnowledgeFilter, TenantId
 from db.pg_repository import PostgresAssetRepository, PostgresDesignKnowledgeRepository
@@ -69,6 +73,16 @@ def ListInventoryByTypes(
     limit: int | None = 200,
 ) -> Dict[str, Any]:
     resolved_tenant = tenant_id or "demo_tenant"
+    if is_demo_inventory_tenant(
+        resolved_tenant
+    ) and not is_enabled_demo_inventory_tenant(resolved_tenant):
+        return {
+            "tenant_id": resolved_tenant,
+            "requested_types": _stable_unique_strs(types),
+            "count": 0,
+            "items": [],
+            "disabled": True,
+        }
     repo = PostgresAssetRepository()
     assets = list(repo.list_assets(AssetFilter(tenant_id=TenantId(resolved_tenant))))
 

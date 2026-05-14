@@ -20,6 +20,10 @@ CORNER_EXCLUSION_MM = 200
 DOOR_FRONT_CLEARANCE_MM = 900
 DOOR_SIDE_MARGIN_MM = 100
 WINDOW_CLEARANCE_MM = 150
+DAYLIGHT_NEAR_DEPTH_MM = 1600
+DAYLIGHT_NEAR_SIDE_MARGIN_MM = 150
+DAYLIGHT_MID_DEPTH_MM = 3000
+DAYLIGHT_MID_SIDE_MARGIN_MM = 300
 MIN_WALL_LEN_MM = 150
 MIN_USABLE_WALL_LEN_MM = 700
 AFFORDANCE_FIELD_RESOLUTION_MM = 200
@@ -164,6 +168,11 @@ def _build_room_interpreter_payload(
 
     walls = _build_wall_graph(sanitized_polygon)
     openings_input = _resolve_floorplan_openings(input_payload)
+    explicit_doors = _opening_kind_explicitly_provided(input_payload, kind="doors")
+    explicit_windows = _opening_kind_explicitly_provided(
+        input_payload,
+        kind="windows",
+    )
     doors = _normalize_openings_for_kind(
         openings_input.get("doors"),
         walls=walls,
@@ -177,7 +186,7 @@ def _build_room_interpreter_payload(
         conflicts=conflicts,
     )
 
-    if sanitized_polygon and not doors:
+    if sanitized_polygon and not doors and not explicit_doors:
         default_door = _default_opening(walls, kind="door", existing_ids=set())
         if default_door is not None:
             doors.append(default_door)
@@ -185,7 +194,7 @@ def _build_room_interpreter_payload(
                 "No door was provided; generated a deterministic default entry on the longest wall."
             )
 
-    if sanitized_polygon and not windows:
+    if sanitized_polygon and not windows and not explicit_windows:
         default_window = _default_opening(
             walls,
             kind="window",
@@ -248,7 +257,7 @@ def _build_room_interpreter_payload(
         centroid=centroid,
     )
 
-    if not windows:
+    if not windows and not explicit_windows:
         missing.append("windows")
     if not usable_walls:
         conflicts.append(
@@ -1021,16 +1030,16 @@ def _daylight_regions(
             window,
             wall=wall,
             obstacle_type="daylight_near",
-            clearance_mm=1600,
-            side_margin_mm=300,
+            clearance_mm=DAYLIGHT_NEAR_DEPTH_MM,
+            side_margin_mm=DAYLIGHT_NEAR_SIDE_MARGIN_MM,
             suffix="daylight_near",
         )
         mid = _opening_clearance_obstacle(
             window,
             wall=wall,
             obstacle_type="daylight_mid",
-            clearance_mm=3000,
-            side_margin_mm=600,
+            clearance_mm=DAYLIGHT_MID_DEPTH_MM,
+            side_margin_mm=DAYLIGHT_MID_SIDE_MARGIN_MM,
             suffix="daylight_mid",
         )
         regions.append(
@@ -1550,6 +1559,38 @@ def _resolve_floorplan_openings(
     return {"doors": [], "windows": []}
 
 
+def _opening_kind_explicitly_provided(
+    input_payload: Mapping[str, object],
+    *,
+    kind: Literal["doors", "windows"],
+) -> bool:
+    top_value = input_payload.get(kind)
+    if isinstance(top_value, list):
+        return True
+
+    for container_key in ("floorplan_geometry", "constraints"):
+        container = input_payload.get(container_key)
+        if not isinstance(container, Mapping):
+            continue
+        openings = container.get("openings")
+        if isinstance(openings, Mapping) and isinstance(openings.get(kind), list):
+            return True
+
+    if kind != "windows":
+        return False
+
+    user_input = input_payload.get("user_input")
+    if not isinstance(user_input, Mapping):
+        return False
+    raw_count = user_input.get("windows")
+    if isinstance(raw_count, bool):
+        return False
+    try:
+        return int(raw_count) <= 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _resolve_room_polygon(input_payload: Mapping[str, object]) -> list[object] | None:
     polygon = input_payload.get("polygon_mm")
     if isinstance(polygon, list) and len(polygon) >= 3:
@@ -1964,6 +2005,10 @@ def _settings_payload() -> dict[str, int | float]:
         "door_front_clearance_mm": DOOR_FRONT_CLEARANCE_MM,
         "door_side_margin_mm": DOOR_SIDE_MARGIN_MM,
         "window_clearance_mm": WINDOW_CLEARANCE_MM,
+        "daylight_near_depth_mm": DAYLIGHT_NEAR_DEPTH_MM,
+        "daylight_near_side_margin_mm": DAYLIGHT_NEAR_SIDE_MARGIN_MM,
+        "daylight_mid_depth_mm": DAYLIGHT_MID_DEPTH_MM,
+        "daylight_mid_side_margin_mm": DAYLIGHT_MID_SIDE_MARGIN_MM,
         "min_wall_len_mm": MIN_WALL_LEN_MM,
         "min_usable_wall_len_mm": MIN_USABLE_WALL_LEN_MM,
         "affordance_field_resolution_mm": AFFORDANCE_FIELD_RESOLUTION_MM,

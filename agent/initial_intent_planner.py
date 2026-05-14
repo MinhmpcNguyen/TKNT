@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,12 +10,49 @@ from agent_schema.initial_intent_planner_schema import (
 )
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
-from config.gemini_config import GeminiConfig
+
+try:
+    from config.llm_config import TextLLMConfig
+except Exception:  # pragma: no cover
+    from config.gemini_config import GeminiConfig
+
+    class TextLLMConfig:
+        PROVIDER = "gemini"
+        STRICT_SINGLE_TEXT_MODEL = str(
+            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
+        ).strip()
+        AGENT_MODELS = dict(getattr(GeminiConfig, "AGENT_MODELS", {}) or {})
+
+        @classmethod
+        def primary_model_name(cls) -> str:
+            return ""
+
+        @classmethod
+        def agent_model(cls, key: str) -> str | None:
+            return cls.AGENT_MODELS.get(key)
+
+
 from prompt.initial_intent_planner import INITIAL_INTENT_PLANNER_PROMPT
 from prompt.system import SYSTEM_PROMPT
 
 _INTENT_COUNT = 10
 _DEFAULT_PRIORITY = "medium"
+logger = logging.getLogger(__name__)
+
+
+def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
+    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
+        return
+    try:
+        from clients.gemini_client import GeminiClient
+
+        GeminiClient.record_retry_event(
+            stage=stage,
+            model_name=model_name,
+            reason=reason,
+        )
+    except Exception:
+        logger.debug("Failed to record Gemini retry event.", exc_info=True)
 
 
 @dataclass(frozen=True)
@@ -58,13 +96,14 @@ class InitialIntentPlanner:
             description=description,
             special_notes=special_notes,
         )
-        client = get_llm_client(provider="gemini")
+        client = get_llm_client()
+        model_name = TextLLMConfig.agent_model("planner")
         last_raw = ""
         for attempt in range(2):
             response = client.chat_completion(
                 messages,
                 model_key="primary",
-                model_name=GeminiConfig.AGENT_MODELS.get("planner"),
+                model_name=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -75,6 +114,11 @@ class InitialIntentPlanner:
             except ValueError:
                 if attempt == 1:
                     break
+                _record_llm_retry(
+                    stage="initial_intent_planner",
+                    model_name=model_name,
+                    reason="invalid_json",
+                )
                 messages.append({"role": "assistant", "content": last_raw})
                 messages.append(
                     {

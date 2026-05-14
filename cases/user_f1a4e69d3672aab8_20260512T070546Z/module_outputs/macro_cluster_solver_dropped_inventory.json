@@ -1,0 +1,28 @@
+{
+  "status": "OK",
+  "total_dropped_items": 3,
+  "clusters": [
+    {
+      "cluster_id": "kitchen_core",
+      "items": [
+        {
+          "object_id": "dishwasher",
+          "reason": "support_slot_failed"
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_support",
+      "items": [
+        {
+          "object_id": "fridge",
+          "reason": "optional_trial_anchor_cluster_not_placed"
+        },
+        {
+          "object_id": "kitchen_tall_cabinet",
+          "reason": "optional_trial_anchor_cluster_not_placed"
+        }
+      ]
+    }
+  ]
+}

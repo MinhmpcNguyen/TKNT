@@ -9,6 +9,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.deps import get_optional_current_user
+from config.demo_inventory import (
+    is_demo_inventory_tenant,
+    is_enabled_demo_inventory_tenant,
+)
 from db.models import AssetFile, UserAccount
 from db.pg_assets import PostgresAssetRepository
 from services.auth_service import get_shared_inventory_tenant_id
@@ -146,6 +150,10 @@ def get_inventory_file(
     asset = asset_repository.get_asset(asset_file.asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found.")
+    if is_demo_inventory_tenant(
+        str(asset.tenant_id)
+    ) and not is_enabled_demo_inventory_tenant(str(asset.tenant_id)):
+        raise HTTPException(status_code=404, detail="Asset file not found.")
     if not service.can_access_asset(user=current_user, asset=asset):
         raise HTTPException(status_code=403, detail="Access denied.")
 
@@ -171,6 +179,10 @@ def _load_inventory_items(
     style_tags: list[str] | None = None,
     service: UserContentService,
 ) -> list[InventoryItem]:
+    if is_demo_inventory_tenant(
+        shared_tenant_id
+    ) and not is_enabled_demo_inventory_tenant(shared_tenant_id):
+        return []
     try:
         persisted_assets = service.list_inventory_assets_for_user(
             user=current_user,

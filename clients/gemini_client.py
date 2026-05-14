@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Mapping, Sequence
 from threading import Lock
 from types import SimpleNamespace
@@ -21,6 +22,16 @@ class GeminiClient:
     _instance: ClassVar["GeminiClient | None"] = None
     _lock: ClassVar[Lock] = Lock()
     _capability_lock: ClassVar[Lock] = Lock()
+    _usage_lock: ClassVar[Lock] = Lock()
+    _usage_totals: ClassVar[dict[str, object]] = {
+        "request_count": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "by_model": {},
+        "retry_events": [],
+        "retry_summary": {},
+    }
     _thinking_level_unsupported_models: ClassVar[set[str]] = set()
     _known_thinking_level_unsupported_models: ClassVar[frozenset[str]] = frozenset(
         {
@@ -64,6 +75,89 @@ class GeminiClient:
     def get_model_name(self, key: LLMModelKey) -> str:
         return self._model_map[key].name
 
+    @classmethod
+    def reset_usage_totals(cls) -> None:
+        with cls._usage_lock:
+            cls._usage_totals = {
+                "request_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "by_model": {},
+                "retry_events": [],
+                "retry_summary": {},
+            }
+
+    @classmethod
+    def usage_totals(cls) -> dict[str, object]:
+        with cls._usage_lock:
+            by_model = cls._usage_totals.get("by_model")
+            retry_events = cls._usage_totals.get("retry_events")
+            retry_summary = cls._usage_totals.get("retry_summary")
+            return {
+                "request_count": int(cls._usage_totals.get("request_count") or 0),
+                "input_tokens": int(cls._usage_totals.get("input_tokens") or 0),
+                "output_tokens": int(cls._usage_totals.get("output_tokens") or 0),
+                "total_tokens": int(cls._usage_totals.get("total_tokens") or 0),
+                "by_model": dict(by_model) if isinstance(by_model, Mapping) else {},
+                "retry_events": list(retry_events)
+                if isinstance(retry_events, list)
+                else [],
+                "retry_summary": dict(retry_summary)
+                if isinstance(retry_summary, Mapping)
+                else {},
+            }
+
+    @classmethod
+    def record_retry_event(
+        cls,
+        *,
+        stage: str,
+        model_name: str | None,
+        reason: str,
+    ) -> None:
+        stage_name = str(stage or "unknown").strip() or "unknown"
+        reason_name = str(reason or "retry").strip() or "retry"
+        normalized_model_name = cls._normalize_model_name(
+            str(
+                model_name
+                or getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "")
+                or "unknown"
+            )
+        )
+        with cls._usage_lock:
+            retry_events = cls._usage_totals.get("retry_events")
+            if not isinstance(retry_events, list):
+                retry_events = []
+                cls._usage_totals["retry_events"] = retry_events
+
+            for event in retry_events:
+                if not isinstance(event, dict):
+                    continue
+                if (
+                    event.get("stage") == stage_name
+                    and event.get("model") == normalized_model_name
+                    and event.get("reason") == reason_name
+                ):
+                    event["count"] = int(event.get("count") or 0) + 1
+                    break
+            else:
+                retry_events.append(
+                    {
+                        "stage": stage_name,
+                        "model": normalized_model_name,
+                        "reason": reason_name,
+                        "count": 1,
+                    }
+                )
+
+            retry_summary = cls._usage_totals.get("retry_summary")
+            if not isinstance(retry_summary, dict):
+                retry_summary = {}
+                cls._usage_totals["retry_summary"] = retry_summary
+            summary_key = f"{stage_name}:{reason_name}"
+            retry_summary[summary_key] = int(retry_summary.get(summary_key) or 0) + 1
+
     def chat_completion(
         self,
         messages: Sequence[ChatMessage],
@@ -76,20 +170,28 @@ class GeminiClient:
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
+        response_schema: Mapping[str, object] | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
-        resolved_model_name = model_name or self.get_model_name(model_key)
+        strict_model_name = self._strict_single_text_model_name()
+        resolved_model_name = (
+            strict_model_name or model_name or self.get_model_name(model_key)
+        )
+        resolved_fallback_model_names = (
+            () if strict_model_name else fallback_model_names
+        )
         if tools is not None:
             return self._raw_tool_chat_completion(
                 messages,
                 model_name=resolved_model_name,
-                fallback_model_names=fallback_model_names,
+                fallback_model_names=resolved_fallback_model_names,
                 temperature=temperature,
                 top_p=top_p,
                 max_tokens=max_tokens,
                 thinking_level=thinking_level,
                 response_mime_type=response_mime_type,
+                response_schema=response_schema,
                 tools=tools,
                 tool_choice=tool_choice,
             )
@@ -97,12 +199,13 @@ class GeminiClient:
         data = self._post_chat_payload_with_failover(
             messages,
             model_name=resolved_model_name,
-            fallback_model_names=fallback_model_names,
+            fallback_model_names=resolved_fallback_model_names,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
             thinking_level=thinking_level,
             response_mime_type=response_mime_type,
+            response_schema=response_schema,
         )
         return self._to_openai_style_response(data)
 
@@ -176,31 +279,67 @@ class GeminiClient:
         return f"{self._base_url}/models/{model_name}:{action}"
 
     def _post_json(self, url: str, payload: Mapping[str, object]) -> dict[str, object]:
-        response = self._http_client.post(
-            url,
-            json=dict(payload),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": self._api_key,
-            },
-        )
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            error_text = response.text.strip()
-            detail = (
-                f"{exc}. Gemini response body: {error_text}" if error_text else str(exc)
+        last_decode_error: json.JSONDecodeError | None = None
+        last_response: httpx.Response | None = None
+        for attempt in range(2):
+            response = self._http_client.post(
+                url,
+                json=dict(payload),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self._api_key,
+                },
             )
-            raise httpx.HTTPStatusError(
-                detail,
-                request=exc.request,
-                response=exc.response,
-            ) from exc
+            last_response = response
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                error_text = response.text.strip()
+                detail = (
+                    f"{exc}. Gemini response body: {error_text}"
+                    if error_text
+                    else str(exc)
+                )
+                raise httpx.HTTPStatusError(
+                    detail,
+                    request=exc.request,
+                    response=exc.response,
+                ) from exc
 
-        data = response.json()
-        if not isinstance(data, dict):
-            raise ValueError("Gemini response must be a JSON object.")
-        return data
+            try:
+                data = response.json()
+            except json.JSONDecodeError as exc:
+                last_decode_error = exc
+                if attempt == 0:
+                    logger.warning(
+                        "Gemini returned malformed JSON body; retrying same request once. "
+                        "status=%s content_type=%s preview=%s",
+                        response.status_code,
+                        response.headers.get("content-type", ""),
+                        self._truncate_text(response.text),
+                    )
+                    continue
+                break
+            if not isinstance(data, dict):
+                raise ValueError("Gemini response must be a JSON object.")
+            return data
+
+        response_preview = (
+            self._truncate_text(last_response.text) if last_response is not None else ""
+        )
+        response_status = (
+            last_response.status_code if last_response is not None else "?"
+        )
+        response_content_type = (
+            last_response.headers.get("content-type", "")
+            if last_response is not None
+            else ""
+        )
+        raise ValueError(
+            "Gemini returned malformed JSON response body "
+            f"(status={response_status}, content_type={response_content_type}, "
+            f"preview={response_preview})"
+        ) from last_decode_error
 
     def _build_chat_payload(
         self,
@@ -211,6 +350,7 @@ class GeminiClient:
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
+        response_schema: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         contents = self._to_gemini_contents(messages)
         payload: dict[str, object] = {"contents": contents}
@@ -223,6 +363,8 @@ class GeminiClient:
             generation_config["maxOutputTokens"] = max_tokens
         if response_mime_type is not None:
             generation_config["responseMimeType"] = response_mime_type
+        if response_schema is not None:
+            generation_config["responseSchema"] = dict(response_schema)
         if thinking_level is not None:
             generation_config["thinkingConfig"] = {
                 "thinkingLevel": thinking_level,
@@ -241,6 +383,7 @@ class GeminiClient:
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
+        response_schema: Mapping[str, object] | None,
     ) -> dict[str, object]:
         applied_thinking_level = self._thinking_level_for_model(
             model_name,
@@ -253,17 +396,25 @@ class GeminiClient:
             max_tokens=max_tokens,
             thinking_level=applied_thinking_level,
             response_mime_type=response_mime_type,
+            response_schema=response_schema,
         )
         url = self._build_model_url(model_name, "generateContent")
 
         try:
-            return self._post_json(url, payload)
+            data = self._post_json(url, payload)
+            self._record_usage(model_name, data)
+            return data
         except httpx.HTTPStatusError as exc:
             if (
                 applied_thinking_level is None
                 or not self._is_thinking_level_unsupported_error(exc)
             ):
                 raise
+            self.record_retry_event(
+                stage="gemini_client",
+                model_name=model_name,
+                reason="thinking_level_unsupported_retry",
+            )
             self._mark_thinking_level_unsupported(model_name)
             retry_payload = self._build_chat_payload(
                 messages,
@@ -272,8 +423,11 @@ class GeminiClient:
                 max_tokens=max_tokens,
                 thinking_level=None,
                 response_mime_type=response_mime_type,
+                response_schema=response_schema,
             )
-            return self._post_json(url, retry_payload)
+            data = self._post_json(url, retry_payload)
+            self._record_usage(model_name, data)
+            return data
 
     def _post_chat_payload_with_failover(
         self,
@@ -286,6 +440,7 @@ class GeminiClient:
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
+        response_schema: Mapping[str, object] | None,
     ) -> dict[str, object]:
         candidate_models = self._fallback_model_sequence(
             model_name,
@@ -303,6 +458,7 @@ class GeminiClient:
                     max_tokens=max_tokens,
                     thinking_level=thinking_level,
                     response_mime_type=response_mime_type,
+                    response_schema=response_schema,
                 )
             except httpx.HTTPStatusError as exc:
                 if not self._is_retryable_model_unavailable_error(exc):
@@ -314,6 +470,11 @@ class GeminiClient:
                     "Gemini model fallback triggered after retryable 503 on %s; retrying with %s",
                     candidate_model_name,
                     candidate_models[index + 1],
+                )
+                self.record_retry_event(
+                    stage="gemini_client",
+                    model_name=candidate_model_name,
+                    reason="model_unavailable_fallback",
                 )
 
         if last_retryable_error is not None:
@@ -327,6 +488,13 @@ class GeminiClient:
         *,
         fallback_model_names: Sequence[str] | None = None,
     ) -> list[str]:
+        if os.getenv("TKNT_GEMINI_DISABLE_MODEL_FALLBACK", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            return [requested_model_name]
         normalized_requested = cls._normalize_model_name(requested_model_name)
         ordered_candidates = [requested_model_name]
         fallback_pool = (
@@ -343,6 +511,71 @@ class GeminiClient:
                 continue
             ordered_candidates.append(candidate_name)
         return ordered_candidates
+
+    @staticmethod
+    def _strict_single_text_model_name() -> str:
+        return str(getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or "").strip()
+
+    @classmethod
+    def _record_usage(cls, model_name: str, data: Mapping[str, object]) -> None:
+        usage = data.get("usageMetadata")
+        if not isinstance(usage, Mapping):
+            return
+        input_tokens = cls._usage_int(usage.get("promptTokenCount"))
+        output_tokens = cls._usage_int(usage.get("candidatesTokenCount"))
+        total_tokens = cls._usage_int(usage.get("totalTokenCount"))
+        normalized_model_name = cls._normalize_model_name(model_name)
+        with cls._usage_lock:
+            cls._usage_totals["request_count"] = (
+                int(cls._usage_totals.get("request_count") or 0) + 1
+            )
+            cls._usage_totals["input_tokens"] = (
+                int(cls._usage_totals.get("input_tokens") or 0) + input_tokens
+            )
+            cls._usage_totals["output_tokens"] = (
+                int(cls._usage_totals.get("output_tokens") or 0) + output_tokens
+            )
+            cls._usage_totals["total_tokens"] = (
+                int(cls._usage_totals.get("total_tokens") or 0) + total_tokens
+            )
+            by_model = cls._usage_totals.get("by_model")
+            if not isinstance(by_model, dict):
+                by_model = {}
+                cls._usage_totals["by_model"] = by_model
+            current = by_model.get(normalized_model_name)
+            if not isinstance(current, dict):
+                current = {
+                    "request_count": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                }
+                by_model[normalized_model_name] = current
+            current["request_count"] = int(current.get("request_count") or 0) + 1
+            current["input_tokens"] = (
+                int(current.get("input_tokens") or 0) + input_tokens
+            )
+            current["output_tokens"] = (
+                int(current.get("output_tokens") or 0) + output_tokens
+            )
+            current["total_tokens"] = (
+                int(current.get("total_tokens") or 0) + total_tokens
+            )
+
+    @staticmethod
+    def _usage_int(value: object) -> int:
+        if isinstance(value, bool):
+            return 0
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return 0
+        return 0
 
     @classmethod
     def _thinking_level_for_model(
@@ -490,6 +723,7 @@ class GeminiClient:
         max_tokens: int | None,
         thinking_level: ThinkingLevel | None,
         response_mime_type: str | None,
+        response_schema: Mapping[str, object] | None,
         tools: Sequence[dict[str, object]],
         tool_choice: dict[str, object] | str | None,
     ) -> object:
@@ -507,6 +741,7 @@ class GeminiClient:
             max_tokens=max_tokens,
             thinking_level=thinking_level,
             response_mime_type=response_mime_type,
+            response_schema=response_schema,
         )
         return self._to_openai_style_raw_response(data)
 
@@ -752,6 +987,13 @@ class GeminiClient:
             if isinstance(text, str):
                 texts.append(text)
         return "\n".join(texts).strip()
+
+    @staticmethod
+    def _truncate_text(text: str, limit: int = 600) -> str:
+        normalized = " ".join(text.split())
+        if len(normalized) <= limit:
+            return normalized
+        return f"{normalized[: limit - 3]}..."
 
     def _first_candidate(
         self, data: Mapping[str, object]

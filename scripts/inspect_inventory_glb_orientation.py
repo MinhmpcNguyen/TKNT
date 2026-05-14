@@ -103,6 +103,15 @@ def normalize_cardinal_offset(value: float) -> int:
     return normalized
 
 
+def normalize_quarter_turn_tilt(value: float) -> int:
+    normalized = int(round(value / 90.0) * 90) % 360
+    if normalized == 270:
+        return -90
+    if normalized in {0, 90, 180}:
+        return normalized
+    raise ValueError("Tilt correction must be one of -90, 0, 90, or 180 degrees.")
+
+
 def path_within(child: Path, parent: Path) -> bool:
     try:
         child.resolve().relative_to(parent.resolve())
@@ -169,6 +178,23 @@ def preview_override_offset(metadata: JsonObject) -> float | None:
     )
 
 
+def preview_override_tilt_deg(metadata: JsonObject, axis: str) -> float | None:
+    override = read_json_object(
+        metadata.get("preview_override") or metadata.get("previewOverride")
+    )
+    if override is None:
+        return None
+    if axis == "x":
+        return read_number(
+            override.get("rotation_deg_x") or override.get("rotationDegX")
+        )
+    if axis == "z":
+        return read_number(
+            override.get("rotation_deg_z") or override.get("rotationDegZ")
+        )
+    raise ValueError(f"Unsupported tilt axis: {axis}")
+
+
 class InventoryGlbOrientationInspector:
     def __init__(
         self,
@@ -224,6 +250,12 @@ class InventoryGlbOrientationInspector:
         if rotation_offset is None:
             raise ValueError("rotation_deg_offset is required.")
         normalized_offset = normalize_cardinal_offset(rotation_offset)
+        rotation_x_deg = normalize_quarter_turn_tilt(
+            read_number(payload.get("rotation_deg_x")) or 0.0
+        )
+        rotation_z_deg = normalize_quarter_turn_tilt(
+            read_number(payload.get("rotation_deg_z")) or 0.0
+        )
 
         contexts = [
             context.strip().lower()
@@ -238,6 +270,8 @@ class InventoryGlbOrientationInspector:
         updated_metadata = self._build_updated_metadata(
             metadata=variant.metadata,
             rotation_offset=normalized_offset,
+            rotation_x_deg=rotation_x_deg,
+            rotation_z_deg=rotation_z_deg,
             contexts=contexts,
             notes=notes,
         )
@@ -254,6 +288,8 @@ class InventoryGlbOrientationInspector:
             "asset_id": str(asset.id),
             "style_key": variant.style_key,
             "rotation_deg_offset": normalized_offset,
+            "rotation_deg_x": rotation_x_deg,
+            "rotation_deg_z": rotation_z_deg,
             "front_axis": MODEL_FRONT_AXIS_BY_OFFSET[normalized_offset],
             "contexts": contexts,
         }
@@ -422,6 +458,12 @@ class InventoryGlbOrientationInspector:
         )
         offset = preview_override_offset(metadata)
         normalized_offset = normalize_cardinal_offset(offset) if offset is not None else 0
+        rotation_x_deg = normalize_quarter_turn_tilt(
+            preview_override_tilt_deg(metadata, "x") or 0.0
+        )
+        rotation_z_deg = normalize_quarter_turn_tilt(
+            preview_override_tilt_deg(metadata, "z") or 0.0
+        )
         model_url = (
             "/api/model?"
             f"asset_id={quote(str(asset.id), safe='')}"
@@ -443,6 +485,8 @@ class InventoryGlbOrientationInspector:
             "local_path": str(variant.path),
             "base_rotation_deg": metadata_rotation_deg(metadata),
             "rotation_deg_offset": normalized_offset,
+            "rotation_deg_x": rotation_x_deg,
+            "rotation_deg_z": rotation_z_deg,
             "front_axis": MODEL_FRONT_AXIS_BY_OFFSET[normalized_offset],
             "preview_override": override,
             "preview_calibration": calibration,
@@ -454,6 +498,8 @@ class InventoryGlbOrientationInspector:
         *,
         metadata: JsonObject,
         rotation_offset: int,
+        rotation_x_deg: int,
+        rotation_z_deg: int,
         contexts: list[str],
         notes: str | None,
     ) -> JsonObject:
@@ -464,6 +510,8 @@ class InventoryGlbOrientationInspector:
         override["enabled"] = True
         override["contexts"] = contexts
         override["rotation_deg_offset"] = float(rotation_offset)
+        override["rotation_deg_x"] = float(rotation_x_deg)
+        override["rotation_deg_z"] = float(rotation_z_deg)
         override["notes"] = notes or "Manual GLB orientation review."
         updated["preview_override"] = override
         updated["orientation_review"] = {
@@ -471,6 +519,8 @@ class InventoryGlbOrientationInspector:
             "status": "reviewed",
             "front_axis": MODEL_FRONT_AXIS_BY_OFFSET[rotation_offset],
             "rotation_deg_offset": float(rotation_offset),
+            "rotation_deg_x": float(rotation_x_deg),
+            "rotation_deg_z": float(rotation_z_deg),
             "reference_front": "2D plan +Y / 3D scene -Z",
             "contexts": contexts,
             "notes": notes,

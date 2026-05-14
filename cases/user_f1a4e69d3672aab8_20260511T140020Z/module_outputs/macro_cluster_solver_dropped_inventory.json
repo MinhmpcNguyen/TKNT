@@ -1,0 +1,24 @@
+{
+  "status": "OK",
+  "total_dropped_items": 2,
+  "clusters": [
+    {
+      "cluster_id": "lounge_reading",
+      "items": [
+        {
+          "object_id": "floor_lamp",
+          "reason": "support_slot_failed"
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_core",
+      "items": [
+        {
+          "object_id": "bookshelf",
+          "reason": "support_slot_failed"
+        }
+      ]
+    }
+  ]
+}

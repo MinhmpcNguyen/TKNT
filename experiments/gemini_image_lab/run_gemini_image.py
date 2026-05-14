@@ -148,8 +148,8 @@ def build_payload(
     if image_path is not None:
         parts.append(
             {
-                "inline_data": {
-                    "mime_type": guess_mime_type(image_path),
+                "inlineData": {
+                    "mimeType": guess_mime_type(image_path),
                     "data": base64.b64encode(image_path.read_bytes()).decode("utf-8"),
                 }
             }

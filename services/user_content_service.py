@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from config.demo_inventory import is_enabled_demo_inventory_tenant
 from db.models import (
     Asset,
     AssetDimensions,
@@ -309,6 +310,26 @@ class UserContentService:
             user.id,
         )
 
+    def update_generated_render_meta(
+        self,
+        *,
+        user: UserAccount,
+        render_id: str,
+        meta_patch: dict[str, JsonValue],
+    ) -> GeneratedRender | None:
+        existing = self.get_generated_render(user=user, render_id=render_id)
+        if existing is None:
+            return None
+        merged_meta = {
+            **dict(existing.meta or {}),
+            **meta_patch,
+        }
+        return self._user_repository.update_generated_render_meta(
+            GeneratedRenderId(render_id),
+            user.id,
+            merged_meta,
+        )
+
     def save_snapshot_render_from_data_url(
         self,
         *,
@@ -320,12 +341,7 @@ class UserContentService:
         meta: dict[str, JsonValue] | None = None,
     ) -> GeneratedRender:
         mime_type, raw_bytes = _decode_data_url(image_data_url)
-        extension = _extension_for_mime_type(mime_type)
         render_id = GeneratedRenderId(f"render_{uuid.uuid4().hex}")
-        render_dir = self._content_root / "renders" / str(user.id)
-        render_dir.mkdir(parents=True, exist_ok=True)
-        render_path = render_dir / f"{render_id}{extension}"
-        render_path.write_bytes(raw_bytes)
 
         render = GeneratedRender(
             id=render_id,
@@ -334,7 +350,8 @@ class UserContentService:
             model_name=model_name,
             prompt=prompt,
             negative_prompt=negative_prompt,
-            storage_path=str(render_path),
+            storage_path=None,
+            image_bytes=raw_bytes,
             mime_type=mime_type,
             meta=meta or {},
         )
@@ -344,6 +361,8 @@ class UserContentService:
 
     def can_access_asset(self, *, user: UserAccount | None, asset: Asset) -> bool:
         if str(asset.tenant_id) == get_shared_inventory_tenant_id():
+            return True
+        if is_enabled_demo_inventory_tenant(str(asset.tenant_id)):
             return True
         if user is None:
             return False
@@ -424,6 +443,18 @@ class UserContentService:
             "file_url": file_url,
         }
 
+    def build_generated_render_data_url(self, render: GeneratedRender) -> str:
+        raw_bytes = self.read_generated_render_bytes(render)
+        image_base64 = base64.b64encode(raw_bytes).decode("ascii")
+        return f"data:{render.mime_type};base64,{image_base64}"
+
+    def read_generated_render_bytes(self, render: GeneratedRender) -> bytes:
+        if render.image_bytes is not None:
+            return render.image_bytes
+        if render.storage_path:
+            return Path(render.storage_path).read_bytes()
+        raise FileNotFoundError(f"Render {render.id} has no stored binary payload.")
+
     def _create_generated_render_from_file(
         self,
         *,
@@ -436,12 +467,8 @@ class UserContentService:
         mime_type: str,
         meta: dict[str, JsonValue],
     ) -> GeneratedRender:
-        render_dir = self._content_root / "renders" / str(user.id)
-        render_dir.mkdir(parents=True, exist_ok=True)
         render_id = GeneratedRenderId(f"render_{uuid.uuid4().hex}")
-        target_path = render_dir / f"{render_id}{source_path.suffix.lower() or '.png'}"
-        if source_path.resolve() != target_path.resolve():
-            shutil.copy2(source_path, target_path)
+        image_bytes = source_path.read_bytes()
 
         render = GeneratedRender(
             id=render_id,
@@ -450,7 +477,8 @@ class UserContentService:
             model_name=model_name,
             prompt=prompt,
             negative_prompt=negative_prompt,
-            storage_path=str(target_path),
+            storage_path=None,
+            image_bytes=image_bytes,
             mime_type=mime_type,
             meta=meta,
         )
@@ -481,14 +509,6 @@ def _decode_data_url(data_url: str) -> tuple[str, bytes]:
         return mime_type, base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ValueError("Invalid base64 payload in data URL.") from exc
-
-
-def _extension_for_mime_type(mime_type: str) -> str:
-    guessed = mimetypes.guess_extension(mime_type)
-    if guessed:
-        return guessed
-    return ".png"
-
 
 def _select_preferred_model_file(files: list[AssetFile]) -> AssetFile | None:
     def score(asset_file: AssetFile) -> int:

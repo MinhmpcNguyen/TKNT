@@ -258,6 +258,30 @@ def controlled_accessory_refill(
             notes=[],
         )
 
+    policy = _normalize_refill_policy(refill_policy, grid_mm=grid_mm)
+    if int(policy["max_refills_total"]) <= 0:
+        notes = ["Controlled Accessory Refill skipped because refill cap is zero."]
+        disabled_reason = str(policy.get("disabled_reason") or "").strip()
+        missing_types = policy.get("missing_request_object_types")
+        if disabled_reason:
+            notes.append(f"Disabled reason: {disabled_reason}.")
+        if isinstance(missing_types, list) and missing_types:
+            notes.append(
+                "Missing request object types before refill: "
+                f"{', '.join(str(item) for item in missing_types)}."
+            )
+        return layout, _accessory_refill_summary(
+            original_inventory=inventory,
+            eligible_inventory={},
+            inserted_by_cluster={},
+            remaining_by_cluster=inventory,
+            rejected_by_cluster={},
+            safe_zone_count=0,
+            quality_before=_quality_from_refined_solution(refined_layout_solution),
+            quality_after=_quality_from_refined_solution(refined_layout_solution),
+            notes=notes,
+        )
+
     room_polygon = _room_polygon(room_output)
     if room_polygon is None or Polygon is None or unary_union is None:
         rejected = {
@@ -290,7 +314,6 @@ def controlled_accessory_refill(
         for row in objects
         if isinstance(row.get("object_id"), str) and str(row.get("object_id")).strip()
     }
-    policy = _normalize_refill_policy(refill_policy, grid_mm=grid_mm)
     eligible_inventory, rejected_by_cluster = _filter_accessory_refill_inventory(
         inventory,
         allow_categories=set(policy["allow_categories"]),
@@ -453,7 +476,7 @@ def _normalize_refill_policy(
         allowed_categories = {"accessory", "decor"}
     return {
         "allow_categories": allowed_categories,
-        "max_refills_total": _positive_int(
+        "max_refills_total": _non_negative_int(
             policy.get("max_refills_total"),
             _CONTROLLED_REFILL_MAX_REFILLS_TOTAL,
         ),
@@ -481,7 +504,21 @@ def _normalize_refill_policy(
             policy.get("min_quality_gain_to_accept"),
             _CONTROLLED_REFILL_MIN_QUALITY_GAIN,
         ),
+        "disabled_reason": str(policy.get("disabled_reason") or ""),
+        "missing_request_object_types": list(
+            policy.get("missing_request_object_types") or []
+        )
+        if isinstance(policy.get("missing_request_object_types"), list)
+        else [],
     }
+
+
+def _non_negative_int(value: Any, default: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return int(default)
+    return number if number >= 0 else int(default)
 
 
 def _positive_int(value: Any, default: int) -> int:

@@ -11,6 +11,7 @@ into exactly one strict semantic_layout_program JSON object.
 Your role:
 - decide which candidate clusters should be active,
 - decide which bundles are indispensable, support-level, or optional,
+- assign each active cluster a macro layout role from the requested schema,
 - assign zone claims and avoid regions for each active cluster,
 - define sparse macro relation intents between active clusters,
 - define a controlled degradation order,
@@ -26,6 +27,8 @@ You must follow these rules:
 - Use only cluster ids, object types, region ids, and enum values present in the input.
 - Obey canonical rules, dominant anchors, required workflows, group caps, and group minimums.
 - Prefer core before support, and support before optional, unless the input strongly justifies otherwise.
+- Assign `priority`, `layout_role`, and `semantic_role` from the room type, brief, objects, and affordances.
+- Do not invent extra fields for macro layout role; use the requested `layout_role` field.
 - Prefer region/topology logic over vague pairwise relations.
 - Keep relation intents sparse and high-value.
 - Keep outputs machine-readable, normalized, and concise.
@@ -60,6 +63,7 @@ Return this exact top-level shape:
   "active_clusters": [
     {
       "cluster_id": "string",
+      "layout_role": "primary|secondary|support|optional",
       "priority": "core|support|optional",
       "activation_reason": "string",
       "semantic_role": "string",
@@ -179,6 +183,8 @@ Rules:
 - Do not output coordinates, placements, exact quantities, exact size tiers, or geometry edits.
 - Activate only clusters that are supported by rules, inventory, and room affordance.
 - Preserve dominant anchors and required workflows.
+- Set `layout_role` for every active cluster using only the enum values in the schema.
+- Let room_type and the brief inform `layout_role`; do not add prose-only role labels outside the schema.
 - Use zone_claims to express spatial logic first; use relation_intents only for high-value macro relationships.
 - Keep relation_intents sparse. Do not add redundant pairwise relations.
 - Keep degradation semantic: drop optional before support, support before core, unless explicit rules say otherwise.

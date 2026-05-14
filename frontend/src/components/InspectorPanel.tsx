@@ -10,6 +10,7 @@ export const InspectorPanel: React.FC = () => {
     selectedOpeningId,
     selectedOpeningType,
     updateWall,
+    updateOpening,
     updatePlacement,
     removeWall,
     removePlacement,
@@ -36,11 +37,12 @@ export const InspectorPanel: React.FC = () => {
     );
   }
 
-  if (opening && selectedOpeningType) {
+  if (opening && selectedOpeningType && selectedOpeningId) {
     const length = Math.hypot(
       opening.end_mm.x - opening.start_mm.x,
       opening.end_mm.y - opening.start_mm.y,
     );
+    const openingId = selectedOpeningId;
     return (
       <aside className="panel inspector-panel">
         <h3>Inspector</h3>
@@ -52,12 +54,24 @@ export const InspectorPanel: React.FC = () => {
           <label>Length (mm)</label>
           <div className="inspector-readonly">{Math.round(length)}</div>
         </div>
+        <div className="inspector-row">
+          <label>Color</label>
+          <input
+            type="color"
+            value={opening.color_hex ?? (selectedOpeningType === 'door' ? '#8c7a63' : '#c0c0c0')}
+            onChange={(evt) =>
+              updateOpening(selectedOpeningType, openingId, {
+                color_hex: evt.target.value,
+              })
+            }
+          />
+        </div>
         <button
           className="danger"
           onClick={() =>
             removeOpening(
               selectedOpeningType,
-              selectedOpeningType === 'door' ? (opening as any).door_id : (opening as any).window_id,
+              openingId,
             )
           }
         >
@@ -83,6 +97,18 @@ export const InspectorPanel: React.FC = () => {
         <div className="inspector-row">
           <label>Length (mm)</label>
           <div className="inspector-readonly">{Math.round(lengthMm)}</div>
+        </div>
+        <div className="inspector-row">
+          <label>Color</label>
+          <input
+            type="color"
+            value={wall.color_hex ?? '#555555'}
+            onChange={(evt) =>
+              updateWall(wall.wall_id, {
+                color_hex: evt.target.value,
+              })
+            }
+          />
         </div>
         <div className="inspector-row">
           <label>Opacity</label>
@@ -210,6 +236,32 @@ export const InspectorPanel: React.FC = () => {
             })
           }
         />
+        <div className="inspector-button-row">
+          <button
+            disabled={isLockedPlacement}
+            onClick={() =>
+              updatePlacement({
+                ...placement,
+                rotation_deg: placement.rotation_deg - 90,
+              })
+            }
+            type="button"
+          >
+            Rotate -90
+          </button>
+          <button
+            disabled={isLockedPlacement}
+            onClick={() =>
+              updatePlacement({
+                ...placement,
+                rotation_deg: placement.rotation_deg + 90,
+              })
+            }
+            type="button"
+          >
+            Rotate +90
+          </button>
+        </div>
       </div>
       <div className="inspector-row">
         <label>Color</label>

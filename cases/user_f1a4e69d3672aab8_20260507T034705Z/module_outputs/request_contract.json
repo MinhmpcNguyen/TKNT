@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "source": "brief_text_heuristic",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": null,
+      "evidence": "keep the layout clean and minimal with clear circulation from the door to the bed",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    }
+  ],
+  "groups": [],
+  "notes": [
+    "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+  ]
+}

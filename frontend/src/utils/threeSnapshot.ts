@@ -27,6 +27,8 @@ export type SnapshotScreenBboxPx = {
 
 export type SnapshotObjectRecord = {
   id: string;
+  assetId?: string | null;
+  rawAssetId?: string | null;
   type: string;
   colorHex: string;
   material: string | null;

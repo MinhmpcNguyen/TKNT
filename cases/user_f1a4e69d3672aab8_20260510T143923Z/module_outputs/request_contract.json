@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "source": "brief_text_heuristic",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a bed",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "ceiling_lamp",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": null,
+      "evidence": "ceiling light",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "wardrobe on a solid wall",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "two nightstands if they fit",
+      "reason": "requested as a viable target, not a hard requirement",
+      "available_in_program": true
+    }
+  ],
+  "groups": [],
+  "notes": [
+    "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+  ]
+}

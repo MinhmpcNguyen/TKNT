@@ -29,9 +29,9 @@ from stylist.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 logger = logging.getLogger(__name__)
 
 try:
-    from config.gemini_config import GeminiConfig
+    from config.llm_config import TextLLMConfig
 except Exception:  # pragma: no cover
-    GeminiConfig = None  # type: ignore[assignment]
+    TextLLMConfig = None  # type: ignore[assignment]
 
 
 _STYLE_VARIANT_MODEL_NAMES = (
@@ -44,6 +44,12 @@ _STYLE_VARIANT_MODEL_NAMES = (
 
 
 def stylist_model_name_for_variant(variant_index: int) -> str:
+    strict_model_name = _strict_single_model_name()
+    if strict_model_name:
+        return strict_model_name
+    configured_model_name = _configured_agent_model_name("stylist")
+    if configured_model_name:
+        return configured_model_name
     safe_index = max(1, int(variant_index))
     return _STYLE_VARIANT_MODEL_NAMES[
         (safe_index - 1) % len(_STYLE_VARIANT_MODEL_NAMES)
@@ -491,38 +497,59 @@ def _generate_style_plan(
     *,
     model_name: str | None = None,
 ) -> dict[str, Any]:
-    client = get_llm_client(provider="gemini")
+    client = get_llm_client()
     attempted_models: list[str] = []
     last_retryable_error: Exception | None = None
 
     for candidate_model_name in _style_plan_model_attempt_order(model_name):
         attempted_models.append(candidate_model_name)
+        candidate_messages = list(messages)
         try:
-            response = client.chat_completion(
-                messages,
-                model_key="primary",
-                model_name=candidate_model_name,
-                temperature=0.35,
-                max_tokens=1800,
-                thinking_level="medium",
-            )
-            content = _extract_content_from_response(response)
-            parsed = _try_parse_json_object(content)
-            if parsed is not None and _is_style_plan_shape(parsed):
-                return parsed
-            last_retryable_error = ValueError(
-                f"Stylist returned invalid JSON: {_truncate_text(content, max_len=300)}"
-            )
-            logger.warning(
-                "Stylist model %s returned invalid JSON; retrying with the next model.",
-                candidate_model_name,
-            )
-            continue
+            for attempt in range(2):
+                response = client.chat_completion(
+                    candidate_messages,
+                    model_key="primary",
+                    model_name=candidate_model_name,
+                    fallback_model_names=(),
+                    temperature=0.35,
+                    max_tokens=2200,
+                    thinking_level="medium",
+                    response_mime_type="application/json",
+                )
+                content = _extract_content_from_response(response)
+                parsed = _try_parse_json_object(content)
+                if parsed is not None and _is_style_plan_shape(parsed):
+                    return parsed
+                last_retryable_error = ValueError(
+                    "Stylist returned invalid JSON: "
+                    f"{_truncate_text(content, max_len=300)}"
+                )
+                if attempt == 1:
+                    logger.warning(
+                        "Stylist model %s returned invalid JSON after repair.",
+                        candidate_model_name,
+                    )
+                    break
+                _record_llm_retry(
+                    stage="stylist.style_plan",
+                    model_name=candidate_model_name,
+                    reason="invalid_json_or_schema",
+                )
+                candidate_messages.append({"role": "assistant", "content": content})
+                candidate_messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Return exactly one valid JSON object matching the style "
+                            "plan shape. No markdown. No prose outside JSON."
+                        ),
+                    }
+                )
         except Exception as exc:
             if _is_retryable_model_unavailable_error(exc):
                 last_retryable_error = exc
                 logger.warning(
-                    "Stylist model %s is temporarily unavailable; retrying with the next model. Error: %s",
+                    "Stylist model %s is temporarily unavailable; moving to the next configured model if available. Error: %s",
                     candidate_model_name,
                     exc,
                 )
@@ -540,13 +567,21 @@ def _generate_style_plan(
 
 
 def _style_plan_model_attempt_order(model_name: str | None) -> list[str]:
-    configured_model_name = (
-        GeminiConfig.AGENT_MODELS.get("stylist") if GeminiConfig is not None else None
-    )
+    strict_model_name = _strict_single_model_name()
+    if strict_model_name:
+        return [strict_model_name]
+    configured_model_name = _configured_agent_model_name("stylist")
     requested_model_name = str(model_name or configured_model_name or "").strip()
-    sequence = list(_STYLE_VARIANT_MODEL_NAMES)
+    sequence = (
+        list(_STYLE_VARIANT_MODEL_NAMES)
+        if TextLLMConfig is None or TextLLMConfig.PROVIDER == "gemini"
+        else []
+    )
     if not requested_model_name:
-        return sequence
+        primary_model_name = (
+            TextLLMConfig.primary_model_name() if TextLLMConfig is not None else ""
+        )
+        return sequence or ([primary_model_name] if primary_model_name else [])
     if requested_model_name in sequence:
         start_index = sequence.index(requested_model_name)
         return sequence[start_index:] + sequence[:start_index]
@@ -554,6 +589,33 @@ def _style_plan_model_attempt_order(model_name: str | None) -> list[str]:
         requested_model_name,
         *[name for name in sequence if name != requested_model_name],
     ]
+
+
+def _strict_single_model_name() -> str:
+    if TextLLMConfig is None:
+        return ""
+    return str(getattr(TextLLMConfig, "STRICT_SINGLE_TEXT_MODEL", "") or "").strip()
+
+
+def _configured_agent_model_name(key: str) -> str | None:
+    if TextLLMConfig is None:
+        return None
+    return TextLLMConfig.agent_model(key)
+
+
+def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
+    if TextLLMConfig is None or getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
+        return
+    try:
+        from clients.gemini_client import GeminiClient
+
+        GeminiClient.record_retry_event(
+            stage=stage,
+            model_name=model_name,
+            reason=reason,
+        )
+    except Exception:
+        logger.debug("Failed to record Gemini retry event.", exc_info=True)
 
 
 def _is_retryable_model_unavailable_error(exc: Exception) -> bool:
@@ -968,7 +1030,7 @@ def _run_with_tools(
     user_context_json: dict[str, Any] | None,
     max_steps: int = 10,
 ) -> str:
-    client = get_llm_client(provider="gemini")
+    client = get_llm_client()
 
     surface_requirements = _compute_surface_requirements(layout_json)
     required_types = surface_requirements.get("required_types") or []
@@ -998,8 +1060,8 @@ def _run_with_tools(
                 messages,
                 model_key="primary",
                 model_name=(
-                    GeminiConfig.AGENT_MODELS.get("stylist")
-                    if GeminiConfig is not None
+                    TextLLMConfig.agent_model("stylist")
+                    if TextLLMConfig is not None
                     else None
                 ),
                 temperature=0.0,

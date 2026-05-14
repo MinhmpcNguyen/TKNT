@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260425T095136Z",
+  "stage": "error",
+  "updated_at_utc": "2026-04-25T09:52:16.085214+00:00",
+  "error": "Expecting value: line 284 column 13 (char 8547)",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-04-25T09:51:36.530022+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-04-25T09:52:16.084514+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "Expecting value: line 284 column 13 (char 8547)",
+      "updated_at_utc": "2026-04-25T09:52:16.085214+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "Expecting value: line 284 column 13 (char 8547)"
+    }
+  ]
+}

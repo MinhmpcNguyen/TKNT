@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   AuthUser,
   DesignPlanV1,
+  Door,
   FloorplanGeometry,
   GeneratedRenderRecord,
   InventoryItem,
@@ -12,8 +13,26 @@ import {
   TemplateItem,
   Violation,
   Wall,
+  Window,
 } from './types';
 import { normalizePoints } from './utils/geometry';
+import { getWorldBboxFromPlacement } from './utils/styledLayout';
+
+const DEFAULT_SHARED_TENANT_ID = 'demo_tenant';
+const DEMO_INVENTORY_TENANT_ID = 'demo_inventory_test';
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on']);
+
+const isDemoInventoryEnabled = () => {
+  const raw =
+    (import.meta as any).env?.TKNT_DEMO_INVENTORY_ENABLED ??
+    (import.meta as any).env?.VITE_TKNT_DEMO_INVENTORY_ENABLED ??
+    '';
+  return TRUE_ENV_VALUES.has(String(raw).trim().toLowerCase());
+};
+
+const DEFAULT_TENANT_ID = isDemoInventoryEnabled()
+  ? DEMO_INVENTORY_TENANT_ID
+  : DEFAULT_SHARED_TENANT_ID;
 
 export type UserInput = {
   description: string;
@@ -66,6 +85,8 @@ export type EditorState = {
   threeDOpen: boolean;
   savedLayouts: SavedLayoutRecord[];
   savedRenders: GeneratedRenderRecord[];
+  activeRootLayoutId: string | null;
+  selectedSavedRenderId: string | null;
   setTenantId: (tenantId: string) => void;
   setAuthResolved: (resolved: boolean) => void;
   setAuthSession: (token: string, user: AuthUser) => void;
@@ -94,6 +115,11 @@ export type EditorState = {
   selectWall: (wallId: string | null) => void;
   selectOpening: (type: 'door' | 'window' | null, id?: string | null) => void;
   updateWall: (wallId: string, patch: Partial<Wall>) => void;
+  updateOpening: (
+    type: 'door' | 'window',
+    id: string,
+    patch: Partial<Door & Window>
+  ) => void;
   removeWall: (wallId: string) => void;
   updatePlacement: (placement: Placement) => void;
   removePlacement: (placementId: string) => void;
@@ -113,10 +139,12 @@ export type EditorState = {
   setSavedLayouts: (layouts: SavedLayoutRecord[]) => void;
   setSavedRenders: (renders: GeneratedRenderRecord[]) => void;
   upsertSavedRender: (render: GeneratedRenderRecord) => void;
+  setActiveRootLayoutId: (layoutId: string | null) => void;
+  selectSavedRender: (renderId: string | null) => void;
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  tenantId: 'demo_tenant',
+  tenantId: DEFAULT_TENANT_ID,
   authResolved: false,
   authToken: null,
   currentUser: null,
@@ -164,6 +192,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   threeDOpen: false,
   savedLayouts: [],
   savedRenders: [],
+  activeRootLayoutId: null,
+  selectedSavedRenderId: null,
   setTenantId: (tenantId) => set({ tenantId }),
   setAuthResolved: (authResolved) => set({ authResolved }),
   setAuthSession: (authToken, currentUser) =>
@@ -177,9 +207,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       authResolved: true,
       authToken: null,
       currentUser: null,
-      tenantId: 'demo_tenant',
+      tenantId: DEFAULT_TENANT_ID,
       savedLayouts: [],
       savedRenders: [],
+      activeRootLayoutId: null,
+      selectedSavedRenderId: null,
       inventory: [],
     }),
   setFloorplan: (floorplan) => {
@@ -357,6 +389,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         : state.design,
     });
   },
+  updateOpening: (type, id, patch) => {
+    const state = get();
+    const floorplan = state.floorplan ?? state.design?.floorplan_geometry ?? null;
+    if (!floorplan) return;
+    const nextFloorplan: FloorplanGeometry = {
+      ...floorplan,
+      openings: {
+        doors:
+          type === 'door'
+            ? floorplan.openings.doors.map((door) =>
+                door.door_id === id ? { ...door, ...patch } : door
+              )
+            : floorplan.openings.doors,
+        windows:
+          type === 'window'
+            ? floorplan.openings.windows.map((window) =>
+                window.window_id === id
+                  ? { ...window, ...patch }
+                  : window
+              )
+            : floorplan.openings.windows,
+      },
+    };
+    set({
+      floorplan: state.floorplan ? nextFloorplan : state.floorplan,
+      design: state.design
+        ? {
+            ...state.design,
+            floorplan_geometry: nextFloorplan,
+          }
+        : state.design,
+    });
+  },
   removeWall: (wallId) => {
     const state = get();
     const floorplan = state.floorplan ?? state.design?.floorplan_geometry ?? null;
@@ -377,17 +442,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
   updatePlacement: (placement) => {
-    const design = get().design;
+    const state = get();
+    const design = state.design;
     if (!design) return;
-    const floorplan = get().floorplan ?? design.floorplan_geometry ?? null;
+    const floorplan = state.floorplan ?? design.floorplan_geometry ?? null;
     const next = floorplan ? clampPlacementToFloorplan(placement, floorplan) : placement;
     const placements = design.placements.map((p) => (p.placement_id === next.placement_id ? next : p));
-    set({ design: { ...design, placements } });
+    set({
+      design: { ...design, placements },
+      styledResult: syncStyledResultPlacement(state.styledResult, next),
+    });
   },
   removePlacement: (placementId) => {
-    const design = get().design;
+    const state = get();
+    const design = state.design;
     if (!design) return;
-    set({ design: { ...design, placements: design.placements.filter((p) => p.placement_id !== placementId) } });
+    set({
+      design: {
+        ...design,
+        placements: design.placements.filter((p) => p.placement_id !== placementId),
+      },
+      styledResult: removePlacementFromStyledResult(state.styledResult, placementId),
+      selectedPlacementId:
+        state.selectedPlacementId === placementId ? null : state.selectedPlacementId,
+    });
   },
   removeOpening: (type, id) => {
     const floorplan = get().floorplan;
@@ -441,7 +519,110 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const next = [render, ...state.savedRenders.filter((item) => item.id !== render.id)];
       return { savedRenders: next };
     }),
+  setActiveRootLayoutId: (activeRootLayoutId) => set({ activeRootLayoutId }),
+  selectSavedRender: (selectedSavedRenderId) => set({ selectedSavedRenderId }),
 }));
+
+function syncStyledResultPlacement(
+  styledResult: unknown,
+  placement: Placement
+): unknown {
+  if (
+    !styledResult ||
+    typeof styledResult !== 'object' ||
+    !Array.isArray((styledResult as { objects?: unknown[] }).objects)
+  ) {
+    return styledResult;
+  }
+
+  const nextStyledResult = {
+    ...(styledResult as Record<string, unknown>),
+  };
+  const worldBbox = getWorldBboxFromPlacement(placement);
+  nextStyledResult.objects = (styledResult as { objects: unknown[] }).objects.map((item) => {
+    if (!item || typeof item !== 'object') {
+      return item;
+    }
+    const objectRow = item as Record<string, unknown>;
+    const objectId =
+      typeof objectRow.instance_id === 'string'
+        ? objectRow.instance_id
+        : typeof objectRow.id === 'string'
+          ? objectRow.id
+          : readStyledResultManualPlacementId(objectRow);
+    if (objectId !== placement.placement_id) {
+      return item;
+    }
+    const existingManualInput =
+      objectRow.manual_input && typeof objectRow.manual_input === 'object'
+        ? (objectRow.manual_input as Record<string, unknown>)
+        : {};
+    return {
+      ...objectRow,
+      object_type: placement.category,
+      color_hex: placement.color_hex,
+      rotation_ccw: ((placement.rotation_deg % 360) + 360) % 360,
+      front_world: placement.front_world ?? null,
+      front_side_world: placement.front_side_world ?? null,
+      front_side_local: placement.front_side_local ?? null,
+      bbox: {
+        min_x: worldBbox.minX,
+        min_y: worldBbox.minY,
+        max_x: worldBbox.maxX,
+        max_y: worldBbox.maxY,
+      },
+      manual_input: {
+        ...existingManualInput,
+        ...placement,
+      },
+    };
+  });
+  return nextStyledResult;
+}
+
+function removePlacementFromStyledResult(
+  styledResult: unknown,
+  placementId: string
+): unknown {
+  if (
+    !styledResult ||
+    typeof styledResult !== 'object' ||
+    !Array.isArray((styledResult as { objects?: unknown[] }).objects)
+  ) {
+    return styledResult;
+  }
+
+  const nextStyledResult = {
+    ...(styledResult as Record<string, unknown>),
+  };
+  nextStyledResult.objects = (styledResult as { objects: unknown[] }).objects.filter(
+    (item) => {
+      if (!item || typeof item !== 'object') {
+        return true;
+      }
+      const objectRow = item as Record<string, unknown>;
+      const objectId =
+        typeof objectRow.instance_id === 'string'
+          ? objectRow.instance_id
+          : typeof objectRow.id === 'string'
+            ? objectRow.id
+            : readStyledResultManualPlacementId(objectRow);
+      return objectId !== placementId;
+    }
+  );
+  return nextStyledResult;
+}
+
+function readStyledResultManualPlacementId(
+  objectRow: Record<string, unknown>
+): string | null {
+  const manualInput = objectRow.manual_input;
+  if (!manualInput || typeof manualInput !== 'object') {
+    return null;
+  }
+  const placementId = (manualInput as Record<string, unknown>).placement_id;
+  return typeof placementId === 'string' && placementId.trim() ? placementId : null;
+}
 
 function polygonArea(points: Point[]): number {
   if (points.length < 3) return 0;

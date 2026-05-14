@@ -11,6 +11,11 @@ import {
 const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:8001';
 const AUTH_TOKEN_STORAGE_KEY = 'tknt.authToken';
 
+export type SnapshotImageSceneReferenceMode =
+  | 'none'
+  | 'target_layout_with_scene_reference'
+  | 'scene_reference_camera_transfer';
+
 export type AuthSessionResponse = {
   access_token: string;
   token_type: 'bearer';
@@ -61,6 +66,12 @@ export type SnapshotImageRenderResult = {
     layout_reference_enabled: boolean;
     layout_reference_used: boolean;
     layout_reference_image_mime_type?: string | null;
+    annotated_reference_used?: boolean;
+    annotated_reference_image_mime_type?: string | null;
+    scene_reference_mode?: SnapshotImageSceneReferenceMode;
+    scene_reference_used?: boolean;
+    reference_only_camera_transfer_used?: boolean;
+    scene_reference_image_mime_type?: string | null;
     reference_image_count?: number;
     edit_operations?: SnapshotImageEditOperationSummary[];
   };
@@ -69,6 +80,7 @@ export type SnapshotImageRenderResult = {
     image_base64: string;
     data_url: string;
     size: string;
+    quality?: string;
     aspect_ratio: string;
     raw_response: Record<string, unknown>;
   };
@@ -89,6 +101,11 @@ export type SnapshotImageRenderResult = {
 export type SnapshotImageRenderApiResponse = {
   render: SnapshotImageRenderResult;
   saved_render?: GeneratedRenderRecord | null;
+};
+
+export type GeneratedRenderDetailResponse = {
+  render: GeneratedRenderRecord;
+  image_data_url: string;
 };
 
 export type SnapshotImagePresetOption = {
@@ -112,6 +129,14 @@ export type SnapshotImagePresetSelection = {
 export type SnapshotImageEditOperation = {
   object_id: string;
   object_name?: string | null;
+  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | null;
+  prompt?: string | null;
+  bbox_norm?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   replacement_image_data_url?: string | null;
   target_color?: string | null;
 };
@@ -119,6 +144,9 @@ export type SnapshotImageEditOperation = {
 export type SnapshotImageEditOperationSummary = {
   object_id: string;
   object_name?: string | null;
+  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | null;
+  prompt?: string | null;
+  bbox_provided?: boolean;
   replacement_image_provided?: boolean;
   target_color?: string | null;
 };
@@ -636,9 +664,13 @@ export async function renderSnapshotImage(
     snapshotPayload: Record<string, unknown>;
     snapshotImageDataUrl: string;
     layoutReferenceImageDataUrl?: string | null;
+    annotatedReferenceImageDataUrl?: string | null;
+    sceneReferenceImageDataUrl?: string | null;
+    sceneReferenceMode?: SnapshotImageSceneReferenceMode;
     userPrompt: string;
     renderMode?: 'generate' | 'edit';
     presetSelection?: SnapshotImagePresetSelection;
+    rootLayoutId?: string | null;
     editOperations?: SnapshotImageEditOperation[];
     editSourceImageDataUrl?: string | null;
   },
@@ -653,9 +685,15 @@ export async function renderSnapshotImage(
         snapshot_image_data_url: request.snapshotImageDataUrl,
         layout_reference_image_data_url:
           request.layoutReferenceImageDataUrl ?? null,
+        annotated_reference_image_data_url:
+          request.annotatedReferenceImageDataUrl ?? null,
+        scene_reference_image_data_url:
+          request.sceneReferenceImageDataUrl ?? null,
+        scene_reference_mode: request.sceneReferenceMode ?? 'none',
         user_prompt: request.userPrompt,
         render_mode: request.renderMode ?? 'generate',
         preset_selection: request.presetSelection ?? {},
+        root_layout_id: request.rootLayoutId ?? null,
         edit_operations: request.editOperations ?? [],
         edit_source_image_data_url: request.editSourceImageDataUrl ?? null,
       }),
@@ -692,6 +730,47 @@ export async function listSavedLayouts(token?: string | null): Promise<SavedLayo
     {},
     { token, fallbackError: 'Failed to load saved layouts' }
   );
+}
+
+export async function getGeneratedRenderDetail(
+  renderId: string,
+  token?: string | null
+): Promise<GeneratedRenderDetailResponse> {
+  const response = await requestJson<GeneratedRenderDetailResponse>(
+    `/account/renders/${renderId}`,
+    {},
+    { token, fallbackError: 'Failed to load saved render' }
+  );
+  return {
+    ...response,
+    render: {
+      ...response.render,
+      file_url: appendAccessToken(response.render.file_url, token),
+    },
+  };
+}
+
+export async function updateGeneratedRenderMeta(
+  renderId: string,
+  meta: Record<string, unknown>,
+  token?: string | null
+): Promise<GeneratedRenderRecord> {
+  const response = await requestJson<GeneratedRenderRecord>(
+    `/account/renders/${encodeURIComponent(renderId)}/meta`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ meta }),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to update saved render metadata',
+    }
+  );
+  return {
+    ...response,
+    file_url: appendAccessToken(response.file_url, token),
+  };
 }
 
 export async function createSavedLayout(

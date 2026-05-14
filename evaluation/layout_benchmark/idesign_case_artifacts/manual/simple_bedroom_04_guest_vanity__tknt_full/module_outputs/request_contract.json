@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "source": "brief_text_heuristic",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "with a comfortable bed",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "ceiling_lamp",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "and a ceiling lamp",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "chair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a small desk or vanity with a chair",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "desk",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a small desk or vanity with a chair",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "one or two nightstands",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a rug",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a wardrobe",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    }
+  ],
+  "groups": [],
+  "notes": [
+    "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+  ]
+}

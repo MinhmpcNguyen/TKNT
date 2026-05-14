@@ -36,6 +36,8 @@ cases/*tenant_*/
 # Secrets (do not commit)
 .env
 .env.*
+gemini.env
+hidden.env
 openai_key.txt
 private_key.enc
 *.pem

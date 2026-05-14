@@ -1,0 +1,24 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260501T030550Z",
+  "stage": "error",
+  "updated_at_utc": "2026-05-01T03:06:12.845181+00:00",
+  "error": "Expecting property name enclosed in double quotes: line 2 column 27 (char 28)",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-01T03:05:50.040844+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "Expecting property name enclosed in double quotes: line 2 column 27 (char 28)",
+      "updated_at_utc": "2026-05-01T03:06:12.845181+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "Expecting property name enclosed in double quotes: line 2 column 27 (char 28)"
+    }
+  ]
+}

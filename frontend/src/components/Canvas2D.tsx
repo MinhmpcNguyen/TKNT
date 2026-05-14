@@ -1074,21 +1074,38 @@ export const Canvas2D: React.FC = () => {
             </Group>
           )}
           {isSelected && !isLocked && (
-            <Circle
-              x={w / 2 + 10}
-              y={0}
-              radius={8}
-              fill="#fff"
-              stroke="#333"
-              strokeWidth={1}
-              draggable
-              onDragMove={(evt) => {
-                const localX = evt.target.x();
-                const localY = evt.target.y();
-                const rad = Math.atan2(localY, localX);
-                updatePlacement({ ...placement, rotation_deg: (rad * 180) / Math.PI });
-              }}
-            />
+            <>
+              <Line
+                points={[0, 0, w / 2 + 18, 0]}
+                stroke="rgba(51, 51, 51, 0.45)"
+                strokeWidth={1.5}
+                dash={[5, 5]}
+                listening={false}
+              />
+              <Text
+                text="Rotate"
+                x={w / 2 + 24}
+                y={-8}
+                fontSize={11}
+                fill="#6d665c"
+                listening={false}
+              />
+              <Circle
+                x={w / 2 + 18}
+                y={0}
+                radius={10}
+                fill="#fff7eb"
+                stroke="#a46a2a"
+                strokeWidth={2}
+                draggable
+                onDragMove={(evt) => {
+                  const localX = evt.target.x();
+                  const localY = evt.target.y();
+                  const rad = Math.atan2(localY, localX);
+                  updatePlacement({ ...placement, rotation_deg: (rad * 180) / Math.PI });
+                }}
+              />
+            </>
           )}
         </Group>
       );

@@ -56,12 +56,16 @@ class ClusterRelationPlanner:
         room_model_json: dict[str, Any],
         clusters_json: dict[str, Any],
         target_count: int = 5,
+        description: str | None = None,
+        special_notes: str | None = None,
     ) -> dict[str, Any]:
         t0 = perf_counter()
         bundle = SeedConceptGenerator().generate_bundle(
             room_model_json=room_model_json,
             clusters_json=clusters_json,
             target_count=target_count,
+            description=description,
+            special_notes=special_notes,
         )
         logger.info(
             "ClusterRelationPlanner wrapper generated %s concepts in %.2fs",

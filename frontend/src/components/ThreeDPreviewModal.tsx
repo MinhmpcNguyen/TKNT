@@ -55,8 +55,21 @@ type ObjectVisualDiagnostic = {
     | 'proxy_model_load_error';
   reason: string;
 };
+type OrbitControlLike = {
+  minDistance: number;
+  maxDistance: number;
+  zoomSpeed: number;
+  enableDamping: boolean;
+  dampingFactor: number;
+  minTargetRadius?: number;
+  maxTargetRadius?: number;
+};
 
 const MM_TO_M = 0.001;
+const MAX_RENDERER_PIXEL_RATIO = 2;
+const ORBIT_MIN_DISTANCE_M = 0.35;
+const ORBIT_MAX_DISTANCE_ROOM_MULTIPLIER = 1.8;
+const ORBIT_MAX_TARGET_RADIUS_ROOM_MULTIPLIER = 1.35;
 const REFILL_ASSET_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
 
 function defaultHeightMm(type: string): number {
@@ -74,6 +87,36 @@ function defaultHeightMm(type: string): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function configureRoomOrbitControls(
+  controls: OrbitControlLike,
+  roomMaxDimM: number
+): void {
+  const safeRoomMaxDimM = Math.max(1, Number.isFinite(roomMaxDimM) ? roomMaxDimM : 1);
+  const minDistanceM = Math.max(
+    ORBIT_MIN_DISTANCE_M,
+    Math.min(0.8, safeRoomMaxDimM * 0.06)
+  );
+
+  controls.minDistance = minDistanceM;
+  controls.maxDistance = Math.max(
+    minDistanceM * 4,
+    safeRoomMaxDimM * ORBIT_MAX_DISTANCE_ROOM_MULTIPLIER
+  );
+  controls.zoomSpeed = 0.65;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  if ('minTargetRadius' in controls) {
+    controls.minTargetRadius = 0;
+  }
+  if ('maxTargetRadius' in controls) {
+    controls.maxTargetRadius = Math.max(
+      controls.maxDistance,
+      safeRoomMaxDimM * ORBIT_MAX_TARGET_RADIUS_ROOM_MULTIPLIER
+    );
+  }
 }
 
 function normalizeRenderAssetId(value: unknown): string | null {
@@ -317,16 +360,27 @@ export const ThreeDPreviewModal: React.FC = () => {
           '../vendor/three/loaders/GLTFLoader.js',
           import.meta.url
         ).toString();
+        const KTX2_LOADER_URL = new URL(
+          '../vendor/three/loaders/KTX2Loader.js',
+          import.meta.url
+        ).toString();
 
         const THREE: any = await import(/* @vite-ignore */ THREE_URL);
         const controlsMod: any = await import(/* @vite-ignore */ ORBIT_URL);
         const OrbitControls = controlsMod.OrbitControls;
         let GLTFLoader: any = null;
+        let KTX2Loader: any = null;
         try {
           const gltfLoaderMod: any = await import(/* @vite-ignore */ GLTF_LOADER_URL);
           GLTFLoader = gltfLoaderMod.GLTFLoader ?? null;
         } catch {
           GLTFLoader = null;
+        }
+        try {
+          const ktx2LoaderMod: any = await import(/* @vite-ignore */ KTX2_LOADER_URL);
+          KTX2Loader = ktx2LoaderMod.KTX2Loader ?? null;
+        } catch {
+          KTX2Loader = null;
         }
         if (!GLTFLoader) {
           setObjectVisualDiagnostics((current) => {
@@ -346,7 +400,9 @@ export const ThreeDPreviewModal: React.FC = () => {
         }
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.setPixelRatio(
+          Math.min(window.devicePixelRatio || 1, MAX_RENDERER_PIXEL_RATIO)
+        );
         renderer.setSize(width, height);
         renderer.setClearColor(0xf6f4ef, 1);
         renderer.shadowMap.enabled = true;
@@ -442,6 +498,7 @@ export const ThreeDPreviewModal: React.FC = () => {
         camera.updateProjectionMatrix();
         camera.position.set(0, Math.max(2.5, maxDimM * 0.9), Math.max(3.5, maxDimM * 1.2));
         controls = new OrbitControls(camera, renderer.domElement);
+        configureRoomOrbitControls(controls, maxDimM);
         controls.target.set(0, 0.4, 0);
         controls.update();
         camera.lookAt(0, 0.4, 0);
@@ -929,6 +986,8 @@ export const ThreeDPreviewModal: React.FC = () => {
             void buildGlbPreviewModel({
                 THREE,
                 GLTFLoader,
+                KTX2Loader,
+                renderer,
                 descriptor: previewOverride.descriptor,
                 wM: previewOverride.wM,
                 dM: previewOverride.dM,

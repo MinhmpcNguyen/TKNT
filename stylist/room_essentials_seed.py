@@ -26,15 +26,14 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
                 "mattress",
                 "headboard",
                 "rug",
-                "cushion",
                 "throw_blanket",
+                "cushion",
                 "pet_bed",
             ],
             "nightstand": [
                 "bedside_lamp",
             ],
-            "tv_console": [
-            ],
+            "tv_console": [],
             "desk": [
                 "laptop",
                 "monitor",

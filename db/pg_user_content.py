@@ -16,7 +16,13 @@ from db.models import (
     UserAuthRecord,
     UserId,
 )
-from db.pg_utils import RowMapping, to_json_dict, to_optional_str, to_str
+from db.pg_utils import (
+    RowMapping,
+    to_json_dict,
+    to_optional_bytes,
+    to_optional_str,
+    to_str,
+)
 from db.postgres import create_connection
 
 
@@ -216,6 +222,7 @@ class PostgresUserContentRepository:
                 prompt,
                 negative_prompt,
                 storage_path,
+                image_bytes,
                 mime_type,
                 meta
             )
@@ -227,6 +234,7 @@ class PostgresUserContentRepository:
                 %(prompt)s,
                 %(negative_prompt)s,
                 %(storage_path)s,
+                %(image_bytes)s,
                 %(mime_type)s,
                 %(meta)s
             )
@@ -243,6 +251,7 @@ class PostgresUserContentRepository:
                         "prompt": render.prompt,
                         "negative_prompt": render.negative_prompt,
                         "storage_path": render.storage_path,
+                        "image_bytes": render.image_bytes,
                         "mime_type": render.mime_type,
                         "meta": Jsonb(render.meta),
                     },
@@ -272,6 +281,33 @@ class PostgresUserContentRepository:
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, {"render_id": render_id, "user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_generated_render(row)
+
+    def update_generated_render_meta(
+        self,
+        render_id: GeneratedRenderId,
+        user_id: UserId,
+        meta: dict[str, object],
+    ) -> GeneratedRender | None:
+        query = """
+            UPDATE generated_renders
+            SET meta = %(meta)s
+            WHERE id = %(render_id)s AND user_id = %(user_id)s
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "render_id": render_id,
+                        "user_id": user_id,
+                        "meta": Jsonb(meta),
+                    },
+                )
                 row = cur.fetchone()
         if row is None:
             return None
@@ -343,7 +379,8 @@ def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
         model_name=to_str(row.get("model_name")),
         prompt=to_str(row.get("prompt")),
         negative_prompt=to_optional_str(row.get("negative_prompt")),
-        storage_path=to_str(row.get("storage_path")),
+        storage_path=to_optional_str(row.get("storage_path")),
+        image_bytes=to_optional_bytes(row.get("image_bytes")),
         mime_type=to_str(row.get("mime_type")),
         meta=to_json_dict(row.get("meta")),
         created_at=row.get("created_at"),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol, TypedDict
 
 LLMModelKey = Literal["primary", "helper", "embedding"]
@@ -27,6 +27,7 @@ class LLMClientProtocol(Protocol):
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
+        response_schema: Mapping[str, object] | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object: ...

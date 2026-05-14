@@ -53,6 +53,18 @@ def to_optional_float(value: object | None) -> float | None:
     raise ValueError("Expected float-compatible value.")
 
 
+def to_optional_bytes(value: object | None) -> bytes | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    if isinstance(value, bytearray):
+        return bytes(value)
+    raise ValueError("Expected bytes-compatible value.")
+
+
 def to_list_str(value: object | None) -> list[str]:
     if value is None:
         return []

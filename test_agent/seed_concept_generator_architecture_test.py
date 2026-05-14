@@ -1,11 +1,144 @@
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
+import agent.seed_concept_generator as seed_mod
 from agent.seed_concept_generator import SeedConceptGenerator, solver_plan_from_concept
 
 
 class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._previous_seed_env = os.environ.get("TKNT_SEED_CONCEPT_GUIDED_LLM")
+        self._previous_semantic_env = os.environ.get("TKNT_SEMANTIC_ADAPTIVE_LLM")
+        os.environ["TKNT_SEED_CONCEPT_GUIDED_LLM"] = "0"
+        os.environ["TKNT_SEMANTIC_ADAPTIVE_LLM"] = "0"
+
+    def tearDown(self) -> None:
+        if self._previous_seed_env is None:
+            os.environ.pop("TKNT_SEED_CONCEPT_GUIDED_LLM", None)
+        else:
+            os.environ["TKNT_SEED_CONCEPT_GUIDED_LLM"] = self._previous_seed_env
+        if self._previous_semantic_env is None:
+            os.environ.pop("TKNT_SEMANTIC_ADAPTIVE_LLM", None)
+        else:
+            os.environ["TKNT_SEMANTIC_ADAPTIVE_LLM"] = self._previous_semantic_env
+
+    def test_llm_guidance_can_refine_macro_concept_bundle(self) -> None:
+        room_model = _room_model()
+        clusters = _clusters()
+
+        class _GuidanceClient:
+            def chat_completion(self, *_args, **_kwargs):
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content=(
+                                    '{"family_order":["zoned","open_center","focal_axis","daylight_oriented","edge_weighted"],'
+                                    '"concept_blueprints":[{"concept_family":"zoned",'
+                                    '"topology_policy":{"reserve_center_degree":"medium","wall_loading_bias":"zone_specific"},'
+                                    '"cluster_zone_overrides":[{"cluster_id":"main_seating","zone_assignment":"floating_center_zone","preferred_wall_side":"center","center_usage":"primary"},'
+                                    '{"cluster_id":"media","zone_assignment":"right_wall_zone","preferred_wall_side":"right_wall","center_usage":"none"}],'
+                                    '"notes":["Guided zoned concept."]}],'
+                                    '"notes":["Macro concept guidance applied."]}'
+                                )
+                            )
+                        )
+                    ]
+                )
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TKNT_SEED_CONCEPT_GUIDED_LLM": "1",
+                    "TKNT_SEMANTIC_ADAPTIVE_LLM": "0",
+                },
+                clear=False,
+            ),
+            mock.patch.object(
+                seed_mod, "get_llm_client", return_value=_GuidanceClient()
+            ),
+        ):
+            bundle = SeedConceptGenerator().generate_bundle(
+                room_model_json=room_model,
+                clusters_json=clusters,
+                target_count=5,
+                description="Keep the room airy and socially legible.",
+            )
+
+        self.assertEqual(bundle["controller"], "llm_guided_seed_concept_generator")
+        self.assertTrue(bundle["settings"]["llm_guided"])
+        self.assertEqual(bundle["concepts"][0]["concept_family"], "zoned")
+        zoned_concept = bundle["concepts"][0]
+        main_row = next(
+            row
+            for row in zoned_concept["cluster_zone_plan"]
+            if row["cluster_id"] == "main_seating"
+        )
+        media_row = next(
+            row
+            for row in zoned_concept["cluster_zone_plan"]
+            if row["cluster_id"] == "media"
+        )
+        self.assertEqual(main_row["zone_assignment"], "floating_center_zone")
+        self.assertEqual(main_row["center_usage"], "primary")
+        self.assertEqual(media_row["zone_assignment"], "right_wall_zone")
+        self.assertTrue(
+            any(
+                "LLM-guided SeedConceptGenerator refined macro concept blueprints"
+                in note
+                for note in bundle["notes"]
+            )
+        )
+
+    def test_llm_guidance_falls_back_to_deterministic_bundle(self) -> None:
+        room_model = _room_model()
+        clusters = _clusters()
+
+        class _InvalidGuidanceClient:
+            def chat_completion(self, *_args, **_kwargs):
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content="not valid json")
+                        )
+                    ]
+                )
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TKNT_SEED_CONCEPT_GUIDED_LLM": "1",
+                    "TKNT_SEMANTIC_ADAPTIVE_LLM": "0",
+                },
+                clear=False,
+            ),
+            mock.patch.object(
+                seed_mod,
+                "get_llm_client",
+                return_value=_InvalidGuidanceClient(),
+            ),
+        ):
+            bundle = SeedConceptGenerator().generate_bundle(
+                room_model_json=room_model,
+                clusters_json=clusters,
+                target_count=5,
+            )
+
+        self.assertEqual(bundle["controller"], "deterministic_seed_concept_generator")
+        self.assertFalse(bundle["settings"]["llm_guided"])
+        self.assertTrue(
+            any(
+                "fell back to deterministic macro concept generation" in note
+                for note in bundle["notes"]
+            )
+        )
+
     def test_concepts_emit_operational_solver_guidance(self) -> None:
         room_model = _room_model()
         clusters = _clusters()
@@ -92,7 +225,11 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             self.assertTrue(concept["macro_constraints"]["protected_topology"])
             anchor_hints = concept["anchor_region_preferences_by_cluster"]
             for cluster_id in ("main_seating", "media"):
-                self.assertTrue(anchor_hints[cluster_id]["required_region_ids"])
+                self.assertFalse(anchor_hints[cluster_id]["required_region_ids"])
+                self.assertIn(
+                    core_rows[cluster_id]["zone_assignment"],
+                    anchor_hints[cluster_id]["preferred_region_ids"],
+                )
                 self.assertTrue(anchor_hints[cluster_id]["preferred_wall_side"])
 
         solver_plan = solver_plan_from_concept(
@@ -108,6 +245,11 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
         self.assertTrue(solver_plan["cluster_directional_relations"])
         self.assertTrue(solver_plan["anchor_pair_contracts"])
         self.assertTrue(
+            solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
+                "preferred_region_ids"
+            ]
+        )
+        self.assertFalse(
             solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
                 "required_region_ids"
             ]
@@ -141,6 +283,11 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
                 if row["cluster_id"] == "sleep_area"
             )
             self.assertEqual(sleep_row["role_kind"], "sleep")
+            self.assertFalse(sleep_row["required_region_ids"])
+            self.assertIn(
+                sleep_row["zone_assignment"],
+                sleep_row["preferred_region_ids"],
+            )
 
         solver_plan = solver_plan_from_concept(
             concept=concepts[0],

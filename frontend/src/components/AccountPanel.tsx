@@ -1,7 +1,65 @@
 import React, { useState } from 'react';
 import { createSavedLayout } from '../api';
 import { useEditorStore } from '../store';
-import { DesignPlanV1, FloorplanGeometry, SavedLayoutRecord } from '../types';
+import {
+  DesignPlanV1,
+  FloorplanGeometry,
+  GeneratedRenderRecord,
+  SavedLayoutRecord,
+} from '../types';
+
+function canReuseSavedRender(render: GeneratedRenderRecord): boolean {
+  if (render.source !== 'snapshot_render') {
+    return false;
+  }
+  const visibleObjects = render.meta.visible_objects;
+  return Array.isArray(visibleObjects) && visibleObjects.length > 0;
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSavedLayoutIdForRender(
+  render: GeneratedRenderRecord,
+  savedLayouts: SavedLayoutRecord[]
+): string | null {
+  const explicitRootLayoutId = render.meta.root_layout_id;
+  if (
+    typeof explicitRootLayoutId === 'string' &&
+    explicitRootLayoutId.trim()
+  ) {
+    return explicitRootLayoutId.trim();
+  }
+  if (savedLayouts.length === 0) {
+    return null;
+  }
+
+  const renderTimeMs = parseTimestampMs(render.created_at);
+  const layoutsWithTime = savedLayouts
+    .map((layout) => ({
+      layout,
+      timeMs: parseTimestampMs(layout.updated_at ?? layout.created_at),
+    }))
+    .filter(
+      (item): item is { layout: SavedLayoutRecord; timeMs: number } =>
+        item.timeMs !== null
+    )
+    .sort((left, right) => right.timeMs - left.timeMs);
+
+  if (renderTimeMs !== null) {
+    const earlierOrEqual = layoutsWithTime.find((item) => item.timeMs <= renderTimeMs);
+    if (earlierOrEqual) {
+      return earlierOrEqual.layout.id;
+    }
+  }
+
+  return layoutsWithTime[0]?.layout.id ?? savedLayouts[0]?.id ?? null;
+}
 
 export const AccountPanel: React.FC = () => {
   const {
@@ -11,17 +69,27 @@ export const AccountPanel: React.FC = () => {
     styledResult,
     savedLayouts,
     savedRenders,
+    activeRootLayoutId,
+    selectedSavedRenderId,
     setSavedLayouts,
     setFloorplan,
     setDesign,
     setStyledResult,
     clearLayoutVariants,
     setViewMode,
+    setActiveRootLayoutId,
+    selectSavedRender,
     appendRunLog,
   } = useEditorStore();
   const [layoutName, setLayoutName] = useState('');
   const [savingLayout, setSavingLayout] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
+  const visibleSavedRenders = activeRootLayoutId
+    ? savedRenders.filter(
+        (render) =>
+          resolveSavedLayoutIdForRender(render, savedLayouts) === activeRootLayoutId
+      )
+    : savedRenders;
 
   const handleSaveLayout = async () => {
     if (!floorplan) {
@@ -42,6 +110,8 @@ export const AccountPanel: React.FC = () => {
         },
       });
       setSavedLayouts([saved, ...savedLayouts.filter((item) => item.id !== saved.id)]);
+      setActiveRootLayoutId(saved.id);
+      selectSavedRender(null);
       setLayoutName('');
       appendRunLog(`Saved layout "${saved.name}" to the current account.`);
     } catch (saveError) {
@@ -63,8 +133,22 @@ export const AccountPanel: React.FC = () => {
     );
     setStyledResult(layout.styled_result_json ?? null);
     clearLayoutVariants();
+    setActiveRootLayoutId(layout.id);
+    selectSavedRender(null);
     setViewMode('2d');
     appendRunLog(`Loaded saved layout "${layout.name}".`);
+  };
+
+  const handleReuseSavedRender = (render: GeneratedRenderRecord) => {
+    if (!canReuseSavedRender(render)) {
+      appendRunLog(
+        `Saved render "${render.id}" is missing edit metadata and cannot be reopened.`
+      );
+      return;
+    }
+    setViewMode('3d');
+    selectSavedRender(render.id);
+    appendRunLog(`Loaded saved render "${render.id}" into the 3D editor for more edits.`);
   };
 
   return (
@@ -125,19 +209,43 @@ export const AccountPanel: React.FC = () => {
       <div className="account-section">
         <div className="account-section-header">
           <strong>Saved Renders</strong>
-          <span>{savedRenders.length}</span>
+          <span>{visibleSavedRenders.length}</span>
         </div>
+        {activeRootLayoutId ? (
+          <p className="muted">
+            Showing renders linked to the loaded root layout.
+          </p>
+        ) : null}
         <div className="account-render-grid">
-          {savedRenders.length === 0 ? (
-            <p className="muted">Your Gemini renders will appear here.</p>
+          {visibleSavedRenders.length === 0 ? (
+            <p className="muted">
+              {activeRootLayoutId
+                ? 'No renders are linked to this root layout yet.'
+                : 'Your Gemini renders will appear here.'}
+            </p>
           ) : (
-            savedRenders.map((render) => (
-              <div key={render.id} className="saved-render-card">
+            visibleSavedRenders.map((render) => (
+              <div
+                key={render.id}
+                className={`saved-render-card ${
+                  selectedSavedRenderId === render.id ? 'selected' : ''
+                }`}
+              >
                 <img src={render.file_url} alt={render.prompt} />
                 <div className="saved-render-meta">
                   <strong>{render.model_name}</strong>
                   <span>{render.source}</span>
                   <p>{render.prompt}</p>
+                  <div className="saved-render-actions">
+                    <button
+                      className="primary-button"
+                      disabled={!canReuseSavedRender(render)}
+                      onClick={() => handleReuseSavedRender(render)}
+                      type="button"
+                    >
+                      {selectedSavedRenderId === render.id ? 'Loaded for edit' : 'Use for edit'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))

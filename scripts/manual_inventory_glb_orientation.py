@@ -24,6 +24,7 @@ from inspect_inventory_glb_orientation import (
     InventoryGlbOrientationInspector,
     JsonObject,
     normalize_cardinal_offset,
+    normalize_quarter_turn_tilt,
 )
 
 DEFAULT_PORT = 8788
@@ -79,6 +80,30 @@ def selected_offset(target: JsonObject | None, raw_offset: str | None) -> int:
         return normalize_cardinal_offset(float(raw_value or 0))
     except ValueError:
         return 0
+
+
+def selected_tilt(
+    target: JsonObject | None,
+    raw_tilt: str | None,
+    *,
+    axis: str,
+) -> int:
+    if raw_tilt:
+        try:
+            return normalize_quarter_turn_tilt(float(raw_tilt))
+        except ValueError:
+            return 0
+    if target is None:
+        return 0
+    raw_value = target.get(f"rotation_deg_{axis}")
+    try:
+        return normalize_quarter_turn_tilt(float(raw_value or 0))
+    except ValueError:
+        return 0
+
+
+def adjusted_tilt(value: int, delta: int) -> int:
+    return normalize_quarter_turn_tilt(float(value + delta))
 
 
 class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
@@ -138,12 +163,16 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
                 return
 
             offset = params.get("offset", ["0"])[0]
+            tilt_x = params.get("tilt_x", ["0"])[0]
+            tilt_z = params.get("tilt_z", ["0"])[0]
             contexts = ["all"] if params.get("apply_all", [""])[0] == "on" else ["panel"]
             notes = params.get("notes", [""])[0].strip() or None
             payload: JsonObject = {
                 "asset_id": asset_id,
                 "style_key": style_key,
                 "rotation_deg_offset": normalize_cardinal_offset(float(offset)),
+                "rotation_deg_x": normalize_quarter_turn_tilt(float(tilt_x)),
+                "rotation_deg_z": normalize_quarter_turn_tilt(float(tilt_z)),
                 "contexts": contexts,
                 "notes": notes,
             }
@@ -153,6 +182,8 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
                     "asset_id": asset_id,
                     "style_key": style_key,
                     "offset": str(payload["rotation_deg_offset"]),
+                    "tilt_x": str(payload["rotation_deg_x"]),
+                    "tilt_z": str(payload["rotation_deg_z"]),
                     "saved": "1",
                 }
             )
@@ -184,6 +215,8 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
             style_key=requested_style_key,
         )
         offset = selected_offset(target, params.get("offset", [None])[0])
+        tilt_x = selected_tilt(target, params.get("tilt_x", [None])[0], axis="x")
+        tilt_z = selected_tilt(target, params.get("tilt_z", [None])[0], axis="z")
         saved = params.get("saved", [""])[0] == "1"
         deleted = params.get("deleted", [""])[0] == "1"
         selected_key = (
@@ -201,9 +234,59 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
                 asset_id=requested_asset_id,
                 style_key=requested_style_key,
                 offset=value,
+                tilt_x=tilt_x,
+                tilt_z=tilt_z,
                 selected=offset == value,
             )
             for value in OFFSET_LABELS
+        )
+        tilt_x_links = " ".join(
+            (
+                self._tilt_link(
+                    asset_id=requested_asset_id,
+                    style_key=requested_style_key,
+                    offset=offset,
+                    tilt_x=adjusted_tilt(tilt_x, -90),
+                    tilt_z=tilt_z,
+                    label="X -90",
+                ),
+                self._tilt_link(
+                    asset_id=requested_asset_id,
+                    style_key=requested_style_key,
+                    offset=offset,
+                    tilt_x=adjusted_tilt(tilt_x, 90),
+                    tilt_z=tilt_z,
+                    label="X +90",
+                ),
+            )
+        )
+        tilt_z_links = " ".join(
+            (
+                self._tilt_link(
+                    asset_id=requested_asset_id,
+                    style_key=requested_style_key,
+                    offset=offset,
+                    tilt_x=tilt_x,
+                    tilt_z=adjusted_tilt(tilt_z, -90),
+                    label="Z -90",
+                ),
+                self._tilt_link(
+                    asset_id=requested_asset_id,
+                    style_key=requested_style_key,
+                    offset=offset,
+                    tilt_x=tilt_x,
+                    tilt_z=adjusted_tilt(tilt_z, 90),
+                    label="Z +90",
+                ),
+            )
+        )
+        tilt_reset_link = self._tilt_link(
+            asset_id=requested_asset_id,
+            style_key=requested_style_key,
+            offset=offset,
+            tilt_x=0,
+            tilt_z=0,
+            label="Reset tilt",
         )
         viewer_src = (
             "/viewer?"
@@ -212,6 +295,8 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
                     "asset_id": requested_asset_id,
                     "style_key": requested_style_key,
                     "offset": str(offset),
+                    "tilt_x": str(tilt_x),
+                    "tilt_z": str(tilt_z),
                 }
             )
             if target is not None
@@ -252,6 +337,9 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
     .offsets {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }}
     .offsets a {{ display: block; padding: 10px; border: 1px solid #bbb; border-radius: 6px; text-align: center; color: #111; text-decoration: none; background: #fafafa; }}
     .offsets a.selected {{ border-color: #176b32; background: #dcfce7; font-weight: 800; }}
+    .tilts {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }}
+    .tilts a {{ display: block; padding: 10px; border: 1px solid #bbb; border-radius: 6px; text-align: center; color: #111; text-decoration: none; background: #fafafa; }}
+    .tilts.single {{ grid-template-columns: 1fr; }}
     iframe {{ width: 100%; height: 100%; border: 0; background: #202020; }}
     .save {{ margin-top: 12px; padding: 11px; border: 0; border-radius: 6px; background: #176b32; color: #fff; font-weight: 800; cursor: pointer; }}
     .delete {{ margin-top: 10px; padding: 11px; border: 0; border-radius: 6px; background: #b42318; color: #fff; font-weight: 800; cursor: pointer; }}
@@ -276,10 +364,18 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
       <label>Pick which model axis is the real front</label>
       <div class="offsets">{offset_links}</div>
 
+      <label>Stand the object upright if needed</label>
+      <div class="muted">Current tilt: X={tilt_x}deg, Z={tilt_z}deg</div>
+      <div class="tilts">{tilt_x_links}</div>
+      <div class="tilts">{tilt_z_links}</div>
+      <div class="tilts single">{tilt_reset_link}</div>
+
       <form method="post" action="/save">
         <input type="hidden" name="asset_id" value="{escape(requested_asset_id)}">
         <input type="hidden" name="style_key" value="{escape(requested_style_key)}">
         <input type="hidden" name="offset" value="{offset}">
+        <input type="hidden" name="tilt_x" value="{tilt_x}">
+        <input type="hidden" name="tilt_z" value="{tilt_z}">
         <label class="apply"><input type="checkbox" name="apply_all"> Apply to all 3D contexts</label>
         <label for="notes">Notes</label>
         <textarea id="notes" name="notes">{escape(notes)}</textarea>
@@ -293,12 +389,12 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         <button class="delete" type="submit">Delete selected GLB</button>
       </form>
 
-      <p class="muted">Workflow: choose an object, compare the model to the white PLAN FRONT arrow, choose the offset where the real front points toward that arrow, then save.</p>
+      <p class="muted">Workflow: first stand the object upright with X/Z tilt if it is lying on its side, then choose the front offset, then save.</p>
     </aside>
     <main>
       <div class="topbar">
         <div class="name">{escape(target_name)}</div>
-        <div class="muted">offset={offset}deg | {escape(OFFSET_LABELS[offset])}</div>
+        <div class="muted">offset={offset}deg | {escape(OFFSET_LABELS[offset])} | tiltX={tilt_x}deg | tiltZ={tilt_z}deg</div>
       </div>
       <iframe src="{escape(viewer_src)}" title="GLB viewer"></iframe>
     </main>
@@ -312,6 +408,8 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         asset_id = params.get("asset_id", [""])[0]
         style_key = params.get("style_key", [""])[0]
         offset = selected_offset(None, params.get("offset", ["0"])[0])
+        tilt_x = selected_tilt(None, params.get("tilt_x", ["0"])[0], axis="x")
+        tilt_z = selected_tilt(None, params.get("tilt_z", ["0"])[0], axis="z")
         model_url = "/model?" + urlencode({"asset_id": asset_id, "style_key": style_key})
         targets = self.inspector.list_targets()
         target = find_target(targets=targets, asset_id=asset_id, style_key=style_key)
@@ -319,7 +417,10 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         calibration = (target or {}).get("preview_calibration")
         calibration_json = json.dumps(calibration if isinstance(calibration, dict) else None)
         model_url_json = json.dumps(model_url)
-        status_text = f"Loaded {asset_id} [{style_key}] offset={offset}deg"
+        status_text = (
+            f"Loaded {asset_id} [{style_key}] "
+            f"offset={offset}deg tiltX={tilt_x}deg tiltZ={tilt_z}deg"
+        )
         status_text_json = json.dumps(status_text)
         document = f"""<!doctype html>
 <html lang="en">
@@ -439,12 +540,18 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
       }}
 
       const root = new THREE.Group();
+      const yawRoot = new THREE.Group();
+      const tiltRoot = new THREE.Group();
       const calibrationRoot = new THREE.Group();
       const model = sceneSource.clone(true);
-      model.rotation.y = THREE.MathUtils.degToRad({base_rotation_deg + offset});
+      yawRoot.rotation.y = THREE.MathUtils.degToRad({base_rotation_deg + offset});
+      tiltRoot.rotation.x = THREE.MathUtils.degToRad({tilt_x});
+      tiltRoot.rotation.z = THREE.MathUtils.degToRad({tilt_z});
       calibrationRoot.add(model);
+      tiltRoot.add(calibrationRoot);
+      yawRoot.add(tiltRoot);
       applyCalibrationMatrix(calibrationRoot, {calibration_json});
-      root.add(calibrationRoot);
+      root.add(yawRoot);
       world.add(root);
       root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(root);
@@ -522,11 +629,42 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         asset_id: str,
         style_key: str,
         offset: int,
+        tilt_x: int,
+        tilt_z: int,
         selected: bool,
     ) -> str:
-        query = urlencode({"asset_id": asset_id, "style_key": style_key, "offset": str(offset)})
+        query = urlencode(
+            {
+                "asset_id": asset_id,
+                "style_key": style_key,
+                "offset": str(offset),
+                "tilt_x": str(tilt_x),
+                "tilt_z": str(tilt_z),
+            }
+        )
         class_name = " selected" if selected else ""
         return f'<a class="{class_name}" href="/?{query}">{escape(OFFSET_LABELS[offset])}<br>{offset}deg</a>'
+
+    def _tilt_link(
+        self,
+        *,
+        asset_id: str,
+        style_key: str,
+        offset: int,
+        tilt_x: int,
+        tilt_z: int,
+        label: str,
+    ) -> str:
+        query = urlencode(
+            {
+                "asset_id": asset_id,
+                "style_key": style_key,
+                "offset": str(offset),
+                "tilt_x": str(tilt_x),
+                "tilt_z": str(tilt_z),
+            }
+        )
+        return f'<a href="/?{query}">{escape(label)}<br>X={tilt_x} Z={tilt_z}</a>'
 
     def _send_vendor_file(self, relative_path: str) -> None:
         allowed_files = {

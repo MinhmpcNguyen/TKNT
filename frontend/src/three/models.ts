@@ -47,6 +47,8 @@ export type InventoryModelPreviewOverride = {
   fitStrategy: GlbFitStrategy | null;
   scaleMultiplier: number | null;
   rotationDegOffset: number;
+  rotationXDeg: number;
+  rotationZDeg: number;
   dimensionScale:
     | {
         width: number | null;
@@ -63,6 +65,8 @@ export type InventoryModelDescriptor = {
   fit: 'contain' | 'cover';
   scale: number;
   rotationDeg: number;
+  rotationXDeg: number;
+  rotationZDeg: number;
   previewCalibration: InventoryModelPreviewCalibration | null;
   previewOverride: InventoryModelPreviewOverride | null;
 };
@@ -97,15 +101,26 @@ function resolveActivePreviewCalibration(
 }
 
 type GltfLoaderConstructor = new (manager?: unknown) => {
+  setKTX2Loader?(ktx2Loader: unknown): unknown;
   loadAsync(url: string): Promise<{
     scene?: unknown;
     scenes?: unknown[];
   }>;
 };
 
+type Ktx2LoaderConstructor = new (manager?: unknown) => {
+  setTranscoderPath(path: string): {
+    detectSupport(renderer: unknown): unknown;
+    setWorkerLimit?(limit: number): unknown;
+  };
+};
+
 type BuildGlbPreviewModelParams = {
   THREE: any;
   GLTFLoader: GltfLoaderConstructor;
+  KTX2Loader?: Ktx2LoaderConstructor | null;
+  renderer?: unknown;
+  ktx2TranscoderPath?: string;
   descriptor: InventoryModelDescriptor;
   wM: number;
   dM: number;
@@ -181,6 +196,31 @@ const MODEL_VARIANT_KEYS = ['model_variants', 'modelVariants'];
 
 const gltfPromiseCache = new Map<string, Promise<any>>();
 const PROXY_BOX_ASPECT_FALLBACK_THRESHOLD = 1.25;
+const DEFAULT_KTX2_TRANSCODER_PATH = '/assets/three/basis/';
+let sharedKtx2Loader: unknown = null;
+let sharedKtx2LoaderConstructor: Ktx2LoaderConstructor | null = null;
+
+function resolveKtx2Loader(params: {
+  KTX2Loader?: Ktx2LoaderConstructor | null;
+  renderer?: unknown;
+  transcoderPath?: string;
+}): unknown | null {
+  const { KTX2Loader, renderer, transcoderPath = DEFAULT_KTX2_TRANSCODER_PATH } = params;
+  if (!KTX2Loader || !renderer) {
+    return null;
+  }
+  if (sharedKtx2Loader && sharedKtx2LoaderConstructor === KTX2Loader) {
+    return sharedKtx2Loader;
+  }
+  const loader = new KTX2Loader().setTranscoderPath(transcoderPath);
+  if (typeof loader.setWorkerLimit === 'function') {
+    loader.setWorkerLimit(2);
+  }
+  loader.detectSupport(renderer);
+  sharedKtx2Loader = loader;
+  sharedKtx2LoaderConstructor = KTX2Loader;
+  return loader;
+}
 
 function computePreviewBounds(THREE: any, root: any): any {
   const meshEntries: Array<{
@@ -608,6 +648,14 @@ function resolvePreviewOverride(
       readNumber(rawOverride.rotation_deg_offset) ??
       readNumber(rawOverride.rotationDegOffset) ??
       0,
+    rotationXDeg:
+      readNumber(rawOverride.rotation_deg_x) ??
+      readNumber(rawOverride.rotationDegX) ??
+      0,
+    rotationZDeg:
+      readNumber(rawOverride.rotation_deg_z) ??
+      readNumber(rawOverride.rotationDegZ) ??
+      0,
     dimensionScale:
       widthScale !== null || heightScale !== null || depthScale !== null
         ? {
@@ -856,6 +904,8 @@ export function inspectInventoryModelDescriptor(
       fit,
       scale,
       rotationDeg,
+      rotationXDeg: 0,
+      rotationZDeg: 0,
       previewCalibration,
       previewOverride,
     },
@@ -937,6 +987,8 @@ export function applyInventoryModelPreviewOverride(params: {
     descriptor: {
       ...descriptor,
       rotationDeg: descriptor.rotationDeg + previewOverride.rotationDegOffset,
+      rotationXDeg: descriptor.rotationXDeg + previewOverride.rotationXDeg,
+      rotationZDeg: descriptor.rotationZDeg + previewOverride.rotationZDeg,
       scale:
         descriptor.scale *
         (previewOverride.scaleMultiplier && previewOverride.scaleMultiplier > 0
@@ -957,6 +1009,9 @@ export async function buildGlbPreviewModel(
   const {
     THREE,
     GLTFLoader,
+    KTX2Loader,
+    renderer,
+    ktx2TranscoderPath,
     descriptor,
     wM,
     dM,
@@ -970,7 +1025,18 @@ export async function buildGlbPreviewModel(
   let gltfPromise = gltfPromiseCache.get(descriptor.url);
   if (!gltfPromise) {
     const loader = new GLTFLoader();
-    gltfPromise = loader.loadAsync(descriptor.url);
+    const ktx2Loader = resolveKtx2Loader({
+      KTX2Loader,
+      renderer,
+      transcoderPath: ktx2TranscoderPath,
+    });
+    if (ktx2Loader && typeof loader.setKTX2Loader === 'function') {
+      loader.setKTX2Loader(ktx2Loader);
+    }
+    gltfPromise = loader.loadAsync(descriptor.url).catch((error: unknown) => {
+      gltfPromiseCache.delete(descriptor.url);
+      throw error;
+    });
     gltfPromiseCache.set(descriptor.url, gltfPromise);
   }
 
@@ -987,12 +1053,18 @@ export async function buildGlbPreviewModel(
 
   const visualRoot = new THREE.Group();
   const geometryAdjustRoot = new THREE.Group();
+  const yawRoot = new THREE.Group();
+  const tiltRoot = new THREE.Group();
   const calibrationRoot = new THREE.Group();
   visualRoot.add(geometryAdjustRoot);
-  geometryAdjustRoot.add(calibrationRoot);
+  geometryAdjustRoot.add(yawRoot);
+  yawRoot.add(tiltRoot);
+  tiltRoot.add(calibrationRoot);
   const scene = (sceneSource as any).clone(true);
   calibrationRoot.add(scene);
-  scene.rotation.y = (descriptor.rotationDeg * Math.PI) / 180;
+  yawRoot.rotation.y = (descriptor.rotationDeg * Math.PI) / 180;
+  tiltRoot.rotation.x = (descriptor.rotationXDeg * Math.PI) / 180;
+  tiltRoot.rotation.z = (descriptor.rotationZDeg * Math.PI) / 180;
   const previewCalibration = resolveActivePreviewCalibration(descriptor.previewCalibration);
   const rotationMatrix = previewCalibration?.rotationMatrix;
   if (rotationMatrix) {

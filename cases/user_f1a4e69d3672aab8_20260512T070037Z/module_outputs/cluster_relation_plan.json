@@ -1,0 +1,1325 @@
+{
+  "status": "OK",
+  "room_id": "room_1",
+  "room_type": "kitchen",
+  "planner_kind": "seed_concept_generator",
+  "macro_concept": {
+    "concept_id": "concept_01",
+    "concept_family": "daylight_oriented",
+    "macro_scenario": {
+      "scenario_id": "daylight_primary_bottom_media",
+      "label": "primary seating claims daylight with media opposite",
+      "primary_zone_id": "window_side_zone",
+      "secondary_zone_id": "bottom_wall_zone",
+      "storage_zone_id": "right_wall_zone",
+      "support_zone_id": "left_wall_zone",
+      "primary_wall_side": "window_side",
+      "secondary_wall_side": "bottom_wall",
+      "storage_wall_side": "right_wall",
+      "pair_type": "daylight_opposite",
+      "center_policy": "balanced_open",
+      "primary_anchor_strength": "strong",
+      "secondary_anchor_strength": "strong",
+      "support_anchor_strength": "medium",
+      "allow_primary_center_overlap": false
+    },
+    "spatial_character": "kitchen_daylight_oriented_support",
+    "macro_region_map_snapshot": {
+      "regions": [
+        {
+          "region_id": "primary_focal_wall_zone",
+          "region_type": "focal_wall_zone",
+          "label": "primary focal wall zone",
+          "source_ids": [
+            "wall_2_usable_200_3750_focal",
+            "wall_3_usable_200_4800_focal",
+            "wall_4_usable_2500_3800_focal",
+            "wall_4_usable_200_1300_focal"
+          ],
+          "tags": [
+            "wall",
+            "focal",
+            "anchor"
+          ]
+        },
+        {
+          "region_id": "quiet_private_deep_zone",
+          "region_type": "private_deep_zone",
+          "label": "quiet private deep zone",
+          "source_ids": [
+            "privacy_back_zone"
+          ],
+          "tags": [
+            "privacy",
+            "far_from_entry"
+          ]
+        },
+        {
+          "region_id": "daylight_biased_zone",
+          "region_type": "daylight_zone",
+          "label": "daylight-biased zone",
+          "source_ids": [
+            "window_1_daylight"
+          ],
+          "tags": [
+            "daylight",
+            "window_side"
+          ]
+        },
+        {
+          "region_id": "entry_adjacent_active_zone",
+          "region_type": "entry_active_zone",
+          "label": "entry-adjacent active zone",
+          "source_ids": [
+            "door_1_entry_clearance"
+          ],
+          "tags": [
+            "entry_side",
+            "active"
+          ]
+        },
+        {
+          "region_id": "keep_open_center",
+          "region_type": "keep_open_center",
+          "label": "keep-open center",
+          "source_ids": [
+            "center_openness_core"
+          ],
+          "tags": [
+            "center",
+            "keep_open"
+          ]
+        },
+        {
+          "region_id": "floating_support_zone",
+          "region_type": "floating_support_zone",
+          "label": "floating support zone",
+          "source_ids": [
+            "floating_center_zone"
+          ],
+          "tags": [
+            "floating",
+            "support",
+            "center"
+          ]
+        },
+        {
+          "region_id": "storage_service_edge_zone",
+          "region_type": "storage_service_edge_zone",
+          "label": "storage/service edge zone",
+          "source_ids": [
+            "top_wall_zone",
+            "right_wall_zone",
+            "bottom_wall_zone",
+            "left_wall_zone"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "storage"
+          ]
+        },
+        {
+          "region_id": "edge_loading_zone",
+          "region_type": "edge_loading_zone",
+          "label": "edge loading zone",
+          "source_ids": [
+            "wall_2_usable_200_3750_anchor",
+            "wall_3_usable_200_4800_anchor",
+            "wall_1_usable_200_1850_anchor",
+            "wall_4_usable_2500_3800_anchor",
+            "wall_4_usable_200_1300_anchor"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "perimeter"
+          ]
+        },
+        {
+          "region_id": "top_wall_zone",
+          "region_type": "side_wall_zone",
+          "label": "top wall zone",
+          "source_ids": [
+            "top_wall_zone"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "top_wall"
+          ]
+        },
+        {
+          "region_id": "right_wall_zone",
+          "region_type": "side_wall_zone",
+          "label": "right wall zone",
+          "source_ids": [
+            "right_wall_zone"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "right_wall"
+          ]
+        },
+        {
+          "region_id": "bottom_wall_zone",
+          "region_type": "side_wall_zone",
+          "label": "bottom wall zone",
+          "source_ids": [
+            "bottom_wall_zone"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "bottom_wall"
+          ]
+        },
+        {
+          "region_id": "left_wall_zone",
+          "region_type": "side_wall_zone",
+          "label": "left wall zone",
+          "source_ids": [
+            "left_wall_zone"
+          ],
+          "tags": [
+            "wall",
+            "edge",
+            "left_wall"
+          ]
+        },
+        {
+          "region_id": "window_side_zone",
+          "region_type": "window_side_zone",
+          "label": "window side zone",
+          "source_ids": [
+            "window_1_daylight"
+          ],
+          "tags": [
+            "wall",
+            "daylight",
+            "window_side"
+          ]
+        },
+        {
+          "region_id": "floating_center_zone",
+          "region_type": "floating_center_zone",
+          "label": "floating center zone",
+          "source_ids": [
+            "floating_center_zone"
+          ],
+          "tags": [
+            "floating",
+            "center"
+          ]
+        }
+      ],
+      "protected_topology": {
+        "entry_landing_zones": [
+          "door_1_entry_clearance"
+        ],
+        "primary_circulation_corridors": [
+          "door_1_to_room_center_corridor"
+        ],
+        "center_openness_regions": [
+          "center_openness_core"
+        ],
+        "operational_zones": [
+          {
+            "region": "door_1_entry_clearance",
+            "zone_type": "entry_landing",
+            "priority": "high",
+            "enforcement": "hard",
+            "max_overlap_ratio": 0.0,
+            "applies_to": [
+              "core_clusters",
+              "support_clusters",
+              "interaction_hulls"
+            ],
+            "violation_severity": "blocking"
+          },
+          {
+            "region": "door_1_to_room_center_corridor",
+            "zone_type": "primary_circulation_corridor",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "max_overlap_ratio": 0.05,
+            "applies_to": [
+              "core_clusters",
+              "support_clusters",
+              "interaction_hulls"
+            ],
+            "violation_severity": "blocking"
+          },
+          {
+            "region": "center_openness_core",
+            "zone_type": "center_openness_core",
+            "priority": "high",
+            "enforcement": "hard_soft",
+            "max_overlap_ratio": 0.1,
+            "applies_to": [
+              "core_clusters",
+              "interaction_hulls"
+            ],
+            "violation_severity": "blocking"
+          }
+        ]
+      },
+      "topology_summary": {
+        "entry_nodes": [
+          "door_1"
+        ],
+        "window_nodes": [
+          "window:window_1"
+        ],
+        "subzones": []
+      }
+    },
+    "cluster_zone_plan": [
+      {
+        "cluster_id": "kitchen_core",
+        "semantic_role": "core_work_triangle_and_run",
+        "layout_role": "primary",
+        "role_kind": "storage",
+        "priority": "core",
+        "macro_scenario_id": "daylight_primary_bottom_media",
+        "scenario_role": "primary",
+        "scenario_locked": true,
+        "zone_assignment": "window_side_zone",
+        "required_region_ids": [],
+        "preferred_region_ids": [
+          "window_side_zone",
+          "bottom_wall_zone",
+          "edge_loading_zone",
+          "left_wall_zone",
+          "right_wall_zone"
+        ],
+        "forbidden_region_ids": [
+          "center_openness_core",
+          "entry_to_center_corridor",
+          "door_1_entry_clearance"
+        ],
+        "preferred_wall_side": "window_side",
+        "anchor_strength": "strong",
+        "region_candidates": [
+          {
+            "cluster_id": "kitchen_core",
+            "region_id": "bottom_wall_zone",
+            "region_type": "side_wall_zone",
+            "score": 6.2,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          },
+          {
+            "cluster_id": "kitchen_core",
+            "region_id": "edge_loading_zone",
+            "region_type": "edge_loading_zone",
+            "score": 6.2,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          },
+          {
+            "cluster_id": "kitchen_core",
+            "region_id": "left_wall_zone",
+            "region_type": "side_wall_zone",
+            "score": 6.2,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          }
+        ],
+        "wall_claim": "strong",
+        "center_usage": "partial",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "neutral",
+        "privacy_relation": "privacy_preferred",
+        "placement_bias": "wall_backed",
+        "placement_behavior": {
+          "wall_backing": "required",
+          "front_space": "required",
+          "daylight_blocking": "neutral",
+          "pose_flexibility": "low"
+        }
+      },
+      {
+        "cluster_id": "storage_support",
+        "semantic_role": "tall_storage_and_pantry_buffer",
+        "layout_role": "secondary",
+        "role_kind": "storage",
+        "priority": "support",
+        "macro_scenario_id": "daylight_primary_bottom_media",
+        "scenario_role": "secondary",
+        "scenario_locked": true,
+        "zone_assignment": "bottom_wall_zone",
+        "required_region_ids": [],
+        "preferred_region_ids": [
+          "bottom_wall_zone",
+          "edge_loading_zone",
+          "left_wall_zone",
+          "right_wall_zone"
+        ],
+        "forbidden_region_ids": [
+          "center_openness_core",
+          "entry_to_center_corridor",
+          "door_1_entry_clearance"
+        ],
+        "preferred_wall_side": "bottom_wall",
+        "anchor_strength": "strong",
+        "region_candidates": [
+          {
+            "cluster_id": "storage_support",
+            "region_id": "bottom_wall_zone",
+            "region_type": "side_wall_zone",
+            "score": 5.5,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          },
+          {
+            "cluster_id": "storage_support",
+            "region_id": "edge_loading_zone",
+            "region_type": "edge_loading_zone",
+            "score": 5.5,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          },
+          {
+            "cluster_id": "storage_support",
+            "region_id": "left_wall_zone",
+            "region_type": "side_wall_zone",
+            "score": 5.5,
+            "reasons": [
+              "wall_affinity=high",
+              "storage_edge_compatible"
+            ]
+          }
+        ],
+        "wall_claim": "medium",
+        "center_usage": "none",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "neutral",
+        "privacy_relation": "privacy_preferred",
+        "placement_bias": "balanced",
+        "placement_behavior": {
+          "wall_backing": "preferred",
+          "front_space": "required",
+          "daylight_blocking": "neutral",
+          "pose_flexibility": "low"
+        }
+      }
+    ],
+    "allowed_variant_families_by_cluster": {
+      "kitchen_core": [
+        "storage_wall",
+        "edge_storage",
+        "perimeter_storage",
+        "edge_weighted"
+      ],
+      "storage_support": [
+        "storage_wall",
+        "edge_storage",
+        "perimeter_storage",
+        "edge_weighted"
+      ]
+    },
+    "critical_object_orientations": [
+      {
+        "cluster_id": "kitchen_core",
+        "object_id": "kitchen_base_cabinet",
+        "intents": [
+          "back_to_wall",
+          "face_cluster",
+          "align_with_focal_axis"
+        ],
+        "priority": "high",
+        "reason": "Critical object orientation emitted by macro concept.",
+        "target_cluster_id": "storage_support"
+      }
+    ],
+    "primary_pair_contracts": [
+      {
+        "pair_type": "daylight_opposite",
+        "cluster_a": "kitchen_core",
+        "cluster_b": "storage_support",
+        "strength": "high",
+        "required": true
+      },
+      {
+        "pair_type": "supports_use_axis",
+        "cluster_a": "kitchen_core",
+        "cluster_b": "storage_support",
+        "strength": "medium",
+        "required": false
+      }
+    ],
+    "anchor_region_preferences_by_cluster": {
+      "kitchen_core": {
+        "zone_assignment": "window_side_zone",
+        "required_region_ids": [],
+        "forbidden_region_ids": [
+          "center_openness_core",
+          "entry_to_center_corridor",
+          "door_1_entry_clearance"
+        ],
+        "preferred_region_ids": [
+          "window_side_zone",
+          "bottom_wall_zone",
+          "edge_loading_zone",
+          "left_wall_zone",
+          "right_wall_zone"
+        ],
+        "wall_claim": "strong",
+        "center_usage": "partial",
+        "preferred_wall_side": "window_side",
+        "anchor_strength": "strong",
+        "scenario_role": "primary",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "neutral",
+        "placement_bias": "wall_backed",
+        "placement_behavior": {
+          "wall_backing": "required",
+          "front_space": "required",
+          "daylight_blocking": "neutral",
+          "pose_flexibility": "low"
+        }
+      },
+      "storage_support": {
+        "zone_assignment": "bottom_wall_zone",
+        "required_region_ids": [],
+        "forbidden_region_ids": [
+          "center_openness_core",
+          "entry_to_center_corridor",
+          "door_1_entry_clearance"
+        ],
+        "preferred_region_ids": [
+          "bottom_wall_zone",
+          "edge_loading_zone",
+          "left_wall_zone",
+          "right_wall_zone"
+        ],
+        "wall_claim": "medium",
+        "center_usage": "none",
+        "preferred_wall_side": "bottom_wall",
+        "anchor_strength": "strong",
+        "scenario_role": "secondary",
+        "entry_relation": "avoid_direct_entry_conflict",
+        "daylight_relation": "neutral",
+        "placement_bias": "balanced",
+        "placement_behavior": {
+          "wall_backing": "preferred",
+          "front_space": "required",
+          "daylight_blocking": "neutral",
+          "pose_flexibility": "low"
+        }
+      }
+    },
+    "anchor_pair_contracts": [
+      {
+        "pair_type": "daylight_opposite",
+        "cluster_a": "kitchen_core",
+        "cluster_b": "storage_support",
+        "strength": "high",
+        "required": true
+      },
+      {
+        "pair_type": "supports_use_axis",
+        "cluster_a": "kitchen_core",
+        "cluster_b": "storage_support",
+        "strength": "medium",
+        "required": false
+      }
+    ],
+    "object_solver_policy": {
+      "placement_mode": "anchor_first_object_level",
+      "anchor_stage_first": true,
+      "family": "daylight_oriented",
+      "support_stage_enabled": true,
+      "micro_refine_inside_solver": true,
+      "placement_order_by_cluster": {
+        "kitchen_core": [
+          "kitchen_base_cabinet",
+          "fridge",
+          "stove",
+          "sink",
+          "dishwasher"
+        ],
+        "storage_support": [
+          "kitchen_tall_cabinet"
+        ]
+      },
+      "protected_ids_by_cluster": {
+        "kitchen_core": [
+          "kitchen_base_cabinet"
+        ],
+        "storage_support": [
+          "kitchen_tall_cabinet"
+        ]
+      },
+      "droppable_ids_by_cluster": {
+        "kitchen_core": [
+          "fridge",
+          "stove",
+          "sink",
+          "dishwasher"
+        ],
+        "storage_support": []
+      }
+    },
+    "topology_policy": {
+      "preserve_entry_landing": true,
+      "preserve_primary_corridor": true,
+      "reserve_center_degree": "medium",
+      "wall_loading_bias": "balanced",
+      "daylight_bias": "primary_support_preferred",
+      "entry_avoidance_strength": "high",
+      "secondary_zone_placement_bias": "daylight_if_not_focal",
+      "style_name": "balanced",
+      "style_density_target": "medium",
+      "style_visual_balance": "calm"
+    },
+    "macro_constraints": {
+      "keep_open_regions": [
+        {
+          "type": "entry_buffer",
+          "near": "door_1_entry_clearance",
+          "priority": "high"
+        },
+        {
+          "type": "window_buffer",
+          "near": "window_1",
+          "priority": "medium"
+        }
+      ],
+      "reserved_regions": [
+        {
+          "region": "door_1_entry_clearance",
+          "reason": "entry landing must stay usable"
+        },
+        {
+          "region": "door_1_to_room_center_corridor",
+          "reason": "primary circulation corridor must stay usable"
+        }
+      ],
+      "protected_topology": [
+        {
+          "region": "door_1_entry_clearance",
+          "zone_type": "entry_landing",
+          "priority": "high",
+          "enforcement": "hard",
+          "max_overlap_ratio": 0.0,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "door_1_to_room_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.05,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "center_openness_core",
+          "zone_type": "center_openness_core",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.12,
+          "applies_to": [
+            "core_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        }
+      ],
+      "cluster_separation_preferences": [],
+      "cluster_alignment_preferences": [
+        {
+          "a": "kitchen_core",
+          "b": "storage_support",
+          "preference": "daylight_opposite",
+          "priority": "high"
+        }
+      ],
+      "anchor_region_constraints": [
+        {
+          "cluster_id": "kitchen_core",
+          "required_region_ids": [],
+          "preferred_region_ids": [
+            "window_side_zone",
+            "bottom_wall_zone",
+            "edge_loading_zone",
+            "left_wall_zone",
+            "right_wall_zone"
+          ],
+          "forbidden_region_ids": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "preferred_wall_side": "window_side",
+          "anchor_strength": "strong",
+          "scenario_role": "primary"
+        },
+        {
+          "cluster_id": "storage_support",
+          "required_region_ids": [],
+          "preferred_region_ids": [
+            "bottom_wall_zone",
+            "edge_loading_zone",
+            "left_wall_zone",
+            "right_wall_zone"
+          ],
+          "forbidden_region_ids": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "preferred_wall_side": "bottom_wall",
+          "anchor_strength": "strong",
+          "scenario_role": "secondary"
+        }
+      ]
+    },
+    "concept_readiness_requirements": {
+      "required_publishable_diagnostics": [
+        "circulation_clear",
+        "entry_preserved",
+        "dominant_anchor_correct",
+        "workflow_preserved"
+      ],
+      "required_pair_contracts": [
+        "daylight_opposite"
+      ],
+      "required_center_preservation": "medium",
+      "required_entry_preservation": true
+    },
+    "variant_bias_weights": {
+      "family_match_weight": 1.4,
+      "center_preserve_weight": 1.2,
+      "focal_axis_weight": 1.3,
+      "entry_clear_weight": 1.45,
+      "wall_loading_weight": 1.15,
+      "daylight_alignment_weight": 1.7,
+      "edge_loading_weight": 1.1,
+      "symmetry_weight": 1.05
+    },
+    "concept_score_prior": {
+      "functionality": 0.91,
+      "naturalness": 0.9400000000000001,
+      "semantic_coherence": 0.9500000000000001,
+      "spatial_quality": 0.91
+    },
+    "llm_guided": false,
+    "guidance_notes": [],
+    "diversity_signature": "daylight_oriented|scenario=daylight_primary_bottom_media|center=medium|wall=balanced|kitchen_core:window_side_zone:window_side:partial:strong,storage_support:bottom_wall_zone:bottom_wall:none:medium"
+  },
+  "cluster_affinities": [
+    {
+      "cluster_id": "kitchen_core",
+      "prefer": [
+        "wall",
+        "recess_or_edge",
+        "far_from_entry",
+        "center"
+      ],
+      "avoid": [
+        "entry_blocking",
+        "main_path"
+      ],
+      "priority": "high",
+      "reason": "Projection from concept zone assignment."
+    },
+    {
+      "cluster_id": "storage_support",
+      "prefer": [
+        "wall",
+        "recess_or_edge",
+        "far_from_entry"
+      ],
+      "avoid": [
+        "entry_blocking",
+        "main_path",
+        "center"
+      ],
+      "priority": "medium",
+      "reason": "Projection from concept zone assignment."
+    }
+  ],
+  "cluster_orientations": [
+    {
+      "cluster_id": "kitchen_core",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall",
+        "face_cluster",
+        "inward_to_room"
+      ],
+      "target_cluster_id": "storage_support",
+      "priority": "high",
+      "reason": "Projection from concept wall/center/focal policy."
+    },
+    {
+      "cluster_id": "storage_support",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall",
+        "face_cluster",
+        "access_to_open_space"
+      ],
+      "target_cluster_id": "kitchen_core",
+      "priority": "high",
+      "reason": "Projection from concept wall/center/focal policy."
+    }
+  ],
+  "object_orientations": [
+    {
+      "cluster_id": "kitchen_core",
+      "object_id": "kitchen_base_cabinet",
+      "intents": [
+        "back_to_wall",
+        "face_cluster",
+        "align_with_focal_axis"
+      ],
+      "priority": "high",
+      "reason": "Critical object orientation emitted by macro concept.",
+      "target_cluster_id": "storage_support"
+    }
+  ],
+  "anchor_region_preferences_by_cluster": {
+    "kitchen_core": {
+      "zone_assignment": "window_side_zone",
+      "required_region_ids": [],
+      "forbidden_region_ids": [
+        "center_openness_core",
+        "entry_to_center_corridor",
+        "door_1_entry_clearance"
+      ],
+      "preferred_region_ids": [
+        "window_side_zone",
+        "bottom_wall_zone",
+        "edge_loading_zone",
+        "left_wall_zone",
+        "right_wall_zone"
+      ],
+      "wall_claim": "strong",
+      "center_usage": "partial",
+      "preferred_wall_side": "window_side",
+      "anchor_strength": "strong",
+      "scenario_role": "primary",
+      "entry_relation": "avoid_direct_entry_conflict",
+      "daylight_relation": "neutral",
+      "placement_bias": "wall_backed",
+      "placement_behavior": {
+        "wall_backing": "required",
+        "front_space": "required",
+        "daylight_blocking": "neutral",
+        "pose_flexibility": "low"
+      }
+    },
+    "storage_support": {
+      "zone_assignment": "bottom_wall_zone",
+      "required_region_ids": [],
+      "forbidden_region_ids": [
+        "center_openness_core",
+        "entry_to_center_corridor",
+        "door_1_entry_clearance"
+      ],
+      "preferred_region_ids": [
+        "bottom_wall_zone",
+        "edge_loading_zone",
+        "left_wall_zone",
+        "right_wall_zone"
+      ],
+      "wall_claim": "medium",
+      "center_usage": "none",
+      "preferred_wall_side": "bottom_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "secondary",
+      "entry_relation": "avoid_direct_entry_conflict",
+      "daylight_relation": "neutral",
+      "placement_bias": "balanced",
+      "placement_behavior": {
+        "wall_backing": "preferred",
+        "front_space": "required",
+        "daylight_blocking": "neutral",
+        "pose_flexibility": "low"
+      }
+    }
+  },
+  "anchor_layout_hints_by_cluster": {
+    "kitchen_core": {
+      "zone_assignment": "window_side_zone",
+      "required_region_ids": [],
+      "forbidden_region_ids": [
+        "center_openness_core",
+        "entry_to_center_corridor",
+        "door_1_entry_clearance"
+      ],
+      "preferred_region_ids": [
+        "window_side_zone",
+        "bottom_wall_zone",
+        "edge_loading_zone",
+        "left_wall_zone",
+        "right_wall_zone"
+      ],
+      "role_kind": "storage",
+      "wall_claim": "strong",
+      "center_usage": "partial",
+      "preferred_wall_side": "window_side",
+      "anchor_strength": "strong",
+      "scenario_role": "primary",
+      "placement_bias": "wall_backed",
+      "placement_behavior": {
+        "wall_backing": "required",
+        "front_space": "required",
+        "daylight_blocking": "neutral",
+        "pose_flexibility": "low"
+      }
+    },
+    "storage_support": {
+      "zone_assignment": "bottom_wall_zone",
+      "required_region_ids": [],
+      "forbidden_region_ids": [
+        "center_openness_core",
+        "entry_to_center_corridor",
+        "door_1_entry_clearance"
+      ],
+      "preferred_region_ids": [
+        "bottom_wall_zone",
+        "edge_loading_zone",
+        "left_wall_zone",
+        "right_wall_zone"
+      ],
+      "role_kind": "storage",
+      "wall_claim": "medium",
+      "center_usage": "none",
+      "preferred_wall_side": "bottom_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "secondary",
+      "placement_bias": "balanced",
+      "placement_behavior": {
+        "wall_backing": "preferred",
+        "front_space": "required",
+        "daylight_blocking": "neutral",
+        "pose_flexibility": "low"
+      }
+    }
+  },
+  "anchor_pair_contracts": [
+    {
+      "pair_type": "daylight_opposite",
+      "cluster_a": "kitchen_core",
+      "cluster_b": "storage_support",
+      "strength": "high",
+      "required": true
+    },
+    {
+      "pair_type": "supports_use_axis",
+      "cluster_a": "kitchen_core",
+      "cluster_b": "storage_support",
+      "strength": "medium",
+      "required": false
+    }
+  ],
+  "object_solver_policy": {
+    "placement_mode": "anchor_first_object_level",
+    "anchor_stage_first": true,
+    "family": "daylight_oriented",
+    "support_stage_enabled": true,
+    "micro_refine_inside_solver": true,
+    "placement_order_by_cluster": {
+      "kitchen_core": [
+        "kitchen_base_cabinet",
+        "fridge",
+        "stove",
+        "sink",
+        "dishwasher"
+      ],
+      "storage_support": [
+        "kitchen_tall_cabinet"
+      ]
+    },
+    "protected_ids_by_cluster": {
+      "kitchen_core": [
+        "kitchen_base_cabinet"
+      ],
+      "storage_support": [
+        "kitchen_tall_cabinet"
+      ]
+    },
+    "droppable_ids_by_cluster": {
+      "kitchen_core": [
+        "fridge",
+        "stove",
+        "sink",
+        "dishwasher"
+      ],
+      "storage_support": []
+    }
+  },
+  "macro_region_map": {
+    "regions": [
+      {
+        "region_id": "primary_focal_wall_zone",
+        "region_type": "focal_wall_zone",
+        "label": "primary focal wall zone",
+        "source_ids": [
+          "wall_2_usable_200_3750_focal",
+          "wall_3_usable_200_4800_focal",
+          "wall_4_usable_2500_3800_focal",
+          "wall_4_usable_200_1300_focal"
+        ],
+        "tags": [
+          "wall",
+          "focal",
+          "anchor"
+        ]
+      },
+      {
+        "region_id": "quiet_private_deep_zone",
+        "region_type": "private_deep_zone",
+        "label": "quiet private deep zone",
+        "source_ids": [
+          "privacy_back_zone"
+        ],
+        "tags": [
+          "privacy",
+          "far_from_entry"
+        ]
+      },
+      {
+        "region_id": "daylight_biased_zone",
+        "region_type": "daylight_zone",
+        "label": "daylight-biased zone",
+        "source_ids": [
+          "window_1_daylight"
+        ],
+        "tags": [
+          "daylight",
+          "window_side"
+        ]
+      },
+      {
+        "region_id": "entry_adjacent_active_zone",
+        "region_type": "entry_active_zone",
+        "label": "entry-adjacent active zone",
+        "source_ids": [
+          "door_1_entry_clearance"
+        ],
+        "tags": [
+          "entry_side",
+          "active"
+        ]
+      },
+      {
+        "region_id": "keep_open_center",
+        "region_type": "keep_open_center",
+        "label": "keep-open center",
+        "source_ids": [
+          "center_openness_core"
+        ],
+        "tags": [
+          "center",
+          "keep_open"
+        ]
+      },
+      {
+        "region_id": "floating_support_zone",
+        "region_type": "floating_support_zone",
+        "label": "floating support zone",
+        "source_ids": [
+          "floating_center_zone"
+        ],
+        "tags": [
+          "floating",
+          "support",
+          "center"
+        ]
+      },
+      {
+        "region_id": "storage_service_edge_zone",
+        "region_type": "storage_service_edge_zone",
+        "label": "storage/service edge zone",
+        "source_ids": [
+          "top_wall_zone",
+          "right_wall_zone",
+          "bottom_wall_zone",
+          "left_wall_zone"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "storage"
+        ]
+      },
+      {
+        "region_id": "edge_loading_zone",
+        "region_type": "edge_loading_zone",
+        "label": "edge loading zone",
+        "source_ids": [
+          "wall_2_usable_200_3750_anchor",
+          "wall_3_usable_200_4800_anchor",
+          "wall_1_usable_200_1850_anchor",
+          "wall_4_usable_2500_3800_anchor",
+          "wall_4_usable_200_1300_anchor"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "perimeter"
+        ]
+      },
+      {
+        "region_id": "top_wall_zone",
+        "region_type": "side_wall_zone",
+        "label": "top wall zone",
+        "source_ids": [
+          "top_wall_zone"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "top_wall"
+        ]
+      },
+      {
+        "region_id": "right_wall_zone",
+        "region_type": "side_wall_zone",
+        "label": "right wall zone",
+        "source_ids": [
+          "right_wall_zone"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "right_wall"
+        ]
+      },
+      {
+        "region_id": "bottom_wall_zone",
+        "region_type": "side_wall_zone",
+        "label": "bottom wall zone",
+        "source_ids": [
+          "bottom_wall_zone"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "bottom_wall"
+        ]
+      },
+      {
+        "region_id": "left_wall_zone",
+        "region_type": "side_wall_zone",
+        "label": "left wall zone",
+        "source_ids": [
+          "left_wall_zone"
+        ],
+        "tags": [
+          "wall",
+          "edge",
+          "left_wall"
+        ]
+      },
+      {
+        "region_id": "window_side_zone",
+        "region_type": "window_side_zone",
+        "label": "window side zone",
+        "source_ids": [
+          "window_1_daylight"
+        ],
+        "tags": [
+          "wall",
+          "daylight",
+          "window_side"
+        ]
+      },
+      {
+        "region_id": "floating_center_zone",
+        "region_type": "floating_center_zone",
+        "label": "floating center zone",
+        "source_ids": [
+          "floating_center_zone"
+        ],
+        "tags": [
+          "floating",
+          "center"
+        ]
+      }
+    ],
+    "protected_topology": {
+      "entry_landing_zones": [
+        "door_1_entry_clearance"
+      ],
+      "primary_circulation_corridors": [
+        "door_1_to_room_center_corridor"
+      ],
+      "center_openness_regions": [
+        "center_openness_core"
+      ],
+      "operational_zones": [
+        {
+          "region": "door_1_entry_clearance",
+          "zone_type": "entry_landing",
+          "priority": "high",
+          "enforcement": "hard",
+          "max_overlap_ratio": 0.0,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "door_1_to_room_center_corridor",
+          "zone_type": "primary_circulation_corridor",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.05,
+          "applies_to": [
+            "core_clusters",
+            "support_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        },
+        {
+          "region": "center_openness_core",
+          "zone_type": "center_openness_core",
+          "priority": "high",
+          "enforcement": "hard_soft",
+          "max_overlap_ratio": 0.1,
+          "applies_to": [
+            "core_clusters",
+            "interaction_hulls"
+          ],
+          "violation_severity": "blocking"
+        }
+      ]
+    },
+    "topology_summary": {
+      "entry_nodes": [
+        "door_1"
+      ],
+      "window_nodes": [
+        "window:window_1"
+      ],
+      "subzones": []
+    }
+  },
+  "allowed_variant_families_by_cluster": {
+    "kitchen_core": [
+      "storage_wall",
+      "edge_storage",
+      "perimeter_storage",
+      "edge_weighted"
+    ],
+    "storage_support": [
+      "storage_wall",
+      "edge_storage",
+      "perimeter_storage",
+      "edge_weighted"
+    ]
+  },
+  "variant_bias_weights": {
+    "family_match_weight": 1.4,
+    "center_preserve_weight": 1.2,
+    "focal_axis_weight": 1.3,
+    "entry_clear_weight": 1.45,
+    "wall_loading_weight": 1.15,
+    "daylight_alignment_weight": 1.7,
+    "edge_loading_weight": 1.1,
+    "symmetry_weight": 1.05
+  },
+  "concept_readiness_requirements": {
+    "required_publishable_diagnostics": [
+      "circulation_clear",
+      "entry_preserved",
+      "dominant_anchor_correct",
+      "workflow_preserved"
+    ],
+    "required_pair_contracts": [
+      "daylight_opposite"
+    ],
+    "required_center_preservation": "medium",
+    "required_entry_preservation": true
+  },
+  "cluster_relations": [
+    {
+      "a": "kitchen_core",
+      "b": "storage_support",
+      "relation": "near",
+      "priority": "high",
+      "reason": "Projection from primary_pair_contract=daylight_opposite."
+    }
+  ],
+  "cluster_directional_relations": [
+    {
+      "a": "kitchen_core",
+      "b": "storage_support",
+      "relation": "access_faces_other",
+      "priority": "medium",
+      "reason": "Projection from primary_pair_contract=supports_use_axis."
+    }
+  ],
+  "circulation_plan": {
+    "main_paths": [
+      {
+        "from": "door_1",
+        "to_cluster": "kitchen_core",
+        "priority": "high",
+        "reason": "Primary circulation path from entry to core cluster."
+      }
+    ],
+    "keep_open_regions": [
+      {
+        "type": "entry_buffer",
+        "near": "door_1_entry_clearance",
+        "priority": "high",
+        "reason": "Protected by deterministic macro concept policy."
+      },
+      {
+        "type": "window_buffer",
+        "near": "window_1",
+        "priority": "medium",
+        "reason": "Protected by deterministic macro concept policy."
+      }
+    ]
+  },
+  "layout_intent_profile": {
+    "focus_mode": "mixed",
+    "primary_cluster_id": "kitchen_core",
+    "secondary_cluster_id": "storage_support",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
+    "support_cluster_behavior": "balanced",
+    "distribution_mode": "balanced"
+  },
+  "placement_guidelines": [
+    "Follow macro_concept.cluster_zone_plan before applying local repair.",
+    "Preserve entry landing, primary corridor, and declared center openness before support clusters compete for space."
+  ],
+  "notes": [
+    "Generated by deterministic SeedConceptGenerator family=daylight_oriented.",
+    "Legacy relation fields are a solver projection of the macro concept, not the planning source of truth."
+  ],
+  "missing": []
+}

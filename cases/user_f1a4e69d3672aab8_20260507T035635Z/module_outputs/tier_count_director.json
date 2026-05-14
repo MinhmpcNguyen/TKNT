@@ -1,0 +1,512 @@
+{
+  "status": "NEEDS_REVIEW",
+  "room_type": "bedroom",
+  "cluster_decisions": [
+    {
+      "cluster_id": "sleep_core",
+      "decision_status": "active",
+      "selected_bundles": [
+        {
+          "bundle_id": "sleep_core_bundle",
+          "preserve_level": "highest",
+          "bundle_class": "indispensable",
+          "objects": [
+            {
+              "object_type": "bed",
+              "quantity": 1,
+              "size_tier": "M",
+              "role": "dominant_anchor",
+              "preserve_level": "highest",
+              "drop_order_bias": "drop_last",
+              "min_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.3,
+              "preferred_size_tier": "M",
+              "request_contract_intent": "must_keep",
+              "request_contract_reason": "explicitly requested in the brief",
+              "request_contract_evidence": "keep the layout clean and minimal with clear circulation from the door to the bed",
+              "decision_reason": "highest functional utility and semantic anchor value",
+              "utility_score": 3.893,
+              "utility_breakdown": {
+                "function": 5.6,
+                "semantic": 5.0,
+                "completeness": 0.45,
+                "roomfit": -0.8,
+                "clutter_penalty": 6.227,
+                "circulation_penalty": 2.98,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": 0.0,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.9,
+                "tier_count_hint_bias": 1.95,
+                "space_surplus_bonus": 0.0,
+                "total": 3.893
+              }
+            },
+            {
+              "object_type": "nightstand",
+              "quantity": 0,
+              "size_tier": null,
+              "role": "support",
+              "preserve_level": "high",
+              "drop_order_bias": "neutral",
+              "min_keep": 0,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.55,
+              "preferred_size_tier": "S",
+              "request_contract_intent": "",
+              "request_contract_reason": "",
+              "request_contract_evidence": "",
+              "decision_reason": "dropped by utility ranking under clutter and circulation budget",
+              "utility_score": 1.267,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 2.0,
+                "completeness": 1.5,
+                "roomfit": 1.4,
+                "clutter_penalty": 6.511,
+                "circulation_penalty": 0.122,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.32,
+                "protected_bonus": 0.0,
+                "tier_count_hint_bias": 0.43,
+                "space_surplus_bonus": 0.0,
+                "total": 1.267
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cluster_id": "storage_core",
+      "decision_status": "active",
+      "selected_bundles": [
+        {
+          "bundle_id": "storage_core_bundle",
+          "preserve_level": "highest",
+          "bundle_class": "indispensable",
+          "objects": [
+            {
+              "object_type": "wardrobe",
+              "quantity": 1,
+              "size_tier": "M",
+              "role": "dominant_anchor",
+              "preserve_level": "highest",
+              "drop_order_bias": "neutral",
+              "min_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.35,
+              "preferred_size_tier": "M",
+              "request_contract_intent": "",
+              "request_contract_reason": "",
+              "request_contract_evidence": "",
+              "decision_reason": "highest functional utility and semantic anchor value",
+              "utility_score": 5.282,
+              "utility_breakdown": {
+                "function": 5.0,
+                "semantic": 5.0,
+                "completeness": 0.45,
+                "roomfit": 0.8,
+                "clutter_penalty": 7.769,
+                "circulation_penalty": 0.379,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": 0.0,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.9,
+                "tier_count_hint_bias": 1.28,
+                "space_surplus_bonus": 0.0,
+                "total": 5.282
+              }
+            },
+            {
+              "object_type": "bookshelf",
+              "quantity": 0,
+              "size_tier": null,
+              "role": "support",
+              "preserve_level": "medium",
+              "drop_order_bias": "drop_early",
+              "min_keep": 0,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.6,
+              "preferred_size_tier": "S",
+              "request_contract_intent": "",
+              "request_contract_reason": "",
+              "request_contract_evidence": "",
+              "decision_reason": "dropped by utility ranking under clutter and circulation budget",
+              "utility_score": -3.042,
+              "utility_breakdown": {
+                "function": 2.7,
+                "semantic": 2.0,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 8.911,
+                "circulation_penalty": 0.281,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.32,
+                "protected_bonus": 0.0,
+                "tier_count_hint_bias": -0.27,
+                "space_surplus_bonus": 0.0,
+                "total": -3.042
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_study",
+      "decision_status": "active",
+      "selected_bundles": [
+        {
+          "bundle_id": "work_study_bundle",
+          "preserve_level": "high",
+          "bundle_class": "strong_support",
+          "objects": [
+            {
+              "object_type": "desk",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "dominant_anchor",
+              "preserve_level": "high",
+              "drop_order_bias": "neutral",
+              "min_keep": 0,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.45,
+              "preferred_size_tier": "S",
+              "request_contract_intent": "",
+              "request_contract_reason": "",
+              "request_contract_evidence": "",
+              "decision_reason": "highest functional utility and semantic anchor value",
+              "utility_score": 2.588,
+              "utility_breakdown": {
+                "function": 5.6,
+                "semantic": 3.0,
+                "completeness": 0.45,
+                "roomfit": 1.4,
+                "clutter_penalty": 8.911,
+                "circulation_penalty": 0.281,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": 0.0,
+                "semantic_support_bias": 0.0,
+                "protected_bonus": 0.9,
+                "tier_count_hint_bias": 0.43,
+                "space_surplus_bonus": 0.0,
+                "total": 2.588
+              }
+            },
+            {
+              "object_type": "chair",
+              "quantity": 1,
+              "size_tier": "S",
+              "role": "secondary_support",
+              "preserve_level": "medium",
+              "drop_order_bias": "neutral",
+              "min_keep": 0,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.6,
+              "preferred_size_tier": "S",
+              "request_contract_intent": "",
+              "request_contract_reason": "",
+              "request_contract_evidence": "",
+              "decision_reason": "high completeness utility under clutter budget",
+              "utility_score": -2.353,
+              "utility_breakdown": {
+                "function": 2.1,
+                "semantic": 2.2,
+                "completeness": 1.3,
+                "roomfit": 1.4,
+                "clutter_penalty": 9.311,
+                "circulation_penalty": 0.172,
+                "redundancy_penalty": 0.0,
+                "style_policy_bias": -0.45,
+                "semantic_support_bias": 0.55,
+                "protected_bonus": 0.0,
+                "tier_count_hint_bias": 0.03,
+                "space_surplus_bonus": 0.0,
+                "total": -2.353
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "global_density_policy": {
+    "target_density": "low_to_balanced",
+    "clutter_budget_level": "low",
+    "center_openness_preserved": false,
+    "style_policy_applied": true
+  },
+  "capacity_model": {
+    "available_area_m2": 10.32,
+    "target_density": "low_to_balanced",
+    "density_ratio": 0.24599999999999997,
+    "wall_capacity_m2": 4.32,
+    "floating_capacity_m2": 1.6512,
+    "center_openness_budget_m2": 2.9928000000000003,
+    "circulation_budget_m2": 2.064,
+    "clutter_budget_m2": 2.5387199999999996,
+    "entry_conflict_sensitivity": "high",
+    "center_openness_weight": "very_high",
+    "circulation_penalty_weight": "very_high",
+    "semantic_core_preserve_weight": "very_high",
+    "signals": {
+      "usable_wall_segments": 0,
+      "floating_zone_candidates": 1,
+      "center_openness_regions": 1,
+      "primary_circulation_corridors": 0,
+      "entry_landing_zones": 1
+    },
+    "style_policy": {
+      "style_name": "balanced",
+      "layout_policy": {
+        "target_density": "low_to_balanced",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "focal_balanced",
+        "symmetry_bias": "balanced",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "low_to_medium",
+        "material_weight_bias": "light",
+        "visual_balance_bias": "calm"
+      }
+    }
+  },
+  "decision_summary": {
+    "selected_object_count": 4,
+    "dropped_object_types": [
+      "bookshelf",
+      "nightstand"
+    ],
+    "estimated_footprint_mm2": 7305523,
+    "estimated_circulation_pressure": 1.0
+  },
+  "degradation_ready_order": [],
+  "missing": [],
+  "conflicts": [
+    "chair is semantically required but has negative utility under capacity."
+  ],
+  "confidence": 0.67,
+  "notes": [
+    "Tier Count used deterministic utility, capacity, and bundle-preserving rules, plus Forge semantic tier-count hints when available.",
+    "Tier Count itself did not run an additional LLM call.",
+    "Output is synchronized for the object-level anchor-first solver handoff."
+  ],
+  "decisions": [
+    {
+      "object_type": "bed",
+      "category": "bed",
+      "cluster_id": "sleep_core",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "preserve_level": "highest",
+      "bundle_id": "sleep_core_bundle",
+      "role": "dominant_anchor",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": true,
+      "droppable": false,
+      "drop_order_bias": "drop_last",
+      "min_keep": 1,
+      "keep_if_space_surplus": false,
+      "space_surplus_threshold": 0.3,
+      "preferred_size_tier": "M",
+      "request_contract_intent": "must_keep",
+      "request_contract_reason": "explicitly requested in the brief",
+      "request_contract_evidence": "keep the layout clean and minimal with clear circulation from the door to the bed",
+      "rationale": "highest functional utility and semantic anchor value",
+      "utility_score": 3.893,
+      "rep_dims_m": {
+        "L": 2.319375,
+        "W": 2.3059531,
+        "H": 1.1500009,
+        "A": 5.3483699713125,
+        "R": 1.005820543357972,
+        "source_id": "demo_inventory_Group2132577628"
+      }
+    },
+    {
+      "object_type": "nightstand",
+      "category": "nightstand",
+      "cluster_id": "sleep_core",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "high",
+      "bundle_id": "sleep_core_bundle",
+      "role": "support",
+      "semantic_support_role": "side_support",
+      "band_intent": "beside_base",
+      "protected": false,
+      "droppable": false,
+      "drop_order_bias": "neutral",
+      "min_keep": 0,
+      "keep_if_space_surplus": true,
+      "space_surplus_threshold": 0.55,
+      "preferred_size_tier": "S",
+      "request_contract_intent": "",
+      "request_contract_reason": "",
+      "request_contract_evidence": "",
+      "rationale": "dropped by utility ranking under clutter and circulation budget",
+      "utility_score": 1.267,
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.400625,
+        "H": 0.5963327,
+        "A": 0.18028125,
+        "R": 1.1232449297971918,
+        "source_id": "demo_inventory_Group2132576449"
+      }
+    },
+    {
+      "object_type": "wardrobe",
+      "category": "wardrobe",
+      "cluster_id": "storage_core",
+      "quantity": 1,
+      "size_tier": "M",
+      "priority": "anchor",
+      "preserve_level": "highest",
+      "bundle_id": "storage_core_bundle",
+      "role": "dominant_anchor",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": true,
+      "droppable": false,
+      "drop_order_bias": "neutral",
+      "min_keep": 1,
+      "keep_if_space_surplus": true,
+      "space_surplus_threshold": 0.35,
+      "preferred_size_tier": "M",
+      "request_contract_intent": "",
+      "request_contract_reason": "",
+      "request_contract_evidence": "",
+      "rationale": "highest functional utility and semantic anchor value",
+      "utility_score": 5.282,
+      "rep_dims_m": {
+        "L": 1.6006484,
+        "W": 0.6115,
+        "H": 2.3944648,
+        "A": 0.9787964966000001,
+        "R": 2.617577105478332,
+        "source_id": "demo_inventory_Group2132577606"
+      }
+    },
+    {
+      "object_type": "bookshelf",
+      "category": "bookshelf",
+      "cluster_id": "storage_core",
+      "quantity": 0,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "medium",
+      "bundle_id": "storage_core_bundle",
+      "role": "support",
+      "semantic_support_role": "wall_support",
+      "band_intent": "wall_band",
+      "protected": false,
+      "droppable": false,
+      "drop_order_bias": "drop_early",
+      "min_keep": 0,
+      "keep_if_space_surplus": true,
+      "space_surplus_threshold": 0.6,
+      "preferred_size_tier": "S",
+      "request_contract_intent": "",
+      "request_contract_reason": "",
+      "request_contract_evidence": "",
+      "rationale": "dropped by utility ranking under clutter and circulation budget",
+      "utility_score": -3.042,
+      "rep_dims_m": {
+        "L": 0.45,
+        "W": 0.400625,
+        "H": 0.5963327,
+        "A": 0.18028125,
+        "R": 1.1232449297971918,
+        "source_id": "demo_inventory_Group2132576449"
+      }
+    },
+    {
+      "object_type": "desk",
+      "category": "desk",
+      "cluster_id": "work_study",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "anchor",
+      "preserve_level": "high",
+      "bundle_id": "work_study_bundle",
+      "role": "dominant_anchor",
+      "semantic_support_role": "",
+      "band_intent": "",
+      "protected": true,
+      "droppable": false,
+      "drop_order_bias": "neutral",
+      "min_keep": 0,
+      "keep_if_space_surplus": true,
+      "space_surplus_threshold": 0.45,
+      "preferred_size_tier": "S",
+      "request_contract_intent": "",
+      "request_contract_reason": "",
+      "request_contract_evidence": "",
+      "rationale": "highest functional utility and semantic anchor value",
+      "utility_score": 2.588,
+      "rep_dims_m": {
+        "L": 1.208,
+        "W": 0.5998905999999999,
+        "H": 0.7497368,
+        "A": 0.7246678447999999,
+        "R": 2.0137004980574793,
+        "source_id": "demo_inventory_Group2132576496"
+      }
+    },
+    {
+      "object_type": "chair",
+      "category": "chair",
+      "cluster_id": "work_study",
+      "quantity": 1,
+      "size_tier": "S",
+      "priority": "secondary",
+      "preserve_level": "medium",
+      "bundle_id": "work_study_bundle",
+      "role": "secondary_support",
+      "semantic_support_role": "secondary_seat",
+      "band_intent": "flank_band",
+      "protected": false,
+      "droppable": false,
+      "drop_order_bias": "neutral",
+      "min_keep": 0,
+      "keep_if_space_surplus": true,
+      "space_surplus_threshold": 0.6,
+      "preferred_size_tier": "S",
+      "request_contract_intent": "",
+      "request_contract_reason": "",
+      "request_contract_evidence": "",
+      "rationale": "high completeness utility under clutter budget",
+      "utility_score": -2.353,
+      "rep_dims_m": {
+        "L": 0.5115938,
+        "W": 0.4958789,
+        "H": 0.8496606000000001,
+        "A": 0.25368857079082,
+        "R": 1.0316910035897877,
+        "source_id": "demo_inventory_Group2132577565"
+      }
+    }
+  ],
+  "assumptions": [
+    "Deterministic tier-count policy applied from semantic bundles, room capacity, and utility scores.",
+    "User notes suggest a clutter-light layout, so optional items start conservative.",
+    "Estimated available room area is 10.32 m2.",
+    "Style policy adjusted density, clutter, and decor utility without overriding required functional anchors."
+  ],
+  "global_notes": [
+    "TierCountDirector used deterministic rules instead of an LLM.",
+    "Utility scoring considered the requested style: modern.",
+    "Initial furnishing mode: minimal."
+  ],
+  "budget_valid": false
+}

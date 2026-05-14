@@ -1,9 +1,48 @@
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Mapping, Sequence
+import os
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+from clients.base_client import ChatMessage
+from clients.llm_client import get_llm_client
+
+try:
+    from config.llm_config import TextLLMConfig
+except Exception:  # pragma: no cover
+    from config.gemini_config import GeminiConfig
+
+    class TextLLMConfig:
+        PROVIDER = "gemini"
+        STRICT_SINGLE_TEXT_MODEL = str(
+            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
+        ).strip()
+        AGENT_MODELS = dict(getattr(GeminiConfig, "AGENT_MODELS", {}) or {})
+
+        @classmethod
+        def primary_model_name(cls) -> str:
+            return ""
+
+        @classmethod
+        def agent_model_chain(
+            cls,
+            model_config_keys: Sequence[str],
+            default_model_chain: Sequence[str] = (),
+        ) -> list[str]:
+            if cls.STRICT_SINGLE_TEXT_MODEL:
+                return [cls.STRICT_SINGLE_TEXT_MODEL]
+            configured = [
+                cls.AGENT_MODELS.get(config_key) for config_key in model_config_keys
+            ]
+            return [
+                model_name
+                for model_name in (*configured, *default_model_chain)
+                if isinstance(model_name, str) and model_name.strip()
+            ]
+
 
 from layout.variant_family import SLEEP_VARIANT_FAMILIES
 
@@ -34,18 +73,104 @@ DEDUPE_THRESHOLD = 0.75
 MIN_CONCEPT_DISTANCE = 0.25
 MAX_VARIANT_FAMILIES_PER_CLUSTER = 4
 MIN_VARIANT_FAMILIES_PER_CLUSTER = 2
+_RESPONSE_MIME_TYPE = "application/json"
+_GUIDANCE_LLM_TEMPERATURE = 0.2
+_GUIDANCE_LLM_TOP_P = 0.9
+_SEED_CONCEPT_GUIDED_LLM_ENV = "TKNT_SEED_CONCEPT_GUIDED_LLM"
+_GUIDED_STAGE_NOTE = (
+    "LLM-guided SeedConceptGenerator refined macro concept blueprints while "
+    "deterministic validation and solver projection remained active."
+)
+_GUIDED_STAGE_FALLBACK_NOTE = (
+    "LLM-guided SeedConceptGenerator fell back to deterministic macro concept "
+    "generation after guidance validation failed."
+)
+_CENTER_USAGE_VALUES = {"none", "partial", "primary", "open_reserved"}
+_GUIDED_WALL_SIDES = {
+    "",
+    "center",
+    "window_side",
+    "top_wall",
+    "right_wall",
+    "bottom_wall",
+    "left_wall",
+}
+_GUIDED_TOPOLOGY_POLICY_KEYS = {
+    "reserve_center_degree",
+    "wall_loading_bias",
+    "daylight_bias",
+    "entry_avoidance_strength",
+    "secondary_zone_placement_bias",
+}
+_FIT_CHECKED_REQUIRED_REGION_IDS: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class _MacroConceptGuidanceSpec:
+    model_config_keys: tuple[str, str, str]
+    default_model_chain: tuple[str, str, str]
+    system_prompt: str
+    task_prompt: str
+    output_contract: str
+    repair_prompt: str
+
+
+_MACRO_CONCEPT_GUIDANCE_SPEC = _MacroConceptGuidanceSpec(
+    model_config_keys=(
+        "relation_planner_macro_concept_guidance_primary",
+        "relation_planner_macro_concept_guidance_fallback_primary",
+        "relation_planner_macro_concept_guidance_fallback_secondary",
+    ),
+    default_model_chain=(
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash-lite",
+    ),
+    system_prompt=(
+        "You refine macro layout concept blueprints for a deterministic interior "
+        "layout planner. Return exactly one JSON object. No markdown. No prose "
+        "outside JSON. Use only the provided concept families, cluster ids, and "
+        "macro region ids."
+    ),
+    task_prompt=(
+        "Increase macro-concept diversity without breaking solver stability. "
+        "Adjust concept family order, topology bias, and cluster-to-zone steering "
+        "for this exact room, brief, and semantic cluster set. Favor legible, "
+        "plausible alternatives over novelty for its own sake."
+    ),
+    output_contract=(
+        "Top-level keys: `family_order`, `concept_blueprints`, `notes`. "
+        "`family_order` must contain only provided concept families. "
+        "`concept_blueprints` must be a list of guidance entries. Each entry must "
+        "contain `concept_family`, `topology_policy`, and `cluster_zone_overrides`. "
+        "`topology_policy` may only set: `reserve_center_degree`, "
+        "`wall_loading_bias`, `daylight_bias`, `entry_avoidance_strength`, "
+        "`secondary_zone_placement_bias`. Each cluster override must contain "
+        "`cluster_id`, `zone_assignment`, `preferred_wall_side`, and "
+        "`center_usage`. Use only provided cluster ids and macro region ids. "
+        "Never assign any cluster to `keep_open_center`."
+    ),
+    repair_prompt=(
+        "Return exactly one valid JSON object with top-level keys "
+        "`family_order`, `concept_blueprints`, and `notes`. No markdown."
+    ),
+)
 
 
 @dataclass(frozen=True)
 class ClusterProgram:
     cluster_id: str
     semantic_role: str
+    layout_role: str
     role_kind: str
     priority: Priority
     zone_claims: Mapping[str, object]
     relation_intents: tuple[Mapping[str, object], ...]
     seed_region_tags: tuple[str, ...]
     object_ids: tuple[str, ...]
+    required_object_ids: tuple[str, ...]
+    optional_object_ids: tuple[str, ...]
+    droppable_object_ids: tuple[str, ...]
 
     @property
     def dominant_anchor_object_id(self) -> str | None:
@@ -103,6 +228,12 @@ class SeedConceptGenerator:
         room_model_json: Mapping[str, object],
         clusters_json: Mapping[str, object],
         target_count: int = 5,
+        description: str | None = None,
+        special_notes: str | None = None,
+        use_llm: bool = True,
+        temperature: float = _GUIDANCE_LLM_TEMPERATURE,
+        top_p: float = _GUIDANCE_LLM_TOP_P,
+        max_tokens: int | None = None,
     ) -> dict[str, object]:
         room_model = _unwrap_room_model(room_model_json)
         room_type = _room_type(room_model)
@@ -113,6 +244,39 @@ class SeedConceptGenerator:
             cluster_programs=cluster_programs,
             macro_regions=_macro_regions_from_map(macro_region_map),
         )
+        guidance_notes: list[str] = []
+        guidance_bundle: dict[str, object] | None = None
+        controller = "deterministic_seed_concept_generator"
+        if (
+            use_llm
+            and _guided_seed_concept_llm_enabled()
+            and cluster_programs
+            and region_candidates
+        ):
+            try:
+                guidance_bundle = self._generate_macro_concept_guidance(
+                    room_model=room_model,
+                    room_type=room_type,
+                    clusters_json=clusters_json,
+                    cluster_programs=cluster_programs,
+                    macro_region_map=macro_region_map,
+                    region_candidates=region_candidates,
+                    style_policy=style_policy,
+                    description=description,
+                    special_notes=special_notes,
+                    target_count=target_count,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                )
+                guidance_notes.extend(_string_list(guidance_bundle.get("notes")))
+                controller = "llm_guided_seed_concept_generator"
+            except Exception as exc:
+                logger.warning(
+                    "SeedConceptGenerator LLM guidance failed; using deterministic macro concepts: %s",
+                    exc,
+                )
+                guidance_notes.append(_GUIDED_STAGE_FALLBACK_NOTE)
         concepts = _instantiate_concept_families(
             room_model=room_model,
             room_type=room_type,
@@ -121,14 +285,22 @@ class SeedConceptGenerator:
             region_candidates=region_candidates,
             style_policy=style_policy,
             target_count=target_count,
+            guidance_bundle=guidance_bundle,
         )
 
         status = "OK" if concepts and cluster_programs else "UNSAT"
+        notes = [
+            "Relation planning is absorbed into semantic zone claims and deterministic macro concept generation.",
+            "Concepts do not place exact coordinates; MacroClusterSolver owns pose search.",
+        ]
+        if guidance_bundle is not None:
+            notes.insert(0, _GUIDED_STAGE_NOTE)
+        notes.extend(note for note in guidance_notes if note not in notes)
         return {
             "status": status,
             "room_id": _room_id(room_model),
             "room_type": room_type,
-            "controller": "deterministic_seed_concept_generator",
+            "controller": controller,
             "settings": {
                 "macro_region_cap": MACRO_REGION_CAP,
                 "concept_family_count": len(CONCEPT_FAMILIES),
@@ -136,6 +308,7 @@ class SeedConceptGenerator:
                 "max_assignment_candidates_per_concept": MAX_ASSIGNMENT_CANDIDATES_PER_CONCEPT,
                 "dedupe_threshold": DEDUPE_THRESHOLD,
                 "min_concept_distance": MIN_CONCEPT_DISTANCE,
+                "llm_guided": guidance_bundle is not None,
             },
             "style_policy": style_policy,
             "macro_region_map": macro_region_map,
@@ -146,10 +319,8 @@ class SeedConceptGenerator:
                 ]
             ],
             "concepts": concepts,
-            "notes": [
-                "Relation planning is absorbed into semantic zone claims and deterministic macro concept generation.",
-                "Concepts do not place exact coordinates; MacroClusterSolver owns pose search.",
-            ],
+            "notes": notes,
+            "llm_guidance": guidance_bundle or {},
         }
 
     def generate(
@@ -163,12 +334,17 @@ class SeedConceptGenerator:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> dict[str, object]:
-        _ = description, model_name, temperature, max_tokens
+        _ = model_name
         family = _family_from_text(special_notes)
         bundle = self.generate_bundle(
             room_model_json=room_model_json,
             clusters_json=clusters_json,
             target_count=len(CONCEPT_FAMILIES),
+            description=description,
+            special_notes=special_notes,
+            use_llm=True,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         concepts = [
             concept
@@ -187,6 +363,168 @@ class SeedConceptGenerator:
             room_model=room_model,
             room_type=str(bundle.get("room_type") or _room_type(room_model_json)),
         )
+
+    def _generate_macro_concept_guidance(
+        self,
+        *,
+        room_model: Mapping[str, object],
+        room_type: str,
+        clusters_json: Mapping[str, object],
+        cluster_programs: Sequence[ClusterProgram],
+        macro_region_map: Mapping[str, object],
+        region_candidates: Sequence[RegionCandidate],
+        style_policy: Mapping[str, object],
+        description: str | None,
+        special_notes: str | None,
+        target_count: int,
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+    ) -> dict[str, object]:
+        payload = {
+            "room_type": room_type,
+            "description": (description or "").strip(),
+            "special_notes": (special_notes or "").strip(),
+            "target_count": max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
+            "style_policy": style_policy,
+            "cluster_programs": [
+                {
+                    "cluster_id": cluster.cluster_id,
+                    "semantic_role": cluster.semantic_role,
+                    "layout_role": cluster.layout_role,
+                    "role_kind": cluster.role_kind,
+                    "priority": cluster.priority,
+                    "zone_claims": dict(cluster.zone_claims),
+                    "object_ids": list(cluster.object_ids),
+                }
+                for cluster in cluster_programs
+            ],
+            "macro_regions": [
+                {
+                    "region_id": region.get("region_id"),
+                    "region_type": region.get("region_type"),
+                    "tags": region.get("tags"),
+                }
+                for region in _sequence_or_empty(macro_region_map.get("regions"))
+                if isinstance(region, Mapping)
+            ],
+            "top_region_candidates_by_cluster": _top_region_candidates_by_cluster(
+                region_candidates
+            ),
+            "available_concept_families": list(CONCEPT_FAMILIES),
+            "deterministic_family_order": list(
+                _style_ranked_concept_families(style_policy)
+            ),
+            "clusters_json_summary": _guided_clusters_summary(clusters_json),
+            "room_topology_summary": _guided_room_summary(room_model, macro_region_map),
+        }
+        guidance = self._call_macro_concept_guidance_stage(
+            prompt_payload=payload,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            response_validator=lambda response: _sanitize_macro_concept_guidance(
+                response,
+                target_count=max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
+                available_families=CONCEPT_FAMILIES,
+                cluster_ids={cluster.cluster_id for cluster in cluster_programs},
+                region_ids=_available_macro_region_ids(macro_region_map),
+            ),
+        )
+        return _sanitize_macro_concept_guidance(
+            guidance,
+            target_count=max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
+            available_families=CONCEPT_FAMILIES,
+            cluster_ids={cluster.cluster_id for cluster in cluster_programs},
+            region_ids=_available_macro_region_ids(macro_region_map),
+        )
+
+    def _call_macro_concept_guidance_stage(
+        self,
+        *,
+        prompt_payload: Mapping[str, object],
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None,
+        response_validator: Callable[[dict[str, object]], object] | None = None,
+    ) -> dict[str, object]:
+        stage_spec = _MACRO_CONCEPT_GUIDANCE_SPEC
+        user_prompt = (
+            "Task:\n"
+            f"{stage_spec.task_prompt}\n\n"
+            "Output Contract:\n"
+            f"{stage_spec.output_contract}\n\n"
+            "Rules:\n"
+            "- Return exactly one JSON object.\n"
+            "- No markdown.\n"
+            "- No commentary outside JSON.\n"
+            "- Do not omit required keys.\n\n"
+            "Payload:\n"
+            f"{json.dumps(prompt_payload, ensure_ascii=True, indent=2)}"
+        )
+        base_messages: list[ChatMessage] = [
+            {"role": "system", "content": stage_spec.system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        client = get_llm_client()
+        model_chain = _seed_concept_guidance_model_chain()
+        last_error: Exception | None = None
+        for model_index, model_name in enumerate(model_chain):
+            messages = list(base_messages)
+            fallback_model_names = model_chain[model_index + 1 :]
+            try:
+                last_raw = ""
+                for attempt in range(2):
+                    response = client.chat_completion(
+                        messages,
+                        model_key="primary",
+                        model_name=model_name,
+                        fallback_model_names=fallback_model_names,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        response_mime_type=_RESPONSE_MIME_TYPE,
+                    )
+                    last_raw = _extract_llm_content(response)
+                    try:
+                        parsed = _parse_guidance_json(last_raw)
+                        if response_validator is not None:
+                            response_validator(parsed)
+                        return parsed
+                    except ValueError as exc:
+                        if attempt == 1:
+                            raise ValueError(
+                                "macro concept guidance validation failed on "
+                                f"{model_name}: {exc}"
+                            ) from exc
+                        _record_llm_retry(
+                            stage="seed_concept_generator.macro_concept_guidance",
+                            model_name=model_name,
+                            reason="invalid_json_or_schema",
+                        )
+                        messages.append({"role": "assistant", "content": last_raw})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"{stage_spec.repair_prompt}\n"
+                                    f"Validation error: {exc}"
+                                ),
+                            }
+                        )
+            except Exception as exc:
+                last_error = exc
+                if model_index == len(model_chain) - 1:
+                    break
+                logger.warning(
+                    "SeedConceptGenerator guidance failed on model %s; retrying with %s: %s",
+                    model_name,
+                    model_chain[model_index + 1],
+                    exc,
+                )
+        if last_error is not None:
+            raise last_error
+        raise ValueError("macro concept guidance produced no response")
 
 
 def solver_plan_from_concept(
@@ -334,6 +672,22 @@ def _build_cluster_programs(
             semantic.get("zone_claims") or _cluster_rules(cluster).get("zone_claims")
         )
         object_ids = tuple(_cluster_object_ids(cluster))
+        object_program = _mapping_or_empty(cluster.get("object_program"))
+        required_object_ids = tuple(
+            item
+            for item in _string_list(object_program.get("required_object_ids"))
+            if item in object_ids
+        )
+        optional_object_ids = tuple(
+            item
+            for item in _string_list(object_program.get("optional_object_ids"))
+            if item in object_ids
+        )
+        droppable_object_ids = tuple(
+            item
+            for item in _string_list(object_program.get("droppable_ids"))
+            if item in object_ids
+        )
         semantic_role = _clean_str(
             semantic.get("semantic_role")
         ) or _semantic_role_from_cluster(cluster_id, object_ids)
@@ -348,12 +702,16 @@ def _build_cluster_programs(
             ClusterProgram(
                 cluster_id=cluster_id,
                 semantic_role=semantic_role,
+                layout_role=_layout_role(semantic),
                 role_kind=role_kind,
                 priority=priority,
                 zone_claims=zone_claims,
                 relation_intents=relation_intents,
                 seed_region_tags=tuple(_seed_region_tags(cluster)),
                 object_ids=object_ids,
+                required_object_ids=required_object_ids,
+                optional_object_ids=optional_object_ids,
+                droppable_object_ids=droppable_object_ids,
             )
         )
     return programs
@@ -559,6 +917,420 @@ def _macro_regions_from_map(
             )
         )
     return out
+
+
+def _apply_zone_forbidden_guardrails(
+    *,
+    room_model: Mapping[str, object],
+    macro_region_map: Mapping[str, object],
+    cluster_programs: Sequence[ClusterProgram],
+    family: ConceptFamily,
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    region_index = _guardrail_region_index(room_model)
+    clusters_by_id = {cluster.cluster_id: cluster for cluster in cluster_programs}
+    rows = [dict(row) for row in cluster_zone_plan]
+    for row in rows:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        cluster = clusters_by_id.get(cluster_id)
+        if cluster is None:
+            continue
+        current_zone = _clean_str(row.get("zone_assignment"))
+        if current_zone is None:
+            continue
+        forbidden_region_ids = _string_list(row.get("forbidden_region_ids"))
+        if not forbidden_region_ids:
+            continue
+        if not _zone_overlaps_forbidden_regions(
+            zone_id=current_zone,
+            forbidden_region_ids=forbidden_region_ids,
+            region_index=region_index,
+            macro_region_map=macro_region_map,
+            room_model=room_model,
+        ):
+            continue
+        replacement = _non_conflicting_zone_assignment(
+            row=row,
+            forbidden_region_ids=forbidden_region_ids,
+            region_index=region_index,
+            macro_region_map=macro_region_map,
+            room_model=room_model,
+        )
+        if replacement is None or replacement == current_zone:
+            row["zone_guardrail_notes"] = [
+                "No non-conflicting macro zone candidate was available."
+            ]
+            continue
+        _apply_zone_assignment_to_row(
+            row=row,
+            cluster=cluster,
+            family=family,
+            zone_assignment=replacement,
+        )
+        row["zone_guardrail_notes"] = [
+            f"Reassigned from {current_zone} because it overlaps a forbidden region."
+        ]
+    return rows
+
+
+def _non_conflicting_zone_assignment(
+    *,
+    row: Mapping[str, object],
+    forbidden_region_ids: Sequence[str],
+    region_index: Mapping[str, tuple[int, int, int, int]],
+    macro_region_map: Mapping[str, object],
+    room_model: Mapping[str, object],
+) -> str | None:
+    current_zone = _clean_str(row.get("zone_assignment"))
+    candidate_ids = [
+        _clean_str(candidate.get("region_id"))
+        for candidate in _sequence_or_empty(row.get("region_candidates"))
+        if isinstance(candidate, Mapping)
+    ]
+    candidate_ids.extend(
+        [
+            "edge_loading_zone",
+            "storage_service_edge_zone",
+            "top_wall_zone",
+            "right_wall_zone",
+            "bottom_wall_zone",
+            "left_wall_zone",
+            "primary_focal_wall_zone",
+            "quiet_private_deep_zone",
+            "daylight_biased_zone",
+            "window_side_zone",
+        ]
+    )
+    seen: set[str] = set()
+    best_zone = current_zone
+    best_score = float("inf")
+    for candidate_id in candidate_ids:
+        if candidate_id is None or candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        if candidate_id == "keep_open_center":
+            continue
+        score = _zone_forbidden_overlap_score(
+            zone_id=candidate_id,
+            forbidden_region_ids=forbidden_region_ids,
+            region_index=region_index,
+            macro_region_map=macro_region_map,
+            room_model=room_model,
+        )
+        if score <= 1e-9:
+            return candidate_id
+        if score < best_score:
+            best_score = score
+            best_zone = candidate_id
+    return best_zone
+
+
+def _zone_overlaps_forbidden_regions(
+    *,
+    zone_id: str,
+    forbidden_region_ids: Sequence[str],
+    region_index: Mapping[str, tuple[int, int, int, int]],
+    macro_region_map: Mapping[str, object],
+    room_model: Mapping[str, object],
+) -> bool:
+    return (
+        _zone_forbidden_overlap_score(
+            zone_id=zone_id,
+            forbidden_region_ids=forbidden_region_ids,
+            region_index=region_index,
+            macro_region_map=macro_region_map,
+            room_model=room_model,
+        )
+        > 0.25
+    )
+
+
+def _zone_forbidden_overlap_score(
+    *,
+    zone_id: str,
+    forbidden_region_ids: Sequence[str],
+    region_index: Mapping[str, tuple[int, int, int, int]],
+    macro_region_map: Mapping[str, object],
+    room_model: Mapping[str, object],
+) -> float:
+    zone_bboxes = _guardrail_region_bboxes_from_ref(
+        zone_id, region_index, macro_region_map, room_model
+    )
+    forbidden_bboxes = [
+        bbox
+        for region_id in forbidden_region_ids
+        for bbox in _guardrail_region_bboxes_from_ref(
+            region_id, region_index, macro_region_map, room_model
+        )
+    ]
+    score = 0.0
+    for zone_bbox in zone_bboxes:
+        for forbidden_bbox in forbidden_bboxes:
+            score = max(
+                score,
+                _guardrail_rect_overlap_ratio(zone_bbox, forbidden_bbox),
+                _guardrail_rect_overlap_ratio(forbidden_bbox, zone_bbox),
+            )
+    return score
+
+
+def _guardrail_region_index(
+    room_model: Mapping[str, object],
+) -> dict[str, tuple[int, int, int, int]]:
+    out: dict[str, tuple[int, int, int, int]] = {}
+
+    def walk(value: object) -> None:
+        if isinstance(value, Mapping):
+            region_id = _clean_str(value.get("region_id")) or _clean_str(
+                value.get("id")
+            )
+            bbox = _guardrail_bbox_from_mapping(value)
+            if region_id is not None and bbox is not None:
+                out.setdefault(region_id, bbox)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, Sequence) and not isinstance(value, str):
+            for item in value:
+                walk(item)
+
+    walk(room_model)
+    _add_guardrail_primary_corridor_aliases(room_model, out)
+    return out
+
+
+def _guardrail_region_bboxes_from_ref(
+    region_ref: str,
+    region_index: Mapping[str, tuple[int, int, int, int]],
+    macro_region_map: Mapping[str, object],
+    room_model: Mapping[str, object],
+) -> list[tuple[int, int, int, int]]:
+    if region_ref in region_index:
+        return [region_index[region_ref]]
+    for region in _sequence_or_empty(macro_region_map.get("regions")):
+        if not isinstance(region, Mapping):
+            continue
+        if _clean_str(region.get("region_id")) != region_ref:
+            continue
+        source_bboxes = [
+            bbox
+            for source_id in _string_list(region.get("source_ids"))
+            for bbox in _guardrail_region_bboxes_from_ref(
+                source_id, region_index, {}, room_model
+            )
+        ]
+        if source_bboxes:
+            return _dedupe_guardrail_bboxes(source_bboxes)
+    fallback_bbox = _guardrail_fallback_region_bbox(region_ref, room_model)
+    return [fallback_bbox] if fallback_bbox is not None else []
+
+
+def _dedupe_guardrail_bboxes(
+    bboxes: Sequence[tuple[int, int, int, int]],
+) -> list[tuple[int, int, int, int]]:
+    out: list[tuple[int, int, int, int]] = []
+    seen: set[tuple[int, int, int, int]] = set()
+    for bbox in bboxes:
+        if bbox in seen:
+            continue
+        seen.add(bbox)
+        out.append(bbox)
+    return out
+
+
+def _guardrail_bbox_from_mapping(
+    value: Mapping[str, object],
+) -> tuple[int, int, int, int] | None:
+    bbox = value.get("bbox_mm") or value.get("bbox")
+    if isinstance(bbox, Mapping):
+        parsed = _guardrail_bbox_tuple(
+            bbox.get("min_x"),
+            bbox.get("min_y"),
+            bbox.get("max_x"),
+            bbox.get("max_y"),
+        )
+        if parsed is not None:
+            return parsed
+    for key in (
+        "near_polygon_ccw",
+        "anchor_polygon_ccw",
+        "polygon_ccw",
+        "polygon",
+        "points",
+        "mid_polygon_ccw",
+    ):
+        parsed = _guardrail_bbox_from_points(value.get(key))
+        if parsed is not None:
+            return parsed
+    polyline_bbox = _guardrail_bbox_from_polyline(value)
+    if polyline_bbox is not None:
+        return polyline_bbox
+    return None
+
+
+def _guardrail_bbox_from_points(
+    value: object,
+) -> tuple[int, int, int, int] | None:
+    points: list[tuple[float, float]] = []
+    for item in _sequence_or_empty(value):
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            points.append((float(item.get("x")), float(item.get("y"))))
+        except (TypeError, ValueError):
+            continue
+    if len(points) < 2:
+        return None
+    return _guardrail_bbox_tuple(
+        min(point[0] for point in points),
+        min(point[1] for point in points),
+        max(point[0] for point in points),
+        max(point[1] for point in points),
+    )
+
+
+def _guardrail_bbox_from_polyline(
+    value: Mapping[str, object],
+) -> tuple[int, int, int, int] | None:
+    points_bbox = _guardrail_bbox_from_points(value.get("polyline_mm"))
+    if points_bbox is None:
+        return None
+    try:
+        width_mm = max(0, int(value.get("width_mm") or 0))
+    except (TypeError, ValueError):
+        width_mm = 0
+    pad = max(1, width_mm // 2)
+    return (
+        points_bbox[0] - pad,
+        points_bbox[1] - pad,
+        points_bbox[2] + pad,
+        points_bbox[3] + pad,
+    )
+
+
+def _add_guardrail_primary_corridor_aliases(
+    room_model: Mapping[str, object],
+    region_index: dict[str, tuple[int, int, int, int]],
+) -> None:
+    affordance = _mapping_or_empty(room_model.get("affordance_map"))
+    primary_bbox: tuple[int, int, int, int] | None = None
+    for row in _sequence_or_empty(affordance.get("circulation_corridors")):
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("from") or "") != "entry" or str(row.get("to") or "") not in {
+            "room_center",
+            "center",
+        }:
+            continue
+        primary_bbox = _guardrail_bbox_from_mapping(row)
+        if primary_bbox is not None:
+            break
+    if primary_bbox is None:
+        return
+    region_index.setdefault("entry_to_center_corridor", primary_bbox)
+    openings = _mapping_or_empty(room_model.get("openings"))
+    for index, door in enumerate(_sequence_or_empty(openings.get("doors")), start=1):
+        door_id = (
+            _clean_str(door.get("id")) if isinstance(door, Mapping) else f"door_{index}"
+        )
+        alias_id = door_id or f"door_{index}"
+        region_index.setdefault(f"{alias_id}_to_room_center_corridor", primary_bbox)
+
+
+def _guardrail_bbox_tuple(
+    min_x: object,
+    min_y: object,
+    max_x: object,
+    max_y: object,
+) -> tuple[int, int, int, int] | None:
+    try:
+        x1 = int(round(float(min_x)))
+        y1 = int(round(float(min_y)))
+        x2 = int(round(float(max_x)))
+        y2 = int(round(float(max_y)))
+    except (TypeError, ValueError):
+        return None
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def _guardrail_fallback_region_bbox(
+    region_ref: str,
+    room_model: Mapping[str, object],
+) -> tuple[int, int, int, int] | None:
+    room_bbox = _guardrail_room_bbox(room_model)
+    min_x, min_y, max_x, max_y = room_bbox
+    width = max_x - min_x
+    height = max_y - min_y
+    token = region_ref.lower()
+    if "bottom" in token and "wall" in token:
+        return (min_x, max_y - max(700, int(round(height * 0.18))), max_x, max_y)
+    if "left" in token and "wall" in token:
+        return (min_x, min_y, min_x + max(700, int(round(width * 0.18))), max_y)
+    if "right" in token and "wall" in token:
+        return (max_x - max(700, int(round(width * 0.18))), min_y, max_x, max_y)
+    if "focal" in token or ("wall" in token and "top" in token):
+        return (min_x, min_y, max_x, min_y + max(700, int(round(height * 0.18))))
+    if "daylight" in token or "window" in token:
+        return (min_x, min_y, max_x, min_y + max(900, int(round(height * 0.24))))
+    if "entry" in token or "door" in token:
+        return (
+            min_x,
+            max_y - max(850, int(round(height * 0.22))),
+            min_x + max(1000, int(round(width * 0.22))),
+            max_y,
+        )
+    if "center" in token or "floating" in token:
+        return (
+            min_x + int(round(width * 0.25)),
+            min_y + int(round(height * 0.25)),
+            max_x - int(round(width * 0.25)),
+            max_y - int(round(height * 0.25)),
+        )
+    if "privacy" in token or "deep" in token:
+        return (
+            min_x + int(round(width * 0.45)),
+            min_y + int(round(height * 0.45)),
+            max_x,
+            max_y,
+        )
+    if "edge" in token or "storage" in token:
+        return room_bbox
+    return None
+
+
+def _guardrail_room_bbox(room_model: Mapping[str, object]) -> tuple[int, int, int, int]:
+    room = _mapping_or_empty(room_model.get("room"))
+    bbox = _mapping_or_empty(room.get("bbox_mm") or room.get("bbox"))
+    parsed = _guardrail_bbox_tuple(
+        bbox.get("min_x"),
+        bbox.get("min_y"),
+        bbox.get("max_x"),
+        bbox.get("max_y"),
+    )
+    if parsed is not None:
+        return parsed
+    polygon_bbox = _guardrail_bbox_from_points(room.get("polygon_ccw"))
+    if polygon_bbox is not None:
+        return polygon_bbox
+    return 0, 0, 6000, 4000
+
+
+def _guardrail_rect_overlap_ratio(
+    left: tuple[int, int, int, int],
+    right: tuple[int, int, int, int],
+) -> float:
+    ix1 = max(left[0], right[0])
+    iy1 = max(left[1], right[1])
+    ix2 = min(left[2], right[2])
+    iy2 = min(left[3], right[3])
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    intersection = float((ix2 - ix1) * (iy2 - iy1))
+    area = float(max(1, (left[2] - left[0]) * (left[3] - left[1])))
+    return intersection / area
 
 
 def _operational_protected_topology_zones(
@@ -821,15 +1593,24 @@ def _instantiate_concept_families(
     region_candidates: Sequence[RegionCandidate],
     style_policy: Mapping[str, object],
     target_count: int,
+    guidance_bundle: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
-    family_order = _style_ranked_concept_families(style_policy)
+    family_order = _concept_family_order(
+        style_policy=style_policy,
+        guidance_bundle=guidance_bundle,
+    )
     concept_count = max(1, min(int(target_count), len(family_order)))
     primary_cluster_id = _primary_cluster_id(cluster_programs)
     secondary_cluster_id = _secondary_cluster_id(cluster_programs, primary_cluster_id)
+    guidance_by_family = _guidance_by_family(guidance_bundle)
     concepts: list[dict[str, object]] = []
     for index, family in enumerate(family_order[:concept_count], start=1):
         scenario = _macro_scenario_for_family(family)
-        topology_policy = _topology_policy_for_family(family, style_policy=style_policy)
+        family_guidance = guidance_by_family.get(family, {})
+        topology_policy = _merge_topology_policy_guidance(
+            _topology_policy_for_family(family, style_policy=style_policy),
+            family_guidance=family_guidance,
+        )
         cluster_zone_plan = [
             _cluster_zone_assignment(
                 family=family,
@@ -842,7 +1623,7 @@ def _instantiate_concept_families(
             )
             for cluster in cluster_programs
         ]
-        cluster_zone_plan = _resolve_complementary_zone_assignments(
+        baseline_cluster_zone_plan = _resolve_complementary_zone_assignments(
             family=family,
             scenario=scenario,
             cluster_programs=cluster_programs,
@@ -850,6 +1631,22 @@ def _instantiate_concept_families(
             primary_cluster_id=primary_cluster_id,
             secondary_cluster_id=secondary_cluster_id,
         )
+        cluster_zone_plan = _apply_family_guidance_to_cluster_zone_plan(
+            family=family,
+            cluster_programs=cluster_programs,
+            baseline_cluster_zone_plan=baseline_cluster_zone_plan,
+            family_guidance=family_guidance,
+            primary_cluster_id=primary_cluster_id,
+            secondary_cluster_id=secondary_cluster_id,
+        )
+        cluster_zone_plan = _apply_zone_forbidden_guardrails(
+            room_model=room_model,
+            macro_region_map=macro_region_map,
+            cluster_programs=cluster_programs,
+            family=family,
+            cluster_zone_plan=cluster_zone_plan,
+        )
+        cluster_zone_plan = _apply_placement_behavior_contracts(cluster_zone_plan)
         macro_constraints = _macro_constraints_for_concept(
             family=family,
             scenario=scenario,
@@ -896,6 +1693,7 @@ def _instantiate_concept_families(
                 primary_pair_contracts=primary_pair_contracts,
                 primary_cluster_id=primary_cluster_id,
                 secondary_cluster_id=secondary_cluster_id,
+                cluster_programs=cluster_programs,
             ),
             "object_solver_policy": _object_solver_policy_for_concept(
                 family=family,
@@ -915,6 +1713,8 @@ def _instantiate_concept_families(
                 family,
                 style_policy=style_policy,
             ),
+            "llm_guided": bool(family_guidance),
+            "guidance_notes": list(_string_list(family_guidance.get("notes"))),
             "diversity_signature": _diversity_signature(
                 family=family,
                 cluster_zone_plan=cluster_zone_plan,
@@ -923,6 +1723,195 @@ def _instantiate_concept_families(
         }
         concepts.append(concept)
     return concepts
+
+
+def _concept_family_order(
+    *,
+    style_policy: Mapping[str, object],
+    guidance_bundle: Mapping[str, object] | None,
+) -> tuple[ConceptFamily, ...]:
+    default_order = list(_style_ranked_concept_families(style_policy))
+    if not isinstance(guidance_bundle, Mapping):
+        return tuple(default_order)
+    raw_order = _string_list(guidance_bundle.get("family_order"))
+    ordered = [
+        family
+        for family in raw_order
+        if family in CONCEPT_FAMILIES and family in default_order
+    ]
+    for family in default_order:
+        if family not in ordered:
+            ordered.append(family)
+    return tuple(ordered[: len(CONCEPT_FAMILIES)])  # type: ignore[return-value]
+
+
+def _guidance_by_family(
+    guidance_bundle: Mapping[str, object] | None,
+) -> dict[ConceptFamily, Mapping[str, object]]:
+    if not isinstance(guidance_bundle, Mapping):
+        return {}
+    out: dict[ConceptFamily, Mapping[str, object]] = {}
+    for item in _sequence_or_empty(guidance_bundle.get("concept_blueprints")):
+        if not isinstance(item, Mapping):
+            continue
+        family = _clean_str(item.get("concept_family"))
+        if family not in CONCEPT_FAMILIES:
+            continue
+        out[family] = item  # type: ignore[assignment]
+    return out
+
+
+def _merge_topology_policy_guidance(
+    base_policy: Mapping[str, object],
+    *,
+    family_guidance: Mapping[str, object],
+) -> dict[str, object]:
+    merged = dict(base_policy)
+    guided_policy = _mapping_or_empty(family_guidance.get("topology_policy"))
+    for key in _GUIDED_TOPOLOGY_POLICY_KEYS:
+        value = _clean_str(guided_policy.get(key))
+        if value is not None:
+            merged[key] = value
+    return merged
+
+
+def _apply_family_guidance_to_cluster_zone_plan(
+    *,
+    family: ConceptFamily,
+    cluster_programs: Sequence[ClusterProgram],
+    baseline_cluster_zone_plan: Sequence[Mapping[str, object]],
+    family_guidance: Mapping[str, object],
+    primary_cluster_id: str | None,
+    secondary_cluster_id: str | None,
+) -> list[dict[str, object]]:
+    rows = [dict(row) for row in baseline_cluster_zone_plan]
+    if not family_guidance:
+        return rows
+
+    clusters_by_id = {cluster.cluster_id: cluster for cluster in cluster_programs}
+    baseline_by_cluster = {
+        str(row.get("cluster_id")): dict(row)
+        for row in baseline_cluster_zone_plan
+        if _clean_str(row.get("cluster_id")) is not None
+    }
+    for override in _sequence_or_empty(family_guidance.get("cluster_zone_overrides")):
+        if not isinstance(override, Mapping):
+            continue
+        cluster_id = _clean_str(override.get("cluster_id"))
+        zone_assignment = _clean_str(override.get("zone_assignment"))
+        if cluster_id is None or zone_assignment is None:
+            continue
+        row = _zone_row_by_cluster(rows, cluster_id)
+        cluster = clusters_by_id.get(cluster_id)
+        baseline_row = baseline_by_cluster.get(cluster_id)
+        if row is None or cluster is None or baseline_row is None:
+            continue
+        if zone_assignment == "keep_open_center":
+            continue
+        if zone_assignment in _string_list(row.get("forbidden_region_ids")):
+            continue
+        _apply_zone_assignment_to_row(
+            row=row,
+            cluster=cluster,
+            family=family,
+            zone_assignment=zone_assignment,
+        )
+        center_usage = _guided_center_usage(
+            raw_value=override.get("center_usage"),
+            cluster_id=cluster_id,
+            primary_cluster_id=primary_cluster_id,
+        )
+        row["center_usage"] = center_usage
+        preferred_wall_side = _guided_wall_side(
+            raw_value=override.get("preferred_wall_side"),
+            fallback=str(baseline_row.get("preferred_wall_side") or ""),
+        )
+        row["preferred_wall_side"] = preferred_wall_side
+        if bool(row.get("scenario_locked")):
+            row["required_region_ids"] = _required_region_ids_for_assignment(
+                zone_assignment=zone_assignment,
+                scenario_role=str(row.get("scenario_role") or ""),
+            )
+        row["placement_bias"] = _placement_bias(
+            zone_assignment,
+            str(row.get("wall_claim") or "none"),
+            center_usage,
+        )
+        row["guidance_applied"] = True
+    return _stabilize_guided_cluster_zone_plan(
+        rows=rows,
+        baseline_by_cluster=baseline_by_cluster,
+        primary_cluster_id=primary_cluster_id,
+        secondary_cluster_id=secondary_cluster_id,
+    )
+
+
+def _guided_center_usage(
+    *,
+    raw_value: object,
+    cluster_id: str,
+    primary_cluster_id: str | None,
+) -> str:
+    value = str(raw_value or "").strip()
+    if value not in _CENTER_USAGE_VALUES:
+        return "primary" if cluster_id == primary_cluster_id else "none"
+    if cluster_id != primary_cluster_id and value in {"primary", "open_reserved"}:
+        return "partial"
+    return value
+
+
+def _guided_wall_side(*, raw_value: object, fallback: str) -> str:
+    value = str(raw_value or "").strip()
+    if value in _GUIDED_WALL_SIDES:
+        return value
+    return fallback
+
+
+def _stabilize_guided_cluster_zone_plan(
+    *,
+    rows: Sequence[dict[str, object]],
+    baseline_by_cluster: Mapping[str, Mapping[str, object]],
+    primary_cluster_id: str | None,
+    secondary_cluster_id: str | None,
+) -> list[dict[str, object]]:
+    stabilized = [dict(row) for row in rows]
+    primary_center_owner = False
+    for row in stabilized:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        if str(row.get("zone_assignment") or "") == "keep_open_center":
+            baseline = baseline_by_cluster.get(cluster_id)
+            if baseline is not None:
+                row.update(dict(baseline))
+            continue
+        center_usage = str(row.get("center_usage") or "none")
+        if cluster_id == primary_cluster_id:
+            if center_usage == "primary":
+                primary_center_owner = True
+            elif center_usage not in {"partial", "none", "open_reserved"}:
+                row["center_usage"] = "primary"
+                primary_center_owner = True
+        elif center_usage in {"primary", "open_reserved"}:
+            row["center_usage"] = "partial"
+    if not primary_center_owner and primary_cluster_id is not None:
+        row = _zone_row_by_cluster(stabilized, primary_cluster_id)
+        if row is not None:
+            row["center_usage"] = "primary"
+
+    if primary_cluster_id and secondary_cluster_id:
+        primary_row = _zone_row_by_cluster(stabilized, primary_cluster_id)
+        secondary_row = _zone_row_by_cluster(stabilized, secondary_cluster_id)
+        baseline_secondary = baseline_by_cluster.get(secondary_cluster_id)
+        if (
+            primary_row is not None
+            and secondary_row is not None
+            and primary_row.get("zone_assignment")
+            == secondary_row.get("zone_assignment")
+            and baseline_secondary is not None
+        ):
+            secondary_row.update(dict(baseline_secondary))
+    return stabilized
 
 
 def _cluster_zone_assignment(
@@ -959,7 +1948,7 @@ def _cluster_zone_assignment(
         primary_cluster_id=primary_cluster_id,
         secondary_cluster_id=secondary_cluster_id,
     )
-    if scenario_role in {"primary", "secondary", "storage"}:
+    if scenario_role in {"primary", "secondary"}:
         zone_assignment = preferred_region_id
     wall_claim = _wall_claim_for(cluster, zone_assignment, family)
     center_usage = _center_usage_for(
@@ -977,22 +1966,34 @@ def _cluster_zone_assignment(
         scenario=scenario,
         scenario_role=scenario_role,
     )
+    forbidden_region_ids = _uniq(
+        [
+            *_forbidden_region_ids_for_scenario_role(
+                scenario=scenario,
+                scenario_role=scenario_role,
+            ),
+            *_cluster_avoid_region_ids(cluster),
+        ]
+    )
     return {
         "cluster_id": cluster.cluster_id,
         "semantic_role": cluster.semantic_role,
+        "layout_role": cluster.layout_role,
         "role_kind": cluster.role_kind,
         "priority": cluster.priority,
         "macro_scenario_id": scenario.scenario_id,
         "scenario_role": scenario_role,
-        "scenario_locked": scenario_role in {"primary", "secondary", "storage"},
+        "scenario_locked": scenario_role in {"primary", "secondary"},
         "zone_assignment": zone_assignment,
-        "required_region_ids": [zone_assignment]
-        if scenario_role in {"primary", "secondary", "storage"}
-        else [],
-        "forbidden_region_ids": _forbidden_region_ids_for_scenario_role(
-            scenario=scenario,
+        "required_region_ids": _required_region_ids_for_assignment(
+            zone_assignment=zone_assignment,
             scenario_role=scenario_role,
         ),
+        "preferred_region_ids": _preferred_region_ids_for_assignment(
+            zone_assignment=zone_assignment,
+            candidates=candidates,
+        ),
+        "forbidden_region_ids": forbidden_region_ids,
         "preferred_wall_side": preferred_wall_side,
         "anchor_strength": anchor_strength,
         "region_candidates": [
@@ -1159,8 +2160,8 @@ def _scenario_role_for_cluster(
         return "primary"
     if cluster.cluster_id == secondary_cluster_id:
         return "secondary"
-    if cluster.role_kind == "storage":
-        return "storage"
+    if cluster.layout_role == "optional":
+        return "optional"
     return "support"
 
 
@@ -1185,8 +2186,6 @@ def _preferred_wall_side_for_scenario_role(
         return scenario.primary_wall_side
     if scenario_role == "secondary":
         return scenario.secondary_wall_side
-    if scenario_role == "storage":
-        return scenario.storage_wall_side
     return ""
 
 
@@ -1204,6 +2203,10 @@ def _forbidden_region_ids_for_scenario_role(
     return []
 
 
+def _cluster_avoid_region_ids(cluster: ClusterProgram) -> list[str]:
+    return _string_list(cluster.zone_claims.get("avoid_regions"))
+
+
 def _complementary_zone_for_cluster(
     *,
     family: ConceptFamily,
@@ -1212,8 +2215,6 @@ def _complementary_zone_for_cluster(
 ) -> str:
     if cluster.role_kind == "work":
         return "daylight_biased_zone"
-    if cluster.role_kind == "storage":
-        return scenario.storage_zone_id
     if cluster.role_kind == "sleep":
         return "quiet_private_deep_zone"
     if family == "daylight_oriented" and cluster.role_kind in {
@@ -1236,6 +2237,13 @@ def _apply_zone_assignment_to_row(
     wall_claim = _wall_claim_for(cluster, zone_assignment, family)
     center_usage = str(row.get("center_usage") or "none")
     row["zone_assignment"] = zone_assignment
+    if row.get("scenario_role") in {"primary", "secondary"}:
+        row["required_region_ids"] = _required_region_ids_for_assignment(
+            zone_assignment=zone_assignment,
+            scenario_role=str(row.get("scenario_role") or ""),
+        )
+        row["preferred_region_ids"] = _preferred_region_ids_for_row(row)
+        row["preferred_wall_side"] = _preferred_wall_side_for_zone(zone_assignment)
     row["wall_claim"] = wall_claim
     row["daylight_relation"] = _daylight_relation_for(
         cluster,
@@ -1248,6 +2256,53 @@ def _apply_zone_assignment_to_row(
         wall_claim,
         center_usage,
     )
+
+
+def _preferred_wall_side_for_zone(zone_assignment: str) -> str:
+    token = zone_assignment.strip().lower()
+    if "window" in token or "daylight" in token:
+        return "window_side"
+    for side in ("top_wall", "right_wall", "bottom_wall", "left_wall"):
+        if side in token:
+            return side
+    if "center" in token or "floating" in token:
+        return "center"
+    return ""
+
+
+def _required_region_ids_for_assignment(
+    *,
+    zone_assignment: str,
+    scenario_role: str,
+) -> list[str]:
+    if scenario_role not in {"primary", "secondary"}:
+        return []
+    if zone_assignment in _FIT_CHECKED_REQUIRED_REGION_IDS:
+        return [zone_assignment]
+    return []
+
+
+def _preferred_region_ids_for_assignment(
+    *,
+    zone_assignment: str,
+    candidates: Sequence[RegionCandidate],
+) -> list[str]:
+    return _uniq([zone_assignment, *(candidate.region_id for candidate in candidates)])
+
+
+def _preferred_region_ids_for_row(row: Mapping[str, object]) -> list[str]:
+    region_ids: list[str] = []
+    zone_assignment = _clean_str(row.get("zone_assignment"))
+    if zone_assignment is not None:
+        region_ids.append(zone_assignment)
+    region_ids.extend(_string_list(row.get("preferred_region_ids")))
+    for candidate in _sequence_or_empty(row.get("region_candidates")):
+        if not isinstance(candidate, Mapping):
+            continue
+        candidate_id = _clean_str(candidate.get("region_id"))
+        if candidate_id is not None:
+            region_ids.append(candidate_id)
+    return _uniq(region_ids)
 
 
 def _mark_zone_complement_role(
@@ -1285,9 +2340,10 @@ def _preferred_region_for_family(
         return scenario.primary_zone_id
     if scenario_role == "secondary":
         return scenario.secondary_zone_id
-    if scenario_role == "storage":
-        return scenario.storage_zone_id
-    if scenario_role == "support" and cluster.role_kind not in {"work", "sleep"}:
+    if scenario_role in {"support", "optional"} and cluster.role_kind not in {
+        "work",
+        "sleep",
+    }:
         return scenario.support_zone_id
     if family == "focal_axis":
         if cluster.cluster_id in {primary_cluster_id, secondary_cluster_id}:
@@ -1298,11 +2354,7 @@ def _preferred_region_for_family(
             return "primary_focal_wall_zone"
         return "edge_loading_zone"
     if family == "edge_weighted":
-        return (
-            "storage_service_edge_zone"
-            if cluster.role_kind == "storage"
-            else "edge_loading_zone"
-        )
+        return "edge_loading_zone"
     if family == "zoned":
         if cluster.cluster_id == primary_cluster_id:
             return "floating_support_zone"
@@ -1480,6 +2532,9 @@ def _macro_constraints_for_concept(
             "cluster_id": str(row.get("cluster_id")),
             "required_region_ids": list(
                 _sequence_or_empty(row.get("required_region_ids"))
+            ),
+            "preferred_region_ids": list(
+                _sequence_or_empty(row.get("preferred_region_ids"))
             ),
             "forbidden_region_ids": list(
                 _sequence_or_empty(row.get("forbidden_region_ids"))
@@ -1685,20 +2740,11 @@ def _anchor_region_preferences_by_cluster(
         cluster_id = _clean_str(row.get("cluster_id"))
         if cluster_id is None:
             continue
-        region_candidates = [
-            dict(candidate)
-            for candidate in _sequence_or_empty(row.get("region_candidates"))
-            if isinstance(candidate, Mapping)
-        ]
         out[cluster_id] = {
             "zone_assignment": str(row.get("zone_assignment") or ""),
             "required_region_ids": list(_string_list(row.get("required_region_ids"))),
             "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
-            "preferred_region_ids": [
-                str(candidate.get("region_id") or "")
-                for candidate in region_candidates
-                if str(candidate.get("region_id") or "")
-            ],
+            "preferred_region_ids": _preferred_region_ids_for_row(row),
             "wall_claim": str(row.get("wall_claim") or "none"),
             "center_usage": str(row.get("center_usage") or "none"),
             "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
@@ -1707,7 +2753,27 @@ def _anchor_region_preferences_by_cluster(
             "entry_relation": str(row.get("entry_relation") or ""),
             "daylight_relation": str(row.get("daylight_relation") or ""),
             "placement_bias": str(row.get("placement_bias") or "balanced"),
+            "placement_behavior": _placement_behavior_contract(row),
         }
+    return out
+
+
+def _ensure_placement_behavior_by_cluster(
+    preferences_by_cluster: Mapping[str, object],
+    *,
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = {
+        str(cluster_id): dict(row)
+        for cluster_id, row in preferences_by_cluster.items()
+        if isinstance(row, Mapping)
+    }
+    for row in cluster_zone_plan:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        target = out.setdefault(cluster_id, {})
+        target["placement_behavior"] = _placement_behavior_contract(row)
     return out
 
 
@@ -1720,16 +2786,11 @@ def _anchor_layout_hints_by_cluster(
         cluster_id = _clean_str(row.get("cluster_id"))
         if cluster_id is None:
             continue
-        preferred_region_ids = [
-            str(candidate.get("region_id") or "")
-            for candidate in _sequence_or_empty(row.get("region_candidates"))
-            if isinstance(candidate, Mapping) and str(candidate.get("region_id") or "")
-        ]
         out[cluster_id] = {
             "zone_assignment": str(row.get("zone_assignment") or ""),
             "required_region_ids": list(_string_list(row.get("required_region_ids"))),
             "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
-            "preferred_region_ids": preferred_region_ids,
+            "preferred_region_ids": _preferred_region_ids_for_row(row),
             "role_kind": str(row.get("role_kind") or ""),
             "wall_claim": str(row.get("wall_claim") or "none"),
             "center_usage": str(row.get("center_usage") or "none"),
@@ -1737,6 +2798,7 @@ def _anchor_layout_hints_by_cluster(
             "anchor_strength": str(row.get("anchor_strength") or "medium"),
             "scenario_role": str(row.get("scenario_role") or "support"),
             "placement_bias": str(row.get("placement_bias") or "balanced"),
+            "placement_behavior": _placement_behavior_contract(row),
         }
     return out
 
@@ -1746,13 +2808,33 @@ def _anchor_pair_contracts_for_concept(
     primary_pair_contracts: Sequence[Mapping[str, object]],
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
+    cluster_programs: Sequence[ClusterProgram],
 ) -> list[dict[str, object]]:
+    required_cluster_ids = {
+        cluster.cluster_id
+        for cluster in cluster_programs
+        if _cluster_has_required_solver_objects(cluster)
+    }
     out: list[dict[str, object]] = []
     for row in primary_pair_contracts:
         if not isinstance(row, Mapping):
             continue
-        out.append(dict(row))
-    if not out and primary_cluster_id and secondary_cluster_id:
+        next_row = dict(row)
+        row_clusters = {
+            str(next_row.get("cluster_a") or ""),
+            str(next_row.get("cluster_b") or ""),
+        }
+        if not row_clusters.issubset(required_cluster_ids):
+            next_row["required"] = False
+            next_row["strength"] = str(next_row.get("strength") or "medium")
+        out.append(next_row)
+    if (
+        not out
+        and primary_cluster_id
+        and secondary_cluster_id
+        and primary_cluster_id in required_cluster_ids
+        and secondary_cluster_id in required_cluster_ids
+    ):
         out.append(
             {
                 "pair_type": "face_each_other",
@@ -1765,6 +2847,17 @@ def _anchor_pair_contracts_for_concept(
     return out
 
 
+def _cluster_has_required_solver_objects(cluster: ClusterProgram) -> bool:
+    has_explicit_object_policy = bool(
+        cluster.required_object_ids
+        or cluster.optional_object_ids
+        or cluster.droppable_object_ids
+    )
+    if has_explicit_object_policy:
+        return bool(cluster.required_object_ids)
+    return bool(cluster.object_ids)
+
+
 def _object_solver_policy_for_concept(
     *,
     family: ConceptFamily,
@@ -1775,16 +2868,27 @@ def _object_solver_policy_for_concept(
     placement_order_by_cluster: dict[str, list[str]] = {}
     for cluster in cluster_programs:
         placement_order_by_cluster[cluster.cluster_id] = list(cluster.object_ids)
-        if cluster.dominant_anchor_object_id:
-            protected_by_cluster.setdefault(cluster.cluster_id, []).append(
-                cluster.dominant_anchor_object_id
-            )
+        required_ids = list(cluster.required_object_ids)
+        has_explicit_object_policy = bool(
+            cluster.required_object_ids
+            or cluster.optional_object_ids
+            or cluster.droppable_object_ids
+        )
+        if (
+            not required_ids
+            and not has_explicit_object_policy
+            and cluster.dominant_anchor_object_id
+        ):
+            required_ids = [cluster.dominant_anchor_object_id]
+        protected_by_cluster[cluster.cluster_id] = required_ids
         optional_ids = [
             object_id
             for object_id in cluster.object_ids
             if object_id not in protected_by_cluster.get(cluster.cluster_id, [])
         ]
-        droppable_by_cluster[cluster.cluster_id] = optional_ids
+        droppable_by_cluster[cluster.cluster_id] = _uniq(
+            [*list(cluster.droppable_object_ids), *optional_ids]
+        )
     return {
         "placement_mode": "anchor_first_object_level",
         "anchor_stage_first": True,
@@ -1860,7 +2964,7 @@ def _object_orientation_is_critical(
         return True
     if cluster.role_kind in {"work", "media", "focal"}:
         return True
-    return cluster.role_kind == "storage" and row.get("wall_claim") == "strong"
+    return False
 
 
 def _orientation_target_cluster_id(
@@ -2090,6 +3194,7 @@ def _concept_to_solver_plan(
         for row in _sequence_or_empty(concept.get("cluster_zone_plan"))
         if isinstance(row, Mapping)
     ]
+    cluster_zone_plan = _apply_placement_behavior_contracts(cluster_zone_plan)
     primary_cluster_id = _primary_from_concept(cluster_zone_plan)
     secondary_cluster_id = _secondary_from_concept(
         cluster_zone_plan, primary_cluster_id
@@ -2158,22 +3263,24 @@ def _concept_to_solver_plan(
         for row in _sequence_or_empty(constraints.get("keep_open_regions"))
         if isinstance(row, Mapping) and row.get("type") and row.get("near")
     ]
+    macro_concept_payload = {
+        key: value for key, value in concept.items() if key != "solver_relation_plan"
+    }
+    macro_concept_payload["cluster_zone_plan"] = cluster_zone_plan
+    anchor_region_preferences = _ensure_placement_behavior_by_cluster(
+        dict(_mapping_or_empty(concept.get("anchor_region_preferences_by_cluster"))),
+        cluster_zone_plan=cluster_zone_plan,
+    )
     return {
         "status": "OK",
         "room_id": _room_id(room_model),
         "room_type": room_type,
         "planner_kind": "seed_concept_generator",
-        "macro_concept": {
-            key: value
-            for key, value in concept.items()
-            if key != "solver_relation_plan"
-        },
+        "macro_concept": macro_concept_payload,
         "cluster_affinities": _dedupe_by_cluster(affinities),
         "cluster_orientations": _dedupe_by_cluster(orientations),
         "object_orientations": _concept_object_orientations_for_solver(concept),
-        "anchor_region_preferences_by_cluster": dict(
-            _mapping_or_empty(concept.get("anchor_region_preferences_by_cluster"))
-        ),
+        "anchor_region_preferences_by_cluster": anchor_region_preferences,
         "anchor_layout_hints_by_cluster": _anchor_layout_hints_by_cluster(
             cluster_zone_plan=cluster_zone_plan
         ),
@@ -2227,8 +3334,12 @@ def _concept_to_solver_plan(
             "Preserve entry landing, primary corridor, and declared center openness before support clusters compete for space.",
         ],
         "notes": [
-            f"Generated by deterministic SeedConceptGenerator family={family}.",
+            (
+                f"Generated by {'LLM-guided' if bool(concept.get('llm_guided')) else 'deterministic'} "
+                f"SeedConceptGenerator family={family}."
+            ),
             "Legacy relation fields are a solver projection of the macro concept, not the planning source of truth.",
+            *_string_list(concept.get("guidance_notes")),
         ],
         "missing": [],
     }
@@ -2550,6 +3661,13 @@ def _priority(value: object, role_kind: str) -> Priority:
     return "optional"
 
 
+def _layout_role(semantic: Mapping[str, object]) -> str:
+    text = str(semantic.get("layout_role") or "").strip().lower()
+    if text in {"primary", "secondary", "support", "optional"}:
+        return text
+    return ""
+
+
 def _affinity_level(value: object) -> str:
     text = str(value or "none").strip().lower()
     if text in {"none", "low", "medium", "high"}:
@@ -2577,6 +3695,14 @@ def _seed_region_tags(cluster: Mapping[str, object]) -> list[str]:
 
 
 def _primary_cluster_id(clusters: Sequence[ClusterProgram]) -> str | None:
+    explicit = sorted(
+        (cluster for cluster in clusters if cluster.layout_role == "primary"),
+        key=lambda cluster: cluster.cluster_id,
+    )
+    if explicit:
+        return explicit[0].cluster_id
+    if any(cluster.layout_role for cluster in clusters):
+        return None
     ranked = sorted(
         clusters,
         key=lambda cluster: (
@@ -2595,6 +3721,19 @@ def _secondary_cluster_id(
     clusters: Sequence[ClusterProgram],
     primary_cluster_id: str | None,
 ) -> str | None:
+    explicit = sorted(
+        (
+            cluster
+            for cluster in clusters
+            if cluster.cluster_id != primary_cluster_id
+            and cluster.layout_role == "secondary"
+        ),
+        key=lambda cluster: cluster.cluster_id,
+    )
+    if explicit:
+        return explicit[0].cluster_id
+    if any(cluster.layout_role for cluster in clusters):
+        return None
     ranked = sorted(
         (cluster for cluster in clusters if cluster.cluster_id != primary_cluster_id),
         key=lambda cluster: (
@@ -2615,7 +3754,7 @@ def _wall_claim_for(
     family: ConceptFamily,
 ) -> str:
     if family in {"focal_axis", "edge_weighted"} and (
-        cluster.role_kind in {"media", "storage"} or "wall" in zone_assignment
+        cluster.role_kind == "media" or "wall" in zone_assignment
     ):
         return "strong"
     if "wall" in zone_assignment or "edge" in zone_assignment:
@@ -2667,7 +3806,10 @@ def _daylight_relation_for(
         return "claim_daylight"
     if family == "daylight_oriented" and cluster.role_kind in {"work", "social_anchor"}:
         return "daylight_preferred"
-    if cluster.role_kind in {"media", "storage"}:
+    avoid_regions = " ".join(_string_list(cluster.zone_claims.get("avoid_regions")))
+    if cluster.role_kind == "media" or any(
+        token in avoid_regions.lower() for token in ("window", "daylight")
+    ):
         return "avoid_window_blocking"
     return "neutral"
 
@@ -2681,6 +3823,76 @@ def _privacy_relation_for(cluster: ClusterProgram, zone_assignment: str) -> str:
     }:
         return "privacy_preferred"
     return "neutral"
+
+
+def _apply_placement_behavior_contracts(
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in cluster_zone_plan:
+        out = dict(row)
+        out["placement_behavior"] = _placement_behavior_contract(out)
+        rows.append(out)
+    return rows
+
+
+def _placement_behavior_contract(row: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "wall_backing": _wall_backing_contract(row),
+        "front_space": _front_space_contract(row),
+        "daylight_blocking": _daylight_blocking_contract(row),
+        "pose_flexibility": _pose_flexibility_contract(row),
+    }
+
+
+def _wall_backing_contract(row: Mapping[str, object]) -> str:
+    wall_claim = str(row.get("wall_claim") or "none").strip().lower()
+    placement_bias = str(row.get("placement_bias") or "balanced").strip().lower()
+    if wall_claim == "strong" or placement_bias == "wall_backed":
+        return "required"
+    if wall_claim == "medium" or placement_bias in {"daylight_edge", "edge_loaded"}:
+        return "preferred"
+    return "optional"
+
+
+def _front_space_contract(row: Mapping[str, object]) -> str:
+    scenario_role = str(row.get("scenario_role") or "support").strip().lower()
+    layout_role = str(row.get("layout_role") or "").strip().lower()
+    anchor_strength = str(row.get("anchor_strength") or "medium").strip().lower()
+    placement_bias = str(row.get("placement_bias") or "balanced").strip().lower()
+    if layout_role == "optional" or scenario_role == "optional":
+        return "optional"
+    if scenario_role in {"primary", "secondary"} and anchor_strength in {
+        "hard",
+        "strong",
+    }:
+        return "required"
+    if placement_bias in {"daylight_edge", "edge_loaded", "wall_backed"}:
+        return "preferred"
+    return "optional"
+
+
+def _daylight_blocking_contract(row: Mapping[str, object]) -> str:
+    daylight_relation = str(row.get("daylight_relation") or "neutral").strip().lower()
+    if daylight_relation == "avoid_window_blocking":
+        return "avoid"
+    if daylight_relation in {"claim_daylight", "daylight_preferred"}:
+        return "prefer"
+    return "neutral"
+
+
+def _pose_flexibility_contract(row: Mapping[str, object]) -> str:
+    scenario_role = str(row.get("scenario_role") or "support").strip().lower()
+    layout_role = str(row.get("layout_role") or "").strip().lower()
+    anchor_strength = str(row.get("anchor_strength") or "medium").strip().lower()
+    if scenario_role in {"primary", "secondary"} or anchor_strength in {
+        "hard",
+        "strong",
+    }:
+        return "low"
+    if layout_role == "optional" or scenario_role == "optional":
+        return "high"
+    return "medium"
 
 
 def _placement_bias(zone_assignment: str, wall_claim: str, center_usage: str) -> str:
@@ -2773,6 +3985,225 @@ def _diversity_signature(
         f"center={topology_policy.get('reserve_center_degree')}|"
         f"wall={topology_policy.get('wall_loading_bias')}|{assignments}"
     )
+
+
+def _guided_seed_concept_llm_enabled() -> bool:
+    raw = os.getenv(_SEED_CONCEPT_GUIDED_LLM_ENV, "0")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _seed_concept_guidance_model_chain() -> tuple[str, ...]:
+    return tuple(
+        TextLLMConfig.agent_model_chain(
+            _MACRO_CONCEPT_GUIDANCE_SPEC.model_config_keys,
+            _MACRO_CONCEPT_GUIDANCE_SPEC.default_model_chain,
+        )
+    )
+
+
+def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
+    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
+        return
+    try:
+        from clients.gemini_client import GeminiClient
+
+        GeminiClient.record_retry_event(
+            stage=stage,
+            model_name=model_name,
+            reason=reason,
+        )
+    except Exception:
+        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+
+
+def _available_macro_region_ids(macro_region_map: Mapping[str, object]) -> set[str]:
+    region_ids: set[str] = set()
+    for item in _sequence_or_empty(macro_region_map.get("regions")):
+        if not isinstance(item, Mapping):
+            continue
+        region_id = _clean_str(item.get("region_id"))
+        if region_id is not None:
+            region_ids.add(region_id)
+    return region_ids
+
+
+def _top_region_candidates_by_cluster(
+    region_candidates: Sequence[RegionCandidate],
+) -> dict[str, list[dict[str, object]]]:
+    out: dict[str, list[dict[str, object]]] = {}
+    for candidate in region_candidates:
+        rows = out.setdefault(candidate.cluster_id, [])
+        if len(rows) >= 3:
+            continue
+        rows.append(_region_candidate_to_dict(candidate))
+    return out
+
+
+def _guided_clusters_summary(clusters_json: Mapping[str, object]) -> dict[str, object]:
+    clusters = _extract_clusters_map(clusters_json)
+    return {
+        "cluster_ids": sorted(clusters),
+        "semantic_cluster_ids": sorted(_semantic_clusters_by_id(clusters_json)),
+        "style_name": _clean_str(_extract_style_policy(clusters_json).get("style_name"))
+        or "",
+    }
+
+
+def _guided_room_summary(
+    room_model: Mapping[str, object],
+    macro_region_map: Mapping[str, object],
+) -> dict[str, object]:
+    room = _mapping_or_empty(room_model.get("room"))
+    protected = _mapping_or_empty(macro_region_map.get("protected_topology"))
+    return {
+        "room_id": _room_id(room_model),
+        "polygon_vertex_count": len(_sequence_or_empty(room.get("polygon_ccw"))),
+        "protected_regions": {
+            "entry_landing_zones": _string_list(protected.get("entry_landing_zones")),
+            "primary_circulation_corridors": _string_list(
+                protected.get("primary_circulation_corridors")
+            ),
+            "center_openness_regions": _string_list(
+                protected.get("center_openness_regions")
+            ),
+        },
+    }
+
+
+def _extract_llm_content(response: object) -> str:
+    choices = getattr(response, "choices", None)
+    if isinstance(choices, Sequence) and choices:
+        message = getattr(choices[0], "message", None)
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content
+    raise ValueError("SeedConceptGenerator guidance response missing message content")
+
+
+def _parse_guidance_json(raw: str) -> dict[str, object]:
+    text = raw.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        for idx in range(1, len(parts), 2):
+            candidate = parts[idx].strip()
+            if candidate.startswith("json"):
+                candidate = candidate[4:].lstrip()
+            if candidate.startswith("{") and candidate.endswith("}"):
+                text = candidate
+                break
+    if not text.startswith("{"):
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            text = text[start : end + 1]
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("SeedConceptGenerator guidance returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("SeedConceptGenerator guidance JSON must be an object")
+    return payload
+
+
+def _sanitize_macro_concept_guidance(
+    payload: Mapping[str, object],
+    *,
+    target_count: int,
+    available_families: Sequence[ConceptFamily],
+    cluster_ids: set[str],
+    region_ids: set[str],
+) -> dict[str, object]:
+    family_order = [
+        family
+        for family in _string_list(payload.get("family_order"))
+        if family in available_families
+    ]
+    for family in available_families:
+        if family not in family_order:
+            family_order.append(family)
+    family_order = family_order[: len(available_families)]
+
+    concept_blueprints: list[dict[str, object]] = []
+    seen_families: set[str] = set()
+    for item in _sequence_or_empty(payload.get("concept_blueprints")):
+        if not isinstance(item, Mapping):
+            continue
+        family = _clean_str(item.get("concept_family"))
+        if family not in available_families or family in seen_families:
+            continue
+        concept_blueprints.append(
+            {
+                "concept_family": family,
+                "topology_policy": _sanitize_guided_topology_policy(
+                    item.get("topology_policy")
+                ),
+                "cluster_zone_overrides": _sanitize_cluster_zone_overrides(
+                    item.get("cluster_zone_overrides"),
+                    cluster_ids=cluster_ids,
+                    region_ids=region_ids,
+                ),
+                "notes": _string_list(item.get("notes")),
+            }
+        )
+        seen_families.add(family)
+        if len(concept_blueprints) >= max(1, target_count):
+            break
+
+    return {
+        "family_order": family_order,
+        "concept_blueprints": concept_blueprints,
+        "notes": _string_list(payload.get("notes")),
+    }
+
+
+def _sanitize_guided_topology_policy(value: object) -> dict[str, object]:
+    policy = _mapping_or_empty(value)
+    out: dict[str, object] = {}
+    for key in _GUIDED_TOPOLOGY_POLICY_KEYS:
+        text = _clean_str(policy.get(key))
+        if text is not None:
+            out[key] = text
+    return out
+
+
+def _sanitize_cluster_zone_overrides(
+    value: object,
+    *,
+    cluster_ids: set[str],
+    region_ids: set[str],
+) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    seen_clusters: set[str] = set()
+    for item in _sequence_or_empty(value):
+        if not isinstance(item, Mapping):
+            continue
+        cluster_id = _clean_str(item.get("cluster_id"))
+        zone_assignment = _clean_str(item.get("zone_assignment"))
+        if (
+            cluster_id is None
+            or cluster_id not in cluster_ids
+            or cluster_id in seen_clusters
+            or zone_assignment is None
+            or zone_assignment not in region_ids
+            or zone_assignment == "keep_open_center"
+        ):
+            continue
+        center_usage = str(item.get("center_usage") or "").strip()
+        if center_usage not in _CENTER_USAGE_VALUES:
+            center_usage = "none"
+        preferred_wall_side = str(item.get("preferred_wall_side") or "").strip()
+        if preferred_wall_side not in _GUIDED_WALL_SIDES:
+            preferred_wall_side = ""
+        out.append(
+            {
+                "cluster_id": cluster_id,
+                "zone_assignment": zone_assignment,
+                "preferred_wall_side": preferred_wall_side,
+                "center_usage": center_usage,
+            }
+        )
+        seen_clusters.add(cluster_id)
+    return out
 
 
 def _primary_from_concept(

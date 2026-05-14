@@ -70,11 +70,13 @@ class MistralClient:
         max_tokens: int | None = None,
         thinking_level: ThinkingLevel | None = None,
         response_mime_type: str | None = None,
+        response_schema: Mapping[str, object] | None = None,
         tools: Sequence[dict[str, object]] | None = None,
         tool_choice: dict[str, object] | str | None = None,
     ) -> object:
         _ = thinking_level
         _ = response_mime_type
+        _ = response_schema
         _ = fallback_model_names
         resolved_model_name = model_name or self.get_model_name(model_key)
         if tools is not None:

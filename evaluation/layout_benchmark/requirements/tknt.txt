@@ -1,0 +1,24 @@
+# TKNT benchmark/runtime requirements.
+# Based on the root requirements.txt plus the prj-tknt conda environment.
+openai==2.17.0
+pydantic==2.12.5
+python-dotenv==1.2.1
+PyYAML==6.0.3
+cryptography==46.0.4
+psycopg[binary]==3.3.2
+typing-extensions==4.15.0
+httpx==0.28.1
+beautifulsoup4==4.14.3
+fake-useragent==2.2.0
+crawl4ai==0.8.0
+fastapi==0.128.8
+uvicorn==0.40.0
+shapely==2.1.2
+ortools==9.15.6755
+numpy==2.4.2
+pillow==12.1.0
+opencv-python==4.13.0.92
+trimesh==4.11.1
+pygltflib==1.16.5
+rank-bm25==0.2.2
+tiktoken==0.12.0

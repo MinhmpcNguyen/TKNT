@@ -205,6 +205,28 @@ def get_runtime_asset_schema_statements() -> list[str]:
     ]
 
 
+def get_runtime_knowledge_schema_statements() -> list[str]:
+    return [
+        """
+        CREATE TABLE IF NOT EXISTS design_knowledge (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            category TEXT,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            source TEXT,
+            meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_tenant ON design_knowledge (tenant_id);",
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_tags ON design_knowledge USING GIN (tags);",
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_category ON design_knowledge (category);",
+    ]
+
+
 def get_runtime_user_content_schema_statements() -> list[str]:
     return [
         """
@@ -251,11 +273,20 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             model_name TEXT NOT NULL,
             prompt TEXT NOT NULL,
             negative_prompt TEXT,
-            storage_path TEXT NOT NULL,
+            storage_path TEXT,
+            image_bytes BYTEA,
             mime_type TEXT NOT NULL,
             meta JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        """,
+        """
+        ALTER TABLE generated_renders
+        ADD COLUMN IF NOT EXISTS image_bytes BYTEA;
+        """,
+        """
+        ALTER TABLE generated_renders
+        ALTER COLUMN storage_path DROP NOT NULL;
         """,
         "CREATE INDEX IF NOT EXISTS idx_user_accounts_email ON user_accounts (email);",
         "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions (user_id);",
@@ -267,6 +298,7 @@ def get_runtime_user_content_schema_statements() -> list[str]:
 def get_runtime_schema_statements() -> list[str]:
     return [
         *get_runtime_asset_schema_statements(),
+        *get_runtime_knowledge_schema_statements(),
         *get_runtime_user_content_schema_statements(),
     ]
 

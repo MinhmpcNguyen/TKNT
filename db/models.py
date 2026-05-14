@@ -175,7 +175,8 @@ class GeneratedRender(BaseModel):
     model_name: str
     prompt: str
     negative_prompt: str | None = None
-    storage_path: str
+    storage_path: str | None = None
+    image_bytes: bytes | None = None
     mime_type: str
     meta: dict[str, JsonValue] = Field(default_factory=dict)
     created_at: datetime | None = None

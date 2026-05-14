@@ -25,9 +25,9 @@ except Exception:  # pragma: no cover
     get_llm_client = None  # type: ignore
 
 try:
-    from config.gemini_config import GeminiConfig  # type: ignore
+    from config.llm_config import TextLLMConfig  # type: ignore
 except Exception:  # pragma: no cover
-    GeminiConfig = None  # type: ignore
+    TextLLMConfig = None  # type: ignore
 
 try:
     from prompt.cluster_placer import (
@@ -1483,23 +1483,13 @@ def _extract_message(response: object) -> object:
 
 
 def _configured_placer_models() -> list[str]:
-    configured: list[str] = []
-    if GeminiConfig is not None:
-        for key in _PLACER_MODEL_ROTATION_KEYS:
-            model_name = GeminiConfig.AGENT_MODELS.get(key)
-            if isinstance(model_name, str) and model_name.strip():
-                configured.append(model_name.strip())
-    if not configured:
-        configured = list(_DEFAULT_PLACER_FALLBACK_MODELS)
-
-    unique: list[str] = []
-    seen: set[str] = set()
-    for model_name in configured:
-        if model_name in seen:
-            continue
-        seen.add(model_name)
-        unique.append(model_name)
-    return unique or list(_DEFAULT_PLACER_FALLBACK_MODELS)
+    if TextLLMConfig is None:
+        return list(_DEFAULT_PLACER_FALLBACK_MODELS)
+    configured = TextLLMConfig.agent_model_chain(
+        _PLACER_MODEL_ROTATION_KEYS,
+        _DEFAULT_PLACER_FALLBACK_MODELS,
+    )
+    return configured or list(_DEFAULT_PLACER_FALLBACK_MODELS)
 
 
 def _current_placer_model_name() -> str:
@@ -1540,7 +1530,7 @@ def _is_quota_exhausted_error(exc: Exception) -> bool:
 def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:
     if get_llm_client is None:
         raise RuntimeError("LLM client is unavailable")
-    client = get_llm_client(provider="gemini")
+    client = get_llm_client()
     model_name = _current_placer_model_name()
     messages = [
         {"role": "system", "content": system_prompt},

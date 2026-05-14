@@ -1,0 +1,549 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 0
+      },
+      {
+        "x": 3000,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 3000,
+              "y": 1550
+            },
+            {
+              "x": 3000,
+              "y": 2450
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 2600
+            },
+            {
+              "x": 0,
+              "y": 1400
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#F3EFE6",
+      "floor_color_hex": "#D7BFA8",
+      "ceiling_color_hex": "#FFFFFF"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#D9D2C6"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#E7E1D6"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "bed",
+      "object_type": "bed",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 450,
+          "y": 0
+        },
+        {
+          "x": 2510,
+          "y": 0
+        },
+        {
+          "x": 2510,
+          "y": 1210
+        },
+        {
+          "x": 450,
+          "y": 1210
+        }
+      ],
+      "bbox": {
+        "min_x": 450,
+        "min_y": 0,
+        "max_x": 2510,
+        "max_y": 1210
+      },
+      "color_hex": "#F5F1E8",
+      "material": "light oak veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "wardrobe",
+      "object_type": "wardrobe",
+      "source": "existing",
+      "cluster_id": "storage_core",
+      "polygon_ccw": [
+        {
+          "x": 1100,
+          "y": 3350
+        },
+        {
+          "x": 1910,
+          "y": 3350
+        },
+        {
+          "x": 1910,
+          "y": 3950
+        },
+        {
+          "x": 1100,
+          "y": 3950
+        }
+      ],
+      "bbox": {
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
+      },
+      "color_hex": "#E9E2D6",
+      "material": "matte painted wood",
+      "place_on": null
+    },
+    {
+      "instance_id": "desk",
+      "object_type": "desk",
+      "source": "existing",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 100,
+          "y": 2750
+        },
+        {
+          "x": 600,
+          "y": 2750
+        },
+        {
+          "x": 600,
+          "y": 3840
+        },
+        {
+          "x": 100,
+          "y": 3840
+        }
+      ],
+      "bbox": {
+        "min_x": 100,
+        "min_y": 2750,
+        "max_x": 600,
+        "max_y": 3840
+      },
+      "color_hex": "#DCC7A8",
+      "material": "oak veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "rug_001",
+      "object_type": "rug",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 300,
+          "y": 0
+        },
+        {
+          "x": 2660,
+          "y": 0
+        },
+        {
+          "x": 2660,
+          "y": 2520
+        },
+        {
+          "x": 300,
+          "y": 2520
+        }
+      ],
+      "bbox": {
+        "min_x": 300,
+        "min_y": 0,
+        "max_x": 2660,
+        "max_y": 2520
+      },
+      "color_hex": "#E7D9C8",
+      "material": "wool blend",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "floor"
+      }
+    },
+    {
+      "instance_id": "cushion_001",
+      "object_type": "cushion",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 490,
+          "y": 40
+        },
+        {
+          "x": 1030,
+          "y": 40
+        },
+        {
+          "x": 1030,
+          "y": 210
+        },
+        {
+          "x": 490,
+          "y": 210
+        }
+      ],
+      "bbox": {
+        "min_x": 490,
+        "min_y": 40,
+        "max_x": 1030,
+        "max_y": 210
+      },
+      "color_hex": "#B9A48A",
+      "material": "linen-cotton blend",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "desk_lamp_001",
+      "object_type": "desk_lamp",
+      "source": "inventory",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 140,
+          "y": 3580
+        },
+        {
+          "x": 300,
+          "y": 3580
+        },
+        {
+          "x": 300,
+          "y": 3800
+        },
+        {
+          "x": 140,
+          "y": 3800
+        }
+      ],
+      "bbox": {
+        "min_x": 140,
+        "min_y": 3580,
+        "max_x": 300,
+        "max_y": 3800
+      },
+      "color_hex": "#C7A27A",
+      "material": "brushed brass",
+      "place_on": {
+        "target_instance_id": "desk",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "laptop_001",
+      "object_type": "laptop",
+      "source": "inventory",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 140,
+          "y": 3140
+        },
+        {
+          "x": 150,
+          "y": 3140
+        },
+        {
+          "x": 150,
+          "y": 3530
+        },
+        {
+          "x": 140,
+          "y": 3530
+        }
+      ],
+      "bbox": {
+        "min_x": 140,
+        "min_y": 3140,
+        "max_x": 150,
+        "max_y": 3530
+      },
+      "color_hex": "#F2F2F2",
+      "material": "anodized aluminum",
+      "place_on": {
+        "target_instance_id": "desk",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "wall_art_001",
+      "object_type": "wall_art",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 1270,
+          "y": 20
+        },
+        {
+          "x": 1690,
+          "y": 20
+        },
+        {
+          "x": 1690,
+          "y": 460
+        },
+        {
+          "x": 1270,
+          "y": 460
+        }
+      ],
+      "bbox": {
+        "min_x": 1270,
+        "min_y": 20,
+        "max_x": 1690,
+        "max_y": 460
+      },
+      "color_hex": "#CBB8A0",
+      "material": "linen canvas",
+      "place_on": {
+        "target_instance_id": "wall",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 1390,
+          "y": 245
+        },
+        {
+          "x": 1570,
+          "y": 245
+        },
+        {
+          "x": 1570,
+          "y": 965
+        },
+        {
+          "x": 1390,
+          "y": 965
+        }
+      ],
+      "bbox": {
+        "min_x": 1390,
+        "min_y": 245,
+        "max_x": 1570,
+        "max_y": 965
+      },
+      "color_hex": "#F7F7F7",
+      "material": "powder-coated steel",
+      "place_on": {
+        "target_instance_id": "ceiling",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "final_style_plan": {
+    "style_name": "scandinavian",
+    "layout_policy_trace": {
+      "style_name": "scandinavian",
+      "style_tags": [
+        "scandinavian",
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "low_to_medium",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "focal_balanced",
+        "symmetry_bias": "low_to_medium",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "balanced",
+        "material_weight_bias": "light",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "support_optional": {
+          "allow_only_if_space_surplus": true
+        },
+        "decor": {
+          "max_items_per_cluster": 1
+        },
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 0.82,
+        "optional_utility_bias": -0.45,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": [
+        "Bedroom correction raised restfulness and clutter control."
+      ]
+    },
+    "palette": {
+      "walls": "warm_off_white",
+      "floor": "light_oak",
+      "primary_wood": "natural_oak",
+      "metal": "matte_black_soft",
+      "textiles": "beige_sand_gray",
+      "walls_hex": "#F3EFE6",
+      "floor_hex": "#D7BFA8",
+      "ceiling_hex": "#FFFFFF"
+    },
+    "surface_plan": {
+      "walls": {
+        "finish": "paint",
+        "color_hex": "#F3EFE6"
+      },
+      "floor": {
+        "finish": "floor_finish",
+        "color_hex": "#D7BFA8"
+      },
+      "ceiling": {
+        "finish": "ceiling_paint",
+        "color_hex": "#FFFFFF"
+      }
+    },
+    "object_finish_plan": [
+      {
+        "instance_id": "bed",
+        "material": "light oak veneer",
+        "color_hex": "#F5F1E8"
+      },
+      {
+        "instance_id": "wardrobe",
+        "material": "matte painted wood",
+        "color_hex": "#E9E2D6"
+      },
+      {
+        "instance_id": "desk",
+        "material": "oak veneer",
+        "color_hex": "#DCC7A8"
+      },
+      {
+        "instance_id": "rug_001",
+        "material": "wool blend",
+        "color_hex": "#E7D9C8"
+      },
+      {
+        "instance_id": "cushion_001",
+        "material": "linen-cotton blend",
+        "color_hex": "#B9A48A"
+      },
+      {
+        "instance_id": "desk_lamp_001",
+        "material": "brushed brass",
+        "color_hex": "#C7A27A"
+      },
+      {
+        "instance_id": "laptop_001",
+        "material": "anodized aluminum",
+        "color_hex": "#F2F2F2"
+      },
+      {
+        "instance_id": "wall_art_001",
+        "material": "linen canvas",
+        "color_hex": "#CBB8A0"
+      },
+      {
+        "instance_id": "ceiling_light_001",
+        "material": "powder-coated steel",
+        "color_hex": "#F7F7F7"
+      }
+    ],
+    "decor_plan": [
+      {
+        "type": "rug",
+        "placement_zone": "sleep_core",
+        "style_role": "quiet_minimal_accent"
+      }
+    ],
+    "lighting_mood": "soft_daylit_calm",
+    "rules": {
+      "layout_locked": true,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    }
+  },
+  "notes": [
+    "Accessory placement used deterministic support rules and fixed 50 mm spacing.",
+    "Warm Scandinavian-modern palette; restrained contrast for calm readability."
+  ],
+  "missing": []
+}

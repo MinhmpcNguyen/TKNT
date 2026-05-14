@@ -1,0 +1,32 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260512T102952Z",
+  "stage": "error",
+  "updated_at_utc": "2026-05-12T10:29:53.317458+00:00",
+  "error": "Style policy compiler could not produce valid JSON after attempting models: gpt-5.4-mini",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-12T10:29:52.309403+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "stylist_style_policy",
+      "message": "stylist_style_policy",
+      "updated_at_utc": "2026-05-12T10:29:52.315483+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "Style policy compiler could not produce valid JSON after attempting models: gpt-5.4-mini",
+      "updated_at_utc": "2026-05-12T10:29:53.317458+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "Style policy compiler could not produce valid JSON after attempting models: gpt-5.4-mini"
+    }
+  ]
+}

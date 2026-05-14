@@ -10,10 +10,32 @@ from agent.semantic_layout_planner import (
     SemanticLayoutPlanner,
     semantic_program_to_cluster_forge_payload,
 )
+from agent.request_contract import attach_request_contract_to_semantic_program
 from agent_schema.clusterF_schema import ClusterForgeOutput
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
-from config.gemini_config import GeminiConfig
+
+try:
+    from config.llm_config import TextLLMConfig
+except Exception:  # pragma: no cover
+    from config.gemini_config import GeminiConfig
+
+    class TextLLMConfig:
+        PROVIDER = "gemini"
+        STRICT_SINGLE_TEXT_MODEL = str(
+            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
+        ).strip()
+        AGENT_MODELS = dict(getattr(GeminiConfig, "AGENT_MODELS", {}) or {})
+
+        @classmethod
+        def primary_model_name(cls) -> str:
+            return ""
+
+        @classmethod
+        def agent_model(cls, key: str) -> str | None:
+            return cls.AGENT_MODELS.get(key)
+
+
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_cluster_rules_grid
 from layout.semantic_roles import (
     is_bed_like,
@@ -34,6 +56,21 @@ from stylist.style_policy import (
 
 logger = logging.getLogger(__name__)
 _FORGE_RESPONSE_MIME_TYPE = "application/json"
+
+
+def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
+    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
+        return
+    try:
+        from clients.gemini_client import GeminiClient
+
+        GeminiClient.record_retry_event(
+            stage=stage,
+            model_name=model_name,
+            reason=reason,
+        )
+    except Exception:
+        logger.debug("Failed to record Gemini retry event.", exc_info=True)
 
 
 @dataclass(frozen=True)
@@ -101,10 +138,10 @@ class ClusterForge:
             description=description,
             special_notes=special_notes,
         )
-        response = get_llm_client(provider="gemini").chat_completion(
+        response = get_llm_client().chat_completion(
             messages,
             model_key="primary",
-            model_name=GeminiConfig.AGENT_MODELS.get("forge"),
+            model_name=TextLLMConfig.agent_model("forge"),
             temperature=temperature,
             max_tokens=max_tokens,
             response_mime_type=_FORGE_RESPONSE_MIME_TYPE,
@@ -158,28 +195,68 @@ class ClusterForge:
                 semantic_program.model_dump(),
                 style_policy,
             )
+            semantic_payload = attach_request_contract_to_semantic_program(
+                semantic_payload,
+                brief_text=brief_text,
+            )
             payload = semantic_program_to_cluster_forge_payload(semantic_payload)
             payload["style_policy"] = style_policy
             payload = _normalize_cluster_forge_payload(payload)
             return ClusterForgeOutput.model_validate(payload)
 
-        response = get_llm_client(provider="gemini").chat_completion(
-            self.build_messages(
-                room_type,
-                room_rules,
-                description=description,
-                special_notes=special_notes,
-            ),
-            model_key="primary",
-            model_name=GeminiConfig.AGENT_MODELS.get("forge"),
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_mime_type=_FORGE_RESPONSE_MIME_TYPE,
+        client = get_llm_client()
+        model_name = TextLLMConfig.agent_model("forge")
+        messages = self.build_messages(
+            room_type,
+            room_rules,
+            description=description,
+            special_notes=special_notes,
         )
-        raw = _extract_content(response)
-        payload = _parse_json(raw, finish_reason=_extract_finish_reason(response))
-        payload = _normalize_cluster_forge_payload(payload)
-        return ClusterForgeOutput.model_validate(payload)
+        last_raw = ""
+        for attempt in range(2):
+            response = client.chat_completion(
+                messages,
+                model_key="primary",
+                model_name=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_mime_type=_FORGE_RESPONSE_MIME_TYPE,
+            )
+            last_raw = _extract_content(response)
+            try:
+                payload = _parse_json(
+                    last_raw,
+                    finish_reason=_extract_finish_reason(response),
+                )
+                payload = _attach_request_contract_to_payload(
+                    payload,
+                    brief_text="\n".join(
+                        item
+                        for item in (description or "", special_notes or "")
+                        if item.strip()
+                    ),
+                )
+                payload = _normalize_cluster_forge_payload(payload)
+                return ClusterForgeOutput.model_validate(payload)
+            except Exception:
+                if attempt == 1:
+                    raise
+                _record_llm_retry(
+                    stage="cluster_forge",
+                    model_name=model_name,
+                    reason="invalid_json_or_schema",
+                )
+                messages.append({"role": "assistant", "content": last_raw})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Return exactly one valid JSON object that satisfies "
+                            "the ClusterForge schema. No markdown. No prose."
+                        ),
+                    }
+                )
+        raise ValueError("ClusterForge returned invalid JSON")
 
 
 def _extract_content(response: object) -> str:
@@ -249,6 +326,22 @@ def _extract_finish_reason(response: object) -> str | None:
         return None
     finish_reason = getattr(choices[0], "finish_reason", None)
     return finish_reason if isinstance(finish_reason, str) else None
+
+
+def _attach_request_contract_to_payload(
+    payload: dict[str, object],
+    *,
+    brief_text: str,
+) -> dict[str, object]:
+    semantic_program = payload.get("semantic_layout_program")
+    if not isinstance(semantic_program, Mapping):
+        return payload
+    out = dict(payload)
+    out["semantic_layout_program"] = attach_request_contract_to_semantic_program(
+        semantic_program,
+        brief_text=brief_text,
+    )
+    return out
 
 
 def _truncate_text(text: str, limit: int = 600) -> str:
@@ -2125,7 +2218,7 @@ def _infer_semantic_support_role(
         return "side_support"
     if is_seat_like(object_id) and is_lounge_anchor_like(relative_to):
         return "secondary_seat"
-    if is_lounge_anchor_like(base) and is_storage_anchor_like(object_id):
+    if is_lounge_anchor_like(base) and _is_storage_anchor_like(object_id):
         return "wall_support"
     return None
 

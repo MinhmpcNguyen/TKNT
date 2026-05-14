@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from api.routes import account, auth, inventory, object_3d, pipeline
 from config import root_config
 from config.logging_config import setup_logging
+from config.models import OpenAIModelGroupConfig
+from db.demo_data import ensure_demo_inventory_loaded
 from db.runtime_init import ensure_runtime_schema
 
 app = FastAPI(title="TKNT Pipeline API", version="0.2.0")
@@ -27,6 +29,9 @@ def _startup_logging() -> None:
 def _initialize_runtime_schema() -> None:
     try:
         ensure_runtime_schema()
+        loaded_count = ensure_demo_inventory_loaded()
+        if loaded_count:
+            logger.info("Loaded %d bundled demo inventory assets.", loaded_count)
     except Exception as exc:
         logger.exception("Runtime schema initialization skipped: %s", exc)
 
@@ -67,18 +72,24 @@ def _log_runtime_profile() -> None:
         )
         logged_provider = True
     if not logged_provider and openai_config.azure:
+        primary_model, helper_model, embedding_model = _openai_model_names(
+            openai_config.models
+        )
         logger.info(
             "LLM provider: Azure OpenAI | primary=%s | helper=%s | embedding=%s",
-            openai_config.models.gpt_4o.name,
-            openai_config.models.gpt_4o_mini.name,
-            openai_config.models.text_embedding_3_small.name,
+            primary_model,
+            helper_model,
+            embedding_model,
         )
     elif not logged_provider:
+        primary_model, helper_model, embedding_model = _openai_model_names(
+            openai_config.models
+        )
         logger.info(
             "LLM provider: OpenAI-compatible API | primary=%s | helper=%s | embedding=%s",
-            openai_config.models.gpt_4o.name,
-            openai_config.models.gpt_4o_mini.name,
-            openai_config.models.text_embedding_3_small.name,
+            primary_model,
+            helper_model,
+            embedding_model,
         )
 
     if semantic_enabled:
@@ -87,6 +98,15 @@ def _log_runtime_profile() -> None:
         logger.info(
             "Knowledge retrieval: semantic search disabled; lexical fallback search enabled."
         )
+
+
+def _openai_model_names(models: OpenAIModelGroupConfig) -> tuple[str, str, str]:
+    resolved_models = models.resolved_models()
+    return (
+        resolved_models["primary"].name,
+        resolved_models["helper"].name,
+        resolved_models["embedding"].name,
+    )
 
 
 app.add_middleware(

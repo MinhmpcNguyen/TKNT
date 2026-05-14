@@ -1,0 +1,24 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260501T030107Z",
+  "stage": "error",
+  "updated_at_utc": "2026-05-01T03:01:23.566622+00:00",
+  "error": "Unterminated string starting at: line 3 column 3 (char 31)",
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-01T03:01:07.840038+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "error",
+      "message": "Unterminated string starting at: line 3 column 3 (char 31)",
+      "updated_at_utc": "2026-05-01T03:01:23.566622+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": "Unterminated string starting at: line 3 column 3 (char 31)"
+    }
+  ]
+}

@@ -22,6 +22,7 @@ class _VariantCandidate:
     concept_signature: str = ""
     anchor_signature: str = ""
     macro_layout_signature: str = ""
+    visual_family_signature: str = ""
     state_signature: str = ""
 
 
@@ -30,6 +31,10 @@ def select_distinct_final_gallery_candidates(
     candidates: list[dict[str, Any]],
     max_variants: int,
 ) -> list[dict[str, Any]]:
+    target_count = max(0, int(max_variants))
+    if target_count <= 0:
+        return []
+
     pool: list[tuple[_VariantCandidate, dict[str, Any]]] = []
     for raw in candidates:
         candidate = _coerce_candidate(raw)
@@ -40,15 +45,22 @@ def select_distinct_final_gallery_candidates(
     pool.sort(key=lambda item: _candidate_rank_tuple(item[0]), reverse=True)
     selected: list[dict[str, Any]] = []
     selected_candidates: list[_VariantCandidate] = []
+    selected_indices: set[int] = set()
     seen_state: set[str] = set()
-    seen_macro: set[str] = set()
+    seen_visual_family: set[str] = set()
     seen_concept: set[str] = set()
     seen_anchor: set[str] = set()
 
-    for candidate, raw in pool:
-        if len(selected) >= max(0, int(max_variants)):
+    for pool_index, (candidate, raw) in enumerate(pool):
+        if len(selected) >= target_count:
             break
         if candidate.state_signature and candidate.state_signature in seen_state:
+            continue
+        visual_family_repeat = bool(
+            candidate.visual_family_signature
+            and candidate.visual_family_signature in seen_visual_family
+        )
+        if selected_candidates and visual_family_repeat:
             continue
         if any(
             _is_near_duplicate_layout(candidate.absolute_layout, row.absolute_layout)
@@ -62,32 +74,143 @@ def select_distinct_final_gallery_candidates(
         anchor_repeat = bool(
             candidate.anchor_signature and candidate.anchor_signature in seen_anchor
         )
-        macro_repeat = bool(
-            candidate.macro_layout_signature
-            and candidate.macro_layout_signature in seen_macro
-        )
-        if selected_candidates and macro_repeat:
-            continue
         if selected_candidates and concept_repeat and anchor_repeat:
             continue
 
-        raw["state_signature"] = candidate.state_signature
-        raw["macro_layout_signature"] = candidate.macro_layout_signature
-        raw["concept_signature"] = candidate.concept_signature
-        raw["anchor_signature"] = candidate.anchor_signature
-        raw["gallery_selection_mode"] = "distinct"
-        selected.append(raw)
-        selected_candidates.append(candidate)
-        if candidate.state_signature:
-            seen_state.add(candidate.state_signature)
-        if candidate.macro_layout_signature:
-            seen_macro.add(candidate.macro_layout_signature)
-        if candidate.concept_signature:
-            seen_concept.add(candidate.concept_signature)
-        if candidate.anchor_signature:
-            seen_anchor.add(candidate.anchor_signature)
+        _accept_gallery_candidate(
+            candidate=candidate,
+            raw=raw,
+            pool_index=pool_index,
+            mode="distinct",
+            selected=selected,
+            selected_candidates=selected_candidates,
+            selected_indices=selected_indices,
+            seen_state=seen_state,
+            seen_visual_family=seen_visual_family,
+            seen_concept=seen_concept,
+            seen_anchor=seen_anchor,
+        )
 
-    return selected[: max(0, int(max_variants))]
+    while len(selected) < target_count:
+        backfill_row = _best_backfill_candidate(
+            pool=pool,
+            selected_candidates=selected_candidates,
+            selected_indices=selected_indices,
+            seen_state=seen_state,
+            seen_visual_family=seen_visual_family,
+        )
+        if backfill_row is None:
+            break
+        pool_index, candidate, raw = backfill_row
+        _accept_gallery_candidate(
+            candidate=candidate,
+            raw=raw,
+            pool_index=pool_index,
+            mode="fallback_near_distinct",
+            selected=selected,
+            selected_candidates=selected_candidates,
+            selected_indices=selected_indices,
+            seen_state=seen_state,
+            seen_visual_family=seen_visual_family,
+            seen_concept=seen_concept,
+            seen_anchor=seen_anchor,
+        )
+
+    return selected[:target_count]
+
+
+def _accept_gallery_candidate(
+    *,
+    candidate: _VariantCandidate,
+    raw: dict[str, Any],
+    pool_index: int,
+    mode: str,
+    selected: list[dict[str, Any]],
+    selected_candidates: list[_VariantCandidate],
+    selected_indices: set[int],
+    seen_state: set[str],
+    seen_visual_family: set[str],
+    seen_concept: set[str],
+    seen_anchor: set[str],
+) -> None:
+    raw["state_signature"] = candidate.state_signature
+    raw["macro_layout_signature"] = candidate.macro_layout_signature
+    raw["visual_family_signature"] = candidate.visual_family_signature
+    raw["concept_signature"] = candidate.concept_signature
+    raw["anchor_signature"] = candidate.anchor_signature
+    raw["gallery_selection_mode"] = mode
+    selected.append(raw)
+    selected_candidates.append(candidate)
+    selected_indices.add(pool_index)
+    if candidate.state_signature:
+        seen_state.add(candidate.state_signature)
+    if candidate.visual_family_signature:
+        seen_visual_family.add(candidate.visual_family_signature)
+    if candidate.concept_signature:
+        seen_concept.add(candidate.concept_signature)
+    if candidate.anchor_signature:
+        seen_anchor.add(candidate.anchor_signature)
+
+
+def _best_backfill_candidate(
+    *,
+    pool: list[tuple[_VariantCandidate, dict[str, Any]]],
+    selected_candidates: list[_VariantCandidate],
+    selected_indices: set[int],
+    seen_state: set[str],
+    seen_visual_family: set[str],
+) -> tuple[int, _VariantCandidate, dict[str, Any]] | None:
+    best_rank: tuple[int, int, int, int, float, int, int] | None = None
+    best_row: tuple[int, _VariantCandidate, dict[str, Any]] | None = None
+    for pool_index, (candidate, raw) in enumerate(pool):
+        if pool_index in selected_indices:
+            continue
+        if candidate.state_signature and candidate.state_signature in seen_state:
+            continue
+        rank = _candidate_backfill_rank_tuple(
+            candidate,
+            selected_candidates=selected_candidates,
+            seen_visual_family=seen_visual_family,
+            pool_index=pool_index,
+        )
+        if best_rank is None or rank > best_rank:
+            best_rank = rank
+            best_row = (pool_index, candidate, deepcopy(raw))
+    return best_row
+
+
+def _candidate_backfill_rank_tuple(
+    candidate: _VariantCandidate,
+    *,
+    selected_candidates: list[_VariantCandidate],
+    seen_visual_family: set[str],
+    pool_index: int,
+) -> tuple[int, int, int, int, float, int, int]:
+    visual_family_is_new = int(
+        bool(
+            candidate.visual_family_signature
+            and candidate.visual_family_signature not in seen_visual_family
+        )
+    )
+    if selected_candidates:
+        distance = min(
+            _layout_distance_score(candidate.absolute_layout, row.absolute_layout)
+            for row in selected_candidates
+        )
+    else:
+        distance = 0
+    gallery_eligible, complete, coverage_ratio, layout_score = _candidate_rank_tuple(
+        candidate
+    )
+    return (
+        visual_family_is_new,
+        distance,
+        gallery_eligible,
+        complete,
+        coverage_ratio,
+        layout_score,
+        -pool_index,
+    )
 
 
 def build_final_layout_variants_payload(
@@ -119,6 +242,7 @@ def build_final_layout_variants_payload(
                 "notes": deepcopy(candidate.notes),
                 "state_signature": candidate.state_signature,
                 "macro_layout_signature": candidate.macro_layout_signature,
+                "visual_family_signature": candidate.visual_family_signature,
                 "concept_signature": candidate.concept_signature,
                 "anchor_signature": candidate.anchor_signature,
                 "gallery_selection_mode": str(raw.get("gallery_selection_mode") or ""),
@@ -160,8 +284,12 @@ def build_final_gallery_selection_summary(
     ]
     candidate_macro_counts = _macro_signature_counts(candidate_rows)
     selected_macro_counts = _macro_signature_counts(selected_rows)
+    candidate_visual_family_counts = _visual_family_signature_counts(candidate_rows)
+    selected_visual_family_counts = _visual_family_signature_counts(selected_rows)
     candidate_macro_signatures = set(candidate_macro_counts)
     selected_macro_signatures = set(selected_macro_counts)
+    candidate_visual_family_signatures = set(candidate_visual_family_counts)
+    selected_visual_family_signatures = set(selected_visual_family_counts)
     collapsed_macro_layouts = [
         {
             "macro_layout_signature": signature,
@@ -173,19 +301,58 @@ def build_final_gallery_selection_summary(
         for signature, candidate_count in sorted(candidate_macro_counts.items())
         if candidate_count > selected_macro_counts.get(signature, 0)
     ]
+    collapsed_visual_families = [
+        {
+            "visual_family_signature": signature,
+            "candidate_count": candidate_count,
+            "returned_count": selected_visual_family_counts.get(signature, 0),
+            "collapsed_count": candidate_count
+            - selected_visual_family_counts.get(signature, 0),
+        }
+        for signature, candidate_count in sorted(candidate_visual_family_counts.items())
+        if candidate_count > selected_visual_family_counts.get(signature, 0)
+    ]
+    fallback_near_distinct_count = sum(
+        1
+        for raw in selected
+        if str(raw.get("gallery_selection_mode") or "") == "fallback_near_distinct"
+    )
     notes: list[str] = []
-    if len(selected_rows) < max(0, int(requested_count)):
+    requested = max(0, int(requested_count))
+    if fallback_near_distinct_count:
         notes.append(
-            "Final gallery returned fewer options because remaining candidates "
-            "collapsed to already selected macro anchor layouts."
+            "Final gallery backfilled near-distinct options after exhausting "
+            "strongly distinct visual families."
+        )
+    if len(selected_rows) < requested:
+        if len(candidate_rows) <= len(selected_rows):
+            notes.append(
+                "Final gallery returned fewer options because fewer usable "
+                "candidates were available than requested."
+            )
+        else:
+            notes.append(
+                "Final gallery returned fewer options because remaining candidates "
+                "were exact duplicate layout states."
+            )
+    elif collapsed_visual_families:
+        notes.append(
+            "Final gallery preserved the requested count by selecting distinct "
+            "visual families first, then backfilling when needed."
         )
     return {
-        "requested_count": max(0, int(requested_count)),
+        "requested_count": requested,
         "candidate_count": len(candidate_rows),
         "returned_count": len(selected_rows),
         "macro_distinct_candidate_count": len(candidate_macro_signatures),
         "macro_distinct_returned_count": len(selected_macro_signatures),
+        "visual_family_distinct_candidate_count": len(
+            candidate_visual_family_signatures
+        ),
+        "visual_family_distinct_returned_count": len(selected_visual_family_signatures),
+        "fallback_near_distinct_count": fallback_near_distinct_count,
         "collapsed_macro_layouts": collapsed_macro_layouts,
+        "collapsed_visual_families": collapsed_visual_families,
         "notes": notes,
     }
 
@@ -199,6 +366,19 @@ def _macro_signature_counts(
             continue
         counts[row.macro_layout_signature] = (
             counts.get(row.macro_layout_signature, 0) + 1
+        )
+    return counts
+
+
+def _visual_family_signature_counts(
+    rows: list[_VariantCandidate],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if not row.visual_family_signature:
+            continue
+        counts[row.visual_family_signature] = (
+            counts.get(row.visual_family_signature, 0) + 1
         )
     return counts
 
@@ -268,6 +448,7 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
     )
     anchor_signature = _anchor_signature(concept=concept, relation_plan=relation_plan)
     macro_signature = _macro_layout_signature(absolute_layout)
+    visual_family_signature = _visual_family_signature(absolute_layout)
     return _VariantCandidate(
         absolute_layout=deepcopy(absolute_layout),
         styled_result=deepcopy(styled_result)
@@ -287,6 +468,7 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
         concept_signature=concept_signature,
         anchor_signature=anchor_signature,
         macro_layout_signature=macro_signature,
+        visual_family_signature=visual_family_signature,
         state_signature=_absolute_layout_signature(absolute_layout),
     )
 
@@ -371,6 +553,185 @@ def _macro_layout_signature(layout: dict[str, Any]) -> str:
             f"{cluster_id}:{_bucket(center_x, min_x, width)}{_bucket(center_y, min_y, height)}"
         )
     return "|".join(rows)
+
+
+def _visual_family_signature(layout: dict[str, Any]) -> str:
+    bounds = _room_bounds(layout)
+    object_rows: list[str] = []
+    anchor_rows: list[str] = []
+    for item in _layout_objects(layout):
+        object_id = str(item.get("object_id") or item.get("instance_id") or "")
+        if "__reintroduced_" in object_id:
+            continue
+        bbox = item.get("bbox") if isinstance(item.get("bbox"), dict) else None
+        visual_key = _visual_object_key(item)
+        if not visual_key or bbox is None:
+            continue
+        object_rows.append(visual_key)
+        if not _is_visual_anchor_object(item):
+            continue
+        box = {
+            "min_x": int(bbox.get("min_x") or 0),
+            "min_y": int(bbox.get("min_y") or 0),
+            "max_x": int(bbox.get("max_x") or 0),
+            "max_y": int(bbox.get("max_y") or 0),
+        }
+        rotation = _rotation_bucket(item.get("rotation_ccw"))
+        anchor_rows.append(
+            f"{visual_key}:{rotation}:{_visual_anchor_zone(box, bounds)}"
+        )
+    if not object_rows and not anchor_rows:
+        return ""
+    object_rows.sort()
+    anchor_rows.sort()
+    return f"objects={','.join(object_rows)}|anchors={','.join(anchor_rows)}"
+
+
+def _room_bounds(layout: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    room = layout.get("room") if isinstance(layout.get("room"), dict) else {}
+    polygon = (
+        room.get("polygon_ccw") if isinstance(room.get("polygon_ccw"), list) else []
+    )
+    xs: list[int] = []
+    ys: list[int] = []
+    for point in polygon:
+        if not isinstance(point, dict):
+            continue
+        xs.append(int(point.get("x") or 0))
+        ys.append(int(point.get("y") or 0))
+    if not xs or not ys:
+        for item in _layout_objects(layout):
+            bbox = item.get("bbox") if isinstance(item.get("bbox"), dict) else None
+            if bbox is None:
+                continue
+            xs.extend([int(bbox.get("min_x") or 0), int(bbox.get("max_x") or 0)])
+            ys.extend([int(bbox.get("min_y") or 0), int(bbox.get("max_y") or 0)])
+    if not xs or not ys:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _visual_object_key(item: dict[str, Any]) -> str:
+    key = _layout_identity_key(item).strip().lower()
+    if key:
+        return key.replace(" ", "_")
+    object_type = str(item.get("object_type") or item.get("category") or "").strip()
+    return object_type.lower().replace(" ", "_")
+
+
+def _is_visual_anchor_object(item: dict[str, Any]) -> bool:
+    role = str(item.get("role") or "").strip().lower()
+    if "anchor" in role or "dominant" in role or "primary" in role:
+        return True
+    text = " ".join(
+        str(item.get(key) or "").strip().lower()
+        for key in (
+            "cluster_id",
+            "object_id",
+            "instance_id",
+            "object_type",
+            "category",
+            "type",
+        )
+    )
+    support_tokens = (
+        "nightstand",
+        "side_table",
+        "lamp",
+        "rug",
+        "curtain",
+        "art",
+        "plant",
+        "ottoman",
+        "stool",
+        "pouf",
+    )
+    if any(token in text for token in support_tokens):
+        return False
+    anchor_tokens = (
+        "bed",
+        "bunk",
+        "crib",
+        "sofa",
+        "sectional",
+        "armchair",
+        "wardrobe",
+        "closet",
+        "dresser",
+        "cabinet",
+        "storage",
+        "desk",
+        "dining",
+        "table",
+        "island",
+        "counter",
+        "vanity",
+        "tv_console",
+        "console",
+        "bookshelf",
+        "bookcase",
+        "shelf",
+    )
+    return any(token in text for token in anchor_tokens)
+
+
+def _rotation_bucket(value: Any) -> int:
+    rotation = int(value or 0) % 360
+    return int(round(rotation / 90.0) * 90) % 360
+
+
+def _visual_anchor_zone(
+    box: dict[str, int],
+    bounds: tuple[int, int, int, int] | None,
+) -> str:
+    if bounds is None:
+        return "unknown"
+    min_x, min_y, max_x, max_y = bounds
+    width = max(1, max_x - min_x)
+    height = max(1, max_y - min_y)
+    center_x = (box["min_x"] + box["max_x"]) / 2.0
+    center_y = (box["min_y"] + box["max_y"]) / 2.0
+    distances = {
+        "left": abs(box["min_x"] - min_x),
+        "right": abs(max_x - box["max_x"]),
+        "top": abs(box["min_y"] - min_y),
+        "bottom": abs(max_y - box["max_y"]),
+    }
+    side, distance = min(distances.items(), key=lambda row: row[1])
+    edge_threshold = max(250, int(min(width, height) * 0.12))
+    close_horizontal = [
+        side_name
+        for side_name in ("left", "right")
+        if distances[side_name] <= edge_threshold
+    ]
+    close_vertical = [
+        side_name
+        for side_name in ("top", "bottom")
+        if distances[side_name] <= edge_threshold
+    ]
+    if close_horizontal and close_vertical:
+        return f"corner:{close_vertical[0]}_{close_horizontal[0]}"
+    if distance <= edge_threshold:
+        if side in {"left", "right"}:
+            band = _coarse_band(center_y, origin=min_y, span=height, divisions=2)
+        else:
+            band = _coarse_band(center_x, origin=min_x, span=width, divisions=2)
+        return f"{side}:{band}"
+    x_band = _coarse_band(center_x, origin=min_x, span=width, divisions=2)
+    y_band = _coarse_band(center_y, origin=min_y, span=height, divisions=2)
+    return f"interior:{x_band}{y_band}"
+
+
+def _coarse_band(
+    value: float,
+    *,
+    origin: int,
+    span: int,
+    divisions: int,
+) -> int:
+    normalized = (value - origin) / max(1, span)
+    normalized = min(0.999, max(0.0, normalized))
+    return int(normalized * max(1, divisions))
 
 
 def _cluster_boxes(layout: dict[str, Any]) -> dict[str, dict[str, int]]:

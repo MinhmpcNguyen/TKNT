@@ -191,6 +191,33 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
         self.assertIn("topology", parsed)
         self.assertIn("quality_meta", parsed)
 
+    def test_generate_respects_explicit_empty_openings(self) -> None:
+        payload = {
+            "user_input": {
+                "description": "Small bedroom without windows in the payload.",
+                "room_type": "bedroom",
+                "windows": 0,
+                "shape_points": [
+                    {"x": 0, "y": 0},
+                    {"x": 3000, "y": 0},
+                    {"x": 3000, "y": 4000},
+                    {"x": 0, "y": 4000},
+                ],
+            },
+            "doors": [],
+            "windows": [],
+        }
+
+        result = RoomInterpreter().generate(payload)
+        data = result.model_dump()
+
+        self.assertEqual(data["openings"]["doors"], [])
+        self.assertEqual(data["openings"]["windows"], [])
+        self.assertNotIn("windows", data["missing"])
+        self.assertFalse(
+            any("generated a deterministic default" in note for note in data["notes"])
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

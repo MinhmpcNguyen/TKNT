@@ -1,0 +1,707 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "living_room",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 5200,
+        "y": 0
+      },
+      {
+        "x": 5200,
+        "y": 3800
+      },
+      {
+        "x": 0,
+        "y": 3800
+      }
+    ],
+    "obstacles": [],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 2150,
+              "y": 0
+            },
+            {
+              "x": 3050,
+              "y": 0
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 3200,
+              "y": 3800
+            },
+            {
+              "x": 2000,
+              "y": 3800
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#F3EDE3",
+      "floor_color_hex": "#C9A57A",
+      "ceiling_color_hex": "#FAF7F2"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#D9C7A8"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#E7E0D3"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "sofa",
+      "object_type": "sofa",
+      "source": "existing",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 850
+        },
+        {
+          "x": 960,
+          "y": 850
+        },
+        {
+          "x": 960,
+          "y": 2910
+        },
+        {
+          "x": 0,
+          "y": 2910
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 850,
+        "max_x": 960,
+        "max_y": 2910
+      },
+      "color_hex": "#3B4A5A",
+      "material": "fabric",
+      "place_on": null
+    },
+    {
+      "instance_id": "tv_console",
+      "object_type": "tv_console",
+      "source": "existing",
+      "cluster_id": "media",
+      "polygon_ccw": [
+        {
+          "x": 4600,
+          "y": 1100
+        },
+        {
+          "x": 5060,
+          "y": 1100
+        },
+        {
+          "x": 5060,
+          "y": 2690
+        },
+        {
+          "x": 4600,
+          "y": 2690
+        }
+      ],
+      "bbox": {
+        "min_x": 4600,
+        "min_y": 1100,
+        "max_x": 5060,
+        "max_y": 2690
+      },
+      "color_hex": "#B8895A",
+      "material": "wood_matte",
+      "place_on": null
+    },
+    {
+      "instance_id": "coffee_table",
+      "object_type": "coffee_table",
+      "source": "existing",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 1050,
+          "y": 600
+        },
+        {
+          "x": 1630,
+          "y": 600
+        },
+        {
+          "x": 1630,
+          "y": 1680
+        },
+        {
+          "x": 1050,
+          "y": 1680
+        }
+      ],
+      "bbox": {
+        "min_x": 1050,
+        "min_y": 600,
+        "max_x": 1630,
+        "max_y": 1680
+      },
+      "color_hex": "#A9784F",
+      "material": "wood_matte",
+      "place_on": null
+    },
+    {
+      "instance_id": "side_table",
+      "object_type": "side_table",
+      "source": "existing",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 1000,
+          "y": 2400
+        },
+        {
+          "x": 1390,
+          "y": 2400
+        },
+        {
+          "x": 1390,
+          "y": 2770
+        },
+        {
+          "x": 1000,
+          "y": 2770
+        }
+      ],
+      "bbox": {
+        "min_x": 1000,
+        "min_y": 2400,
+        "max_x": 1390,
+        "max_y": 2770
+      },
+      "color_hex": "#B8895A",
+      "material": "wood_matte",
+      "place_on": null
+    },
+    {
+      "instance_id": "floor_lamp",
+      "object_type": "floor_lamp",
+      "source": "existing",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 300
+        },
+        {
+          "x": 320,
+          "y": 300
+        },
+        {
+          "x": 320,
+          "y": 650
+        },
+        {
+          "x": 0,
+          "y": 650
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 300,
+        "max_x": 320,
+        "max_y": 650
+      },
+      "color_hex": "#D0B08A",
+      "material": "metal_brushed",
+      "place_on": null
+    },
+    {
+      "instance_id": "rug_001",
+      "object_type": "rug",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 620
+        },
+        {
+          "x": 2110,
+          "y": 620
+        },
+        {
+          "x": 2110,
+          "y": 3140
+        },
+        {
+          "x": 0,
+          "y": 3140
+        }
+      ],
+      "bbox": {
+        "min_x": 0,
+        "min_y": 620,
+        "max_x": 2110,
+        "max_y": 3140
+      },
+      "color_hex": "#E6D8C2",
+      "material": "woven_textile",
+      "place_on": {
+        "target_instance_id": "sofa",
+        "method": "floor"
+      }
+    },
+    {
+      "instance_id": "cushion_001",
+      "object_type": "cushion",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 40,
+          "y": 890
+        },
+        {
+          "x": 210,
+          "y": 890
+        },
+        {
+          "x": 210,
+          "y": 1430
+        },
+        {
+          "x": 40,
+          "y": 1430
+        }
+      ],
+      "bbox": {
+        "min_x": 40,
+        "min_y": 890,
+        "max_x": 210,
+        "max_y": 1430
+      },
+      "color_hex": "#6F7F8F",
+      "material": "fabric",
+      "place_on": {
+        "target_instance_id": "sofa",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "speaker_001",
+      "object_type": "speaker",
+      "source": "inventory",
+      "cluster_id": "media",
+      "polygon_ccw": [
+        {
+          "x": 4820,
+          "y": 1140
+        },
+        {
+          "x": 5020,
+          "y": 1140
+        },
+        {
+          "x": 5020,
+          "y": 1490
+        },
+        {
+          "x": 4820,
+          "y": 1490
+        }
+      ],
+      "bbox": {
+        "min_x": 4820,
+        "min_y": 1140,
+        "max_x": 5020,
+        "max_y": 1490
+      },
+      "color_hex": "#E9E2D6",
+      "material": "powder_coated_metal",
+      "place_on": {
+        "target_instance_id": "tv_console",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "vase_001",
+      "object_type": "vase",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 1090,
+          "y": 640
+        },
+        {
+          "x": 1310,
+          "y": 640
+        },
+        {
+          "x": 1310,
+          "y": 880
+        },
+        {
+          "x": 1090,
+          "y": 880
+        }
+      ],
+      "bbox": {
+        "min_x": 1090,
+        "min_y": 640,
+        "max_x": 1310,
+        "max_y": 880
+      },
+      "color_hex": "#F1F0EC",
+      "material": "ceramic_matte",
+      "place_on": {
+        "target_instance_id": "coffee_table",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "table_lamp_001",
+      "object_type": "table_lamp",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 1040,
+          "y": 2520
+        },
+        {
+          "x": 1350,
+          "y": 2520
+        },
+        {
+          "x": 1350,
+          "y": 2730
+        },
+        {
+          "x": 1040,
+          "y": 2730
+        }
+      ],
+      "bbox": {
+        "min_x": 1040,
+        "min_y": 2520,
+        "max_x": 1350,
+        "max_y": 2730
+      },
+      "color_hex": "#D0B08A",
+      "material": "metal_brushed",
+      "place_on": {
+        "target_instance_id": "side_table",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "curtain_001",
+      "object_type": "curtain",
+      "source": "inventory",
+      "cluster_id": null,
+      "polygon_ccw": [
+        {
+          "x": 1845,
+          "y": 2885
+        },
+        {
+          "x": 3355,
+          "y": 2885
+        },
+        {
+          "x": 3355,
+          "y": 4715
+        },
+        {
+          "x": 1845,
+          "y": 4715
+        }
+      ],
+      "bbox": {
+        "min_x": 1845,
+        "min_y": 2885,
+        "max_x": 3355,
+        "max_y": 4715
+      },
+      "color_hex": "#E7E0D3",
+      "material": "linen_blend",
+      "place_on": {
+        "target_instance_id": "window_1",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "wall_art_001",
+      "object_type": "wall_art",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 20,
+          "y": 1660
+        },
+        {
+          "x": 440,
+          "y": 1660
+        },
+        {
+          "x": 440,
+          "y": 2100
+        },
+        {
+          "x": 20,
+          "y": 2100
+        }
+      ],
+      "bbox": {
+        "min_x": 20,
+        "min_y": 1660,
+        "max_x": 440,
+        "max_y": 2100
+      },
+      "color_hex": "#C9A57A",
+      "material": "framed_print",
+      "place_on": {
+        "target_instance_id": "wall",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "inventory",
+      "cluster_id": "main_seating",
+      "polygon_ccw": [
+        {
+          "x": 390,
+          "y": 1520
+        },
+        {
+          "x": 570,
+          "y": 1520
+        },
+        {
+          "x": 570,
+          "y": 2240
+        },
+        {
+          "x": 390,
+          "y": 2240
+        }
+      ],
+      "bbox": {
+        "min_x": 390,
+        "min_y": 1520,
+        "max_x": 570,
+        "max_y": 2240
+      },
+      "color_hex": "#EDE6DA",
+      "material": "metal_white",
+      "place_on": {
+        "target_instance_id": "ceiling",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "final_style_plan": {
+    "style_name": "balanced",
+    "layout_policy_trace": {
+      "style_name": "balanced",
+      "style_tags": [
+        "cozy",
+        "social"
+      ],
+      "layout_policy": {
+        "target_density": "low_to_medium",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "focal_balanced",
+        "symmetry_bias": "medium",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low_to_medium",
+        "decor_tolerance": "low_to_medium",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "medium_high",
+        "material_weight_bias": "balanced",
+        "visual_balance_bias": "social"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "support_optional": {
+          "allow_only_if_space_surplus": true
+        },
+        "decor": {
+          "max_items_per_cluster": 1
+        },
+        "lounge_reading": {
+          "allow_if_social_clearance_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 0.82,
+        "optional_utility_bias": -0.45,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": [
+        "Living room correction preserved social clarity and focal logic."
+      ]
+    },
+    "palette": {
+      "walls": "warm_off_white",
+      "floor": "light_oak",
+      "primary_wood": "natural_oak",
+      "metal": "matte_black_soft",
+      "textiles": "beige_sand_gray",
+      "walls_hex": "#F3EDE3",
+      "floor_hex": "#C9A57A",
+      "ceiling_hex": "#FAF7F2"
+    },
+    "surface_plan": {
+      "walls": {
+        "finish": "paint",
+        "color_hex": "#F3EDE3"
+      },
+      "floor": {
+        "finish": "floor_finish",
+        "color_hex": "#C9A57A"
+      },
+      "ceiling": {
+        "finish": "ceiling_paint",
+        "color_hex": "#FAF7F2"
+      }
+    },
+    "object_finish_plan": [
+      {
+        "instance_id": "sofa",
+        "material": "fabric",
+        "color_hex": "#3B4A5A"
+      },
+      {
+        "instance_id": "tv_console",
+        "material": "wood_matte",
+        "color_hex": "#B8895A"
+      },
+      {
+        "instance_id": "coffee_table",
+        "material": "wood_matte",
+        "color_hex": "#A9784F"
+      },
+      {
+        "instance_id": "side_table",
+        "material": "wood_matte",
+        "color_hex": "#B8895A"
+      },
+      {
+        "instance_id": "floor_lamp",
+        "material": "metal_brushed",
+        "color_hex": "#D0B08A"
+      },
+      {
+        "instance_id": "rug_001",
+        "material": "woven_textile",
+        "color_hex": "#E6D8C2"
+      },
+      {
+        "instance_id": "cushion_001",
+        "material": "fabric",
+        "color_hex": "#6F7F8F"
+      },
+      {
+        "instance_id": "speaker_001",
+        "material": "powder_coated_metal",
+        "color_hex": "#E9E2D6"
+      },
+      {
+        "instance_id": "vase_001",
+        "material": "ceramic_matte",
+        "color_hex": "#F1F0EC"
+      },
+      {
+        "instance_id": "table_lamp_001",
+        "material": "metal_brushed",
+        "color_hex": "#D0B08A"
+      },
+      {
+        "instance_id": "curtain_001",
+        "material": "linen_blend",
+        "color_hex": "#E7E0D3"
+      },
+      {
+        "instance_id": "wall_art_001",
+        "material": "framed_print",
+        "color_hex": "#C9A57A"
+      },
+      {
+        "instance_id": "ceiling_light_001",
+        "material": "metal_white",
+        "color_hex": "#EDE6DA"
+      }
+    ],
+    "decor_plan": [
+      {
+        "type": "floor_lamp",
+        "placement_zone": "main_seating",
+        "style_role": "quiet_minimal_accent"
+      }
+    ],
+    "lighting_mood": "soft_daylit_social",
+    "rules": {
+      "layout_locked": true,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    }
+  },
+  "notes": [
+    "Accessory placement used deterministic support rules and fixed 50 mm spacing.",
+    "Warm modern functional palette with restrained accents and airy finishes."
+  ],
+  "missing": []
+}

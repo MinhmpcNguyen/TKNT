@@ -1,0 +1,36 @@
+[
+  {
+    "system_id": "tknt_full",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "full"
+  },
+  {
+    "system_id": "idesign_gemini",
+    "kind": "external",
+    "normalizer": "idesign"
+  },
+  {
+    "system_id": "flairgpt_gemini",
+    "kind": "external",
+    "normalizer": "flairgpt"
+  },
+  {
+    "system_id": "tknt_a1_no_style_policy",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_style_policy"
+  },
+  {
+    "system_id": "tknt_a2_no_capacity_control",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_capacity_control"
+  },
+  {
+    "system_id": "tknt_a3_single_concept",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "single_concept"
+  }
+]
