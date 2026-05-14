@@ -51,7 +51,17 @@ except Exception:  # pragma: no cover
                 if isinstance(model_name, str) and model_name.strip()
             ]
 
+
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from layout.kitchen_profile import (
+    is_kitchen_floating_object,
+    is_kitchen_object_like,
+    is_kitchen_room_type,
+    is_kitchen_storage_object,
+    is_kitchen_wall_backed_object,
+    is_kitchen_workflow_object,
+    kitchen_semantic_room_rule,
+)
 from layout.semantic_roles import (
     is_bed_like,
     is_bedside_support_like,
@@ -1151,7 +1161,11 @@ def semantic_program_to_cluster_forge_payload(
                 for member in members
                 if _needs_front_access(member)
             ],
-            "semantic_placements": [],
+            "semantic_placements": _semantic_placements_for_members(
+                cluster_id=cluster_id,
+                members=members,
+                anchors=anchors,
+            ),
             "dominant_anchor_candidates": dominant_anchor_candidates,
             "allow_empty_cluster": active_cluster.get("priority") != "core",
             "zone_claims": active_cluster.get("zone_claims") or {},
@@ -1186,6 +1200,8 @@ def _room_rules_for(
     room_type: str,
     semantic_program_rules: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
+    if is_kitchen_room_type(room_type):
+        return kitchen_semantic_room_rule(room_type)
     if semantic_program_rules is not None:
         if semantic_program_rules.get("room_type") == room_type:
             return dict(semantic_program_rules)
@@ -1577,7 +1593,10 @@ def _candidate_objects(
     for object_type in _string_list(object_program.get("required")):
         add_object(
             object_type,
-            role="dominant_anchor" if object_type in dominant_candidates else "support",
+            role=_required_object_role(
+                object_type,
+                dominant_candidates=dominant_candidates,
+            ),
             required=True,
         )
     for group in _list_of_string_lists(object_program.get("choose_exactly_one_from")):
@@ -1684,6 +1703,28 @@ def _zone_claims_for(
     center = _cap_regions(affordance_summary.get("center_openness_regions"))
     corridors = _cap_regions(affordance_summary.get("primary_circulation_corridors"))
 
+    if "kitchen" in lowered or any(is_kitchen_object_like(obj) for obj in object_types):
+        if any(is_kitchen_floating_object(obj) for obj in object_types) and not any(
+            is_kitchen_wall_backed_object(obj) for obj in object_types
+        ):
+            return {
+                "preferred_regions": _cap_regions(
+                    affordance_summary.get("floating_zone_candidates")
+                ),
+                "avoid_regions": _cap_regions(entry + corridors + center[:1]),
+                "wall_affinity": "medium",
+                "daylight_affinity": "medium",
+                "privacy_affinity": "none",
+                "floating_allowed": True,
+            }
+        return {
+            "preferred_regions": _cap_regions(walls + focal),
+            "avoid_regions": _cap_regions(center + corridors + entry),
+            "wall_affinity": "high",
+            "daylight_affinity": "medium",
+            "privacy_affinity": "none",
+            "floating_allowed": False,
+        }
     if "sleep" in lowered or any(is_bed_like(obj) for obj in object_types):
         return {
             "preferred_regions": _cap_regions(privacy + walls),
@@ -1758,6 +1799,21 @@ def _relation_intents_for(
         intents.append(
             {"type": "face", "target_cluster": "main_seating", "strength": "soft"}
         )
+    if any(is_kitchen_workflow_object(obj) for obj in object_types):
+        intents.append(
+            {"type": "claim_wall", "target": "usable_wall", "strength": "hard"}
+        )
+        intents.append(
+            {"type": "preserve_center", "target": "circulation", "strength": "soft"}
+        )
+    elif any(is_kitchen_floating_object(obj) for obj in object_types):
+        intents.append(
+            {
+                "type": "near",
+                "target_cluster": "kitchen_workflow_core",
+                "strength": "soft",
+            }
+        )
     if "work" in cluster_id:
         intents.append(
             {"type": "claim_daylight", "target": "daylight", "strength": "soft"}
@@ -1778,6 +1834,17 @@ def _build_macro_relations(
     media = _first_cluster_matching(active_clusters, _cluster_has_media)
     sleep = _first_cluster_matching(active_clusters, _cluster_has_sleep)
     work = _first_cluster_matching(active_clusters, _cluster_has_work)
+    kitchen_core = _first_cluster_matching(
+        active_clusters, _cluster_has_kitchen_workflow
+    )
+    kitchen_storage = _first_cluster_matching(
+        active_clusters,
+        _cluster_has_kitchen_storage,
+    )
+    kitchen_floating = _first_cluster_matching(
+        active_clusters,
+        _cluster_has_kitchen_floating,
+    )
     if seating and media:
         adjacency.append(
             {"a": seating, "b": media, "relation": "near", "priority": "high"}
@@ -1788,6 +1855,34 @@ def _build_macro_relations(
     if sleep and work and sleep in by_id and work in by_id:
         separation.append(
             {"a": sleep, "b": work, "relation": "separate", "priority": "medium"}
+        )
+    if (
+        kitchen_core
+        and kitchen_storage
+        and kitchen_core in by_id
+        and kitchen_storage in by_id
+    ):
+        adjacency.append(
+            {
+                "a": kitchen_core,
+                "b": kitchen_storage,
+                "relation": "near",
+                "priority": "high",
+            }
+        )
+    if (
+        kitchen_core
+        and kitchen_floating
+        and kitchen_core in by_id
+        and kitchen_floating in by_id
+    ):
+        adjacency.append(
+            {
+                "a": kitchen_core,
+                "b": kitchen_floating,
+                "relation": "near",
+                "priority": "medium",
+            }
         )
     return {
         "adjacency_preferences": adjacency[:_GLOBAL_RELATION_CAP],
@@ -3087,6 +3182,8 @@ def _brief_support_score(
         for item in objects
     )
     tokens = set(_snake_token(haystack).split("_"))
+    if len(tokens) > 1:
+        tokens.discard("kitchen")
     if not text:
         return 0.35
     score = 0.35
@@ -3127,7 +3224,27 @@ def _global_optional_limit(object_program: Mapping[str, Any]) -> int:
     return len(optional)
 
 
+def _required_object_role(
+    object_type: str,
+    *,
+    dominant_candidates: Sequence[str],
+) -> str:
+    if object_type in dominant_candidates:
+        return "dominant_anchor"
+    if is_kitchen_workflow_object(object_type):
+        return "workflow_anchor"
+    if is_kitchen_storage_object(object_type):
+        return "support"
+    return "support"
+
+
 def _support_role(object_type: str) -> str:
+    if is_kitchen_workflow_object(object_type):
+        return "workflow_anchor"
+    if is_kitchen_storage_object(object_type):
+        return "support"
+    if is_kitchen_floating_object(object_type):
+        return "secondary_support"
     if is_bedside_support_like(object_type) or is_bench_like(object_type):
         return "secondary_support"
     if "lamp" in object_type or "plant" in object_type or "decor" in object_type:
@@ -3139,6 +3256,23 @@ def _semantic_role(
     cluster_id: str, objects: Sequence[Mapping[str, Any]], priority: str
 ) -> str:
     lowered = f"{cluster_id} {' '.join(str(row.get('object_type') or '') for row in objects)}".lower()
+    if "kitchen" in lowered or any(
+        is_kitchen_object_like(str(row.get("object_type") or "")) for row in objects
+    ):
+        if any(
+            is_kitchen_floating_object(str(row.get("object_type") or ""))
+            for row in objects
+        ):
+            return "kitchen_floating_support_zone"
+        if any(
+            is_kitchen_storage_object(str(row.get("object_type") or ""))
+            for row in objects
+        ) and not any(
+            is_kitchen_workflow_object(str(row.get("object_type") or ""))
+            for row in objects
+        ):
+            return "kitchen_storage_zone"
+        return "kitchen_workflow_zone"
     if priority == "core" and ("sleep" in lowered or "bed" in lowered):
         return "primary_anchor_zone"
     if priority == "core":
@@ -3171,6 +3305,8 @@ def _primary_focus(active_clusters: Sequence[Mapping[str, Any]]) -> str:
             return "media"
         if "seating" in cluster_id or "living" in cluster_id:
             return "living"
+        if "kitchen" in cluster_id:
+            return "kitchen"
         if "work" in cluster_id:
             return "work"
     return "mixed"
@@ -3178,6 +3314,10 @@ def _primary_focus(active_clusters: Sequence[Mapping[str, Any]]) -> str:
 
 def _cluster_tag(cluster_id: str, members: Sequence[str]) -> str:
     lowered = f"{cluster_id} {' '.join(members)}".lower()
+    if "kitchen" in lowered or any(
+        is_kitchen_object_like(member) for member in members
+    ):
+        return "kitchen"
     if "sleep" in lowered or any(is_bed_like(member) for member in members):
         return "sleep"
     if "dining" in lowered:
@@ -3209,6 +3349,8 @@ def _is_work_anchor_surface_like(object_type: str) -> bool:
 
 def _is_storage_like(object_type: str) -> bool:
     key = object_type.lower()
+    if is_kitchen_storage_object(key):
+        return True
     return any(
         token in key
         for token in ("wardrobe", "dresser", "cabinet", "bookshelf", "shelf", "storage")
@@ -3220,9 +3362,63 @@ def _needs_front_access(object_type: str) -> bool:
         is_seat_like(object_type)
         or is_work_surface_like(object_type)
         or _is_storage_like(object_type)
+        or is_kitchen_wall_backed_object(object_type)
+        or is_kitchen_floating_object(object_type)
+        or is_kitchen_workflow_object(object_type)
         or _contains_any(object_type, _MEDIA_TOKENS)
         or is_bed_like(object_type)
     )
+
+
+def _semantic_placements_for_members(
+    *,
+    cluster_id: str,
+    members: Sequence[str],
+    anchors: Sequence[str],
+) -> list[dict[str, Any]]:
+    if "kitchen" not in cluster_id.lower() and not any(
+        is_kitchen_object_like(member) for member in members
+    ):
+        return []
+    anchor = next((item for item in anchors if item in members), None)
+    if anchor is None:
+        anchor = next(
+            (item for item in members if is_kitchen_workflow_object(item)),
+            None,
+        )
+    if anchor is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    previous_workflow = anchor
+    for member in members:
+        if member == anchor or not is_kitchen_workflow_object(member):
+            continue
+        relative_to = anchor
+        if member in {"stove", "dishwasher"} and "sink" in members:
+            relative_to = "sink"
+        elif member == "sink":
+            relative_to = anchor
+        elif previous_workflow != anchor:
+            relative_to = previous_workflow
+        rows.append(
+            {
+                "id": member,
+                "relative_to": relative_to,
+                "kind": "anchor_side",
+                "side_options": ["left", "right"],
+                "gap_min": 0,
+                "gap_max": 40,
+                "support_role": "wall_support",
+                "band_intent": "wall_band",
+                "orientation": "same_direction",
+                "proximity": "near",
+                "selection": "best_fit",
+            }
+        )
+        if member in {"fridge", "sink", "stove"}:
+            previous_workflow = member
+    return rows
 
 
 def _cluster_has_seating(cluster: Mapping[str, Any]) -> bool:
@@ -3246,6 +3442,24 @@ def _cluster_has_sleep(cluster: Mapping[str, Any]) -> bool:
 def _cluster_has_work(cluster: Mapping[str, Any]) -> bool:
     return any(
         is_work_surface_like(obj) for obj in _objects_from_active_cluster(cluster)
+    )
+
+
+def _cluster_has_kitchen_workflow(cluster: Mapping[str, Any]) -> bool:
+    return any(
+        is_kitchen_workflow_object(obj) for obj in _objects_from_active_cluster(cluster)
+    )
+
+
+def _cluster_has_kitchen_storage(cluster: Mapping[str, Any]) -> bool:
+    return any(
+        is_kitchen_storage_object(obj) for obj in _objects_from_active_cluster(cluster)
+    )
+
+
+def _cluster_has_kitchen_floating(cluster: Mapping[str, Any]) -> bool:
+    return any(
+        is_kitchen_floating_object(obj) for obj in _objects_from_active_cluster(cluster)
     )
 
 

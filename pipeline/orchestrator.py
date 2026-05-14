@@ -93,6 +93,34 @@ _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
         "collision_layer": "ceiling",
         "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
     },
+    "pendant_light": {
+        "width": 320,
+        "height": 320,
+        "collision_layer": "ceiling",
+        "target_object_types": ["kitchen_island", "dining_table"],
+        "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
+    },
+    "range_hood": {
+        "width": 700,
+        "height": 360,
+        "collision_layer": "wall_mounted",
+        "target_object_types": ["stove", "cooktop"],
+        "place_on": {"method": "hang_on"},
+    },
+    "kitchen_wall_cabinet": {
+        "width": 1000,
+        "height": 360,
+        "collision_layer": "wall_mounted",
+        "target_object_types": ["kitchen_base_cabinet", "sink", "stove"],
+        "place_on": {"method": "wall"},
+    },
+    "cooktop": {
+        "width": 650,
+        "height": 550,
+        "collision_layer": "countertop",
+        "target_object_types": ["kitchen_base_cabinet"],
+        "place_on": {"method": "on_top"},
+    },
 }
 
 try:
@@ -3190,8 +3218,16 @@ def _requested_non_functional_layout_object(
     if width <= 0 or height <= 0:
         return None
 
-    center_x = int(round((int(room_bbox["min_x"]) + int(room_bbox["max_x"])) / 2.0))
-    center_y = int(round((int(room_bbox["min_y"]) + int(room_bbox["max_y"])) / 2.0))
+    target_object = _target_existing_layout_object(
+        existing_objects,
+        spec.get("target_object_types"),
+    )
+    target_center = _layout_object_center(target_object) if target_object else None
+    if target_center is not None:
+        center_x, center_y = target_center
+    else:
+        center_x = int(round((int(room_bbox["min_x"]) + int(room_bbox["max_x"])) / 2.0))
+        center_y = int(round((int(room_bbox["min_y"]) + int(room_bbox["max_y"])) / 2.0))
     min_x = _clamp_int(
         center_x - width // 2,
         int(room_bbox["min_x"]),
@@ -3212,6 +3248,10 @@ def _requested_non_functional_layout_object(
         target_id = _largest_existing_layout_object_id(existing_objects)
         if target_id:
             place_on["target_instance_id"] = target_id
+    elif target_object is not None and not place_on.get("target_instance_id"):
+        target_id = target_object.get("instance_id") or target_object.get("object_id")
+        if isinstance(target_id, str) and target_id.strip():
+            place_on["target_instance_id"] = target_id.strip()
 
     return {
         "cluster_id": _preferred_existing_cluster_id(existing_objects),
@@ -3269,6 +3309,98 @@ def _request_refill_dimension(
     if upper < lower:
         lower = upper
     return _clamp_int(value, lower, upper)
+
+
+def _target_existing_layout_object(
+    objects: list[dict[str, Any]],
+    target_object_types: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(target_object_types, list):
+        return None
+    target_types = {
+        canonical_object_type(str(item or ""))
+        for item in target_object_types
+        if str(item or "").strip()
+    }
+    if not target_types:
+        return None
+
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    for row in objects:
+        if not isinstance(row, dict):
+            continue
+        object_type = canonical_object_type(
+            str(row.get("object_type") or row.get("category") or "")
+        )
+        if object_type not in target_types:
+            continue
+        area = _layout_object_area(row)
+        candidates.append((area, row))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _layout_object_center(row: dict[str, Any] | None) -> tuple[int, int] | None:
+    if not isinstance(row, dict):
+        return None
+    center = row.get("center")
+    if isinstance(center, dict):
+        try:
+            return (
+                int(round(float(center.get("x") or 0.0))),
+                int(round(float(center.get("y") or 0.0))),
+            )
+        except (TypeError, ValueError):
+            pass
+    bbox = row.get("bbox")
+    if isinstance(bbox, dict):
+        try:
+            return (
+                int(
+                    round(
+                        (
+                            float(bbox.get("min_x") or 0.0)
+                            + float(bbox.get("max_x") or 0.0)
+                        )
+                        / 2.0
+                    )
+                ),
+                int(
+                    round(
+                        (
+                            float(bbox.get("min_y") or 0.0)
+                            + float(bbox.get("max_y") or 0.0)
+                        )
+                        / 2.0
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            pass
+    try:
+        x = float(row.get("x") or 0.0)
+        y = float(row.get("y") or 0.0)
+        width = float(row.get("w") or 0.0)
+        height = float(row.get("h") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return (int(round(x + width / 2.0)), int(round(y + height / 2.0)))
+
+
+def _layout_object_area(row: dict[str, Any]) -> float:
+    bbox = row.get("bbox")
+    if isinstance(bbox, dict):
+        try:
+            width = float(bbox.get("max_x") or 0.0) - float(bbox.get("min_x") or 0.0)
+            height = float(bbox.get("max_y") or 0.0) - float(bbox.get("min_y") or 0.0)
+            return max(0.0, width * height)
+        except (TypeError, ValueError):
+            return 0.0
+    try:
+        return max(0.0, float(row.get("w") or 0.0) * float(row.get("h") or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _unique_refill_instance_id(

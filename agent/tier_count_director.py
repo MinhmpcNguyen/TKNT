@@ -15,6 +15,15 @@ from agent.request_contract import (
     request_contract_from_payload,
 )
 from agent.tool_call_parser import extract_tool_calls as parse_tool_calls
+from layout.kitchen_profile import (
+    canonical_kitchen_object_type,
+    is_kitchen_floating_object,
+    is_kitchen_object_like,
+    is_kitchen_room_type,
+    is_kitchen_wall_backed_object,
+    is_kitchen_workflow_object,
+    kitchen_fallback_size_profile,
+)
 from prompt.tier_count import TIER_COUNT_DIRECTOR, TIER_COUNT_DIRECTOR_SYSTEM
 from stylist.style_policy import extract_style_policy
 
@@ -102,6 +111,14 @@ PROFILE_CATEGORY_ALIASES: dict[str, str] = {
     "wardrobe_or_closet": "wardrobe",
     "book_shelf": "bookshelf",
     "desk_chair": "chair",
+    "base_cabinet": "kitchen_base_cabinet",
+    "counter": "kitchen_base_cabinet",
+    "countertop": "kitchen_base_cabinet",
+    "kitchen_counter": "kitchen_base_cabinet",
+    "prep_counter": "kitchen_base_cabinet",
+    "refrigerator": "fridge",
+    "tall_cabinet": "kitchen_tall_cabinet",
+    "wall_cabinet": "kitchen_wall_cabinet",
 }
 
 OPTIONAL_MEMBER_TOKENS = (
@@ -236,6 +253,10 @@ def _run_hardcoded_tier_count(
     capacity_model = _apply_style_policy_to_capacity_model(
         capacity_model,
         style_policy=style_policy,
+    )
+    capacity_model = _apply_room_type_capacity_model(
+        capacity_model,
+        room_type=room_type,
     )
 
     logger.info(
@@ -531,6 +552,41 @@ def _apply_style_policy_to_capacity_model(
         "style_name": style_policy.get("style_name"),
         "layout_policy": layout_policy,
     }
+    return out
+
+
+def _apply_room_type_capacity_model(
+    capacity_model: dict[str, Any],
+    *,
+    room_type: str,
+) -> dict[str, Any]:
+    if not is_kitchen_room_type(room_type):
+        return capacity_model
+
+    out = dict(capacity_model)
+    room_area = max(0.1, float(out.get("available_area_m2") or 0.1))
+    density_ratio = max(float(out.get("density_ratio") or 0.38), 0.40)
+    if room_area >= 12.0:
+        density_ratio = max(density_ratio, 0.43)
+    out["target_density"] = "functional_kitchen"
+    out["density_ratio"] = min(0.50, density_ratio)
+    out["clutter_budget_m2"] = max(
+        float(out.get("clutter_budget_m2") or 0.0),
+        room_area * float(out["density_ratio"]),
+    )
+    out["wall_capacity_m2"] = float(out.get("wall_capacity_m2") or 0.0) * 1.30
+    out["floating_capacity_m2"] = float(out.get("floating_capacity_m2") or 0.0) * 0.82
+    out["center_openness_budget_m2"] = max(
+        float(out.get("center_openness_budget_m2") or 0.0),
+        room_area * 0.30,
+    )
+    out["circulation_budget_m2"] = max(
+        float(out.get("circulation_budget_m2") or 0.0),
+        room_area * 0.22,
+    )
+    out["center_openness_weight"] = "very_high"
+    out["circulation_penalty_weight"] = "very_high"
+    out["room_type_capacity_profile"] = "kitchen"
     return out
 
 
@@ -1448,6 +1504,10 @@ def _fallback_role(member: str, anchors: set[str]) -> str:
     if member in anchors:
         return "dominant_anchor"
     member_key = _norm_key(member)
+    if is_kitchen_workflow_object(member_key):
+        return "workflow_anchor"
+    if is_kitchen_object_like(member_key):
+        return "support"
     if any(token in member_key for token in OPTIONAL_MEMBER_TOKENS):
         return "decor_light"
     if any(token in member_key for token in SECONDARY_MEMBER_TOKENS):
@@ -2274,6 +2334,10 @@ def _functional_utility(role: str, base_type: str) -> float:
         for token in ("bed", "desk", "dining_table", "sofa", "tv_console")
     ):
         score += 0.6
+    if is_kitchen_workflow_object(base_type):
+        score += 0.75
+    elif is_kitchen_object_like(base_type):
+        score += 0.35
     return score
 
 
@@ -2897,12 +2961,28 @@ def _footprint_for_object(
         "chair": 0.45,
         "armchair": 0.75,
         "floor_lamp": 0.12,
+        "fridge": 0.53,
+        "sink": 0.44,
+        "stove": 0.49,
+        "cooktop": 0.36,
+        "kitchen_base_cabinet": 0.72,
+        "kitchen_tall_cabinet": 0.45,
+        "kitchen_wall_cabinet": 0.36,
+        "pantry_cabinet": 0.45,
+        "dishwasher": 0.36,
+        "kitchen_island": 1.36,
+        "bar_stool": 0.18,
+        "dining_chair": 0.23,
     }.get(base_type, 0.55)
     tier_mult = {"S": 0.75, "M": 1.0, "L": 1.35}.get(size_tier.upper(), 1.0)
     return fallback * tier_mult * quantity
 
 
 def _placement_mode(base_type: str) -> str:
+    if is_kitchen_wall_backed_object(base_type):
+        return "wall_backed"
+    if is_kitchen_floating_object(base_type):
+        return "floating"
     if any(
         token in base_type
         for token in (
@@ -3584,6 +3664,9 @@ def _classify_room_scale(area_m2: float) -> str:
 def _profile_category_for_member(member: str) -> str:
     normalized = _norm_key(member)
     canonical = re.sub(r"(?:_\d+)+$", "", normalized)
+    kitchen_canonical = canonical_kitchen_object_type(canonical)
+    if kitchen_canonical is not None:
+        return kitchen_canonical
     return PROFILE_CATEGORY_ALIASES.get(canonical, canonical)
 
 
@@ -3598,6 +3681,11 @@ def _enrich_profiles_for_required_types(
         alias = _profile_category_for_member(member)
         if alias != member and isinstance(profiles.get(alias), dict):
             profiles[member] = profiles[alias]
+            continue
+        kitchen_profile = kitchen_fallback_size_profile(alias)
+        if kitchen_profile is not None:
+            profiles.setdefault(alias, kitchen_profile)
+            profiles[member] = kitchen_profile
 
 
 def _select_next_budget_decisions(

@@ -36,7 +36,29 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "floor_lamp": ("floor_lamp", "standing_lamp"),
     "table_lamp": ("table_lamp", "bedside_lamp", "desk_lamp", "lamp"),
     "armchair": ("armchair", "lounge_chair", "accent_chair"),
+    "bar_stool": ("bar_stool", "counter_stool", "island_stool"),
     "bookshelf": ("bookshelf", "bookcase", "shelf"),
+    "cooktop": ("cooktop", "hob", "induction_hob", "gas_hob"),
+    "dining_chair": ("dining_chair", "breakfast_chair"),
+    "dining_table": ("dining_table", "breakfast_table"),
+    "dishwasher": ("dishwasher", "dish_washer"),
+    "fridge": ("fridge", "refrigerator", "fridge_freezer", "freezer"),
+    "kitchen_base_cabinet": (
+        "kitchen_base_cabinet",
+        "base_cabinet",
+        "counter",
+        "countertop",
+        "prep_counter",
+        "worktop",
+    ),
+    "kitchen_island": ("kitchen_island", "island", "prep_island"),
+    "kitchen_tall_cabinet": ("kitchen_tall_cabinet", "tall_cabinet"),
+    "kitchen_wall_cabinet": ("kitchen_wall_cabinet", "wall_cabinet", "upper_cabinet"),
+    "pantry_cabinet": ("pantry_cabinet", "pantry"),
+    "pendant_light": ("pendant_light", "island_pendant"),
+    "range_hood": ("range_hood", "hood", "extractor_hood", "vent_hood"),
+    "sink": ("sink", "kitchen_sink"),
+    "stove": ("stove", "range", "oven_range", "cooker"),
 }
 
 _NON_BLOCKING_TOKENS = (
@@ -57,6 +79,10 @@ _NON_BLOCKING_TOKENS = (
     "table_lamp",
     "desk_lamp",
     "bedside_lamp",
+    "pendant_light",
+    "range_hood",
+    "kitchen_wall_cabinet",
+    "cooktop",
 )
 
 
@@ -252,7 +278,9 @@ def _is_blocking(canonical_type: str) -> bool:
 
 
 def _has_non_blocking_placement(item: LayoutItem) -> bool:
-    place_on = _mapping(item.raw.get("place_on")) if isinstance(item.raw, Mapping) else {}
+    place_on = (
+        _mapping(item.raw.get("place_on")) if isinstance(item.raw, Mapping) else {}
+    )
     method = str(place_on.get("method") or "").strip().lower()
     return method in {"on_top", "hang_on", "wall", "ceiling"}
 

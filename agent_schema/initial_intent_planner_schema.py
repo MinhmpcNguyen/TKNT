@@ -12,12 +12,15 @@ LayoutFocusMode = Literal[
     "rest",
     "work",
     "dining",
+    "cooking",
     "display",
     "mixed",
 ]
 SupportClusterBehavior = Literal["recede", "balanced", "integrate"]
 DistributionMode = Literal["balanced", "edge_weighted", "focal_grouped", "zoned"]
-IntentClusterTag = Literal["sleep", "work", "living", "dining", "storage", "misc"]
+IntentClusterTag = Literal[
+    "sleep", "work", "living", "dining", "storage", "kitchen", "misc"
+]
 
 
 def _strip_required_str(value: str, field_name: str) -> str:

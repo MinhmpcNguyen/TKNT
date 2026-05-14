@@ -13,6 +13,11 @@ from agent_schema.cluster_composer_schema import ClusterComposerOutput
 from cluster_composer.outline import _outline_polygons_union_grid
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from layout.grid_policy import normalize_layout_grid_mm
+from layout.kitchen_profile import (
+    is_kitchen_floating_object,
+    is_kitchen_storage_object,
+    is_kitchen_workflow_object,
+)
 from layout.orientation_contract import (
     rotate_side_ccw_90s as _rotate_side_ccw_90s_contract,
 )
@@ -95,6 +100,12 @@ ARCHETYPE_LIBRARY: dict[str, tuple[str, ...]] = {
         "wall_storage_linear",
         "storage_buffered_entry",
         "compact_storage_bank",
+    ),
+    "kitchen": (
+        "wall_storage_linear",
+        "compact_storage_bank",
+        "edge_storage",
+        "perimeter_storage",
     ),
 }
 
@@ -1932,7 +1943,9 @@ def _select_variant_families(
 
     role_token = _normalize_token(semantic_role or "")
     if role_token:
-        if "media" in role_token:
+        if "kitchen" in role_token:
+            cluster_type = "kitchen"
+        elif "media" in role_token:
             cluster_type = "living_media"
         elif "social" in role_token or "conversation" in role_token:
             cluster_type = "living"
@@ -1997,6 +2010,11 @@ def _infer_cluster_type(cluster: dict[str, Any]) -> str:
 def _cluster_type_from_token(token: str) -> str | None:
     if token in ARCHETYPE_LIBRARY:
         return token
+    if "kitchen" in token or any(
+        marker in token
+        for marker in ("fridge", "stove", "sink", "cooktop", "dishwasher")
+    ):
+        return "kitchen"
     if "media" in token:
         return "living_media"
     if "living" in token or "seating" in token or "social" in token:
@@ -2081,6 +2099,7 @@ def _infer_cluster_type_from_structure(cluster: dict[str, Any]) -> str | None:
         "work": 0,
         "dining": 0,
         "storage": 0,
+        "kitchen": 0,
     }
     for token in _cluster_structure_tokens(cluster):
         inferred = _infer_type_from_token(token)
@@ -2123,6 +2142,18 @@ def _cluster_structure_tokens(cluster: dict[str, Any]) -> list[str]:
 def _infer_type_from_token(token: str) -> tuple[str, int] | None:
     if not token:
         return None
+    if "kitchen" in token or any(
+        marker in token
+        for marker in (
+            "fridge",
+            "stove",
+            "sink",
+            "cooktop",
+            "range_hood",
+            "dishwasher",
+        )
+    ):
+        return ("kitchen", 4)
     if "media" in token or token.startswith("tv_") or token == "tv":
         return ("living_media", 4)
     if "seat" in token or "living" in token:
@@ -2707,6 +2738,12 @@ def _assign_object_roles(
             if not dominant_assigned:
                 roles[oid] = "dominant_anchor"
                 dominant_assigned = True
+            elif is_kitchen_workflow_object(kind):
+                roles[oid] = "workflow_anchor"
+            elif is_kitchen_storage_object(kind):
+                roles[oid] = "storage_support"
+            elif is_kitchen_floating_object(kind):
+                roles[oid] = "central_support"
             elif "tv" in kind or "media" in kind or "console" in kind:
                 roles[oid] = "media_support"
             elif any(
@@ -2727,7 +2764,13 @@ def _assign_object_roles(
             else:
                 roles[oid] = "secondary_anchor"
             continue
-        if any(token in kind for token in ("tv", "media", "console")):
+        if is_kitchen_workflow_object(kind):
+            roles[oid] = "workflow_anchor"
+        elif is_kitchen_storage_object(kind):
+            roles[oid] = "storage_support"
+        elif is_kitchen_floating_object(kind):
+            roles[oid] = "central_support"
+        elif any(token in kind for token in ("tv", "media", "console")):
             roles[oid] = "media_support"
         elif any(
             token in kind for token in ("coffee_table", "ottoman", "center_table")
@@ -2791,6 +2834,13 @@ def _preferred_anchor_candidates(
         "work": ("desk", "workstation"),
         "dining": ("dining_table", "table"),
         "storage": ("wardrobe", "closet", "bookshelf", "cabinet", "shelf"),
+        "kitchen": (
+            "kitchen_base_cabinet",
+            "sink",
+            "stove",
+            "fridge",
+            "counter",
+        ),
     }
     markers = preferred_markers_by_type.get(cluster_type, ())
     if not markers:

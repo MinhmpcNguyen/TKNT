@@ -8,7 +8,7 @@ IMPORTANT
 - Do not assume the pipeline will rerun ClusterForge or ClusterComposer per intent.
 - Cluster ids should still be avoided in your intent descriptions.
 - You must speak in generic cluster tags only.
-- Allowed tags: sleep, work, living, dining, storage, misc
+- Allowed tags: sleep, work, living, dining, storage, kitchen, misc
 - Do not invent tags outside that set.
 - Output JSON only.
 - Be deterministic and concise.
@@ -41,9 +41,9 @@ Use these fields for each intent:
 - intent_id
 - label
 - summary
-- focus_mode: viewing|conversation|rest|work|dining|display|mixed
-- primary_tag: sleep|work|living|dining|storage|misc
-- secondary_tag: sleep|work|living|dining|storage|misc|null
+- focus_mode: viewing|conversation|rest|work|dining|cooking|display|mixed
+- primary_tag: sleep|work|living|dining|storage|kitchen|misc
+- secondary_tag: sleep|work|living|dining|storage|kitchen|misc|null
 - circulation_priority: high|medium|low
 - center_open_preference: high|medium|low
 - support_cluster_behavior: recede|balanced|integrate

@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from layout.kitchen_profile import is_kitchen_object_like
 from layout.variant_family import FALLBACK_GENERIC_VARIANT_FAMILY
 from layout.variant_family import GENERIC_VARIANT_FAMILIES
 from layout.variant_family import ROLE_VARIANT_FAMILY_ALLOWLISTS
@@ -141,7 +142,7 @@ SEMANTIC_VARIANT_FAMILIES = CORE_SEMANTIC_VARIANT_FAMILIES | frozenset(
     {FALLBACK_GENERIC_VARIANT_FAMILY}
 )
 
-STRICT_ROLE_KINDS = frozenset({"focal", "media", "work", "workflow"})
+STRICT_ROLE_KINDS = frozenset({"focal", "kitchen", "media", "work", "workflow"})
 
 
 @dataclass(frozen=True)
@@ -663,6 +664,8 @@ def _cluster_role_kind(
         for part in _normalized_policy_token(value).split("_")
         if part
     }
+    if "kitchen" in tokens or any(is_kitchen_object_like(part) for part in token_parts):
+        return "kitchen"
     if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
         return "social_anchor"
     if any(token in tokens for token in ("tv", "media", "screen", "fireplace")):
@@ -687,7 +690,7 @@ def _cluster_priority_kind(
     if priority in {"core", "support", "optional"}:
         return priority
     role_kind = _cluster_role_kind(relation_plan, cluster_id)
-    if role_kind in {"social_anchor", "media", "focal", "sleep"}:
+    if role_kind in {"social_anchor", "media", "focal", "sleep", "kitchen"}:
         return "core"
     if role_kind in {"work", "storage"}:
         return "support"

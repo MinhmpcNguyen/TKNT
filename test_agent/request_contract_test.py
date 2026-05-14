@@ -64,6 +64,35 @@ class RequestContractTest(unittest.TestCase):
         self.assertIsNone(contract_item_for_object_type(contract, "side_table"))
         self.assertIsNotNone(contract_item_for_object_type(contract, "nightstand"))
 
+    def test_kitchen_synonyms_are_canonicalized_without_functional_pair_groups(
+        self,
+    ) -> None:
+        contract = build_request_contract(
+            brief_text=(
+                "Include a refrigerator, kitchen sink, stove, prep counter, "
+                "and a range hood."
+            ),
+            available_object_types=[
+                "fridge",
+                "sink",
+                "stove",
+                "kitchen_base_cabinet",
+                "range_hood",
+            ],
+        )
+
+        objects = {
+            row["object_type"]: row
+            for row in contract["objects"]
+            if isinstance(row, dict)
+        }
+        self.assertEqual(
+            set(objects),
+            {"fridge", "kitchen_base_cabinet", "range_hood", "sink", "stove"},
+        )
+        self.assertEqual(objects["range_hood"]["min_keep"], 1)
+        self.assertEqual(contract["groups"], [])
+
     def test_missing_non_functional_contract_items_reports_soft_layout_tokens(
         self,
     ) -> None:

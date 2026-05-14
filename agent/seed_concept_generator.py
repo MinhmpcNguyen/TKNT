@@ -44,6 +44,7 @@ except Exception:  # pragma: no cover
             ]
 
 
+from layout.kitchen_profile import is_kitchen_object_like
 from layout.variant_family import SLEEP_VARIANT_FAMILIES
 
 logger = logging.getLogger(__name__)
@@ -2636,6 +2637,10 @@ def _allowed_variant_families_for_row(
         if "daylight" in zone_assignment:
             families.extend(["daylight_work", "window_oriented"])
         families.extend(["work_core", "workflow"])
+    elif role_kind == "kitchen":
+        if wall_claim in {"strong", "medium"}:
+            families.append("storage_wall")
+        families.extend(["edge_storage", "perimeter_storage", "workflow"])
     elif role_kind == "storage":
         if wall_claim in {"strong", "medium"}:
             families.append("storage_wall")
@@ -3625,6 +3630,7 @@ def _semantic_role_from_cluster(cluster_id: str, object_ids: Sequence[str]) -> s
         "media": "focal_anchor",
         "focal": "focal_anchor",
         "storage": "secondary_storage",
+        "kitchen": "kitchen_workflow",
         "work": "work_support",
         "sleep": "rest_anchor",
         "service": "service_support",
@@ -3634,6 +3640,8 @@ def _semantic_role_from_cluster(cluster_id: str, object_ids: Sequence[str]) -> s
 
 def _role_kind(cluster_id: str, object_ids: Sequence[str], semantic_role: str) -> str:
     tokens = " ".join([cluster_id, semantic_role, *object_ids]).lower()
+    if "kitchen" in tokens or any(is_kitchen_object_like(item) for item in object_ids):
+        return "kitchen"
     if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
         return "social_anchor"
     if any(token in tokens for token in ("tv", "media", "screen", "fireplace")):
@@ -3654,7 +3662,7 @@ def _priority(value: object, role_kind: str) -> Priority:
     text = str(value or "").strip().lower()
     if text in {"core", "support", "optional"}:
         return text  # type: ignore[return-value]
-    if role_kind in {"social_anchor", "media", "sleep"}:
+    if role_kind in {"social_anchor", "media", "sleep", "kitchen"}:
         return "core"
     if role_kind in {"storage", "work", "support"}:
         return "support"

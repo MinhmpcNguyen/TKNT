@@ -659,6 +659,12 @@ def _object_family(object_type: str) -> str:
         return "ceiling_lamp"
     if normalized in {"rug", "carpet"}:
         return "rug"
+    if normalized in {"stove", "cooktop", "hob", "range"}:
+        return "cooking_appliance"
+    if normalized in {"range_hood", "hood", "extractor_hood", "vent_hood"}:
+        return "range_hood"
+    if normalized in {"kitchen_wall_cabinet", "wall_cabinet", "upper_cabinet"}:
+        return "kitchen_wall_cabinet"
     return normalized
 
 
