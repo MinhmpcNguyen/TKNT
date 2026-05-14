@@ -1296,6 +1296,13 @@ def _place_ceiling_items(
     rect = _centered_rect(
         center_x=center_x, center_y=center_y, width=width, height=height
     )
+    rect = _fit_rect_within_bounds(
+        rect=rect,
+        min_x=room_rect.min_x + MOUNT_INSET_MM,
+        max_x=room_rect.max_x - MOUNT_INSET_MM,
+        min_y=room_rect.min_y + MOUNT_INSET_MM,
+        max_y=room_rect.max_y - MOUNT_INSET_MM,
+    )
     return [
         _make_generated_object(
             item_type=item_type,

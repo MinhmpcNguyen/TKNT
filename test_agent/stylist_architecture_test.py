@@ -183,6 +183,7 @@ fake_tools_module.TOOL_SCHEMAS = []
 sys.modules["stylist.tools"] = fake_tools_module
 
 _stylist = importlib.import_module("agent.stylist")
+_deterministic_layout = importlib.import_module("stylist.deterministic_layout")
 Stylist = _stylist.Stylist
 
 
@@ -548,6 +549,31 @@ class StylistArchitectureTest(unittest.TestCase):
             "Palette locked from the requested Japandi direction.",
             result["notes"],
         )
+
+    def test_ceiling_accessory_is_clamped_inside_room_bounds(self) -> None:
+        room_rect = _deterministic_layout._Rect(0, 0, 4000, 3500)
+        support = _deterministic_layout._Support(
+            instance_id="dining_table",
+            object_type="dining_table",
+            cluster_id="kitchen_dining_core",
+            rect=_deterministic_layout._Rect(1250, 0, 2790, 720),
+        )
+
+        rows = _deterministic_layout._place_ceiling_items(
+            room_rect=room_rect,
+            supports=[support],
+            item_types=["track_light"],
+            inventory_profiles={},
+            existing_ids=set(),
+            counters={},
+        )
+
+        self.assertEqual(len(rows), 1)
+        bbox = rows[0]["bbox"]
+        self.assertGreaterEqual(bbox["min_x"], 0)
+        self.assertGreaterEqual(bbox["min_y"], 0)
+        self.assertLessEqual(bbox["max_x"], 4000)
+        self.assertLessEqual(bbox["max_y"], 3500)
 
     def test_generate_does_not_add_tv_on_top_of_tv_console(self) -> None:
         result = Stylist().generate(
