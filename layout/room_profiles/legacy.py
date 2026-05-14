@@ -286,9 +286,24 @@ def living_room_shadow_size_profile(object_type: object) -> dict[str, Any] | Non
     return deepcopy(profile) if profile is not None else None
 
 
+def bedroom_legacy_semantic_room_rule(room_type: str) -> dict[str, Any] | None:
+    _ = room_type
+    from stylist.semantic_program_rules import get_compiled_semantic_room_rule
+
+    return get_compiled_semantic_room_rule("bedroom")
+
+
+def living_room_legacy_semantic_room_rule(room_type: str) -> dict[str, Any] | None:
+    _ = room_type
+    from stylist.semantic_program_rules import get_compiled_semantic_room_rule
+
+    return get_compiled_semantic_room_rule("living_room")
+
+
 BEDROOM_LEGACY_PROFILE = RoomProfile(
     profile_id="bedroom_legacy",
     room_types=frozenset({"bedroom", "guest_bedroom", "primary_bedroom"}),
+    canonical_room_type="bedroom",
     layout_traits_enabled=False,
     object_aliases=BEDROOM_LEGACY_ALIASES,
     wall_backed_objects=BEDROOM_WALL_BACKED_OBJECTS,
@@ -301,12 +316,14 @@ BEDROOM_LEGACY_PROFILE = RoomProfile(
     surface_objects=BEDROOM_SURFACE_OBJECTS,
     lighting_objects=BEDROOM_LIGHTING_OBJECTS,
     decor_objects=BEDROOM_DECOR_OBJECTS,
+    semantic_room_rule_provider=bedroom_legacy_semantic_room_rule,
     size_profile_provider=bedroom_shadow_size_profile,
 )
 
 LIVING_ROOM_LEGACY_PROFILE = RoomProfile(
     profile_id="living_room_legacy",
     room_types=frozenset({"living_room", "living", "lounge", "family_room"}),
+    canonical_room_type="living_room",
     layout_traits_enabled=False,
     object_aliases=LIVING_ROOM_LEGACY_ALIASES,
     wall_backed_objects=LIVING_ROOM_WALL_BACKED_OBJECTS,
@@ -319,5 +336,6 @@ LIVING_ROOM_LEGACY_PROFILE = RoomProfile(
     surface_objects=LIVING_ROOM_SURFACE_OBJECTS,
     lighting_objects=LIVING_ROOM_LIGHTING_OBJECTS,
     decor_objects=LIVING_ROOM_DECOR_OBJECTS,
+    semantic_room_rule_provider=living_room_legacy_semantic_room_rule,
     size_profile_provider=living_room_shadow_size_profile,
 )

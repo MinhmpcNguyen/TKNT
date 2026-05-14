@@ -204,6 +204,7 @@ def kitchen_layout_specs() -> dict[str, dict[str, Any]]:
 KITCHEN_PROFILE = RoomProfile(
     profile_id="kitchen",
     room_types=KITCHEN_ROOM_TYPES,
+    canonical_room_type="kitchen",
     layout_traits_enabled=True,
     object_aliases=KITCHEN_OBJECT_ALIASES,
     scoring_aliases=KITCHEN_SCORING_ALIASES,

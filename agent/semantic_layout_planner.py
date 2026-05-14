@@ -61,6 +61,7 @@ from layout.room_profiles.registry import (
     is_profile_workflow_object,
     profile_id_for_objects,
     profile_shadow_trace_for_active_clusters,
+    select_profile_room_rule,
     semantic_placements_for_members,
     semantic_room_rule_for,
 )
@@ -110,6 +111,12 @@ class _AdaptiveStageSpec:
     task_prompt: str
     output_contract: str
     repair_prompt: str
+
+
+@dataclass(frozen=True)
+class _RoomRulePlan:
+    rules: dict[str, Any]
+    trace: dict[str, Any]
 
 
 _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
@@ -507,10 +514,11 @@ class SemanticLayoutPlanner:
         top_p: float = _LLM_TOP_P,
         max_tokens: int | None = None,
     ) -> SemanticLayoutProgram:
-        room_rules = _room_rules_for(
+        room_rule_plan = _room_rule_plan_for(
             room_type=room_type,
             semantic_program_rules=semantic_program_rules,
         )
+        room_rules = room_rule_plan.rules
         affordance_summary = summarize_room_affordance(room_model_json)
         inventory = _normalize_inventory_catalog(inventory_catalog, room_rules)
         adaptive_llm_mode = use_llm and _adaptive_semantic_llm_enabled()
@@ -571,6 +579,7 @@ class SemanticLayoutPlanner:
             brief_text=brief_text,
             inventory_catalog=inventory,
         )
+        deterministic_program["profile_rule_trace"] = room_rule_plan.trace
         deterministic_program = self._attach_llm_request_contract_if_enabled(
             deterministic_program=deterministic_program,
             room_type=room_type,
@@ -1203,9 +1212,35 @@ def _room_rules_for(
     room_type: str,
     semantic_program_rules: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
+    return _room_rule_plan_for(
+        room_type=room_type,
+        semantic_program_rules=semantic_program_rules,
+    ).rules
+
+
+def _room_rule_plan_for(
+    *,
+    room_type: str,
+    semantic_program_rules: Mapping[str, Any] | None,
+) -> _RoomRulePlan:
     profile_rule = semantic_room_rule_for(room_type)
-    if profile_rule is not None:
-        return profile_rule
+    legacy_rule = _legacy_room_rule_for(
+        room_type=room_type,
+        semantic_program_rules=semantic_program_rules,
+    )
+    selection = select_profile_room_rule(
+        room_type=room_type,
+        profile_rule=profile_rule,
+        legacy_rule=legacy_rule,
+    )
+    return _RoomRulePlan(rules=selection.rule, trace=selection.trace())
+
+
+def _legacy_room_rule_for(
+    *,
+    room_type: str,
+    semantic_program_rules: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
     if semantic_program_rules is not None:
         if semantic_program_rules.get("room_type") == room_type:
             return dict(semantic_program_rules)
@@ -1214,12 +1249,7 @@ def _room_rules_for(
             for item in rooms:
                 if isinstance(item, Mapping) and item.get("room_type") == room_type:
                     return dict(item)
-    return get_compiled_semantic_room_rule(room_type) or {
-        "room_type": room_type,
-        "policy": {"selection_policy": "fallback"},
-        "clusters": [],
-        "global_program": {},
-    }
+    return get_compiled_semantic_room_rule(room_type)
 
 
 def _normalize_inventory_catalog(
@@ -1427,7 +1457,7 @@ def _build_deterministic_program(
         "confidence": _confidence(active_clusters, missing),
         "profile_shadow_trace": profile_shadow_trace,
         "notes": [
-            "SemanticLayoutPlanner used compiled_semantic_program.json as the canonical rule source.",
+            "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
             "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
         ],
     }

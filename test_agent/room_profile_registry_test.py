@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -91,10 +93,88 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertIsNotNone(living)
         self.assertEqual(bedroom.profile_id, "bedroom_legacy")
         self.assertEqual(living.profile_id, "living_room_legacy")
-        self.assertIsNone(_registry.semantic_room_rule_for("bedroom"))
-        self.assertIsNone(_registry.semantic_room_rule_for("living_room"))
+        self.assertIsNotNone(_registry.semantic_room_rule_for("bedroom"))
+        self.assertIsNotNone(_registry.semantic_room_rule_for("living_room"))
         self.assertFalse(_registry.is_profile_workflow_object("bed"))
         self.assertFalse(_registry.is_profile_workflow_object("sofa"))
+
+    def test_profile_rule_selection_defaults_to_unified_with_legacy_diff(
+        self,
+    ) -> None:
+        profile_rule = _registry.semantic_room_rule_for("living_room")
+        legacy_rule = dict(profile_rule)
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TKNT_ROOM_PROFILE_RULE_MODE", None)
+            selection = _registry.select_profile_room_rule(
+                room_type="living_room",
+                profile_rule=profile_rule,
+                legacy_rule=legacy_rule,
+            )
+
+        self.assertEqual(selection.mode, "unified")
+        self.assertEqual(selection.selected_source, "profile")
+        self.assertTrue(selection.profile_first_active)
+        self.assertEqual(selection.dry_run_diff["status"], "equivalent")
+
+    def test_profile_rule_selection_canary_uses_room_gate(self) -> None:
+        profile_rule = _registry.semantic_room_rule_for("bedroom")
+        legacy_rule = dict(profile_rule)
+
+        with patch.dict(
+            os.environ,
+            {
+                "TKNT_ROOM_PROFILE_RULE_MODE": "canary",
+                "TKNT_ROOM_PROFILE_FIRST_ROOMS": "living_room",
+            },
+        ):
+            bedroom = _registry.select_profile_room_rule(
+                room_type="bedroom",
+                profile_rule=profile_rule,
+                legacy_rule=legacy_rule,
+            )
+
+        with patch.dict(
+            os.environ,
+            {
+                "TKNT_ROOM_PROFILE_RULE_MODE": "canary",
+                "TKNT_ROOM_PROFILE_FIRST_ROOMS": "bedroom",
+            },
+        ):
+            bedroom_enabled = _registry.select_profile_room_rule(
+                room_type="bedroom",
+                profile_rule=profile_rule,
+                legacy_rule=legacy_rule,
+            )
+
+        self.assertEqual(bedroom.selected_source, "legacy")
+        self.assertFalse(bedroom.profile_first_active)
+        self.assertEqual(bedroom_enabled.selected_source, "profile")
+        self.assertTrue(bedroom_enabled.profile_first_active)
+
+    def test_unified_mode_falls_back_when_legacy_profile_differs(self) -> None:
+        profile_rule = _registry.semantic_room_rule_for("bedroom")
+        legacy_rule = dict(profile_rule)
+        profile_rule = dict(profile_rule)
+        profile_rule["clusters"] = []
+
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_RULE_MODE": "unified"},
+        ):
+            selection = _registry.select_profile_room_rule(
+                room_type="bedroom",
+                profile_rule=profile_rule,
+                legacy_rule=legacy_rule,
+            )
+
+        self.assertEqual(selection.selected_source, "legacy")
+        self.assertFalse(selection.profile_first_active)
+        self.assertTrue(selection.fallback_used)
+        self.assertEqual(
+            selection.fallback_reason,
+            "profile_dry_run_diff_not_equivalent",
+        )
 
     def test_bedroom_shadow_profile_interprets_legacy_clusters_without_activation(
         self,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from layout.room_profiles.base import RoomProfile, normalize_profile_token
@@ -18,6 +20,40 @@ ROOM_PROFILES: tuple[RoomProfile, ...] = (
 )
 _PROFILE_READINESS_MIN_COVERAGE = 1.0
 _PROFILE_READINESS_MIN_TRAIT_COVERAGE = 1.0
+_ROOM_PROFILE_RULE_MODE_ENV = "TKNT_ROOM_PROFILE_RULE_MODE"
+_ROOM_PROFILE_FIRST_ROOMS_ENV = "TKNT_ROOM_PROFILE_FIRST_ROOMS"
+_DEFAULT_ROOM_PROFILE_RULE_MODE = "unified"
+_ROOM_PROFILE_RULE_MODES = frozenset({"legacy", "shadow", "canary", "unified"})
+
+
+@dataclass(frozen=True)
+class RoomRuleSelection:
+    room_type: str
+    requested_room_type: str
+    profile_id: str | None
+    mode: str
+    selected_source: str
+    rule: dict[str, Any]
+    profile_first_requested: bool
+    profile_first_active: bool
+    fallback_used: bool
+    fallback_reason: str | None
+    dry_run_diff: dict[str, Any]
+
+    def trace(self) -> dict[str, Any]:
+        return {
+            "engine": "room_profile_registry",
+            "room_type": self.room_type,
+            "requested_room_type": self.requested_room_type,
+            "profile_id": self.profile_id,
+            "mode": self.mode,
+            "selected_source": self.selected_source,
+            "profile_first_requested": self.profile_first_requested,
+            "profile_first_active": self.profile_first_active,
+            "fallback_used": self.fallback_used,
+            "fallback_reason": self.fallback_reason,
+            "dry_run_diff": deepcopy(self.dry_run_diff),
+        }
 
 
 def resolve_room_profile(room_type: object) -> RoomProfile | None:
@@ -31,7 +67,86 @@ def semantic_room_rule_for(room_type: object) -> dict[str, Any] | None:
     profile = resolve_room_profile(room_type)
     if profile is None:
         return None
-    return profile.semantic_room_rule(str(room_type or ""))
+    return profile.semantic_room_rule(profile.canonical_room_type)
+
+
+def select_profile_room_rule(
+    *,
+    room_type: object,
+    profile_rule: Mapping[str, Any] | None,
+    legacy_rule: Mapping[str, Any] | None,
+) -> RoomRuleSelection:
+    requested_room_type = str(room_type or "").strip()
+    profile = resolve_room_profile(room_type)
+    canonical_room_type = (
+        profile.canonical_room_type if profile is not None else requested_room_type
+    )
+    mode = _room_profile_rule_mode()
+    profile_rule_clean = _clone_rule(profile_rule)
+    legacy_rule_clean = _clone_rule(legacy_rule)
+    dry_run_diff = _room_rule_dry_run_diff(
+        profile_rule=profile_rule_clean,
+        legacy_rule=legacy_rule_clean,
+    )
+
+    profile_first_requested = _profile_rule_requested(
+        room_type=requested_room_type,
+        profile=profile,
+        mode=mode,
+    )
+    selected_source = "legacy"
+    fallback_used = False
+    fallback_reason: str | None = None
+    selected_rule = legacy_rule_clean
+
+    if profile_rule_clean is None and legacy_rule_clean is None:
+        selected_source = "fallback_empty"
+        selected_rule = _fallback_empty_rule(canonical_room_type)
+        fallback_used = True
+        fallback_reason = "no_profile_or_legacy_rule"
+    elif profile_rule_clean is None:
+        selected_source = "legacy"
+        selected_rule = legacy_rule_clean
+        fallback_used = profile_first_requested
+        fallback_reason = "profile_rule_missing" if fallback_used else None
+    elif legacy_rule_clean is None:
+        selected_source = "profile"
+        selected_rule = profile_rule_clean
+    elif _profile_rule_blocked_by_regression_gate(
+        profile=profile,
+        mode=mode,
+        dry_run_diff=dry_run_diff,
+    ):
+        selected_source = "legacy"
+        selected_rule = legacy_rule_clean
+        fallback_used = True
+        fallback_reason = "profile_dry_run_diff_not_equivalent"
+    elif profile_first_requested:
+        selected_source = "profile"
+        selected_rule = profile_rule_clean
+    else:
+        selected_source = "legacy"
+        selected_rule = legacy_rule_clean
+
+    if selected_rule is None:
+        selected_rule = _fallback_empty_rule(canonical_room_type)
+        fallback_used = True
+        fallback_reason = fallback_reason or "selected_rule_missing"
+        selected_source = "fallback_empty"
+
+    return RoomRuleSelection(
+        room_type=canonical_room_type,
+        requested_room_type=requested_room_type,
+        profile_id=profile.profile_id if profile is not None else None,
+        mode=mode,
+        selected_source=selected_source,
+        rule=selected_rule,
+        profile_first_requested=profile_first_requested,
+        profile_first_active=selected_source == "profile",
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        dry_run_diff=dry_run_diff,
+    )
 
 
 def apply_profile_capacity_model(
@@ -320,6 +435,184 @@ def _profile_promotion_readiness(
         "unrecognized_objects": list(unrecognized_objects),
         "untraited_objects": list(untraited_objects),
     }
+
+
+def _room_profile_rule_mode() -> str:
+    raw_mode = str(
+        os.getenv(_ROOM_PROFILE_RULE_MODE_ENV) or _DEFAULT_ROOM_PROFILE_RULE_MODE
+    )
+    mode = normalize_profile_token(raw_mode)
+    mode_aliases = {
+        "profile": "unified",
+        "profile_first": "unified",
+        "profile_first_default": "unified",
+        "dry_run": "shadow",
+    }
+    mode = mode_aliases.get(mode, mode)
+    return mode if mode in _ROOM_PROFILE_RULE_MODES else _DEFAULT_ROOM_PROFILE_RULE_MODE
+
+
+def _profile_rule_requested(
+    *,
+    room_type: str,
+    profile: RoomProfile | None,
+    mode: str,
+) -> bool:
+    if profile is None or mode in {"legacy", "shadow"}:
+        return False
+    if profile.layout_traits_enabled or mode == "unified":
+        return True
+    if mode != "canary":
+        return False
+
+    selectors = _profile_first_selectors()
+    if not selectors:
+        return False
+    match_tokens = {
+        normalize_profile_token(room_type),
+        normalize_profile_token(profile.profile_id),
+        normalize_profile_token(profile.canonical_room_type),
+        *(normalize_profile_token(value) for value in profile.room_types),
+    }
+    return bool({"all", "*"} & selectors or match_tokens & selectors)
+
+
+def _profile_rule_blocked_by_regression_gate(
+    *,
+    profile: RoomProfile | None,
+    mode: str,
+    dry_run_diff: Mapping[str, Any],
+) -> bool:
+    if profile is None or profile.layout_traits_enabled or mode != "unified":
+        return False
+    return not bool(dry_run_diff.get("equivalent"))
+
+
+def _profile_first_selectors() -> frozenset[str]:
+    raw_value = str(os.getenv(_ROOM_PROFILE_FIRST_ROOMS_ENV) or "")
+    tokens = {
+        normalize_profile_token(item)
+        for item in raw_value.replace(";", ",").split(",")
+        if normalize_profile_token(item)
+    }
+    return frozenset(tokens)
+
+
+def _clone_rule(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return deepcopy(dict(value))
+
+
+def _fallback_empty_rule(room_type: str) -> dict[str, Any]:
+    return {
+        "room_type": room_type,
+        "policy": {"selection_policy": "fallback"},
+        "clusters": [],
+        "global_program": {},
+    }
+
+
+def _room_rule_dry_run_diff(
+    *,
+    profile_rule: Mapping[str, Any] | None,
+    legacy_rule: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if profile_rule is None and legacy_rule is None:
+        return {"status": "no_rules", "equivalent": True}
+    if profile_rule is None:
+        return {"status": "legacy_only", "equivalent": False}
+    if legacy_rule is None:
+        return {"status": "profile_only", "equivalent": False}
+
+    profile_clusters = _room_rule_cluster_signature(profile_rule)
+    legacy_clusters = _room_rule_cluster_signature(legacy_rule)
+    profile_ids = set(profile_clusters)
+    legacy_ids = set(legacy_clusters)
+    added_clusters = sorted(profile_ids - legacy_ids)
+    removed_clusters = sorted(legacy_ids - profile_ids)
+    changed_clusters: list[dict[str, Any]] = []
+
+    for cluster_id in sorted(profile_ids & legacy_ids):
+        profile_cluster = profile_clusters[cluster_id]
+        legacy_cluster = legacy_clusters[cluster_id]
+        profile_objects = set(profile_cluster["object_types"])
+        legacy_objects = set(legacy_cluster["object_types"])
+        added_objects = sorted(profile_objects - legacy_objects)
+        removed_objects = sorted(legacy_objects - profile_objects)
+        priority_changed = profile_cluster["priority"] != legacy_cluster["priority"]
+        if added_objects or removed_objects or priority_changed:
+            changed_clusters.append(
+                {
+                    "cluster_id": cluster_id,
+                    "added_objects": added_objects,
+                    "removed_objects": removed_objects,
+                    "priority_changed": priority_changed,
+                    "profile_priority": profile_cluster["priority"],
+                    "legacy_priority": legacy_cluster["priority"],
+                }
+            )
+
+    equivalent = not (added_clusters or removed_clusters or changed_clusters)
+    return {
+        "status": "equivalent" if equivalent else "different",
+        "equivalent": equivalent,
+        "added_clusters": added_clusters,
+        "removed_clusters": removed_clusters,
+        "changed_clusters": changed_clusters,
+        "profile_cluster_count": len(profile_clusters),
+        "legacy_cluster_count": len(legacy_clusters),
+    }
+
+
+def _room_rule_cluster_signature(
+    rule: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    clusters = rule.get("clusters")
+    if not isinstance(clusters, Sequence) or isinstance(clusters, str):
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+    for cluster in clusters:
+        if not isinstance(cluster, Mapping):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        object_program = cluster.get("object_program")
+        out[cluster_id] = {
+            "priority": str(cluster.get("priority") or "").strip(),
+            "object_types": sorted(_object_program_types(object_program)),
+        }
+    return out
+
+
+def _object_program_types(value: object) -> tuple[str, ...]:
+    object_types: set[str] = set()
+    _collect_object_program_types(value, object_types)
+    return tuple(sorted(object_types))
+
+
+def _collect_object_program_types(value: object, out: set[str]) -> None:
+    if isinstance(value, str):
+        token = normalize_profile_token(value)
+        if token:
+            out.add(token)
+        return
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if key == "by_object" and isinstance(child, Mapping):
+                out.update(
+                    normalize_profile_token(item)
+                    for item in child
+                    if normalize_profile_token(item)
+                )
+                continue
+            _collect_object_program_types(child, out)
+        return
+    if isinstance(value, Sequence):
+        for child in value:
+            _collect_object_program_types(child, out)
 
 
 def _profiles_for_members(members: Sequence[str]) -> list[RoomProfile]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from agent import semantic_layout_planner
 
@@ -133,6 +134,34 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             program["active_clusters"][0]["zone_claims"]["privacy_affinity"],
             "high",
         )
+
+    def test_room_rule_plan_can_force_legacy_mode(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"TKNT_ROOM_PROFILE_RULE_MODE": "legacy"},
+        ):
+            plan = semantic_layout_planner._room_rule_plan_for(
+                room_type="living_room",
+                semantic_program_rules=None,
+            )
+
+        self.assertEqual(plan.trace["selected_source"], "legacy")
+        self.assertFalse(plan.trace["profile_first_active"])
+        self.assertEqual(plan.trace["dry_run_diff"]["status"], "equivalent")
+
+    def test_generate_attaches_profile_rule_trace(self) -> None:
+        program = semantic_layout_planner.SemanticLayoutPlanner().generate(
+            room_model_json={},
+            room_type="living_room",
+            brief_text="simple living room with sofa and tv console",
+            inventory_catalog=None,
+            use_llm=False,
+        )
+
+        self.assertIsNotNone(program.profile_rule_trace)
+        assert program.profile_rule_trace is not None
+        self.assertEqual(program.profile_rule_trace["selected_source"], "profile")
+        self.assertTrue(program.profile_rule_trace["profile_first_active"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ def normalize_profile_token(value: object) -> str:
 class RoomProfile:
     profile_id: str
     room_types: frozenset[str]
+    canonical_room_type: str
     layout_traits_enabled: bool = False
     object_aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     scoring_aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
