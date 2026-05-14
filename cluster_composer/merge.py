@@ -455,13 +455,31 @@ def _expand_degradation_ladder(
     out: list[str] = []
     for value in values:
         if value.startswith("drop_"):
-            object_type = value.removeprefix("drop_")
+            object_type = _drop_action_object_type(value, expanded_ids_by_base)
             expanded_ids = _expand_id_list([object_type], expanded_ids_by_base)
             if expanded_ids:
                 out.extend(f"drop_{object_id}" for object_id in expanded_ids)
                 continue
         out.append(value)
     return _stable_unique(out)
+
+
+def _drop_action_object_type(
+    action: str,
+    expanded_ids_by_base: dict[str, list[str]],
+) -> str:
+    object_type = action.removeprefix("drop_")
+    for suffix in ("_first", "_last"):
+        if object_type.endswith(suffix):
+            object_type = object_type[: -len(suffix)]
+    if object_type in expanded_ids_by_base:
+        return object_type
+    for base_object_id in expanded_ids_by_base:
+        if base_object_id.endswith(f"_{object_type}") or object_type.endswith(
+            f"_{base_object_id}"
+        ):
+            return base_object_id
+    return object_type
 
 
 def _primary_expanded_id(

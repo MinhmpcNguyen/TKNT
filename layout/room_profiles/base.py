@@ -39,6 +39,9 @@ class RoomProfile:
     surface_objects: frozenset[str] = field(default_factory=frozenset)
     lighting_objects: frozenset[str] = field(default_factory=frozenset)
     decor_objects: frozenset[str] = field(default_factory=frozenset)
+    cluster_tag: str | None = None
+    semantic_roles_by_object: Mapping[str, str] = field(default_factory=dict)
+    relation_targets: Mapping[str, str] = field(default_factory=dict)
     semantic_room_rule_provider: SemanticRuleProvider | None = None
     size_profile_provider: SizeProfileProvider | None = None
     capacity_policy: CapacityPolicy | None = None

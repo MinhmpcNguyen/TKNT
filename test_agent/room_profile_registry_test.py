@@ -85,6 +85,83 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertEqual(placements[0]["relative_to"], "dining_table")
         self.assertEqual(placements[0]["support_role"], "secondary_seat")
 
+    def test_profile_layout_semantics_are_registry_driven_for_kitchen(self) -> None:
+        affordance_summary = {
+            "entry_landing_zones": ["entry_zone"],
+            "floating_zone_candidates": ["floating_center_zone"],
+            "focal_surfaces": ["wall_north"],
+            "primary_circulation_corridors": ["center_lane"],
+            "wall_anchor_candidates": ["wall_west"],
+        }
+
+        semantic_role = _registry.profile_semantic_role_for_objects(
+            cluster_id="kitchen_dining_core",
+            object_types=["dining_table", "dining_chair"],
+            priority="core",
+            room_type="kitchen",
+        )
+        zone_claims = _registry.profile_zone_claims_for_objects(
+            cluster_id="kitchen_dining_core",
+            object_types=["dining_table", "dining_chair"],
+            room_type="kitchen",
+            affordance_summary=affordance_summary,
+        )
+        workflow_intents = _registry.profile_relation_intents_for_objects(
+            cluster_id="kitchen_workflow_core",
+            object_types=["fridge", "sink", "stove"],
+            room_type="kitchen",
+        )
+        dining_intents = _registry.profile_relation_intents_for_objects(
+            cluster_id="kitchen_dining_core",
+            object_types=["dining_table", "dining_chair"],
+            room_type="kitchen",
+        )
+
+        self.assertEqual(
+            _registry.profile_cluster_tag_for_objects(
+                ["dining_table"],
+                room_type="kitchen",
+            ),
+            "kitchen",
+        )
+        self.assertEqual(semantic_role, "kitchen_dining_zone")
+        self.assertIsNotNone(zone_claims)
+        assert zone_claims is not None
+        self.assertTrue(zone_claims["floating_allowed"])
+        self.assertEqual(zone_claims["wall_affinity"], "medium")
+        self.assertIn(
+            {"type": "claim_wall", "target": "usable_wall", "strength": "hard"},
+            workflow_intents,
+        )
+        self.assertIn(
+            {
+                "type": "near",
+                "target_cluster": "kitchen_workflow_core",
+                "strength": "soft",
+            },
+            dining_intents,
+        )
+
+    def test_profile_layout_semantics_have_room_level_gate(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "unified"},
+        ):
+            self.assertIsNone(
+                _registry.profile_cluster_tag_for_objects(
+                    ["sofa", "coffee_table"],
+                    room_type="living_room",
+                )
+            )
+            self.assertIsNone(
+                _registry.profile_semantic_role_for_objects(
+                    cluster_id="main_seating",
+                    object_types=["sofa", "coffee_table"],
+                    priority="core",
+                    room_type="living_room",
+                )
+            )
+
     def test_bedroom_and_living_profiles_are_legacy_wrappers(self) -> None:
         bedroom = _registry.resolve_room_profile("bedroom")
         living = _registry.resolve_room_profile("living_room")
@@ -144,6 +221,42 @@ class RoomProfileRegistryTest(unittest.TestCase):
                 ),
                 "bedroom",
             )
+
+    def test_layout_traits_default_rollout_is_unified_with_shadow_rollback(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": ""},
+        ):
+            self.assertTrue(_registry.is_profile_trait_object("sofa"))
+            trace = _registry.profile_shadow_trace_for_active_clusters(
+                room_type="living_room",
+                active_clusters=[
+                    {
+                        "cluster_id": "main_seating",
+                        "required_bundles": [
+                            {
+                                "objects": [
+                                    {"object_type": "sofa"},
+                                    {"object_type": "coffee_table"},
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            )
+
+        self.assertIsNotNone(trace)
+        assert trace is not None
+        self.assertEqual(trace["layout_traits_mode"], "unified")
+        self.assertEqual(trace["mode"], "active")
+
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "shadow"},
+        ):
+            self.assertFalse(_registry.is_profile_trait_object("sofa"))
 
     def test_profile_rule_selection_defaults_to_unified_with_legacy_diff(
         self,

@@ -26,7 +26,7 @@ _DEFAULT_ROOM_PROFILE_RULE_MODE = "unified"
 _ROOM_PROFILE_RULE_MODES = frozenset({"legacy", "shadow", "canary", "unified"})
 _ROOM_PROFILE_TRAITS_MODE_ENV = "TKNT_ROOM_PROFILE_TRAITS_MODE"
 _ROOM_PROFILE_TRAIT_ROOMS_ENV = "TKNT_ROOM_PROFILE_TRAIT_ROOMS"
-_DEFAULT_ROOM_PROFILE_TRAITS_MODE = "shadow"
+_DEFAULT_ROOM_PROFILE_TRAITS_MODE = "unified"
 _ROOM_PROFILE_TRAITS_MODES = frozenset({"legacy", "shadow", "canary", "unified"})
 
 
@@ -328,6 +328,187 @@ def profile_object_traits(
     )
 
 
+def profile_cluster_tag_for_objects(
+    object_types: Sequence[str],
+    *,
+    room_type: object | None = None,
+) -> str | None:
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None or not _profile_layout_semantics_enabled(profile):
+        return None
+    return profile.cluster_tag
+
+
+def profile_semantic_role_for_objects(
+    *,
+    cluster_id: object,
+    object_types: Sequence[str],
+    priority: object,
+    room_type: object | None = None,
+) -> str | None:
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None or not _profile_layout_semantics_enabled(profile):
+        return None
+
+    canonical_types = _profile_canonical_object_types(profile, object_types)
+    explicit_role = _profile_semantic_role_override(profile, canonical_types)
+    if explicit_role is not None:
+        return explicit_role
+
+    traits = _profile_object_trait_set(profile, object_types)
+    if "workflow" in traits:
+        return f"{profile.canonical_room_type}_workflow_zone"
+    if "storage" in traits and "workflow" not in traits:
+        return f"{profile.canonical_room_type}_storage_zone"
+    if "floating" in traits:
+        return f"{profile.canonical_room_type}_floating_support_zone"
+
+    cluster_text = str(cluster_id or "").strip()
+    if normalize_profile_token(priority) == "core" and cluster_text:
+        return f"{profile.canonical_room_type}_core_zone"
+    return None
+
+
+def profile_zone_claims_for_objects(
+    *,
+    cluster_id: object,
+    object_types: Sequence[str],
+    room_type: object | None,
+    affordance_summary: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    _ = cluster_id
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None or not _profile_layout_semantics_enabled(profile):
+        return None
+
+    traits = _profile_object_trait_set(profile, object_types)
+    if "floating" in traits and "wall_backed" not in traits:
+        return {
+            "preferred_regions": _profile_regions(
+                affordance_summary.get("floating_zone_candidates")
+            ),
+            "avoid_regions": _profile_regions(
+                _profile_regions(affordance_summary.get("entry_landing_zones"))
+                + _profile_regions(
+                    affordance_summary.get("primary_circulation_corridors")
+                )
+            ),
+            "wall_affinity": "medium",
+            "daylight_affinity": "medium",
+            "privacy_affinity": "none",
+            "floating_allowed": True,
+        }
+    if traits & {"workflow", "storage", "wall_backed"}:
+        return {
+            "preferred_regions": _profile_regions(
+                _profile_regions(affordance_summary.get("wall_anchor_candidates"))
+                + _profile_regions(affordance_summary.get("focal_surfaces"))
+            ),
+            "avoid_regions": _profile_regions(
+                _profile_regions(affordance_summary.get("center_openness_regions"))
+                + _profile_regions(
+                    affordance_summary.get("primary_circulation_corridors")
+                )
+                + _profile_regions(affordance_summary.get("entry_landing_zones"))
+            ),
+            "wall_affinity": "high",
+            "daylight_affinity": "medium",
+            "privacy_affinity": "none",
+            "floating_allowed": False,
+        }
+    return None
+
+
+def profile_relation_intents_for_objects(
+    *,
+    cluster_id: object,
+    object_types: Sequence[str],
+    room_type: object | None = None,
+) -> list[dict[str, Any]]:
+    _ = cluster_id
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None or not _profile_layout_semantics_enabled(profile):
+        return []
+
+    traits = _profile_object_trait_set(profile, object_types)
+    intents: list[dict[str, Any]] = []
+    if "workflow" in traits:
+        intents.append(
+            {"type": "claim_wall", "target": "usable_wall", "strength": "hard"}
+        )
+        intents.append(
+            {"type": "preserve_center", "target": "circulation", "strength": "soft"}
+        )
+    elif "floating" in traits:
+        workflow_target = profile.relation_targets.get("workflow")
+        if workflow_target:
+            intents.append(
+                {
+                    "type": "near",
+                    "target_cluster": workflow_target,
+                    "strength": "soft",
+                }
+            )
+    return intents
+
+
+def profile_macro_relations_for_active_clusters(
+    *,
+    room_type: object | None,
+    active_clusters: Sequence[Mapping[str, Any]],
+) -> dict[str, list[dict[str, object]]]:
+    adjacency: list[dict[str, object]] = []
+    by_id = {
+        str(cluster.get("cluster_id") or ""): cluster for cluster in active_clusters
+    }
+
+    for profile in _layout_enabled_profiles():
+        if not _profile_layout_semantics_enabled(profile):
+            continue
+        target_cluster = profile.relation_targets.get("workflow")
+        if not target_cluster or target_cluster not in by_id:
+            continue
+
+        target_objects = _object_types_from_active_cluster(by_id[target_cluster])
+        if _profile_for_objects(target_objects, room_type=room_type) != profile:
+            continue
+        if "workflow" not in _profile_object_trait_set(profile, target_objects):
+            continue
+
+        for cluster in active_clusters:
+            cluster_id = str(cluster.get("cluster_id") or "")
+            if not cluster_id or cluster_id == target_cluster:
+                continue
+            object_types = _object_types_from_active_cluster(cluster)
+            if _profile_for_objects(object_types, room_type=room_type) != profile:
+                continue
+            traits = _profile_object_trait_set(profile, object_types)
+            if "storage" in traits and "workflow" not in traits:
+                adjacency.append(
+                    {
+                        "a": target_cluster,
+                        "b": cluster_id,
+                        "relation": "near",
+                        "priority": "high",
+                    }
+                )
+            elif "floating" in traits:
+                adjacency.append(
+                    {
+                        "a": target_cluster,
+                        "b": cluster_id,
+                        "relation": "near",
+                        "priority": "medium",
+                    }
+                )
+
+    return {
+        "adjacency_preferences": adjacency,
+        "separation_preferences": [],
+        "orientation_preferences": [],
+    }
+
+
 def profile_shadow_trace_for_active_clusters(
     *,
     room_type: object,
@@ -556,6 +737,68 @@ def _profile_has_effective_trait_object(
     if not _profile_layout_traits_enabled(profile):
         return False
     return profile.has_trait_object(object_type, include_shadow=True)
+
+
+def _profile_layout_semantics_enabled(profile: RoomProfile) -> bool:
+    if not _profile_layout_traits_enabled(profile):
+        return False
+    return bool(
+        profile.cluster_tag
+        or profile.semantic_roles_by_object
+        or profile.relation_targets
+    )
+
+
+def _profile_canonical_object_types(
+    profile: RoomProfile,
+    object_types: Sequence[str],
+) -> list[str]:
+    canonical_types: list[str] = []
+    for object_type in object_types:
+        canonical = profile.canonical_object_type(object_type)
+        if canonical is not None:
+            canonical_types.append(canonical)
+    return canonical_types
+
+
+def _profile_object_trait_set(
+    profile: RoomProfile,
+    object_types: Sequence[str],
+) -> set[str]:
+    traits: set[str] = set()
+    for object_type in object_types:
+        traits.update(profile.object_traits(object_type, include_shadow=True))
+    return traits
+
+
+def _profile_semantic_role_override(
+    profile: RoomProfile,
+    canonical_types: Sequence[str],
+) -> str | None:
+    roles = [
+        profile.semantic_roles_by_object[object_type]
+        for object_type in canonical_types
+        if object_type in profile.semantic_roles_by_object
+    ]
+    if not roles:
+        return None
+    first_role = roles[0]
+    if all(role == first_role for role in roles):
+        return first_role
+    return first_role
+
+
+def _profile_regions(value: object) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= 4:
+            break
+    return out
 
 
 def _profile_rule_blocked_by_regression_gate(

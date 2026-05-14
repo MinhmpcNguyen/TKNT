@@ -215,6 +215,19 @@ KITCHEN_PROFILE = RoomProfile(
     floating_objects=KITCHEN_FLOATING_OBJECTS,
     mounted_objects=KITCHEN_MOUNTED_OBJECTS,
     storage_objects=KITCHEN_STORAGE_OBJECTS,
+    anchor_objects=frozenset({"kitchen_base_cabinet", "dining_table"}),
+    support_objects=KITCHEN_STORAGE_OBJECTS | KITCHEN_FLOATING_OBJECTS,
+    seating_objects=frozenset({"bar_stool", "dining_chair"}),
+    surface_objects=frozenset(
+        {"dining_table", "kitchen_base_cabinet", "kitchen_island"}
+    ),
+    lighting_objects=frozenset({"pendant_light"}),
+    cluster_tag="kitchen",
+    semantic_roles_by_object={
+        "dining_chair": "kitchen_dining_zone",
+        "dining_table": "kitchen_dining_zone",
+    },
+    relation_targets={"workflow": "kitchen_workflow_core"},
     semantic_room_rule_provider=kitchen_semantic_room_rule,
     size_profile_provider=kitchen_fallback_size_profile,
     capacity_policy=apply_kitchen_capacity_model,

@@ -273,6 +273,74 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             "work",
         )
 
+    def test_unified_traits_keep_room_semantics_partitioned(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "unified"},
+        ):
+            living = semantic_layout_planner.SemanticLayoutPlanner().generate(
+                room_model_json={},
+                room_type="living_room",
+                brief_text="simple living room with sofa and tv console",
+                inventory_catalog=None,
+                use_llm=False,
+            )
+            kitchen = semantic_layout_planner.SemanticLayoutPlanner().generate(
+                room_model_json={
+                    "room_type": "kitchen",
+                    "room": {
+                        "polygon_ccw": [
+                            {"x": 0, "y": 0},
+                            {"x": 4000, "y": 0},
+                            {"x": 4000, "y": 3500},
+                            {"x": 0, "y": 3500},
+                        ],
+                        "openings": {"doors": [], "windows": []},
+                    },
+                    "obstacles": [],
+                },
+                room_type="kitchen",
+                brief_text="compact kitchen with dining table",
+                inventory_catalog=None,
+                use_llm=False,
+            )
+
+        living_payload = (
+            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+                living.model_dump()
+            )
+        )
+        kitchen_payload = (
+            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+                kitchen.model_dump()
+            )
+        )
+        living_tags = {
+            row["cluster_id"]: row["tag"] for row in living_payload["clusters"]
+        }
+        kitchen_tags = {
+            row["cluster_id"]: row["tag"] for row in kitchen_payload["clusters"]
+        }
+        kitchen_roles = {
+            row["cluster_id"]: row["semantic_role"]
+            for row in kitchen.model_dump()["active_clusters"]
+        }
+
+        self.assertIsNotNone(living.profile_shadow_trace)
+        self.assertIsNotNone(kitchen.profile_shadow_trace)
+        assert living.profile_shadow_trace is not None
+        assert kitchen.profile_shadow_trace is not None
+        self.assertEqual(living.profile_shadow_trace["mode"], "active")
+        self.assertNotIn("kitchen", living_tags.values())
+        self.assertEqual(living_tags["main_seating"], "living")
+        self.assertEqual(living_tags["media"], "living")
+        self.assertEqual(kitchen.profile_shadow_trace["mode"], "active")
+        self.assertTrue(set(kitchen_tags.values()) <= {"kitchen"})
+        self.assertEqual(
+            kitchen_roles["kitchen_dining_core"],
+            "kitchen_dining_zone",
+        )
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

@@ -184,8 +184,9 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
                     "anchors": ["dining_table"],
                     "cluster_rules": {
                         "degradation_ladder": [
-                            "drop_dining_chair",
+                            "drop_chair",
                             "reduce_chair_count",
+                            "drop_table_last",
                         ],
                         "anchor_first_policy": {
                             "dominant_anchor_id": "dining_table",
@@ -220,7 +221,12 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
 
         self.assertEqual(
             object_program["degradation_ladder"],
-            ["drop_dining_chair", "drop_dining_chair_2", "reduce_chair_count"],
+            [
+                "drop_dining_chair",
+                "drop_dining_chair_2",
+                "reduce_chair_count",
+                "drop_dining_table",
+            ],
         )
         self.assertEqual(
             object_program["droppable_ids"],

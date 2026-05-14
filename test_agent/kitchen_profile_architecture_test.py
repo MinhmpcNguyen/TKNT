@@ -135,6 +135,39 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             dining_payload["cluster_rules"]["degradation_ladder"],
         )
 
+    def test_kitchen_dining_generic_drop_action_keeps_chair_droppable(self) -> None:
+        program = (
+            SemanticLayoutPlanner()
+            .generate(
+                room_model_json=_kitchen_room(),
+                room_type="kitchen",
+                brief_text="Design a compact eat-in kitchen with a dining table and chair.",
+                use_llm=False,
+            )
+            .model_dump()
+        )
+        dining = next(
+            row
+            for row in program["active_clusters"]
+            if row["cluster_id"] == "kitchen_dining_core"
+        )
+        dining["degradation_ladder"] = [
+            "drop_chair",
+            "reduce_chair_count",
+            "drop_table_last",
+        ]
+
+        cluster_payload = semantic_program_to_cluster_forge_payload(program)
+        dining_payload = next(
+            row
+            for row in cluster_payload["clusters"]
+            if row["cluster_id"] == "kitchen_dining_core"
+        )
+        anchor_policy = dining_payload["cluster_rules"]["anchor_first_policy"]
+
+        self.assertIn("dining_chair", anchor_policy["droppable_ids"])
+        self.assertNotIn("dining_table", anchor_policy["droppable_ids"])
+
     def test_kitchen_dining_profile_normalization_restores_floating_claims(
         self,
     ) -> None:
