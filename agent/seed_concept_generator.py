@@ -44,7 +44,7 @@ except Exception:  # pragma: no cover
             ]
 
 
-from layout.room_profiles.registry import is_profile_trait_object
+from layout.room_profiles.registry import profile_room_type_for_objects
 from layout.variant_family import SLEEP_VARIANT_FAMILIES
 
 logger = logging.getLogger(__name__)
@@ -3640,7 +3640,7 @@ def _semantic_role_from_cluster(cluster_id: str, object_ids: Sequence[str]) -> s
 
 def _role_kind(cluster_id: str, object_ids: Sequence[str], semantic_role: str) -> str:
     tokens = " ".join([cluster_id, semantic_role, *object_ids]).lower()
-    if "kitchen" in tokens or any(is_profile_trait_object(item) for item in object_ids):
+    if "kitchen" in tokens or profile_room_type_for_objects(object_ids) == "kitchen":
         return "kitchen"
     if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
         return "social_anchor"

@@ -95,8 +95,55 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertEqual(living.profile_id, "living_room_legacy")
         self.assertIsNotNone(_registry.semantic_room_rule_for("bedroom"))
         self.assertIsNotNone(_registry.semantic_room_rule_for("living_room"))
-        self.assertFalse(_registry.is_profile_workflow_object("bed"))
-        self.assertFalse(_registry.is_profile_workflow_object("sofa"))
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "shadow"},
+        ):
+            self.assertFalse(_registry.is_profile_workflow_object("bed"))
+            self.assertFalse(_registry.is_profile_trait_object("sofa"))
+
+    def test_layout_traits_canary_enables_living_room_only(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TKNT_ROOM_PROFILE_TRAITS_MODE": "canary",
+                "TKNT_ROOM_PROFILE_TRAIT_ROOMS": "living_room",
+            },
+        ):
+            self.assertTrue(_registry.is_profile_trait_object("sofa"))
+            self.assertTrue(_registry.is_profile_floating_object("sofa"))
+            self.assertFalse(_registry.is_profile_trait_object("bed"))
+            self.assertEqual(
+                _registry.profile_id_for_objects(["sofa"]), "living_room_legacy"
+            )
+            self.assertEqual(
+                _registry.profile_room_type_for_objects(["sofa"]), "living_room"
+            )
+            self.assertIsNotNone(_registry.fallback_profile_size("media shelf"))
+
+    def test_layout_traits_unified_enables_ready_legacy_profiles(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "unified"},
+        ):
+            self.assertTrue(_registry.is_profile_trait_object("sofa"))
+            self.assertTrue(_registry.is_profile_trait_object("bed"))
+            self.assertTrue(_registry.is_profile_wall_backed_object("wardrobe"))
+            self.assertTrue(_registry.is_profile_storage_object("media_shelf"))
+            self.assertEqual(
+                _registry.profile_id_for_objects(
+                    ["bookshelf"],
+                    room_type="living_room",
+                ),
+                "living_room_legacy",
+            )
+            self.assertEqual(
+                _registry.profile_room_type_for_objects(
+                    ["bookshelf"],
+                    room_type="bedroom",
+                ),
+                "bedroom",
+            )
 
     def test_profile_rule_selection_defaults_to_unified_with_legacy_diff(
         self,
@@ -179,33 +226,37 @@ class RoomProfileRegistryTest(unittest.TestCase):
     def test_bedroom_shadow_profile_interprets_legacy_clusters_without_activation(
         self,
     ) -> None:
-        trace = _registry.profile_shadow_trace_for_active_clusters(
-            room_type="bedroom",
-            active_clusters=[
-                {
-                    "cluster_id": "sleep_core",
-                    "required_bundles": [
-                        {
-                            "objects": [
-                                {"object_type": "bed"},
-                                {"object_type": "nightstand"},
-                            ]
-                        }
-                    ],
-                },
-                {
-                    "cluster_id": "work_study",
-                    "required_bundles": [
-                        {
-                            "objects": [
-                                {"object_type": "vanity"},
-                                {"object_type": "vanity chair"},
-                            ]
-                        }
-                    ],
-                },
-            ],
-        )
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "shadow"},
+        ):
+            trace = _registry.profile_shadow_trace_for_active_clusters(
+                room_type="bedroom",
+                active_clusters=[
+                    {
+                        "cluster_id": "sleep_core",
+                        "required_bundles": [
+                            {
+                                "objects": [
+                                    {"object_type": "bed"},
+                                    {"object_type": "nightstand"},
+                                ]
+                            }
+                        ],
+                    },
+                    {
+                        "cluster_id": "work_study",
+                        "required_bundles": [
+                            {
+                                "objects": [
+                                    {"object_type": "vanity"},
+                                    {"object_type": "vanity chair"},
+                                ]
+                            }
+                        ],
+                    },
+                ],
+            )
 
         self.assertIsNotNone(trace)
         self.assertEqual(trace["profile_id"], "bedroom_legacy")
@@ -216,24 +267,28 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertIn("support", trace["trait_counts"])
 
     def test_living_room_shadow_profile_interprets_core_furniture(self) -> None:
-        trace = _registry.profile_shadow_trace_for_active_clusters(
-            room_type="living_room",
-            active_clusters=[
-                {
-                    "cluster_id": "living_primary",
-                    "required_bundles": [
-                        {
-                            "objects": [
-                                {"object_type": "couch"},
-                                {"object_type": "coffee table"},
-                                {"object_type": "media console"},
-                                {"object_type": "media_shelf"},
-                            ]
-                        }
-                    ],
-                }
-            ],
-        )
+        with patch.dict(
+            os.environ,
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "shadow"},
+        ):
+            trace = _registry.profile_shadow_trace_for_active_clusters(
+                room_type="living_room",
+                active_clusters=[
+                    {
+                        "cluster_id": "living_primary",
+                        "required_bundles": [
+                            {
+                                "objects": [
+                                    {"object_type": "couch"},
+                                    {"object_type": "coffee table"},
+                                    {"object_type": "media console"},
+                                    {"object_type": "media_shelf"},
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            )
 
         self.assertIsNotNone(trace)
         self.assertEqual(trace["profile_id"], "living_room_legacy")
@@ -250,6 +305,38 @@ class RoomProfileRegistryTest(unittest.TestCase):
             _registry.canonical_profile_object_type("media shelving"),
             "media_shelf",
         )
+
+    def test_living_room_trace_reports_active_when_traits_canary_is_enabled(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TKNT_ROOM_PROFILE_TRAITS_MODE": "canary",
+                "TKNT_ROOM_PROFILE_TRAIT_ROOMS": "living_room",
+            },
+        ):
+            trace = _registry.profile_shadow_trace_for_active_clusters(
+                room_type="living_room",
+                active_clusters=[
+                    {
+                        "cluster_id": "media",
+                        "required_bundles": [
+                            {
+                                "objects": [
+                                    {"object_type": "tv_console"},
+                                    {"object_type": "media_shelf"},
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            )
+
+        self.assertEqual(trace["mode"], "active")
+        self.assertTrue(trace["layout_traits_enabled"])
+        self.assertFalse(trace["layout_traits_intrinsic_enabled"])
+        self.assertEqual(trace["promotion_readiness"]["status"], "active")
 
 
 if __name__ == "__main__":

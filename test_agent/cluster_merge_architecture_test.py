@@ -175,6 +175,58 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             object_program["object_specs_by_id"]["support_surface_2"]["protected"]
         )
 
+    def test_merge_preserves_drop_actions_after_instance_expansion(self) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "kitchen_dining_core",
+                    "members": ["dining_table", "dining_chair"],
+                    "anchors": ["dining_table"],
+                    "cluster_rules": {
+                        "degradation_ladder": [
+                            "drop_dining_chair",
+                            "reduce_chair_count",
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "dining_table",
+                            "protected_ids": ["dining_table"],
+                            "droppable_ids": ["dining_chair"],
+                        },
+                    },
+                }
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "dining_table",
+                    cluster_id="kitchen_dining_core",
+                    role="dominant_anchor",
+                    min_keep=1,
+                    protected=True,
+                ),
+                _decision(
+                    "dining_chair",
+                    cluster_id="kitchen_dining_core",
+                    quantity=2,
+                    min_keep=1,
+                    droppable=True,
+                ),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        object_program = merged["clusters"][0]["object_program"]
+
+        self.assertEqual(
+            object_program["degradation_ladder"],
+            ["drop_dining_chair", "drop_dining_chair_2", "reduce_chair_count"],
+        )
+        self.assertEqual(
+            object_program["droppable_ids"],
+            ["dining_chair", "dining_chair_2"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -339,7 +339,7 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
             for item in _expand_id_list(droppable_ids, expanded_ids_by_base)
             if item in member_set
         ],
-        "degradation_ladder": _expand_id_list(
+        "degradation_ladder": _expand_degradation_ladder(
             _string_list(rules.get("degradation_ladder")),
             expanded_ids_by_base,
         ),
@@ -445,6 +445,22 @@ def _expand_id_list(
             out.extend(expanded_ids[:1] if primary_only else expanded_ids)
         elif value in all_expanded_ids:
             out.append(value)
+    return _stable_unique(out)
+
+
+def _expand_degradation_ladder(
+    values: list[str],
+    expanded_ids_by_base: dict[str, list[str]],
+) -> list[str]:
+    out: list[str] = []
+    for value in values:
+        if value.startswith("drop_"):
+            object_type = value.removeprefix("drop_")
+            expanded_ids = _expand_id_list([object_type], expanded_ids_by_base)
+            if expanded_ids:
+                out.extend(f"drop_{object_id}" for object_id in expanded_ids)
+                continue
+        out.append(value)
     return _stable_unique(out)
 
 

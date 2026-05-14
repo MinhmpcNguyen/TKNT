@@ -8,7 +8,9 @@ from dataclasses import dataclass
 
 from agent.semantic_layout_planner import (
     SemanticLayoutPlanner,
+    _normalize_profile_semantic_program,
     semantic_program_to_cluster_forge_payload,
+    summarize_room_affordance,
 )
 from agent.request_contract import attach_request_contract_to_semantic_program
 from agent_schema.clusterF_schema import ClusterForgeOutput
@@ -198,6 +200,10 @@ class ClusterForge:
             semantic_payload = attach_request_contract_to_semantic_program(
                 semantic_payload,
                 brief_text=brief_text,
+            )
+            semantic_payload = _normalize_profile_semantic_program(
+                semantic_payload,
+                affordance_summary=summarize_room_affordance(room_model_json),
             )
             payload = semantic_program_to_cluster_forge_payload(semantic_payload)
             payload["style_policy"] = style_policy

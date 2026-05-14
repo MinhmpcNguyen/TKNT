@@ -306,6 +306,25 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             )
         )
 
+    def test_living_profile_traits_do_not_relabel_seed_clusters_as_kitchen(
+        self,
+    ) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "TKNT_ROOM_PROFILE_TRAITS_MODE": "canary",
+                "TKNT_ROOM_PROFILE_TRAIT_ROOMS": "living_room",
+            },
+            clear=False,
+        ):
+            role_kind = seed_mod._role_kind(
+                "main_seating",
+                ["sofa", "coffee_table"],
+                "",
+            )
+
+        self.assertEqual(role_kind, "social_anchor")
+
 
 def _zone_logic_class(zone: object) -> str:
     text = str(zone or "")

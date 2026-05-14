@@ -24,6 +24,10 @@ _ROOM_PROFILE_RULE_MODE_ENV = "TKNT_ROOM_PROFILE_RULE_MODE"
 _ROOM_PROFILE_FIRST_ROOMS_ENV = "TKNT_ROOM_PROFILE_FIRST_ROOMS"
 _DEFAULT_ROOM_PROFILE_RULE_MODE = "unified"
 _ROOM_PROFILE_RULE_MODES = frozenset({"legacy", "shadow", "canary", "unified"})
+_ROOM_PROFILE_TRAITS_MODE_ENV = "TKNT_ROOM_PROFILE_TRAITS_MODE"
+_ROOM_PROFILE_TRAIT_ROOMS_ENV = "TKNT_ROOM_PROFILE_TRAIT_ROOMS"
+_DEFAULT_ROOM_PROFILE_TRAITS_MODE = "shadow"
+_ROOM_PROFILE_TRAITS_MODES = frozenset({"legacy", "shadow", "canary", "unified"})
 
 
 @dataclass(frozen=True)
@@ -226,16 +230,32 @@ def canonical_profile_object_type(object_type: object) -> str | None:
     return None
 
 
-def profile_id_for_objects(object_types: Sequence[str]) -> str | None:
-    for profile in _layout_enabled_profiles():
-        if any(profile.has_trait_object(item) for item in object_types):
-            return profile.profile_id
-    return None
+def profile_id_for_objects(
+    object_types: Sequence[str],
+    *,
+    room_type: object | None = None,
+) -> str | None:
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None:
+        return None
+    return profile.profile_id
+
+
+def profile_room_type_for_objects(
+    object_types: Sequence[str],
+    *,
+    room_type: object | None = None,
+) -> str | None:
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None:
+        return None
+    return profile.canonical_room_type
 
 
 def is_profile_trait_object(object_type: object) -> bool:
     return any(
-        profile.has_trait_object(object_type) for profile in _layout_enabled_profiles()
+        _profile_has_effective_trait_object(profile, object_type)
+        for profile in _layout_enabled_profiles()
     )
 
 
@@ -302,7 +322,10 @@ def profile_object_traits(
     profile = resolve_room_profile(room_type)
     if profile is None:
         return ()
-    return profile.object_traits(object_type, include_shadow=include_shadow)
+    return profile.object_traits(
+        object_type,
+        include_shadow=include_shadow or _profile_layout_traits_enabled(profile),
+    )
 
 
 def profile_shadow_trace_for_active_clusters(
@@ -313,6 +336,7 @@ def profile_shadow_trace_for_active_clusters(
     profile = resolve_room_profile(room_type)
     if profile is None:
         return None
+    layout_traits_enabled = _profile_layout_traits_enabled(profile)
 
     total_count = 0
     recognized_count = 0
@@ -377,6 +401,7 @@ def profile_shadow_trace_for_active_clusters(
     )
     promotion_readiness = _profile_promotion_readiness(
         profile=profile,
+        layout_traits_enabled=layout_traits_enabled,
         total_count=total_count,
         coverage_ratio=coverage_ratio,
         trait_coverage_ratio=trait_coverage_ratio,
@@ -385,8 +410,10 @@ def profile_shadow_trace_for_active_clusters(
     )
     return {
         "profile_id": profile.profile_id,
-        "mode": "active" if profile.layout_traits_enabled else "shadow",
-        "layout_traits_enabled": profile.layout_traits_enabled,
+        "mode": "active" if layout_traits_enabled else "shadow",
+        "layout_traits_enabled": layout_traits_enabled,
+        "layout_traits_intrinsic_enabled": profile.layout_traits_enabled,
+        "layout_traits_mode": _room_profile_traits_mode(),
         "semantic_rule_enabled": profile.semantic_room_rule_provider is not None,
         "object_count": total_count,
         "recognized_count": recognized_count,
@@ -401,6 +428,7 @@ def profile_shadow_trace_for_active_clusters(
 def _profile_promotion_readiness(
     *,
     profile: RoomProfile,
+    layout_traits_enabled: bool,
     total_count: int,
     coverage_ratio: float,
     trait_coverage_ratio: float,
@@ -419,7 +447,7 @@ def _profile_promotion_readiness(
     if untraited_objects:
         blockers.append("untraited_objects")
 
-    if profile.layout_traits_enabled:
+    if layout_traits_enabled:
         status = "active"
     elif blockers:
         status = "needs_profile_expansion"
@@ -452,6 +480,27 @@ def _room_profile_rule_mode() -> str:
     return mode if mode in _ROOM_PROFILE_RULE_MODES else _DEFAULT_ROOM_PROFILE_RULE_MODE
 
 
+def _room_profile_traits_mode() -> str:
+    raw_mode = str(
+        os.getenv(_ROOM_PROFILE_TRAITS_MODE_ENV) or _DEFAULT_ROOM_PROFILE_TRAITS_MODE
+    )
+    mode = normalize_profile_token(raw_mode)
+    mode_aliases = {
+        "active": "unified",
+        "layout": "unified",
+        "profile": "unified",
+        "profile_traits": "unified",
+        "dry_run": "shadow",
+        "legacy": "shadow",
+    }
+    mode = mode_aliases.get(mode, mode)
+    return (
+        mode
+        if mode in _ROOM_PROFILE_TRAITS_MODES
+        else _DEFAULT_ROOM_PROFILE_TRAITS_MODE
+    )
+
+
 def _profile_rule_requested(
     *,
     room_type: str,
@@ -477,6 +526,38 @@ def _profile_rule_requested(
     return bool({"all", "*"} & selectors or match_tokens & selectors)
 
 
+def _profile_layout_traits_enabled(profile: RoomProfile) -> bool:
+    if profile.layout_traits_enabled:
+        return True
+
+    mode = _room_profile_traits_mode()
+    if mode in {"legacy", "shadow"}:
+        return False
+    if mode == "unified":
+        return True
+    if mode != "canary":
+        return False
+
+    selectors = _profile_trait_selectors()
+    if not selectors:
+        return False
+    match_tokens = {
+        normalize_profile_token(profile.profile_id),
+        normalize_profile_token(profile.canonical_room_type),
+        *(normalize_profile_token(value) for value in profile.room_types),
+    }
+    return bool({"all", "*"} & selectors or match_tokens & selectors)
+
+
+def _profile_has_effective_trait_object(
+    profile: RoomProfile,
+    object_type: object,
+) -> bool:
+    if not _profile_layout_traits_enabled(profile):
+        return False
+    return profile.has_trait_object(object_type, include_shadow=True)
+
+
 def _profile_rule_blocked_by_regression_gate(
     *,
     profile: RoomProfile | None,
@@ -490,6 +571,16 @@ def _profile_rule_blocked_by_regression_gate(
 
 def _profile_first_selectors() -> frozenset[str]:
     raw_value = str(os.getenv(_ROOM_PROFILE_FIRST_ROOMS_ENV) or "")
+    tokens = {
+        normalize_profile_token(item)
+        for item in raw_value.replace(";", ",").split(",")
+        if normalize_profile_token(item)
+    }
+    return frozenset(tokens)
+
+
+def _profile_trait_selectors() -> frozenset[str]:
+    raw_value = str(os.getenv(_ROOM_PROFILE_TRAIT_ROOMS_ENV) or "")
     tokens = {
         normalize_profile_token(item)
         for item in raw_value.replace(";", ",").split(",")
@@ -619,12 +710,46 @@ def _profiles_for_members(members: Sequence[str]) -> list[RoomProfile]:
     return [
         profile
         for profile in _layout_enabled_profiles()
-        if any(profile.has_trait_object(member) for member in members)
+        if any(
+            _profile_has_effective_trait_object(profile, member) for member in members
+        )
     ]
 
 
+def _profile_for_objects(
+    object_types: Sequence[str],
+    *,
+    room_type: object | None = None,
+) -> RoomProfile | None:
+    preferred = resolve_room_profile(room_type)
+    if (
+        preferred is not None
+        and _profile_layout_traits_enabled(preferred)
+        and any(
+            _profile_has_effective_trait_object(preferred, item)
+            for item in object_types
+        )
+    ):
+        return preferred
+
+    best_profile: RoomProfile | None = None
+    best_score = 0
+    for profile in _layout_enabled_profiles():
+        score = sum(
+            1
+            for item in object_types
+            if _profile_has_effective_trait_object(profile, item)
+        )
+        if score > best_score:
+            best_profile = profile
+            best_score = score
+    return best_profile
+
+
 def _layout_enabled_profiles() -> tuple[RoomProfile, ...]:
-    return tuple(profile for profile in ROOM_PROFILES if profile.layout_traits_enabled)
+    return tuple(
+        profile for profile in ROOM_PROFILES if _profile_layout_traits_enabled(profile)
+    )
 
 
 def _object_types_from_active_cluster(cluster: Mapping[str, Any]) -> list[str]:

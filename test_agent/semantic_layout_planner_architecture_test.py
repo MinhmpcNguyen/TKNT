@@ -86,45 +86,49 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         self.assertEqual(cluster["zone_claims"]["preferred_regions"], ["wall_north"])
 
     def test_bedroom_profile_trace_is_shadow_only_for_legacy_layout(self) -> None:
-        program = semantic_layout_planner._build_deterministic_program(
-            room_type="bedroom",
-            room_rules={"room_type": "bedroom", "global_program": {}},
-            room_model_json={},
-            affordance_summary={
-                "privacy_regions": ["private_back_zone"],
-                "wall_anchor_candidates": ["quiet_wall_zone"],
-                "entry_landing_zones": ["entry_zone"],
-                "primary_circulation_corridors": ["center_lane"],
-                "center_openness_regions": ["room_center"],
-            },
-            candidates=[
-                {
-                    "cluster_id": "sleep_core",
-                    "priority": "core",
-                    "active_by_rule": True,
-                    "useful": True,
-                    "objects": [
-                        {
-                            "object_type": "bed",
-                            "role": "dominant_anchor",
-                            "required": True,
-                        },
-                        {
-                            "object_type": "nightstand",
-                            "role": "secondary_support",
-                            "required": False,
-                        },
-                    ],
-                    "missing": [],
-                    "semantic": {"dominant_anchor_candidates": ["bed"]},
-                    "degradation_hints": {},
-                    "tier_count_hints": {},
-                    "viability": {"inventory_support": 1.0},
-                }
-            ],
-            brief_text="calm bedroom with a bed and nightstand",
-            inventory_catalog={},
-        )
+        with patch.dict(
+            "os.environ",
+            {"TKNT_ROOM_PROFILE_TRAITS_MODE": "shadow"},
+        ):
+            program = semantic_layout_planner._build_deterministic_program(
+                room_type="bedroom",
+                room_rules={"room_type": "bedroom", "global_program": {}},
+                room_model_json={},
+                affordance_summary={
+                    "privacy_regions": ["private_back_zone"],
+                    "wall_anchor_candidates": ["quiet_wall_zone"],
+                    "entry_landing_zones": ["entry_zone"],
+                    "primary_circulation_corridors": ["center_lane"],
+                    "center_openness_regions": ["room_center"],
+                },
+                candidates=[
+                    {
+                        "cluster_id": "sleep_core",
+                        "priority": "core",
+                        "active_by_rule": True,
+                        "useful": True,
+                        "objects": [
+                            {
+                                "object_type": "bed",
+                                "role": "dominant_anchor",
+                                "required": True,
+                            },
+                            {
+                                "object_type": "nightstand",
+                                "role": "secondary_support",
+                                "required": False,
+                            },
+                        ],
+                        "missing": [],
+                        "semantic": {"dominant_anchor_candidates": ["bed"]},
+                        "degradation_hints": {},
+                        "tier_count_hints": {},
+                        "viability": {"inventory_support": 1.0},
+                    }
+                ],
+                brief_text="calm bedroom with a bed and nightstand",
+                inventory_catalog={},
+            )
 
         trace = program["profile_shadow_trace"]
         self.assertEqual(trace["profile_id"], "bedroom_legacy")
@@ -162,6 +166,112 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         assert program.profile_rule_trace is not None
         self.assertEqual(program.profile_rule_trace["selected_source"], "profile")
         self.assertTrue(program.profile_rule_trace["profile_first_active"])
+
+    def test_generate_reports_active_living_trace_when_traits_canary_is_enabled(
+        self,
+    ) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "TKNT_ROOM_PROFILE_TRAITS_MODE": "canary",
+                "TKNT_ROOM_PROFILE_TRAIT_ROOMS": "living_room",
+            },
+        ):
+            program = semantic_layout_planner.SemanticLayoutPlanner().generate(
+                room_model_json={},
+                room_type="living_room",
+                brief_text="simple living room with sofa and tv console",
+                inventory_catalog=None,
+                use_llm=False,
+            )
+
+        self.assertIsNotNone(program.profile_shadow_trace)
+        assert program.profile_shadow_trace is not None
+        self.assertEqual(program.profile_shadow_trace["mode"], "active")
+        self.assertTrue(program.profile_shadow_trace["layout_traits_enabled"])
+        cluster_payload = (
+            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+                program.model_dump()
+            )
+        )
+        cluster_tags = {
+            row["cluster_id"]: row["tag"] for row in cluster_payload["clusters"]
+        }
+        self.assertEqual(cluster_tags["main_seating"], "living")
+        self.assertEqual(cluster_tags["media"], "living")
+        self.assertNotIn("kitchen", cluster_tags.values())
+
+    def test_bedroom_canary_traits_keep_sleep_semantics(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "TKNT_ROOM_PROFILE_TRAITS_MODE": "canary",
+                "TKNT_ROOM_PROFILE_TRAIT_ROOMS": "bedroom",
+            },
+        ):
+            program = semantic_layout_planner._build_deterministic_program(
+                room_type="bedroom",
+                room_rules={"room_type": "bedroom", "global_program": {}},
+                room_model_json={},
+                affordance_summary={
+                    "privacy_regions": ["private_back_zone"],
+                    "wall_anchor_candidates": ["quiet_wall_zone"],
+                    "entry_landing_zones": ["entry_zone"],
+                    "primary_circulation_corridors": ["center_lane"],
+                    "center_openness_regions": ["room_center"],
+                },
+                candidates=[
+                    {
+                        "cluster_id": "sleep_core",
+                        "priority": "core",
+                        "active_by_rule": True,
+                        "useful": True,
+                        "objects": [
+                            {
+                                "object_type": "bed",
+                                "role": "dominant_anchor",
+                                "required": True,
+                            },
+                            {
+                                "object_type": "nightstand",
+                                "role": "secondary_support",
+                                "required": False,
+                            },
+                        ],
+                        "missing": [],
+                        "semantic": {"dominant_anchor_candidates": ["bed"]},
+                        "degradation_hints": {},
+                        "tier_count_hints": {},
+                        "viability": {"inventory_support": 1.0},
+                    }
+                ],
+                brief_text="calm bedroom with a bed and nightstand",
+                inventory_catalog={},
+            )
+
+        trace = program["profile_shadow_trace"]
+        self.assertEqual(trace["mode"], "active")
+        cluster = program["active_clusters"][0]
+        self.assertEqual(cluster["semantic_role"], "primary_anchor_zone")
+        self.assertEqual(cluster["zone_claims"]["privacy_affinity"], "high")
+        self.assertFalse(
+            any(
+                intent.get("target_cluster") == "kitchen_workflow_core"
+                for intent in cluster["relation_intents"]
+            )
+        )
+        cluster_payload = (
+            semantic_layout_planner.semantic_program_to_cluster_forge_payload(program)
+        )
+        self.assertEqual(cluster_payload["clusters"][0]["tag"], "sleep")
+        self.assertEqual(
+            semantic_layout_planner._cluster_tag(
+                "work_study",
+                ["desk", "chair"],
+                room_type="bedroom",
+            ),
+            "work",
+        )
 
 
 if __name__ == "__main__":

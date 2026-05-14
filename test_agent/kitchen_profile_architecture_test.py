@@ -102,6 +102,85 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
         }
         self.assertEqual(cluster_tags["kitchen_workflow_core"], "kitchen")
 
+    def test_kitchen_dining_core_is_floating_and_solver_droppable(self) -> None:
+        program = SemanticLayoutPlanner().generate(
+            room_model_json=_kitchen_room(),
+            room_type="kitchen",
+            brief_text="Design a compact eat-in kitchen with a dining table and chair.",
+            use_llm=False,
+        )
+        payload = program.model_dump()
+
+        clusters_by_id = {
+            row["cluster_id"]: row
+            for row in payload["active_clusters"]
+            if isinstance(row, dict)
+        }
+        dining = clusters_by_id["kitchen_dining_core"]
+        self.assertEqual(dining["semantic_role"], "kitchen_dining_zone")
+        self.assertTrue(dining["zone_claims"]["floating_allowed"])
+        self.assertEqual(dining["zone_claims"]["wall_affinity"], "medium")
+
+        cluster_payload = semantic_program_to_cluster_forge_payload(payload)
+        dining_payload = next(
+            row
+            for row in cluster_payload["clusters"]
+            if row["cluster_id"] == "kitchen_dining_core"
+        )
+        anchor_policy = dining_payload["cluster_rules"]["anchor_first_policy"]
+        self.assertIn("dining_table", anchor_policy["protected_ids"])
+        self.assertIn("dining_chair", anchor_policy["droppable_ids"])
+        self.assertIn(
+            "drop_dining_chair",
+            dining_payload["cluster_rules"]["degradation_ladder"],
+        )
+
+    def test_kitchen_dining_profile_normalization_restores_floating_claims(
+        self,
+    ) -> None:
+        program = (
+            SemanticLayoutPlanner()
+            .generate(
+                room_model_json=_kitchen_room(),
+                room_type="kitchen",
+                brief_text="Design a compact eat-in kitchen with a dining table and chair.",
+                use_llm=False,
+            )
+            .model_dump()
+        )
+        dining = next(
+            row
+            for row in program["active_clusters"]
+            if row["cluster_id"] == "kitchen_dining_core"
+        )
+        dining["zone_claims"] = {
+            "preferred_regions": ["floating_center_zone"],
+            "avoid_regions": ["center_access_lane"],
+            "wall_affinity": "high",
+            "daylight_affinity": "medium",
+            "privacy_affinity": "low",
+            "floating_allowed": False,
+        }
+
+        normalized = _semantic_layout_planner._normalize_profile_semantic_program(
+            program,
+            affordance_summary=_semantic_layout_planner.summarize_room_affordance(
+                _kitchen_room()
+            ),
+        )
+        normalized_dining = next(
+            row
+            for row in normalized["active_clusters"]
+            if row["cluster_id"] == "kitchen_dining_core"
+        )
+
+        self.assertEqual(
+            normalized_dining["semantic_role"],
+            "kitchen_dining_zone",
+        )
+        self.assertTrue(normalized_dining["zone_claims"]["floating_allowed"])
+        self.assertEqual(normalized_dining["zone_claims"]["wall_affinity"], "medium")
+
     def test_tier_count_preserves_kitchen_core_without_forcing_island(self) -> None:
         def fake_estimate_budget(**kwargs: Any) -> dict[str, Any]:
             return {

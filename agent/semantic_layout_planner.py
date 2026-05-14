@@ -56,10 +56,10 @@ from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
 from layout.room_profiles.registry import (
     is_profile_floating_object,
     is_profile_storage_object,
-    is_profile_trait_object,
     is_profile_wall_backed_object,
     is_profile_workflow_object,
     profile_id_for_objects,
+    profile_room_type_for_objects,
     profile_shadow_trace_for_active_clusters,
     select_profile_room_rule,
     semantic_placements_for_members,
@@ -613,11 +613,19 @@ class SemanticLayoutPlanner:
                 deterministic_program,
                 style_policy,
             )
+            deterministic_program = _normalize_profile_semantic_program(
+                deterministic_program,
+                affordance_summary=affordance_summary,
+            )
             return SemanticLayoutProgram.model_validate(deterministic_program)
 
         deterministic_program = apply_style_policy_to_semantic_program(
             deterministic_program,
             style_policy,
+        )
+        deterministic_program = _normalize_profile_semantic_program(
+            deterministic_program,
+            affordance_summary=affordance_summary,
         )
 
         if not use_llm or not candidates:
@@ -652,6 +660,10 @@ class SemanticLayoutPlanner:
             affordance_summary=affordance_summary,
         )
         merged = apply_style_policy_to_semantic_program(merged, style_policy)
+        merged = _normalize_profile_semantic_program(
+            merged,
+            affordance_summary=affordance_summary,
+        )
         return SemanticLayoutProgram.model_validate(merged)
 
     def _generate_llm_payload(
@@ -1184,11 +1196,21 @@ def semantic_program_to_cluster_forge_payload(
             "layout_role": active_cluster.get("layout_role") or "support",
             "degradation_ladder": active_cluster.get("degradation_ladder") or [],
             "tier_count_hints": active_cluster.get("tier_count_hints") or {},
+            "anchor_first_policy": _anchor_first_policy_for_active_cluster(
+                active_cluster=active_cluster,
+                members=members,
+                anchors=anchors,
+                dominant_anchor_candidates=dominant_anchor_candidates,
+            ),
         }
         clusters.append(
             {
                 "cluster_id": cluster_id,
-                "tag": _cluster_tag(cluster_id, members),
+                "tag": _cluster_tag(
+                    cluster_id,
+                    members,
+                    room_type=semantic_program.get("room_type"),
+                ),
                 "members": members,
                 "anchors": anchors,
                 "hard_constraints": _hard_constraints_for_members(members),
@@ -1204,6 +1226,123 @@ def semantic_program_to_cluster_forge_payload(
         "semantic_layout_program": dict(semantic_program),
         "notes": list(semantic_program.get("notes") or []),
         "missing": list(semantic_program.get("missing") or []),
+    }
+
+
+def _anchor_first_policy_for_active_cluster(
+    *,
+    active_cluster: Mapping[str, Any],
+    members: Sequence[str],
+    anchors: Sequence[str],
+    dominant_anchor_candidates: Sequence[str],
+) -> dict[str, Any]:
+    member_set = set(members)
+    protected_ids = [
+        item for item in (*dominant_anchor_candidates, *anchors) if item in member_set
+    ]
+    droppable_ids: list[str] = []
+    for object_type in _objects_marked_optional(active_cluster):
+        if object_type in member_set and object_type not in protected_ids:
+            droppable_ids.append(object_type)
+    for action in active_cluster.get("degradation_ladder") or []:
+        object_type = _drop_action_object_type(action)
+        if object_type in member_set and object_type not in protected_ids:
+            droppable_ids.append(object_type)
+    return {
+        "dominant_anchor_id": next(iter(protected_ids), ""),
+        "dominant_anchor_candidates": list(dominant_anchor_candidates),
+        "placement_order": list(members),
+        "protected_ids": _uniq(protected_ids),
+        "droppable_ids": _uniq(droppable_ids),
+    }
+
+
+def _objects_marked_optional(active_cluster: Mapping[str, Any]) -> list[str]:
+    out: list[str] = []
+    for bundle in active_cluster.get("required_bundles") or []:
+        if not isinstance(bundle, Mapping):
+            continue
+        objects = bundle.get("objects")
+        if not isinstance(objects, Sequence) or isinstance(objects, str):
+            continue
+        for row in objects:
+            if not isinstance(row, Mapping):
+                continue
+            object_type = str(row.get("object_type") or "").strip()
+            if object_type and not bool(row.get("required", False)):
+                out.append(object_type)
+    return out
+
+
+def _drop_action_object_type(action: object) -> str:
+    text = str(action or "").strip()
+    if not text.startswith("drop_"):
+        return ""
+    return text.removeprefix("drop_")
+
+
+def _normalize_profile_semantic_program(
+    program: Mapping[str, Any],
+    *,
+    affordance_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    out = deepcopy(dict(program))
+    room_type = out.get("room_type")
+    active_clusters = out.get("active_clusters")
+    if not isinstance(active_clusters, list):
+        return out
+
+    normalized_clusters: list[Any] = []
+    for cluster in active_clusters:
+        if not isinstance(cluster, Mapping):
+            normalized_clusters.append(cluster)
+            continue
+        normalized = dict(cluster)
+        object_types = _objects_from_active_cluster(normalized)
+        lowered = (
+            f"{normalized.get('cluster_id') or ''} {' '.join(object_types)}".lower()
+        )
+        profile_room_type = profile_room_type_for_objects(
+            object_types,
+            room_type=room_type,
+        )
+        if profile_room_type == "kitchen" and "dining" in lowered:
+            normalized["semantic_role"] = "kitchen_dining_zone"
+            normalized["zone_claims"] = _floating_profile_zone_claims(
+                normalized.get("zone_claims"),
+                affordance_summary=affordance_summary,
+            )
+        normalized_clusters.append(normalized)
+    out["active_clusters"] = normalized_clusters
+    out["macro_relations"] = _build_macro_relations(
+        active_clusters=[
+            cluster for cluster in normalized_clusters if isinstance(cluster, Mapping)
+        ],
+        room_type=room_type,
+        affordance_summary=affordance_summary,
+    )
+    return out
+
+
+def _floating_profile_zone_claims(
+    value: object,
+    *,
+    affordance_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    current = dict(value) if isinstance(value, Mapping) else {}
+    preferred_regions = _cap_regions(current.get("preferred_regions")) or _cap_regions(
+        affordance_summary.get("floating_zone_candidates")
+    )
+    avoid_regions = _cap_regions(current.get("avoid_regions")) or _cap_regions(
+        affordance_summary.get("entry_landing_zones")
+    )
+    return {
+        "preferred_regions": preferred_regions,
+        "avoid_regions": avoid_regions,
+        "wall_affinity": "medium",
+        "daylight_affinity": str(current.get("daylight_affinity") or "medium"),
+        "privacy_affinity": str(current.get("privacy_affinity") or "none"),
+        "floating_allowed": True,
     }
 
 
@@ -1394,6 +1533,7 @@ def _build_deterministic_program(
         active_clusters.append(
             _active_cluster_from_candidate(
                 candidate=candidate,
+                room_type=room_type,
                 affordance_summary=affordance_summary,
                 brief_text=brief_text,
             )
@@ -1404,6 +1544,7 @@ def _build_deterministic_program(
     active_clusters = _enforce_dominant_requirements(
         active_clusters,
         candidates=candidates,
+        room_type=room_type,
         global_program=global_program,
         missing=missing,
     )
@@ -1412,6 +1553,7 @@ def _build_deterministic_program(
 
     macro_relations = _build_macro_relations(
         active_clusters=active_clusters,
+        room_type=room_type,
         affordance_summary=affordance_summary,
     )
     controlled_degradation = _build_controlled_degradation(
@@ -1522,6 +1664,7 @@ def _validate_and_normalize_llm_program(
     out["active_clusters"] = active_clusters
     out["macro_relations"] = _build_macro_relations(
         active_clusters=active_clusters,
+        room_type=room_type,
         affordance_summary=affordance_summary,
     )
     out["controlled_degradation"] = _build_controlled_degradation(
@@ -1555,6 +1698,7 @@ def _deterministic_layout_role(priority: str) -> str:
 def _active_cluster_from_candidate(
     *,
     candidate: Mapping[str, Any],
+    room_type: object | None,
     affordance_summary: Mapping[str, Any],
     brief_text: str,
 ) -> dict[str, Any]:
@@ -1568,9 +1712,14 @@ def _active_cluster_from_candidate(
     zone_claims = _zone_claims_for(
         cluster_id=cluster_id,
         objects=objects,
+        room_type=room_type,
         affordance_summary=affordance_summary,
     )
-    relation_intents = _relation_intents_for(cluster_id, objects)
+    relation_intents = _relation_intents_for(
+        cluster_id,
+        objects,
+        room_type=room_type,
+    )
     viability = _semantic_viability(
         candidate=candidate,
         zone_claims=zone_claims,
@@ -1581,7 +1730,12 @@ def _active_cluster_from_candidate(
         "layout_role": _deterministic_layout_role(priority),
         "priority": priority,
         "activation_reason": _activation_reason(candidate),
-        "semantic_role": _semantic_role(cluster_id, objects, priority),
+        "semantic_role": _semantic_role(
+            cluster_id,
+            objects,
+            priority,
+            room_type=room_type,
+        ),
         "dominant_anchor_candidates": _string_list(
             (candidate.get("semantic") or {}).get("dominant_anchor_candidates")
             if isinstance(candidate.get("semantic"), Mapping)
@@ -1734,10 +1888,15 @@ def _zone_claims_for(
     *,
     cluster_id: str,
     objects: Sequence[Mapping[str, Any]],
+    room_type: object | None,
     affordance_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     object_types = [str(row.get("object_type") or "") for row in objects]
     lowered = f"{cluster_id} {' '.join(object_types)}".lower()
+    profile_room_type = profile_room_type_for_objects(
+        object_types,
+        room_type=room_type,
+    )
     entry = _cap_regions(affordance_summary.get("entry_landing_zones"))
     daylight = _cap_regions(affordance_summary.get("daylight_regions"))
     privacy = _cap_regions(affordance_summary.get("privacy_regions"))
@@ -1746,7 +1905,23 @@ def _zone_claims_for(
     center = _cap_regions(affordance_summary.get("center_openness_regions"))
     corridors = _cap_regions(affordance_summary.get("primary_circulation_corridors"))
 
-    if _has_profile_layout_traits(cluster_id, object_types):
+    if _has_kitchen_layout_traits(
+        cluster_id,
+        object_types,
+        room_type=room_type,
+        profile_room_type=profile_room_type,
+    ):
+        if "dining" in lowered:
+            return {
+                "preferred_regions": _cap_regions(
+                    affordance_summary.get("floating_zone_candidates")
+                ),
+                "avoid_regions": _cap_regions(entry + corridors),
+                "wall_affinity": "medium",
+                "daylight_affinity": "medium",
+                "privacy_affinity": "none",
+                "floating_allowed": True,
+            }
         if any(is_profile_floating_object(obj) for obj in object_types) and not any(
             is_profile_wall_backed_object(obj) for obj in object_types
         ):
@@ -1828,9 +2003,16 @@ def _zone_claims_for(
 
 
 def _relation_intents_for(
-    cluster_id: str, objects: Sequence[Mapping[str, Any]]
+    cluster_id: str,
+    objects: Sequence[Mapping[str, Any]],
+    *,
+    room_type: object | None,
 ) -> list[dict[str, Any]]:
     object_types = [str(row.get("object_type") or "") for row in objects]
+    profile_room_type = profile_room_type_for_objects(
+        object_types,
+        room_type=room_type,
+    )
     intents: list[dict[str, Any]] = []
     if any(str(row.get("role")) == "dominant_anchor" for row in objects):
         intents.append({"type": "dominance", "target": "room", "strength": "hard"})
@@ -1842,14 +2024,18 @@ def _relation_intents_for(
         intents.append(
             {"type": "face", "target_cluster": "main_seating", "strength": "soft"}
         )
-    if any(is_profile_workflow_object(obj) for obj in object_types):
+    if profile_room_type == "kitchen" and any(
+        is_profile_workflow_object(obj) for obj in object_types
+    ):
         intents.append(
             {"type": "claim_wall", "target": "usable_wall", "strength": "hard"}
         )
         intents.append(
             {"type": "preserve_center", "target": "circulation", "strength": "soft"}
         )
-    elif any(is_profile_floating_object(obj) for obj in object_types):
+    elif profile_room_type == "kitchen" and any(
+        is_profile_floating_object(obj) for obj in object_types
+    ):
         intents.append(
             {
                 "type": "near",
@@ -1867,6 +2053,7 @@ def _relation_intents_for(
 def _build_macro_relations(
     *,
     active_clusters: Sequence[Mapping[str, Any]],
+    room_type: object | None,
     affordance_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     adjacency: list[dict[str, object]] = []
@@ -1878,15 +2065,19 @@ def _build_macro_relations(
     sleep = _first_cluster_matching(active_clusters, _cluster_has_sleep)
     work = _first_cluster_matching(active_clusters, _cluster_has_work)
     profile_workflow = _first_cluster_matching(
-        active_clusters, _cluster_has_profile_workflow
+        active_clusters,
+        lambda cluster: _cluster_uses_kitchen_profile(cluster, room_type)
+        and _cluster_has_profile_workflow(cluster),
     )
     profile_storage = _first_cluster_matching(
         active_clusters,
-        _cluster_has_profile_storage,
+        lambda cluster: _cluster_uses_kitchen_profile(cluster, room_type)
+        and _cluster_has_profile_storage(cluster),
     )
     profile_floating = _first_cluster_matching(
         active_clusters,
-        _cluster_has_profile_floating,
+        lambda cluster: _cluster_uses_kitchen_profile(cluster, room_type)
+        and _cluster_has_profile_floating(cluster),
     )
     if seating and media:
         adjacency.append(
@@ -2033,6 +2224,7 @@ def _enforce_dominant_requirements(
     active_clusters: list[dict[str, Any]],
     *,
     candidates: Sequence[Mapping[str, Any]],
+    room_type: object | None,
     global_program: Mapping[str, Any],
     missing: list[str],
 ) -> list[dict[str, Any]]:
@@ -2057,6 +2249,7 @@ def _enforce_dominant_requirements(
         active_clusters.append(
             _active_cluster_from_candidate(
                 candidate=candidate,
+                room_type=room_type,
                 affordance_summary={
                     "privacy_regions": ["private_back_zone"],
                     "wall_anchor_candidates": ["quiet_wall_zone"],
@@ -2993,6 +3186,7 @@ def _sanitize_cluster_semantics(
     out["active_clusters"] = [merged_by_id[cluster_id] for cluster_id in expected_order]
     out["macro_relations"] = _build_macro_relations(
         active_clusters=out["active_clusters"],
+        room_type=deterministic_program.get("room_type"),
         affordance_summary=affordance_summary,
     )
     out["controlled_degradation"] = _build_controlled_degradation(
@@ -3296,12 +3490,19 @@ def _support_role(object_type: str) -> str:
 
 
 def _semantic_role(
-    cluster_id: str, objects: Sequence[Mapping[str, Any]], priority: str
+    cluster_id: str,
+    objects: Sequence[Mapping[str, Any]],
+    priority: str,
+    *,
+    room_type: object | None,
 ) -> str:
     lowered = f"{cluster_id} {' '.join(str(row.get('object_type') or '') for row in objects)}".lower()
     profile_id = profile_id_for_objects(
-        [str(row.get("object_type") or "") for row in objects]
+        [str(row.get("object_type") or "") for row in objects],
+        room_type=room_type,
     )
+    if profile_id == "kitchen" and "dining" in lowered:
+        return "kitchen_dining_zone"
     if "kitchen" in lowered or profile_id == "kitchen":
         if any(
             is_profile_floating_object(str(row.get("object_type") or ""))
@@ -3356,20 +3557,43 @@ def _primary_focus(active_clusters: Sequence[Mapping[str, Any]]) -> str:
     return "mixed"
 
 
-def _has_profile_layout_traits(cluster_id: str, members: Sequence[str]) -> bool:
-    return "kitchen" in cluster_id.lower() or any(
-        is_profile_trait_object(member) for member in members
+def _has_kitchen_layout_traits(
+    cluster_id: str,
+    members: Sequence[str],
+    *,
+    room_type: object | None,
+    profile_room_type: str | None = None,
+) -> bool:
+    if "kitchen" in cluster_id.lower():
+        return True
+    effective_room_type = profile_room_type or profile_room_type_for_objects(
+        members,
+        room_type=room_type,
     )
+    return effective_room_type == "kitchen"
 
 
-def _cluster_tag(cluster_id: str, members: Sequence[str]) -> str:
+def _cluster_tag(
+    cluster_id: str,
+    members: Sequence[str],
+    *,
+    room_type: object | None,
+) -> str:
     lowered = f"{cluster_id} {' '.join(members)}".lower()
-    if "kitchen" in lowered or _has_profile_layout_traits(cluster_id, members):
+    if "kitchen" in lowered or _has_kitchen_layout_traits(
+        cluster_id,
+        members,
+        room_type=room_type,
+    ):
         return "kitchen"
     if "sleep" in lowered or any(is_bed_like(member) for member in members):
         return "sleep"
     if "dining" in lowered:
         return "dining"
+    if "work" in lowered or any(
+        _is_work_anchor_surface_like(member) for member in members
+    ):
+        return "work"
     if (
         "seating" in lowered
         or "living" in lowered
@@ -3379,10 +3603,6 @@ def _cluster_tag(cluster_id: str, members: Sequence[str]) -> str:
         )
     ):
         return "living"
-    if "work" in lowered or any(
-        _is_work_anchor_surface_like(member) for member in members
-    ):
-        return "work"
     if "storage" in lowered or any(_is_storage_like(member) for member in members):
         return "storage"
     return "misc"
@@ -3457,6 +3677,19 @@ def _cluster_has_profile_storage(cluster: Mapping[str, Any]) -> bool:
 def _cluster_has_profile_floating(cluster: Mapping[str, Any]) -> bool:
     return any(
         is_profile_floating_object(obj) for obj in _objects_from_active_cluster(cluster)
+    )
+
+
+def _cluster_uses_kitchen_profile(
+    cluster: Mapping[str, Any],
+    room_type: object | None,
+) -> bool:
+    return (
+        profile_room_type_for_objects(
+            _objects_from_active_cluster(cluster),
+            room_type=room_type,
+        )
+        == "kitchen"
     )
 
 
