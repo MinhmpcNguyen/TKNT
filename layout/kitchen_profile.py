@@ -11,6 +11,9 @@ KITCHEN_ROOM_TYPES = frozenset(
         "open_plan_kitchen",
         "cooking_area",
         "cook_space",
+        "eat_in_kitchen",
+        "kitchen_diner",
+        "kitchen_dining",
     }
 )
 
@@ -33,9 +36,14 @@ KITCHEN_OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "pantry_cabinet": ("pantry", "larder"),
     "dishwasher": ("dish_washer",),
     "kitchen_island": ("island", "prep_island"),
-    "dining_table": ("breakfast_table", "small_dining_table"),
-    "dining_chair": ("dining_seat", "breakfast_chair"),
-    "bar_stool": ("counter_stool", "island_stool"),
+    "dining_table": (
+        "breakfast_table",
+        "small_dining_table",
+        "eat_in_table",
+        "kitchen_table",
+    ),
+    "dining_chair": ("dining_seat", "breakfast_chair", "kitchen_chair"),
+    "bar_stool": ("counter_stool", "island_stool", "breakfast_stool"),
     "microwave": ("microwave_oven",),
 }
 
@@ -156,7 +164,7 @@ _KITCHEN_SIZE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "dining_table": {
         "rep_dims_m": {
-            "S": {"L": 0.90, "W": 0.70, "A": 0.63},
+            "S": {"L": 0.80, "W": 0.70, "A": 0.56},
             "M": {"L": 1.40, "W": 0.85, "A": 1.19},
             "L": {"L": 1.80, "W": 0.95, "A": 1.71},
         }
@@ -430,36 +438,36 @@ _KITCHEN_SEMANTIC_ROOM_RULE: dict[str, Any] = {
             },
         },
         {
-            "cluster_id": "kitchen_dining_optional",
-            "priority": "optional",
+            "cluster_id": "kitchen_dining_core",
+            "priority": "core",
             "activation": {
-                "base_rule": "may_include_if_useful",
-                "always_consider": False,
-                "requires_usefulness_test": True,
+                "base_rule": "must_include",
+                "always_consider": True,
+                "requires_usefulness_test": False,
                 "conditions": [
                     {
                         "predicate": "dining",
                         "effects": {
-                            "required_if_kept": ["dining_table"],
-                            "optional": ["dining_chair"],
+                            "required": ["dining_table"],
+                            "required_if_kept": ["dining_chair"],
                         },
                     },
                     {
                         "predicate": "breakfast",
                         "effects": {
-                            "required_if_kept": ["dining_table"],
-                            "optional": ["dining_chair"],
+                            "required": ["dining_table"],
+                            "required_if_kept": ["dining_chair"],
                         },
                     },
                 ],
             },
             "object_program": {
-                "required": [],
-                "required_if_kept": ["dining_table"],
+                "required": ["dining_table"],
+                "required_if_kept": ["dining_chair"],
                 "choose_exactly_one_from": [],
                 "choose_exactly_one_from_if_kept": [],
                 "choose_at_least_one_from": [],
-                "optional": ["dining_chair"],
+                "optional": [],
                 "optional_limits": {
                     "global": 2,
                     "by_object": {"dining_table": 1, "dining_chair": 2},
@@ -468,39 +476,39 @@ _KITCHEN_SEMANTIC_ROOM_RULE: dict[str, Any] = {
             "semantic": {
                 "dominant_anchor_candidates": ["dining_table"],
                 "notes": [
-                    "A small eat-in setting is optional and should not displace the kitchen triangle."
+                    "Every kitchen profile includes a compact eat-in setting; keep it near but not inside the cooking workflow."
                 ],
             },
             "degradation_hints": {
                 "preserve_first": ["dining_table"],
-                "shrink_before_drop": ["dining_table"],
+                "shrink_before_drop": ["dining_table", "dining_chair"],
                 "drop_first": ["dining_chair", "dining_table"],
             },
             "tier_count_hints": {
-                "bundle_class": "optional",
-                "preserve_level": "medium",
-                "keep_if_space_surplus": True,
-                "space_surplus_threshold": 0.58,
-                "drop_order_bias": "drop_early",
+                "bundle_class": "strong_support",
+                "preserve_level": "high",
+                "keep_if_space_surplus": False,
+                "space_surplus_threshold": 0.0,
+                "drop_order_bias": "drop_late",
                 "object_hints": [
                     {
                         "object_type": "dining_table",
-                        "min_keep": 0,
+                        "min_keep": 1,
                         "max_keep": 1,
-                        "keep_if_space_surplus": True,
-                        "space_surplus_threshold": 0.58,
-                        "drop_order_bias": "drop_early",
-                        "preserve_level": "medium",
+                        "keep_if_space_surplus": False,
+                        "space_surplus_threshold": 0.0,
+                        "drop_order_bias": "drop_late",
+                        "preserve_level": "high",
                         "preferred_size_tier": "S",
                     },
                     {
                         "object_type": "dining_chair",
-                        "min_keep": 0,
+                        "min_keep": 1,
                         "max_keep": 2,
                         "keep_if_space_surplus": True,
-                        "space_surplus_threshold": 0.68,
+                        "space_surplus_threshold": 0.45,
                         "drop_order_bias": "drop_first",
-                        "preserve_level": "low",
+                        "preserve_level": "medium",
                         "preferred_size_tier": "S",
                     },
                 ],
@@ -530,8 +538,8 @@ _KITCHEN_SEMANTIC_ROOM_RULE: dict[str, Any] = {
         ],
         "group_minimums": [],
         "soft_preferences": [
-            "preserve a compact fridge-sink-stove workflow before adding optional dining or island furniture",
-            "prefer wall-backed kitchen equipment and keep center circulation available",
+            "preserve a compact fridge-sink-stove workflow and a small eat-in dining setting before adding optional island furniture",
+            "prefer wall-backed kitchen equipment and keep clear circulation between cooking and dining zones",
         ],
     },
 }

@@ -32,10 +32,16 @@ KITCHEN_NON_FUNCTIONAL_CONTRACT_TYPES = frozenset(
 )
 
 KITCHEN_SCORING_ALIASES: dict[str, tuple[str, ...]] = {
-    "bar_stool": ("bar_stool", "counter_stool", "island_stool"),
+    "bar_stool": ("bar_stool", "counter_stool", "island_stool", "breakfast_stool"),
     "cooktop": ("cooktop", "hob", "induction_hob", "gas_hob"),
-    "dining_chair": ("dining_chair", "breakfast_chair"),
-    "dining_table": ("dining_table", "breakfast_table"),
+    "dining_chair": ("dining_chair", "breakfast_chair", "kitchen_chair"),
+    "dining_table": (
+        "dining_table",
+        "breakfast_table",
+        "small_dining_table",
+        "eat_in_table",
+        "kitchen_table",
+    ),
     "dishwasher": ("dishwasher", "dish_washer"),
     "fridge": ("fridge", "refrigerator", "fridge_freezer", "freezer"),
     "kitchen_base_cabinet": (
@@ -95,28 +101,30 @@ def apply_kitchen_capacity_model(
     _ = room_type
     out = dict(capacity_model)
     room_area = max(0.1, float(out.get("available_area_m2") or 0.1))
-    density_ratio = max(float(out.get("density_ratio") or 0.38), 0.40)
+    density_ratio = max(float(out.get("density_ratio") or 0.38), 0.44)
     if room_area >= 12.0:
-        density_ratio = max(density_ratio, 0.43)
-    out["target_density"] = "functional_kitchen"
-    out["density_ratio"] = min(0.50, density_ratio)
+        density_ratio = max(density_ratio, 0.46)
+    if room_area >= 16.0:
+        density_ratio = max(density_ratio, 0.48)
+    out["target_density"] = "functional_eat_in_kitchen"
+    out["density_ratio"] = min(0.54, density_ratio)
     out["clutter_budget_m2"] = max(
         float(out.get("clutter_budget_m2") or 0.0),
         room_area * float(out["density_ratio"]),
     )
-    out["wall_capacity_m2"] = float(out.get("wall_capacity_m2") or 0.0) * 1.30
-    out["floating_capacity_m2"] = float(out.get("floating_capacity_m2") or 0.0) * 0.82
+    out["wall_capacity_m2"] = float(out.get("wall_capacity_m2") or 0.0) * 1.25
+    out["floating_capacity_m2"] = float(out.get("floating_capacity_m2") or 0.0) * 1.08
     out["center_openness_budget_m2"] = max(
         float(out.get("center_openness_budget_m2") or 0.0),
-        room_area * 0.30,
+        room_area * 0.26,
     )
     out["circulation_budget_m2"] = max(
         float(out.get("circulation_budget_m2") or 0.0),
-        room_area * 0.22,
+        room_area * 0.24,
     )
     out["center_openness_weight"] = "very_high"
     out["circulation_penalty_weight"] = "very_high"
-    out["room_type_capacity_profile"] = "kitchen"
+    out["room_type_capacity_profile"] = "kitchen_with_dining"
     return out
 
 
@@ -138,6 +146,26 @@ def kitchen_semantic_placements_for_members(
         return []
 
     rows: list[dict[str, Any]] = []
+    if "dining_table" in members:
+        for member in members:
+            if member != "dining_chair":
+                continue
+            rows.append(
+                {
+                    "id": member,
+                    "relative_to": "dining_table",
+                    "kind": "anchor_side",
+                    "side_options": ["head", "foot", "left", "right"],
+                    "gap_min": 120,
+                    "gap_max": 320,
+                    "support_role": "secondary_seat",
+                    "band_intent": "flank_band",
+                    "orientation": "face_base",
+                    "proximity": "near",
+                    "selection": "best_fit",
+                }
+            )
+
     previous_workflow = anchor
     for member in members:
         if member == anchor or not is_kitchen_workflow_object(member):
