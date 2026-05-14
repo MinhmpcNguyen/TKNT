@@ -20,6 +20,7 @@ def normalize_profile_token(value: object) -> str:
 class RoomProfile:
     profile_id: str
     room_types: frozenset[str]
+    layout_traits_enabled: bool = False
     object_aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     scoring_aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     non_functional_contract_types: frozenset[str] = field(default_factory=frozenset)
@@ -31,6 +32,12 @@ class RoomProfile:
     floating_objects: frozenset[str] = field(default_factory=frozenset)
     mounted_objects: frozenset[str] = field(default_factory=frozenset)
     storage_objects: frozenset[str] = field(default_factory=frozenset)
+    anchor_objects: frozenset[str] = field(default_factory=frozenset)
+    support_objects: frozenset[str] = field(default_factory=frozenset)
+    seating_objects: frozenset[str] = field(default_factory=frozenset)
+    surface_objects: frozenset[str] = field(default_factory=frozenset)
+    lighting_objects: frozenset[str] = field(default_factory=frozenset)
+    decor_objects: frozenset[str] = field(default_factory=frozenset)
     semantic_room_rule_provider: SemanticRuleProvider | None = None
     size_profile_provider: SizeProfileProvider | None = None
     capacity_policy: CapacityPolicy | None = None
@@ -61,17 +68,44 @@ class RoomProfile:
     def has_declared_object(self, object_type: object) -> bool:
         return self.canonical_object_type(object_type) is not None
 
-    def has_trait_object(self, object_type: object) -> bool:
+    def object_traits(
+        self,
+        object_type: object,
+        *,
+        include_shadow: bool = True,
+    ) -> tuple[str, ...]:
         canonical = self.canonical_object_type(object_type)
         if canonical is None:
-            return False
-        return canonical in (
-            self.workflow_objects
-            | self.wall_backed_objects
-            | self.floating_objects
-            | self.mounted_objects
-            | self.storage_objects
+            return ()
+        if not include_shadow and not self.layout_traits_enabled:
+            return ()
+
+        traits: list[str] = []
+        trait_sets = (
+            ("workflow", self.workflow_objects),
+            ("wall_backed", self.wall_backed_objects),
+            ("floating", self.floating_objects),
+            ("mounted", self.mounted_objects),
+            ("storage", self.storage_objects),
+            ("anchor", self.anchor_objects),
+            ("support", self.support_objects),
+            ("seating", self.seating_objects),
+            ("surface", self.surface_objects),
+            ("lighting", self.lighting_objects),
+            ("decor", self.decor_objects),
         )
+        for trait_name, object_set in trait_sets:
+            if canonical in object_set:
+                traits.append(trait_name)
+        return tuple(traits)
+
+    def has_trait_object(
+        self,
+        object_type: object,
+        *,
+        include_shadow: bool = False,
+    ) -> bool:
+        return bool(self.object_traits(object_type, include_shadow=include_shadow))
 
     def semantic_room_rule(self, room_type: str) -> dict[str, Any] | None:
         if self.semantic_room_rule_provider is None:
@@ -111,5 +145,11 @@ class RoomProfile:
             | self.floating_objects
             | self.mounted_objects
             | self.storage_objects
+            | self.anchor_objects
+            | self.support_objects
+            | self.seating_objects
+            | self.surface_objects
+            | self.lighting_objects
+            | self.decor_objects
             | self.non_functional_contract_types
         )

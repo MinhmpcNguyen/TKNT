@@ -84,6 +84,56 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         self.assertEqual(cluster["dominant_anchor_candidates"], ["bed"])
         self.assertEqual(cluster["zone_claims"]["preferred_regions"], ["wall_north"])
 
+    def test_bedroom_profile_trace_is_shadow_only_for_legacy_layout(self) -> None:
+        program = semantic_layout_planner._build_deterministic_program(
+            room_type="bedroom",
+            room_rules={"room_type": "bedroom", "global_program": {}},
+            room_model_json={},
+            affordance_summary={
+                "privacy_regions": ["private_back_zone"],
+                "wall_anchor_candidates": ["quiet_wall_zone"],
+                "entry_landing_zones": ["entry_zone"],
+                "primary_circulation_corridors": ["center_lane"],
+                "center_openness_regions": ["room_center"],
+            },
+            candidates=[
+                {
+                    "cluster_id": "sleep_core",
+                    "priority": "core",
+                    "active_by_rule": True,
+                    "useful": True,
+                    "objects": [
+                        {
+                            "object_type": "bed",
+                            "role": "dominant_anchor",
+                            "required": True,
+                        },
+                        {
+                            "object_type": "nightstand",
+                            "role": "secondary_support",
+                            "required": False,
+                        },
+                    ],
+                    "missing": [],
+                    "semantic": {"dominant_anchor_candidates": ["bed"]},
+                    "degradation_hints": {},
+                    "tier_count_hints": {},
+                    "viability": {"inventory_support": 1.0},
+                }
+            ],
+            brief_text="calm bedroom with a bed and nightstand",
+            inventory_catalog={},
+        )
+
+        trace = program["profile_shadow_trace"]
+        self.assertEqual(trace["profile_id"], "bedroom_legacy")
+        self.assertEqual(trace["mode"], "shadow")
+        self.assertEqual(trace["coverage_ratio"], 1.0)
+        self.assertEqual(
+            program["active_clusters"][0]["zone_claims"]["privacy_affinity"],
+            "high",
+        )
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

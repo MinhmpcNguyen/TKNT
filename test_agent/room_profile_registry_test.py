@@ -79,6 +79,71 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertFalse(_registry.is_profile_workflow_object("bed"))
         self.assertFalse(_registry.is_profile_workflow_object("sofa"))
 
+    def test_bedroom_shadow_profile_interprets_legacy_clusters_without_activation(
+        self,
+    ) -> None:
+        trace = _registry.profile_shadow_trace_for_active_clusters(
+            room_type="bedroom",
+            active_clusters=[
+                {
+                    "cluster_id": "sleep_core",
+                    "required_bundles": [
+                        {
+                            "objects": [
+                                {"object_type": "bed"},
+                                {"object_type": "nightstand"},
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "cluster_id": "work_study",
+                    "required_bundles": [
+                        {
+                            "objects": [
+                                {"object_type": "vanity"},
+                                {"object_type": "vanity chair"},
+                            ]
+                        }
+                    ],
+                },
+            ],
+        )
+
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["profile_id"], "bedroom_legacy")
+        self.assertEqual(trace["mode"], "shadow")
+        self.assertFalse(trace["layout_traits_enabled"])
+        self.assertEqual(trace["recognized_count"], 4)
+        self.assertIn("anchor", trace["trait_counts"])
+        self.assertIn("support", trace["trait_counts"])
+
+    def test_living_room_shadow_profile_interprets_core_furniture(self) -> None:
+        trace = _registry.profile_shadow_trace_for_active_clusters(
+            room_type="living_room",
+            active_clusters=[
+                {
+                    "cluster_id": "living_primary",
+                    "required_bundles": [
+                        {
+                            "objects": [
+                                {"object_type": "couch"},
+                                {"object_type": "coffee table"},
+                                {"object_type": "media console"},
+                            ]
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["profile_id"], "living_room_legacy")
+        self.assertEqual(trace["mode"], "shadow")
+        self.assertEqual(trace["coverage_ratio"], 1.0)
+        self.assertEqual(trace["trait_counts"]["anchor"], 2)
+        self.assertEqual(trace["trait_counts"]["surface"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

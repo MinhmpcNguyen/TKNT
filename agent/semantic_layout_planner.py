@@ -60,6 +60,7 @@ from layout.room_profiles.registry import (
     is_profile_wall_backed_object,
     is_profile_workflow_object,
     profile_id_for_objects,
+    profile_shadow_trace_for_active_clusters,
     semantic_placements_for_members,
     semantic_room_rule_for,
 )
@@ -1390,6 +1391,10 @@ def _build_deterministic_program(
     status = "OK"
     if missing:
         status = "UNSAT" if not active_clusters else "NEEDS_REVIEW"
+    profile_shadow_trace = profile_shadow_trace_for_active_clusters(
+        room_type=room_type,
+        active_clusters=active_clusters,
+    )
     return {
         "status": status,
         "room_type": room_type,
@@ -1420,6 +1425,7 @@ def _build_deterministic_program(
         "missing": _uniq(missing),
         "conflicts": _uniq(conflicts),
         "confidence": _confidence(active_clusters, missing),
+        "profile_shadow_trace": profile_shadow_trace,
         "notes": [
             "SemanticLayoutPlanner used compiled_semantic_program.json as the canonical rule source.",
             "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
@@ -1491,6 +1497,10 @@ def _validate_and_normalize_llm_program(
     out["controlled_degradation"] = _build_controlled_degradation(
         active_clusters=active_clusters,
         global_program=out.get("selection_constraints") or {},
+    )
+    out["profile_shadow_trace"] = profile_shadow_trace_for_active_clusters(
+        room_type=room_type,
+        active_clusters=active_clusters,
     )
     out["confidence"] = max(float(out.get("confidence") or 0.75), 0.82)
     return out
