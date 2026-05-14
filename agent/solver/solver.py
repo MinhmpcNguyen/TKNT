@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
-from layout.kitchen_profile import is_kitchen_object_like
+from layout.room_profiles.registry import is_profile_trait_object
 from layout.variant_family import FALLBACK_GENERIC_VARIANT_FAMILY
 from layout.variant_family import GENERIC_VARIANT_FAMILIES
 from layout.variant_family import ROLE_VARIANT_FAMILY_ALLOWLISTS
@@ -664,7 +664,9 @@ def _cluster_role_kind(
         for part in _normalized_policy_token(value).split("_")
         if part
     }
-    if "kitchen" in tokens or any(is_kitchen_object_like(part) for part in token_parts):
+    if "kitchen" in tokens or any(
+        is_profile_trait_object(part) for part in token_parts
+    ):
         return "kitchen"
     if any(token in tokens for token in ("sofa", "sectional", "lounge", "seating")):
         return "social_anchor"

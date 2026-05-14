@@ -34,6 +34,7 @@ from agent.request_contract import (
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from layout.room_profiles.registry import all_profile_non_functional_layout_specs
 from pipeline.ablation_modes import (
     AblationMode,
     ablation_metadata,
@@ -93,35 +94,8 @@ _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
         "collision_layer": "ceiling",
         "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
     },
-    "pendant_light": {
-        "width": 320,
-        "height": 320,
-        "collision_layer": "ceiling",
-        "target_object_types": ["kitchen_island", "dining_table"],
-        "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
-    },
-    "range_hood": {
-        "width": 700,
-        "height": 360,
-        "collision_layer": "wall_mounted",
-        "target_object_types": ["stove", "cooktop"],
-        "place_on": {"method": "hang_on"},
-    },
-    "kitchen_wall_cabinet": {
-        "width": 1000,
-        "height": 360,
-        "collision_layer": "wall_mounted",
-        "target_object_types": ["kitchen_base_cabinet", "sink", "stove"],
-        "place_on": {"method": "wall"},
-    },
-    "cooktop": {
-        "width": 650,
-        "height": 550,
-        "collision_layer": "countertop",
-        "target_object_types": ["kitchen_base_cabinet"],
-        "place_on": {"method": "on_top"},
-    },
 }
+_REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.update(all_profile_non_functional_layout_specs())
 
 try:
     from shapely.geometry import Polygon

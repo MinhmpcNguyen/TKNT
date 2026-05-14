@@ -13,10 +13,10 @@ from agent_schema.cluster_composer_schema import ClusterComposerOutput
 from cluster_composer.outline import _outline_polygons_union_grid
 from cluster_composer.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from layout.grid_policy import normalize_layout_grid_mm
-from layout.kitchen_profile import (
-    is_kitchen_floating_object,
-    is_kitchen_storage_object,
-    is_kitchen_workflow_object,
+from layout.room_profiles.registry import (
+    is_profile_floating_object,
+    is_profile_storage_object,
+    is_profile_workflow_object,
 )
 from layout.orientation_contract import (
     rotate_side_ccw_90s as _rotate_side_ccw_90s_contract,
@@ -2738,11 +2738,11 @@ def _assign_object_roles(
             if not dominant_assigned:
                 roles[oid] = "dominant_anchor"
                 dominant_assigned = True
-            elif is_kitchen_workflow_object(kind):
+            elif is_profile_workflow_object(kind):
                 roles[oid] = "workflow_anchor"
-            elif is_kitchen_storage_object(kind):
+            elif is_profile_storage_object(kind):
                 roles[oid] = "storage_support"
-            elif is_kitchen_floating_object(kind):
+            elif is_profile_floating_object(kind):
                 roles[oid] = "central_support"
             elif "tv" in kind or "media" in kind or "console" in kind:
                 roles[oid] = "media_support"
@@ -2764,11 +2764,11 @@ def _assign_object_roles(
             else:
                 roles[oid] = "secondary_anchor"
             continue
-        if is_kitchen_workflow_object(kind):
+        if is_profile_workflow_object(kind):
             roles[oid] = "workflow_anchor"
-        elif is_kitchen_storage_object(kind):
+        elif is_profile_storage_object(kind):
             roles[oid] = "storage_support"
-        elif is_kitchen_floating_object(kind):
+        elif is_profile_floating_object(kind):
             roles[oid] = "central_support"
         elif any(token in kind for token in ("tv", "media", "console")):
             roles[oid] = "media_support"

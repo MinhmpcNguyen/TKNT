@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from evaluation.layout_benchmark.schema import LayoutItem, NormalizedLayout, Point2D
+from layout.room_profiles.registry import all_profile_scoring_aliases
 
 try:
     from shapely.geometry import LineString, Polygon
@@ -60,6 +61,7 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "sink": ("sink", "kitchen_sink"),
     "stove": ("stove", "range", "oven_range", "cooker"),
 }
+_ALIASES.update(all_profile_scoring_aliases())
 
 _NON_BLOCKING_TOKENS = (
     "rug",

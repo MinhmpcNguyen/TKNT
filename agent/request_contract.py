@@ -5,46 +5,28 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
+from layout.room_profiles.registry import (
+    all_profile_non_functional_contract_types,
+    all_profile_object_aliases,
+)
+
 _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
     "bed": ("bed", "queen bed", "king bed", "single bed", "double bed"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
-    "bar_stool": ("bar stool", "counter stool", "island stool"),
     "ceiling_lamp": ("ceiling lamp", "ceiling light", "overhead light"),
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
     "coffee_table": ("coffee table", "tea table", "center table"),
-    "cooktop": ("cooktop", "hob", "induction hob", "gas hob"),
     "desk": ("desk", "work desk", "study desk", "vanity"),
-    "dining_chair": ("dining chair", "breakfast chair", "dining seat"),
-    "dining_table": ("dining table", "breakfast table", "small dining table"),
-    "dishwasher": ("dishwasher", "dish washer"),
     "floor_lamp": ("floor lamp", "standing lamp", "reading lamp"),
-    "fridge": ("fridge", "refrigerator", "fridge freezer", "freezer"),
-    "kitchen_base_cabinet": (
-        "kitchen base cabinet",
-        "base cabinet",
-        "counter",
-        "countertop",
-        "prep counter",
-        "worktop",
-        "kitchen counter",
-    ),
-    "kitchen_island": ("kitchen island", "island", "prep island"),
-    "kitchen_tall_cabinet": ("kitchen tall cabinet", "tall cabinet"),
-    "kitchen_wall_cabinet": ("kitchen wall cabinet", "wall cabinet", "upper cabinet"),
-    "microwave": ("microwave", "microwave oven"),
     "nightstand": ("nightstand", "night stand", "bedside table"),
-    "pantry_cabinet": ("pantry cabinet", "pantry", "larder"),
-    "pendant_light": ("pendant light", "kitchen pendant", "island pendant"),
-    "range_hood": ("range hood", "hood", "extractor hood", "vent hood"),
     "rug": ("rug", "carpet"),
     "side_table": ("side table", "end table"),
-    "sink": ("sink", "kitchen sink", "wash sink"),
     "sofa": ("sofa", "couch", "loveseat", "sectional"),
-    "stove": ("stove", "range", "oven range", "cooker"),
     "tv_console": ("tv console", "media console", "tv stand"),
     "wardrobe": ("wardrobe", "closet", "armoire"),
 }
+_OBJECT_ALIASES.update(all_profile_object_aliases())
 
 _OPTIONAL_ONLY_PATTERNS = (
     "only if",
@@ -85,12 +67,8 @@ _COUNT_WORDS = {
 }
 _NON_FUNCTIONAL_CONTRACT_TYPES = {
     "ceiling_lamp",
-    "cooktop",
-    "kitchen_wall_cabinet",
-    "pendant_light",
-    "range_hood",
     "rug",
-}
+} | all_profile_non_functional_contract_types()
 _HARD_CONTRACT_INTENTS = {"must_keep", "must_try"}
 _TARGET_CONTRACT_INTENTS = {"target_if_viable", "preferred_if_fit"}
 _SOFT_CONTRACT_INTENTS = {*_TARGET_CONTRACT_INTENTS, "optional_if_surplus"}
