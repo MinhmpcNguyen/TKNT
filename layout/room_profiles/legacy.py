@@ -33,6 +33,12 @@ LIVING_ROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
     "coffee_table": ("coffee table", "tea table", "center table"),
     "console_table": ("console table", "entry console"),
     "floor_lamp": ("floor lamp", "standing lamp", "reading lamp"),
+    "media_shelf": (
+        "media shelf",
+        "media shelving",
+        "av shelf",
+        "entertainment shelf",
+    ),
     "ottoman": ("ottoman", "pouf", "footstool"),
     "plant": ("plant", "indoor plant"),
     "rug": ("rug", "carpet"),
@@ -80,6 +86,7 @@ LIVING_ROOM_SUPPORT_OBJECTS = frozenset(
         "coffee_table",
         "console_table",
         "floor_lamp",
+        "media_shelf",
         "ottoman",
         "plant",
         "side_table",
@@ -89,13 +96,13 @@ LIVING_ROOM_SUPPORT_OBJECTS = frozenset(
 )
 LIVING_ROOM_SEATING_OBJECTS = frozenset({"armchair", "chair", "ottoman", "sofa"})
 LIVING_ROOM_SURFACE_OBJECTS = frozenset(
-    {"coffee_table", "console_table", "side_table", "tv_console"}
+    {"coffee_table", "console_table", "media_shelf", "side_table", "tv_console"}
 )
 LIVING_ROOM_LIGHTING_OBJECTS = frozenset({"ceiling_lamp", "floor_lamp", "table_lamp"})
 LIVING_ROOM_DECOR_OBJECTS = frozenset({"plant", "rug", "wall_art"})
-LIVING_ROOM_STORAGE_OBJECTS = frozenset({"bookshelf", "console_table"})
+LIVING_ROOM_STORAGE_OBJECTS = frozenset({"bookshelf", "console_table", "media_shelf"})
 LIVING_ROOM_WALL_BACKED_OBJECTS = frozenset(
-    {"bookshelf", "console_table", "tv", "tv_console"}
+    {"bookshelf", "console_table", "media_shelf", "tv", "tv_console"}
 )
 LIVING_ROOM_FLOATING_OBJECTS = frozenset(
     {
@@ -224,6 +231,13 @@ _LIVING_ROOM_SIZE_PROFILES: dict[str, dict[str, Any]] = {
             "S": {"L": 0.55, "W": 0.30, "A": 0.17},
             "M": {"L": 0.80, "W": 0.35, "A": 0.28},
             "L": {"L": 1.20, "W": 0.40, "A": 0.48},
+        }
+    },
+    "media_shelf": {
+        "rep_dims_m": {
+            "S": {"L": 0.70, "W": 0.28, "A": 0.20},
+            "M": {"L": 1.00, "W": 0.35, "A": 0.35},
+            "L": {"L": 1.40, "W": 0.40, "A": 0.56},
         }
     },
 }

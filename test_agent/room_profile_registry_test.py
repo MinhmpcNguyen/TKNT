@@ -26,6 +26,23 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertIsNotNone(_registry.semantic_room_rule_for("kitchen"))
         self.assertTrue(_registry.is_profile_workflow_object("refrigerator"))
         self.assertTrue(_registry.is_profile_wall_backed_object("prep counter"))
+        trace = _registry.profile_shadow_trace_for_active_clusters(
+            room_type="kitchen",
+            active_clusters=[
+                {
+                    "cluster_id": "kitchen_workflow_core",
+                    "required_bundles": [
+                        {
+                            "objects": [
+                                {"object_type": "fridge"},
+                                {"object_type": "sink"},
+                            ]
+                        }
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(trace["promotion_readiness"]["status"], "active")
 
     def test_kitchen_profile_defaults_to_eat_in_dining(self) -> None:
         room_rule = _registry.semantic_room_rule_for("kitchen")
@@ -130,6 +147,7 @@ class RoomProfileRegistryTest(unittest.TestCase):
                                 {"object_type": "couch"},
                                 {"object_type": "coffee table"},
                                 {"object_type": "media console"},
+                                {"object_type": "media_shelf"},
                             ]
                         }
                     ],
@@ -142,7 +160,16 @@ class RoomProfileRegistryTest(unittest.TestCase):
         self.assertEqual(trace["mode"], "shadow")
         self.assertEqual(trace["coverage_ratio"], 1.0)
         self.assertEqual(trace["trait_counts"]["anchor"], 2)
-        self.assertEqual(trace["trait_counts"]["surface"], 2)
+        self.assertEqual(trace["trait_counts"]["surface"], 3)
+        self.assertEqual(trace["trait_counts"]["storage"], 1)
+        self.assertEqual(
+            trace["promotion_readiness"]["status"], "ready_for_profile_first"
+        )
+        self.assertTrue(trace["promotion_readiness"]["eligible_for_profile_first"])
+        self.assertEqual(
+            _registry.canonical_profile_object_type("media shelving"),
+            "media_shelf",
+        )
 
 
 if __name__ == "__main__":

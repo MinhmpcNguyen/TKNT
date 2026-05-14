@@ -16,6 +16,8 @@ ROOM_PROFILES: tuple[RoomProfile, ...] = (
     BEDROOM_LEGACY_PROFILE,
     LIVING_ROOM_LEGACY_PROFILE,
 )
+_PROFILE_READINESS_MIN_COVERAGE = 1.0
+_PROFILE_READINESS_MIN_TRAIT_COVERAGE = 1.0
 
 
 def resolve_room_profile(room_type: object) -> RoomProfile | None:
@@ -201,6 +203,8 @@ def profile_shadow_trace_for_active_clusters(
     recognized_count = 0
     traited_count = 0
     trait_counts: dict[str, int] = {}
+    unrecognized_objects: set[str] = set()
+    untraited_objects: set[str] = set()
     clusters: list[dict[str, Any]] = []
 
     for cluster in active_clusters:
@@ -217,8 +221,12 @@ def profile_shadow_trace_for_active_clusters(
             if canonical is not None:
                 recognized_count += 1
                 cluster_recognized += 1
+            else:
+                unrecognized_objects.add(object_type)
             if traits:
                 traited_count += 1
+            else:
+                untraited_objects.add(object_type)
             for trait in traits:
                 trait_counts[trait] = trait_counts.get(trait, 0) + 1
                 cluster_traits.add(trait)
@@ -252,6 +260,14 @@ def profile_shadow_trace_for_active_clusters(
     trait_coverage_ratio = (
         round(traited_count / total_count, 3) if total_count > 0 else 0.0
     )
+    promotion_readiness = _profile_promotion_readiness(
+        profile=profile,
+        total_count=total_count,
+        coverage_ratio=coverage_ratio,
+        trait_coverage_ratio=trait_coverage_ratio,
+        unrecognized_objects=sorted(unrecognized_objects),
+        untraited_objects=sorted(untraited_objects),
+    )
     return {
         "profile_id": profile.profile_id,
         "mode": "active" if profile.layout_traits_enabled else "shadow",
@@ -262,7 +278,47 @@ def profile_shadow_trace_for_active_clusters(
         "coverage_ratio": coverage_ratio,
         "trait_coverage_ratio": trait_coverage_ratio,
         "trait_counts": dict(sorted(trait_counts.items())),
+        "promotion_readiness": promotion_readiness,
         "clusters": clusters,
+    }
+
+
+def _profile_promotion_readiness(
+    *,
+    profile: RoomProfile,
+    total_count: int,
+    coverage_ratio: float,
+    trait_coverage_ratio: float,
+    unrecognized_objects: Sequence[str],
+    untraited_objects: Sequence[str],
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    if total_count <= 0:
+        blockers.append("no_active_objects")
+    if coverage_ratio < _PROFILE_READINESS_MIN_COVERAGE:
+        blockers.append("coverage_below_threshold")
+    if trait_coverage_ratio < _PROFILE_READINESS_MIN_TRAIT_COVERAGE:
+        blockers.append("trait_coverage_below_threshold")
+    if unrecognized_objects:
+        blockers.append("unrecognized_objects")
+    if untraited_objects:
+        blockers.append("untraited_objects")
+
+    if profile.layout_traits_enabled:
+        status = "active"
+    elif blockers:
+        status = "needs_profile_expansion"
+    else:
+        status = "ready_for_profile_first"
+
+    return {
+        "status": status,
+        "eligible_for_profile_first": status == "ready_for_profile_first",
+        "minimum_coverage_ratio": _PROFILE_READINESS_MIN_COVERAGE,
+        "minimum_trait_coverage_ratio": _PROFILE_READINESS_MIN_TRAIT_COVERAGE,
+        "blockers": blockers,
+        "unrecognized_objects": list(unrecognized_objects),
+        "untraited_objects": list(untraited_objects),
     }
 
 
