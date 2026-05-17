@@ -496,7 +496,6 @@ class StylistArchitectureTest(unittest.TestCase):
         lamp = objects_by_id["desk_lamp_001"]
         laptop = objects_by_id["laptop_001"]
         rug = objects_by_id["rug_001"]
-        blanket = objects_by_id["throw_blanket_001"]
         curtain = objects_by_id["curtain_001"]
         ceiling_light = objects_by_id["ceiling_light_001"]
 
@@ -518,24 +517,7 @@ class StylistArchitectureTest(unittest.TestCase):
             (rug["bbox"]["min_y"] + rug["bbox"]["max_y"]) // 2,
             2700,
         )
-        self.assertEqual(blanket["place_on"]["method"], "on_top")
-        self.assertEqual(blanket["place_on"]["target_instance_id"], "bed_1")
-        self.assertGreaterEqual(
-            blanket["bbox"]["max_x"] - blanket["bbox"]["min_x"],
-            900,
-        )
-        self.assertGreaterEqual(
-            blanket["bbox"]["max_y"] - blanket["bbox"]["min_y"],
-            250,
-        )
-        self.assertLessEqual(
-            blanket["bbox"]["max_x"],
-            2000 - 40,
-        )
-        self.assertGreaterEqual(
-            blanket["bbox"]["min_x"],
-            400 + 40,
-        )
+        self.assertNotIn("throw_blanket_001", objects_by_id)
 
         self.assertEqual(curtain["place_on"]["method"], "hang_on")
         self.assertEqual(curtain["place_on"]["target_instance_id"], "window_1")

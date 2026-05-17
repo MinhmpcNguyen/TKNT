@@ -3,13 +3,10 @@ import { clearStoredAuthToken, fetchInventory, getCurrentUser, listGeneratedRend
 import { AuthScreen } from './components/AuthScreen';
 import { AccountPanel } from './components/AccountPanel';
 import { Canvas2D } from './components/Canvas2D';
-import { InspectorPanel } from './components/InspectorPanel';
 import { LibraryPanel } from './components/LibraryPanel';
-import { RunLogPanel } from './components/RunLogPanel';
+import { ProfileModal } from './components/ProfileModal';
 import { UserInputPanel } from './components/UserInputPanel';
-import { ValidationPanel } from './components/ValidationPanel';
 import { Toolbar } from './components/Toolbar';
-import { ClusterPreviewPanel } from './components/ClusterPreviewPanel';
 import { LayoutVariantsGallery } from './components/LayoutVariantsGallery';
 import { ThreeDPreviewPanel } from './components/ThreeDPreviewPanel';
 import { useEditorStore } from './store';
@@ -32,8 +29,12 @@ export const App: React.FC = () => {
     viewMode,
     layoutVariants,
     variantPickerOpen,
+    selectedSavedRenderId,
   } = useEditorStore();
   const [bootError, setBootError] = useState<string | null>(null);
+  const [leftDockOpen, setLeftDockOpen] = useState(true);
+  const [rightDockOpen, setRightDockOpen] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     setFloorplan(sampleFloorplan as any);
@@ -116,6 +117,18 @@ export const App: React.FC = () => {
     tenantId,
   ]);
 
+  useEffect(() => {
+    if (viewMode === '3d' && selectedSavedRenderId) {
+      setRightDockOpen(false);
+    }
+  }, [selectedSavedRenderId, viewMode]);
+
+  useEffect(() => {
+    const collapseRightDock = () => setRightDockOpen(false);
+    window.addEventListener('tknt:render-focus', collapseRightDock);
+    return () => window.removeEventListener('tknt:render-focus', collapseRightDock);
+  }, []);
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -127,6 +140,15 @@ export const App: React.FC = () => {
       setBootError(null);
     }
   };
+
+  const workspaceClassName = [
+    'workspace',
+    viewMode === '3d' ? 'workspace-3d' : 'workspace-2d',
+    leftDockOpen ? '' : 'left-dock-collapsed',
+    rightDockOpen ? '' : 'right-dock-collapsed',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   if (!authResolved) {
     return <div className="app-loading">Loading workspace...</div>;
@@ -147,37 +169,63 @@ export const App: React.FC = () => {
           </p>
         </div>
         <div className="app-account-actions">
-          <div className="app-account-chip">
+          <button
+            className="app-account-chip"
+            type="button"
+            onClick={() => setProfileOpen(true)}
+          >
             <strong>{currentUser.display_name || currentUser.email}</strong>
             <span>{currentUser.email}</span>
-          </div>
+          </button>
           <button onClick={handleLogout} type="button">
             Log out
           </button>
         </div>
       </header>
+      {profileOpen ? <ProfileModal onClose={() => setProfileOpen(false)} /> : null}
       {bootError ? <div className="app-banner-error">{bootError}</div> : null}
       <Toolbar />
-      <div className="workspace">
-        <LibraryPanel />
+      <div className={workspaceClassName}>
+        <div className="left-stack">
+          <button
+            className="dock-toggle left-dock-toggle"
+            type="button"
+            onClick={() => setLeftDockOpen((current) => !current)}
+            aria-expanded={leftDockOpen}
+          >
+            <span className="dock-toggle-arrow">{leftDockOpen ? '‹' : '›'}</span>
+            <span>{leftDockOpen ? 'Hide' : 'Library'}</span>
+          </button>
+          <div className="dock-panel-content left-dock-content">
+            <LibraryPanel />
+          </div>
+        </div>
         <div className="canvas-wrapper">
-          {variantPickerOpen && layoutVariants.length > 0 ? (
-            <LayoutVariantsGallery />
-          ) : viewMode === '3d' ? (
-            <ThreeDPreviewPanel />
-          ) : (
-            <Canvas2D />
-          )}
+          <div id="three-controls-slot" className="three-controls-slot" />
+          <div className="canvas-stage">
+            {variantPickerOpen && layoutVariants.length > 0 ? (
+              <LayoutVariantsGallery />
+            ) : viewMode === '3d' ? (
+              <ThreeDPreviewPanel />
+            ) : (
+              <Canvas2D />
+            )}
+          </div>
         </div>
         <div className="side-stack">
-          <UserInputPanel />
-          <InspectorPanel />
-          <AccountPanel />
-        </div>
-        <div className="side-stack">
-          <ClusterPreviewPanel />
-          <ValidationPanel />
-          <RunLogPanel />
+          <button
+            className="dock-toggle right-dock-toggle"
+            type="button"
+            onClick={() => setRightDockOpen((current) => !current)}
+            aria-expanded={rightDockOpen}
+          >
+            <span className="dock-toggle-arrow">{rightDockOpen ? '›' : '‹'}</span>
+            <span>{rightDockOpen ? 'Hide' : 'Workspace'}</span>
+          </button>
+          <div className="dock-panel-content right-dock-content">
+            <UserInputPanel />
+            <AccountPanel />
+          </div>
         </div>
       </div>
     </div>

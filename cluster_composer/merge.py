@@ -5,6 +5,19 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from layout.semantic_roles import is_seat_like, is_work_surface_like
+
+_HARD_REQUEST_CONTRACT_INTENTS = frozenset(
+    {
+        "must_keep",
+        "explicit_must_keep",
+        "required",
+        "required_support",
+        "hard_required",
+        "fixed",
+    }
+)
+
 
 def merge_cluster_outputs(
     cluster_forge: dict[str, Any],
@@ -25,16 +38,23 @@ def merge_cluster_outputs(
 
     decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]] = {}
     decision_by_type: dict[str, dict[str, Any]] = {}
+    all_decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]] = {}
+    all_decision_by_type: dict[str, dict[str, Any]] = {}
     for decision in decisions:
         if not isinstance(decision, dict):
             continue
         obj_type = _decision_type_id(decision)
         if obj_type is None:
             continue
+        cluster_id = str(decision.get("cluster_id") or "").strip()
+        if cluster_id:
+            all_decision_by_cluster_and_type[(cluster_id, obj_type)] = deepcopy(
+                decision
+            )
+        all_decision_by_type.setdefault(obj_type, deepcopy(decision))
         qty = decision.get("quantity")
         if not isinstance(qty, int) or qty < 1:
             continue
-        cluster_id = str(decision.get("cluster_id") or "").strip()
         if cluster_id:
             decision_by_cluster_and_type[(cluster_id, obj_type)] = deepcopy(decision)
         decision_by_type.setdefault(obj_type, deepcopy(decision))
@@ -52,16 +72,35 @@ def merge_cluster_outputs(
         if not isinstance(members, list):
             members = []
 
-        kept_members = [
+        member_ids = [
             member
             for member in members
             if isinstance(member, str)
             and member.strip()
-            and _decision_for_member(
+        ]
+        kept_members = [
+            member
+            for member in member_ids
+            if _decision_for_member(
                 cluster_id, member, decision_by_cluster_and_type, decision_by_type
             )
             is not None
         ]
+        kept_members = _restore_missing_required_seated_surface_supports(
+            cluster=cluster,
+            member_ids=member_ids,
+            kept_members=kept_members,
+            decision_by_cluster_and_type=decision_by_cluster_and_type,
+            decision_by_type=decision_by_type,
+            all_decision_by_cluster_and_type=all_decision_by_cluster_and_type,
+            all_decision_by_type=all_decision_by_type,
+        )
+        kept_members = _drop_incomplete_seated_surface_pairs(
+            cluster=cluster,
+            kept_members=kept_members,
+            decision_by_cluster_and_type=decision_by_cluster_and_type,
+            decision_by_type=decision_by_type,
+        )
         if not kept_members:
             continue
         kept_set = set(kept_members)
@@ -146,6 +185,222 @@ def merge_cluster_outputs(
 
     _remove_key_recursive(merged_output, "raw_text")
     return merged_output
+
+
+def _restore_missing_required_seated_surface_supports(
+    *,
+    cluster: dict[str, Any],
+    member_ids: list[str],
+    kept_members: list[str],
+    decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]],
+    decision_by_type: dict[str, dict[str, Any]],
+    all_decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]],
+    all_decision_by_type: dict[str, dict[str, Any]],
+) -> list[str]:
+    kept_set = set(kept_members)
+    if not kept_set:
+        return kept_members
+
+    cluster_id = str(cluster.get("cluster_id") or "").strip()
+    rules = _cluster_rules(cluster)
+    changed = False
+    for edge in _surface_seat_pair_edges(rules):
+        seat_id = _placement_object_id(edge)
+        surface_id = edge.get("relative_to")
+        if not isinstance(seat_id, str) or not isinstance(surface_id, str):
+            continue
+        if surface_id not in kept_set or seat_id in kept_set:
+            continue
+        surface_decision = _decision_for_member(
+            cluster_id,
+            surface_id,
+            decision_by_cluster_and_type,
+            decision_by_type,
+        )
+        if not _surface_requires_seat_support(surface_decision):
+            continue
+        seat_decision = _decision_for_member(
+            cluster_id,
+            seat_id,
+            all_decision_by_cluster_and_type,
+            all_decision_by_type,
+        )
+        promoted = _promoted_required_support_decision(seat_decision)
+        if promoted is None:
+            continue
+        promoted["cluster_id"] = cluster_id
+        decision_by_cluster_and_type[(cluster_id, seat_id)] = deepcopy(promoted)
+        decision_by_type.setdefault(seat_id, deepcopy(promoted))
+        kept_set.add(seat_id)
+        changed = True
+
+    if not changed:
+        return kept_members
+    return [member for member in member_ids if member in kept_set]
+
+
+def _drop_incomplete_seated_surface_pairs(
+    *,
+    cluster: dict[str, Any],
+    kept_members: list[str],
+    decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]],
+    decision_by_type: dict[str, dict[str, Any]],
+) -> list[str]:
+    kept_set = set(kept_members)
+    if not kept_set:
+        return kept_members
+
+    cluster_id = str(cluster.get("cluster_id") or "").strip()
+    rules = _cluster_rules(cluster)
+    changed = True
+    while changed:
+        changed = False
+        for edge in _surface_seat_pair_edges(rules):
+            seat_id = _placement_object_id(edge)
+            surface_id = edge.get("relative_to")
+            if not isinstance(seat_id, str) or not isinstance(surface_id, str):
+                continue
+            if surface_id not in kept_set or seat_id in kept_set:
+                continue
+            surface_decision = _decision_for_member(
+                cluster_id,
+                surface_id,
+                decision_by_cluster_and_type,
+                decision_by_type,
+            )
+            if not _surface_can_drop_when_seat_missing(
+                surface_decision,
+                rules=rules,
+                surface_id=surface_id,
+            ):
+                continue
+            kept_set.remove(surface_id)
+            changed = True
+
+    return [member for member in kept_members if member in kept_set]
+
+
+def _surface_requires_seat_support(decision: dict[str, Any] | None) -> bool:
+    if decision is None:
+        return False
+    if _decision_min_keep(decision) > 0:
+        return True
+    intent = str(decision.get("request_contract_intent") or "").strip().lower()
+    return intent in _HARD_REQUEST_CONTRACT_INTENTS
+
+
+def _promoted_required_support_decision(
+    decision: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if decision is None or not _decision_has_valid_rep_dims(decision):
+        return None
+    out = deepcopy(decision)
+    out["quantity"] = max(1, _decision_quantity(out))
+    out["min_keep"] = max(1, _decision_min_keep(out))
+    out["protected"] = True
+    out["droppable"] = False
+    out["solver_trial"] = False
+    out["trial_optional"] = False
+    out["keep_if_space_surplus"] = False
+    out["request_contract_intent"] = (
+        str(out.get("request_contract_intent") or "").strip() or "required_support"
+    )
+    out["request_contract_target_count"] = max(
+        1,
+        _safe_int(out.get("request_contract_target_count")),
+    )
+    return out
+
+
+def _decision_has_valid_rep_dims(decision: dict[str, Any]) -> bool:
+    rep_dims = (
+        decision.get("rep_dims_m")
+        if isinstance(decision.get("rep_dims_m"), dict)
+        else {}
+    )
+    try:
+        return float(rep_dims.get("L") or 0.0) > 0 and float(
+            rep_dims.get("W") or 0.0
+        ) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _safe_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _surface_seat_pair_edges(rules: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = (
+        rules.get("semantic_placements")
+        if isinstance(rules.get("semantic_placements"), list)
+        else []
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        object_id = _placement_object_id(row)
+        relative_to = row.get("relative_to")
+        if not isinstance(object_id, str) or not isinstance(relative_to, str):
+            continue
+        support_role = str(row.get("support_role") or "").strip().lower()
+        band_intent = str(row.get("band_intent") or "").strip().lower()
+        if not is_work_surface_like(relative_to):
+            continue
+        if not is_seat_like(object_id):
+            continue
+        if support_role == "secondary_seat" or band_intent == "flank_band":
+            out.append(row)
+    return out
+
+
+def _surface_can_drop_when_seat_missing(
+    decision: dict[str, Any] | None,
+    *,
+    rules: dict[str, Any],
+    surface_id: str,
+) -> bool:
+    if decision is None:
+        return False
+    if _decision_min_keep(decision) > 0:
+        return False
+    intent = str(decision.get("request_contract_intent") or "").strip().lower()
+    if intent in _HARD_REQUEST_CONTRACT_INTENTS:
+        return False
+    if not bool(decision.get("protected")):
+        return True
+    return _cluster_rules_allow_surface_drop(rules, surface_id)
+
+
+def _cluster_rules_allow_surface_drop(rules: dict[str, Any], surface_id: str) -> bool:
+    layout_role = str(rules.get("layout_role") or "").strip().lower()
+    if layout_role not in {"optional", "nice_to_have", "bonus"} and not bool(
+        rules.get("allow_empty_cluster")
+    ):
+        return False
+
+    surface_token = surface_id.strip().lower()
+    drop_tokens = {f"drop_{surface_token}", surface_token}
+    degradation_ladder = _string_list(rules.get("degradation_ladder"))
+    if any(step.strip().lower() in drop_tokens for step in degradation_ladder):
+        return True
+
+    anchor_first_policy = (
+        rules.get("anchor_first_policy")
+        if isinstance(rules.get("anchor_first_policy"), dict)
+        else {}
+    )
+    droppable_ids = {
+        item.strip().lower()
+        for item in _string_list(anchor_first_policy.get("droppable_ids"))
+    }
+    return surface_token in droppable_ids
 
 
 def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]:

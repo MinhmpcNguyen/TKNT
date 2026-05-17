@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import {
+  ensureCurrentBillingPeriod,
+  getMonthlyImagesRemaining,
+  loadBillingSettings,
+  saveBillingSettings,
+  type BillingSettings,
+} from './billing';
+import {
   AuthUser,
   DesignPlanV1,
   Door,
@@ -87,6 +94,7 @@ export type EditorState = {
   savedRenders: GeneratedRenderRecord[];
   activeRootLayoutId: string | null;
   selectedSavedRenderId: string | null;
+  billingSettings: BillingSettings;
   setTenantId: (tenantId: string) => void;
   setAuthResolved: (resolved: boolean) => void;
   setAuthSession: (token: string, user: AuthUser) => void;
@@ -141,6 +149,10 @@ export type EditorState = {
   upsertSavedRender: (render: GeneratedRenderRecord) => void;
   setActiveRootLayoutId: (layoutId: string | null) => void;
   selectSavedRender: (renderId: string | null) => void;
+  setBillingSettings: (settings: BillingSettings) => void;
+  updateBillingSettings: (patch: Partial<BillingSettings>) => void;
+  consumeMonthlyImageCredit: () => boolean;
+  recordPaidImageUse: () => void;
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -194,6 +206,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   savedRenders: [],
   activeRootLayoutId: null,
   selectedSavedRenderId: null,
+  billingSettings: loadBillingSettings(),
   setTenantId: (tenantId) => set({ tenantId }),
   setAuthResolved: (authResolved) => set({ authResolved }),
   setAuthSession: (authToken, currentUser) =>
@@ -521,6 +534,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
   setActiveRootLayoutId: (activeRootLayoutId) => set({ activeRootLayoutId }),
   selectSavedRender: (selectedSavedRenderId) => set({ selectedSavedRenderId }),
+  setBillingSettings: (settings) => {
+    const next = ensureCurrentBillingPeriod(settings);
+    saveBillingSettings(next);
+    set({ billingSettings: next });
+  },
+  updateBillingSettings: (patch) =>
+    set((state) => {
+      const next = ensureCurrentBillingPeriod({
+        ...state.billingSettings,
+        ...patch,
+      });
+      saveBillingSettings(next);
+      return { billingSettings: next };
+    }),
+  consumeMonthlyImageCredit: () => {
+    const current = ensureCurrentBillingPeriod(get().billingSettings);
+    if (current.mode !== 'monthly' || getMonthlyImagesRemaining(current) <= 0) {
+      if (current !== get().billingSettings) {
+        saveBillingSettings(current);
+        set({ billingSettings: current });
+      }
+      return false;
+    }
+    const next = {
+      ...current,
+      monthlyImagesUsed: current.monthlyImagesUsed + 1,
+      totalMonthlyUses: current.totalMonthlyUses + 1,
+    };
+    saveBillingSettings(next);
+    set({ billingSettings: next });
+    return true;
+  },
+  recordPaidImageUse: () =>
+    set((state) => {
+      const next = ensureCurrentBillingPeriod({
+        ...state.billingSettings,
+        totalPaidUses: state.billingSettings.totalPaidUses + 1,
+      });
+      saveBillingSettings(next);
+      return { billingSettings: next };
+    }),
 }));
 
 function syncStyledResultPlacement(

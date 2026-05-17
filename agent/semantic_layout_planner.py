@@ -59,10 +59,11 @@ from layout.room_profiles.registry import (
     is_profile_wall_backed_object,
     is_profile_workflow_object,
     profile_cluster_tag_for_objects,
+    profile_layout_role_for_objects,
+    profile_layout_trace_for_active_clusters,
     profile_macro_relations_for_active_clusters,
     profile_relation_intents_for_objects,
     profile_semantic_role_for_objects,
-    profile_shadow_trace_for_active_clusters,
     profile_zone_claims_for_objects,
     select_profile_room_rule,
     semantic_placements_for_members,
@@ -1351,12 +1352,19 @@ def _normalize_profile_semantic_program(
             priority=normalized.get("priority"),
             room_type=room_type,
         )
+        layout_role = profile_layout_role_for_objects(
+            cluster_id=normalized.get("cluster_id"),
+            object_types=object_types,
+            room_type=room_type,
+        )
         zone_claims = profile_zone_claims_for_objects(
             cluster_id=normalized.get("cluster_id"),
             object_types=object_types,
             room_type=room_type,
             affordance_summary=affordance_summary,
         )
+        if layout_role is not None:
+            normalized["layout_role"] = layout_role
         if semantic_role is not None:
             normalized["semantic_role"] = semantic_role
         if zone_claims is not None:
@@ -1600,7 +1608,7 @@ def _build_deterministic_program(
     status = "OK"
     if missing:
         status = "UNSAT" if not active_clusters else "NEEDS_REVIEW"
-    profile_shadow_trace = profile_shadow_trace_for_active_clusters(
+    profile_layout_trace = profile_layout_trace_for_active_clusters(
         room_type=room_type,
         active_clusters=active_clusters,
     )
@@ -1634,7 +1642,8 @@ def _build_deterministic_program(
         "missing": _uniq(missing),
         "conflicts": _uniq(conflicts),
         "confidence": _confidence(active_clusters, missing),
-        "profile_shadow_trace": profile_shadow_trace,
+        "profile_layout_trace": profile_layout_trace,
+        "profile_shadow_trace": profile_layout_trace,
         "notes": [
             "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
             "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
@@ -1708,10 +1717,12 @@ def _validate_and_normalize_llm_program(
         active_clusters=active_clusters,
         global_program=out.get("selection_constraints") or {},
     )
-    out["profile_shadow_trace"] = profile_shadow_trace_for_active_clusters(
+    profile_layout_trace = profile_layout_trace_for_active_clusters(
         room_type=room_type,
         active_clusters=active_clusters,
     )
+    out["profile_layout_trace"] = profile_layout_trace
+    out["profile_shadow_trace"] = profile_layout_trace
     out["confidence"] = max(float(out.get("confidence") or 0.75), 0.82)
     return out
 

@@ -63,6 +63,16 @@ export type SnapshotImageRenderResult = {
     aspect_ratio: string;
     source_image_mime_type: string;
     structural_image_mime_type?: string | null;
+    geometry_references_used?: {
+      depth_map: boolean;
+      edge_map: boolean;
+      segmentation_map: boolean;
+    };
+    geometry_reference_image_mime_types?: {
+      depth_map?: string | null;
+      edge_map?: string | null;
+      segmentation_map?: string | null;
+    };
     layout_reference_enabled: boolean;
     layout_reference_used: boolean;
     layout_reference_image_mime_type?: string | null;
@@ -83,6 +93,7 @@ export type SnapshotImageRenderResult = {
     quality?: string;
     aspect_ratio: string;
     raw_response: Record<string, unknown>;
+    retry_count?: number;
   };
   models: {
     image_model_name: string;
@@ -95,6 +106,7 @@ export type SnapshotImageRenderResult = {
     render_mode?: 'generate' | 'edit';
     preset_selection?: SnapshotImagePresetSelection;
     edit_operations?: SnapshotImageEditOperationSummary[];
+    validation?: Record<string, unknown>;
   };
 };
 
@@ -663,6 +675,9 @@ export async function renderSnapshotImage(
   request: {
     snapshotPayload: Record<string, unknown>;
     snapshotImageDataUrl: string;
+    depthMapImageDataUrl?: string | null;
+    edgeMapImageDataUrl?: string | null;
+    segmentationMapImageDataUrl?: string | null;
     layoutReferenceImageDataUrl?: string | null;
     annotatedReferenceImageDataUrl?: string | null;
     sceneReferenceImageDataUrl?: string | null;
@@ -683,6 +698,10 @@ export async function renderSnapshotImage(
       body: JSON.stringify({
         snapshot_payload: request.snapshotPayload,
         snapshot_image_data_url: request.snapshotImageDataUrl,
+        depth_map_image_data_url: request.depthMapImageDataUrl ?? null,
+        edge_map_image_data_url: request.edgeMapImageDataUrl ?? null,
+        segmentation_map_image_data_url:
+          request.segmentationMapImageDataUrl ?? null,
         layout_reference_image_data_url:
           request.layoutReferenceImageDataUrl ?? null,
         annotated_reference_image_data_url:

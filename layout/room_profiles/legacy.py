@@ -17,18 +17,17 @@ BEDROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
     "rug": ("rug", "carpet"),
-    "ceiling_lamp": ("ceiling lamp", "ceiling light", "overhead light"),
+    "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
     "floor_lamp": ("floor lamp", "standing lamp", "reading lamp"),
     "mirror": ("mirror", "vanity mirror"),
     "side_table": ("side table", "end table"),
-    "throw_blanket": ("throw blanket", "blanket"),
     "wall_art": ("wall art", "art print", "painting"),
 }
 
 LIVING_ROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
-    "ceiling_lamp": ("ceiling lamp", "ceiling light", "overhead light"),
+    "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
     "coffee_table": ("coffee table", "tea table", "center table"),
     "console_table": ("console table", "entry console"),
@@ -67,15 +66,15 @@ BEDROOM_SUPPORT_OBJECTS = frozenset(
 BEDROOM_SEATING_OBJECTS = frozenset({"chair"})
 BEDROOM_SURFACE_OBJECTS = frozenset({"desk", "dresser", "nightstand", "side_table"})
 BEDROOM_LIGHTING_OBJECTS = frozenset(
-    {"bedside_lamp", "ceiling_lamp", "desk_lamp", "floor_lamp"}
+    {"bedside_lamp", "ceiling_light", "desk_lamp", "floor_lamp"}
 )
-BEDROOM_DECOR_OBJECTS = frozenset({"rug", "throw_blanket", "wall_art"})
+BEDROOM_DECOR_OBJECTS = frozenset({"rug", "wall_art"})
 BEDROOM_STORAGE_OBJECTS = frozenset({"bookshelf", "dresser", "wardrobe"})
 BEDROOM_WALL_BACKED_OBJECTS = frozenset(
     {"bed", "bookshelf", "desk", "dresser", "wardrobe"}
 )
 BEDROOM_FLOATING_OBJECTS = frozenset({"chair", "rug"})
-BEDROOM_MOUNTED_OBJECTS = frozenset({"ceiling_lamp", "mirror", "wall_art"})
+BEDROOM_MOUNTED_OBJECTS = frozenset({"ceiling_light", "mirror", "wall_art"})
 
 LIVING_ROOM_ANCHOR_OBJECTS = frozenset({"sofa", "tv_console"})
 LIVING_ROOM_SUPPORT_OBJECTS = frozenset(
@@ -98,7 +97,7 @@ LIVING_ROOM_SEATING_OBJECTS = frozenset({"armchair", "chair", "ottoman", "sofa"}
 LIVING_ROOM_SURFACE_OBJECTS = frozenset(
     {"coffee_table", "console_table", "media_shelf", "side_table", "tv_console"}
 )
-LIVING_ROOM_LIGHTING_OBJECTS = frozenset({"ceiling_lamp", "floor_lamp", "table_lamp"})
+LIVING_ROOM_LIGHTING_OBJECTS = frozenset({"ceiling_light", "floor_lamp", "table_lamp"})
 LIVING_ROOM_DECOR_OBJECTS = frozenset({"plant", "rug", "wall_art"})
 LIVING_ROOM_STORAGE_OBJECTS = frozenset({"bookshelf", "console_table", "media_shelf"})
 LIVING_ROOM_WALL_BACKED_OBJECTS = frozenset(
@@ -115,7 +114,7 @@ LIVING_ROOM_FLOATING_OBJECTS = frozenset(
         "sofa",
     }
 )
-LIVING_ROOM_MOUNTED_OBJECTS = frozenset({"ceiling_lamp", "tv", "wall_art"})
+LIVING_ROOM_MOUNTED_OBJECTS = frozenset({"ceiling_light", "tv", "wall_art"})
 
 _BEDROOM_DECLARED_OBJECTS = (
     frozenset(BEDROOM_LEGACY_ALIASES)

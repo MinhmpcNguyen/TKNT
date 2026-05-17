@@ -233,6 +233,103 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ["dining_chair", "dining_chair_2"],
         )
 
+    def test_merge_drops_optional_surface_when_required_seat_was_budget_removed(
+        self,
+    ) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "work_study",
+                    "members": ["desk", "chair"],
+                    "anchors": ["desk"],
+                    "cluster_rules": {
+                        "allow_empty_cluster": True,
+                        "layout_role": "optional",
+                        "degradation_ladder": ["drop_chair", "drop_desk"],
+                        "semantic_placements": [
+                            {
+                                "id": "chair",
+                                "relative_to": "desk",
+                                "kind": "dock_to_edge",
+                                "support_role": "secondary_seat",
+                                "band_intent": "flank_band",
+                                "orientation": "face_base",
+                            }
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "desk",
+                            "protected_ids": ["desk"],
+                        },
+                    },
+                }
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "desk",
+                    cluster_id="work_study",
+                    role="dominant_anchor",
+                    min_keep=0,
+                    protected=True,
+                ),
+                _decision("chair", cluster_id="work_study", quantity=0),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+
+        self.assertEqual(merged["clusters"], [])
+        self.assertEqual(merged["active_cluster_ids"], [])
+
+    def test_merge_promotes_seat_when_hard_surface_was_requested(
+        self,
+    ) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "work_study",
+                    "members": ["desk", "chair"],
+                    "anchors": ["desk"],
+                    "cluster_rules": {
+                        "semantic_placements": [
+                            {
+                                "id": "chair",
+                                "relative_to": "desk",
+                                "kind": "dock_to_edge",
+                                "support_role": "secondary_seat",
+                                "band_intent": "flank_band",
+                                "orientation": "face_base",
+                            }
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "desk",
+                            "protected_ids": ["desk"],
+                        },
+                    },
+                }
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "desk",
+                    cluster_id="work_study",
+                    role="dominant_anchor",
+                    min_keep=1,
+                    protected=True,
+                ),
+                _decision("chair", cluster_id="work_study", quantity=0),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+
+        self.assertEqual(merged["active_cluster_ids"], ["work_study"])
+        self.assertEqual(merged["clusters"][0]["members"], ["desk", "chair"])
+        object_program = merged["clusters"][0]["object_program"]
+        self.assertEqual(object_program["required_object_ids"], ["desk", "chair"])
+
 
 if __name__ == "__main__":
     unittest.main()

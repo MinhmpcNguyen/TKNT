@@ -1,0 +1,301 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "TKNT Floorplan Editor" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Shared inventory for everyone, plus your own GLB objects, saved layouts, and render history.
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - strong [ref=e10]: Minh
+        - generic [ref=e11]: ntm.cmv@gmail.com
+      - button "Log out" [ref=e12] [cursor=pointer]
+  - generic [ref=e13]:
+    - combobox [ref=e14]:
+      - option "Office" [selected]
+      - option "Bedroom"
+      - option "Living Room"
+      - option "Studio"
+      - option "Kitchen"
+    - button "Generate" [ref=e15] [cursor=pointer]
+    - button "2D" [ref=e16] [cursor=pointer]
+    - button "3D" [active] [ref=e17] [cursor=pointer]
+    - button "Edit Room" [ref=e18] [cursor=pointer]
+    - button "Draw Line" [disabled] [ref=e19]
+    - button "Delete Point" [disabled] [ref=e20]
+    - button "Reset Room" [ref=e21] [cursor=pointer]
+    - generic [ref=e22]:
+      - textbox "Layout name" [ref=e23]
+      - button "Save" [ref=e24] [cursor=pointer]
+  - generic [ref=e25]:
+    - generic [ref=e26]:
+      - complementary [ref=e27]:
+        - heading "Library" [level=3] [ref=e28]
+        - generic [ref=e29]:
+          - searchbox "Search by name or type" [ref=e30]
+          - combobox [ref=e31]:
+            - option "All styles" [selected]
+            - option "boho"
+            - option "classic"
+            - option "coastal"
+            - option "industrial"
+            - option "japandi"
+            - option "midcentury"
+            - option "minimal"
+            - option "modern"
+            - option "scandinavian"
+            - option "wabi_sabi"
+          - combobox [ref=e32]:
+            - option "All rooms" [selected]
+            - option "Current room"
+            - option "Bedroom"
+            - option "Living Room"
+            - option "Studio"
+            - option "Office"
+            - option "Kitchen"
+        - generic [ref=e33]:
+          - button "Your objects 3" [ref=e35] [cursor=pointer]:
+            - generic [ref=e36]: Your objects
+            - strong [ref=e37]: "3"
+          - button "Shared inventory 919" [ref=e39] [cursor=pointer]:
+            - generic [ref=e40]: Shared inventory
+            - strong [ref=e41]: "919"
+      - generic [ref=e466]:
+        - generic [ref=e467]: 3D Preview
+        - generic [ref=e468]:
+          - button "Capture" [ref=e469] [cursor=pointer]
+          - button "Generate Image" [ref=e470] [cursor=pointer]
+          - button "Reset" [ref=e471] [cursor=pointer]
+          - button "Delete" [disabled] [ref=e472]
+          - button "Edit" [disabled] [ref=e473]
+          - generic [ref=e474]:
+            - generic [ref=e475]:
+              - generic [ref=e476]:
+                - generic [ref=e477]: Quick Camera View
+                - generic [ref=e478]:
+                  - button "Previous camera view" [ref=e479] [cursor=pointer]: ‹
+                  - generic [ref=e480]:
+                    - strong [ref=e481]: Corner 1
+                    - generic [ref=e482]: Mid-height · X 0.0m · Y 0.0m
+                  - button "Next camera view" [ref=e483] [cursor=pointer]: ›
+              - generic:
+                - generic [ref=e484]: Style
+                - button "Hiện đại reference Hiện đại 13 presets ▼" [ref=e485] [cursor=pointer]:
+                  - img "Hiện đại reference" [ref=e486]
+                  - generic:
+                    - generic [ref=e487]: Hiện đại
+                    - generic [ref=e488]: 13 presets
+                  - generic [ref=e489]: ▼
+              - generic [ref=e490]:
+                - generic [ref=e491]: Lighting
+                - button "Ban ngày 1 — Hừng Đông reference Ban ngày 1 — Hừng Đông 12 presets ▼" [ref=e492] [cursor=pointer]:
+                  - img "Ban ngày 1 — Hừng Đông reference" [ref=e493]
+                  - generic [ref=e494]:
+                    - generic [ref=e495]: Ban ngày 1 — Hừng Đông
+                    - generic [ref=e496]: 12 presets
+                  - generic [ref=e497]: ▼
+              - generic:
+                - generic [ref=e498]: Scenery
+                - button "No image Không có 12 presets ▼" [ref=e499] [cursor=pointer]:
+                  - generic [ref=e501]: No image
+                  - generic:
+                    - generic [ref=e502]: Không có
+                    - generic [ref=e503]: 12 presets
+                  - generic [ref=e504]: ▼
+            - generic [ref=e505]:
+              - generic [ref=e506]: Appearance
+              - generic [ref=e507]:
+                - generic [ref=e508]:
+                  - generic [ref=e509]: Walls
+                  - 'textbox "Walls #F3EEE6" [ref=e510]': "#f3eee6"
+                  - generic [ref=e511]: "#F3EEE6"
+                - generic [ref=e512]:
+                  - generic [ref=e513]: Floor
+                  - 'textbox "Floor #B88A63" [ref=e514]': "#b88a63"
+                  - generic [ref=e515]: "#B88A63"
+                - generic [ref=e516]:
+                  - generic [ref=e517]: Ceiling
+                  - 'textbox "Ceiling #FAF7F2" [ref=e518]': "#faf7f2"
+                  - generic [ref=e519]: "#FAF7F2"
+              - generic "Object colors" [ref=e520]:
+                - generic [ref=e521]:
+                  - generic [ref=e522]: sofa · sofa
+                  - 'textbox "sofa · sofa #6F7D7A" [ref=e523]': "#6f7d7a"
+                  - generic [ref=e524]: "#6F7D7A"
+                - generic [ref=e525]:
+                  - generic [ref=e526]: tv console · tv_console
+                  - 'textbox "tv console · tv_console #8A6A4F" [ref=e527]': "#8a6a4f"
+                  - generic [ref=e528]: "#8A6A4F"
+                - generic [ref=e529]:
+                  - generic [ref=e530]: console table · console_table
+                  - 'textbox "console table · console_table #A58A72" [ref=e531]': "#a58a72"
+                  - generic [ref=e532]: "#A58A72"
+                - generic [ref=e533]:
+                  - generic [ref=e534]: coffee table · coffee_table
+                  - 'textbox "coffee table · coffee_table #B08A6A" [ref=e535]': "#b08a6a"
+                  - generic [ref=e536]: "#B08A6A"
+                - generic [ref=e537]:
+                  - generic [ref=e538]: armchair · armchair
+                  - 'textbox "armchair · armchair #7E6F63" [ref=e539]': "#7e6f63"
+                  - generic [ref=e540]: "#7E6F63"
+                - generic [ref=e541]:
+                  - generic [ref=e542]: side table · side_table
+                  - 'textbox "side table · side_table #9C7A5E" [ref=e543]': "#9c7a5e"
+                  - generic [ref=e544]: "#9C7A5E"
+                - generic [ref=e545]:
+                  - generic [ref=e546]: rug · rug_001
+                  - 'textbox "rug · rug_001 #D9C7B2" [ref=e547]': "#d9c7b2"
+                  - generic [ref=e548]: "#D9C7B2"
+                - generic [ref=e549]:
+                  - generic [ref=e550]: cushion · cushion_001
+                  - 'textbox "cushion · cushion_001 #C97B63" [ref=e551]': "#c97b63"
+                  - generic [ref=e552]: "#C97B63"
+                - generic [ref=e553]:
+                  - generic [ref=e554]: speaker · speaker_001
+                  - 'textbox "speaker · speaker_001 #6F6F6F" [ref=e555]': "#6f6f6f"
+                  - generic [ref=e556]: "#6F6F6F"
+                - generic [ref=e557]:
+                  - generic [ref=e558]: mirror · mirror_001
+                  - 'textbox "mirror · mirror_001 #F7F7F4" [ref=e559]': "#f7f7f4"
+                  - generic [ref=e560]: "#F7F7F4"
+                - generic [ref=e561]:
+                  - generic [ref=e562]: vase · vase_001
+                  - 'textbox "vase · vase_001 #B86E5B" [ref=e563]': "#b86e5b"
+                  - generic [ref=e564]: "#B86E5B"
+                - generic [ref=e565]:
+                  - generic [ref=e566]: table lamp · table_lamp_001
+                  - 'textbox "table lamp · table_lamp_001 #D8CDBE" [ref=e567]': "#d8cdbe"
+                  - generic [ref=e568]: "#D8CDBE"
+                - generic [ref=e569]:
+                  - generic [ref=e570]: wall art · wall_art_001
+                  - 'textbox "wall art · wall_art_001 #C8B39A" [ref=e571]': "#c8b39a"
+                  - generic [ref=e572]: "#C8B39A"
+                - generic [ref=e573]:
+                  - generic [ref=e574]: ceiling light · ceiling_light_001
+                  - 'textbox "ceiling light · ceiling_light_001 #E7E1D8" [ref=e575]': "#e7e1d8"
+                  - generic [ref=e576]: "#E7E1D8"
+            - generic [ref=e577]: "Current view: Corner 1 · mid-height · 84deg FOV. Generate Image always uses the current 3D camera."
+            - generic [ref=e578]: Image Prompt
+            - textbox "Image Prompt" [ref=e579]:
+              - /placeholder: "Describe the look you want, for example: warm Japandi materials, soft natural daylight, premium photorealistic styling."
+            - generic [ref=e580]: Generate Image sends a clean 3D snapshot as the source plus a labeled structural guide. Labels guide the model but must not appear in the render.
+          - generic [ref=e581]: Click-drag to orbit. Click an object to select it, or click a wall to adjust its opacity.
+    - generic [ref=e587]:
+      - generic [ref=e588]: Loaded GLBs (14)
+      - generic [ref=e589]:
+        - generic [ref=e590]:
+          - strong [ref=e591]: armchair
+          - generic [ref=e592]: "raw: armchair | inventory: armchair_007"
+          - generic [ref=e593]: "model: armchair_007.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 180deg | final rot: 180deg"
+          - generic [ref=e594]: Loaded GLB with preview override for inventory asset "armchair_007".
+        - generic [ref=e595]:
+          - strong [ref=e596]: ceiling_light
+          - generic [ref=e597]: "raw: ceiling_light_001 | inventory: ceiling_light_001"
+          - generic [ref=e598]: "model: ceiling_light_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e599]: Loaded GLB for inventory asset "ceiling_light_001".
+        - generic [ref=e600]:
+          - strong [ref=e601]: coffee_table
+          - generic [ref=e602]: "raw: coffee_table | inventory: coffee_table_006"
+          - generic [ref=e603]: "model: coffee_table_006.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 270deg | final rot: 270deg"
+          - generic [ref=e604]: Loaded GLB with preview override for inventory asset "coffee_table_006".
+        - generic [ref=e605]:
+          - strong [ref=e606]: console_table
+          - generic [ref=e607]: "raw: console_table | inventory: console_table_007"
+          - generic [ref=e608]: "model: console_table_007.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e609]: Loaded GLB for inventory asset "console_table_007".
+        - generic [ref=e610]:
+          - strong [ref=e611]: cushion
+          - generic [ref=e612]: "raw: cushion_001 | inventory: cushion_001"
+          - generic [ref=e613]: "model: cushion_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e614]: Loaded GLB for inventory asset "cushion_001".
+        - generic [ref=e615]:
+          - strong [ref=e616]: mirror
+          - generic [ref=e617]: "raw: mirror_001 | inventory: mirror_001"
+          - generic [ref=e618]: "model: mirror_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e619]: Loaded GLB for inventory asset "mirror_001".
+        - generic [ref=e620]:
+          - strong [ref=e621]: rug
+          - generic [ref=e622]: "raw: rug_001 | inventory: rug_001"
+          - generic [ref=e623]: "model: rug_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e624]: Loaded GLB for inventory asset "rug_001".
+        - generic [ref=e625]:
+          - strong [ref=e626]: side_table
+          - generic [ref=e627]: "raw: side_table | inventory: side_table_007"
+          - generic [ref=e628]: "model: side_table_007.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e629]: Loaded GLB for inventory asset "side_table_007".
+        - generic [ref=e630]:
+          - strong [ref=e631]: sofa
+          - generic [ref=e632]: "raw: sofa | inventory: sofa_001"
+          - generic [ref=e633]: "model: sofa_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 180deg | final rot: 180deg"
+          - generic [ref=e634]: Loaded GLB with preview override for inventory asset "sofa_001".
+        - generic [ref=e635]:
+          - strong [ref=e636]: speaker
+          - generic [ref=e637]: "raw: speaker_001 | inventory: speaker_001"
+          - generic [ref=e638]: "model: speaker_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e639]: Loaded GLB for inventory asset "speaker_001".
+        - generic [ref=e640]:
+          - strong [ref=e641]: table_lamp
+          - generic [ref=e642]: "raw: table_lamp_001 | inventory: table_lamp_001"
+          - generic [ref=e643]: "model: table_lamp_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e644]: Loaded GLB for inventory asset "table_lamp_001".
+        - generic [ref=e645]:
+          - strong [ref=e646]: tv_console
+          - generic [ref=e647]: "raw: tv_console | inventory: tv_console_001"
+          - generic [ref=e648]: "model: tv_console_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 180deg | final rot: 180deg"
+          - generic [ref=e649]: Loaded GLB with preview override for inventory asset "tv_console_001".
+        - generic [ref=e650]:
+          - strong [ref=e651]: vase
+          - generic [ref=e652]: "raw: vase_001 | inventory: vase_001"
+          - generic [ref=e653]: "model: vase_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e654]: Loaded GLB for inventory asset "vase_001".
+        - generic [ref=e655]:
+          - strong [ref=e656]: wall_art
+          - generic [ref=e657]: "raw: wall_art_001 | inventory: wall_art_001"
+          - generic [ref=e658]: "model: wall_art_001.glb?access_token=UY6xBu5TV5xIM-_e6rdH-zi88FPdRXffNYaUuAudvEvbd6fA0QSptUTOv8UC4Vc7 | offset: 0deg | final rot: 0deg"
+          - generic [ref=e659]: Loaded GLB for inventory asset "wall_art_001".
+    - generic [ref=e46]:
+      - complementary [ref=e47]:
+        - button "User Input office · japandi Edit" [ref=e461] [cursor=pointer]:
+          - generic [ref=e49]:
+            - generic [ref=e50]: User Input
+            - generic [ref=e51]: office · japandi
+          - generic [ref=e52]: Edit
+      - generic [ref=e109]:
+        - button "My Workspace 12 layouts · 4 renders Hide" [expanded] [ref=e462] [cursor=pointer]:
+          - generic [ref=e111]:
+            - generic [ref=e112]: My Workspace
+            - generic [ref=e113]: 12 layouts · 4 renders
+          - generic [ref=e114]: Hide
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - strong [ref=e117]: Minh
+            - generic [ref=e118]: ntm.cmv@gmail.com
+          - generic [ref=e119]:
+            - searchbox "Search saved layouts" [ref=e121]
+            - button "Saved Layouts 12" [ref=e122] [cursor=pointer]:
+              - generic [ref=e123]: Saved Layouts
+              - strong [ref=e124]: "12"
+          - generic [ref=e186]:
+            - button "Saved Renders 4" [expanded] [ref=e463] [cursor=pointer]:
+              - generic [ref=e188]: Saved Renders
+              - strong [ref=e189]: "4"
+            - paragraph [ref=e464]: Showing renders linked to the loaded root layout.
+            - generic [ref=e190]:
+              - generic [ref=e191] [cursor=pointer]:
+                - img [ref=e192]
+                - generic [ref=e193]:
+                  - strong [ref=e194]: gpt-image-1.5
+                  - generic [ref=e195]: snapshot_render
+              - generic [ref=e196] [cursor=pointer]:
+                - img [ref=e197]
+                - generic [ref=e198]:
+                  - strong [ref=e199]: gpt-image-1.5
+                  - generic [ref=e200]: snapshot_render
+              - generic [ref=e201] [cursor=pointer]:
+                - img [ref=e202]
+                - generic [ref=e203]:
+                  - strong [ref=e204]: gpt-image-1.5
+                  - generic [ref=e205]: snapshot_render
+              - generic [ref=e456] [cursor=pointer]:
+                - img [ref=e457]
+                - generic [ref=e458]:
+                  - strong [ref=e459]: google/gemini-2.5-flash-image
+                  - generic [ref=e460]: snapshot_render

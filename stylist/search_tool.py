@@ -18,7 +18,12 @@ from bs4 import BeautifulSoup
 from clients.base_client import LLMClientProtocol
 from clients.llm_client import get_llm_client
 from config.semantic_search_config import SemanticSearchConfig
-from db.models import DesignKnowledge, DesignKnowledgeEmbedding, DesignKnowledgeFilter, TenantId
+from db.models import (
+    DesignKnowledge,
+    DesignKnowledgeEmbedding,
+    DesignKnowledgeFilter,
+    TenantId,
+)
 from db.repositories import DesignKnowledgeRepository
 from stylist.rules import get_soft_rule_templates
 
@@ -99,15 +104,21 @@ class GoogleSearchProvider(SearchProvider):
         if self._region:
             params["gl"] = self._region
 
-        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout, follow_redirects=True
+        ) as client:
             last_error: Exception | None = None
             for attempt in range(1, self._retries + 1):
                 try:
                     if attempt > 1:
-                        delay = min(self._retry_base * (2 ** (attempt - 2)), self._retry_max)
+                        delay = min(
+                            self._retry_base * (2 ** (attempt - 2)), self._retry_max
+                        )
                         jitter = random.uniform(0, delay * 0.2)
                         await asyncio.sleep(delay + jitter)
-                    search_logger.info("Google search attempt %d/%d", attempt, self._retries)
+                    search_logger.info(
+                        "Google search attempt %d/%d", attempt, self._retries
+                    )
                     resp = await client.get(
                         "https://www.google.com/search",
                         headers=headers,
@@ -116,7 +127,9 @@ class GoogleSearchProvider(SearchProvider):
                     resp.raise_for_status()
                     html = resp.text
                     if _is_google_blocked(html):
-                        search_logger.warning("Google blocked or consent page detected.")
+                        search_logger.warning(
+                            "Google blocked or consent page detected."
+                        )
                         _dump_search_html(html, query)
                         last_error = RuntimeError("google_blocked")
                         continue
@@ -131,7 +144,9 @@ class GoogleSearchProvider(SearchProvider):
                     return results
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
-                    search_logger.warning("Google search failed (attempt %d): %s", attempt, exc)
+                    search_logger.warning(
+                        "Google search failed (attempt %d): %s", attempt, exc
+                    )
                     continue
             if last_error:
                 logger.warning("Google search failed after retries: %s", last_error)
@@ -176,15 +191,21 @@ class DuckDuckGoSearchProvider(SearchProvider):
             "kl": self._region or "us-en",
             "kp": self._safe,
         }
-        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout, follow_redirects=True
+        ) as client:
             last_error: Exception | None = None
             for attempt in range(1, self._retries + 1):
                 try:
                     if attempt > 1:
-                        delay = min(self._retry_base * (2 ** (attempt - 2)), self._retry_max)
+                        delay = min(
+                            self._retry_base * (2 ** (attempt - 2)), self._retry_max
+                        )
                         jitter = random.uniform(0, delay * 0.2)
                         await asyncio.sleep(delay + jitter)
-                    search_logger.info("DuckDuckGo search attempt %d/%d", attempt, self._retries)
+                    search_logger.info(
+                        "DuckDuckGo search attempt %d/%d", attempt, self._retries
+                    )
                     resp = await client.get(
                         "https://html.duckduckgo.com/html/",
                         headers=headers,
@@ -199,7 +220,9 @@ class DuckDuckGoSearchProvider(SearchProvider):
                     return results
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
-                    search_logger.warning("DuckDuckGo search failed (attempt %d): %s", attempt, exc)
+                    search_logger.warning(
+                        "DuckDuckGo search failed (attempt %d): %s", attempt, exc
+                    )
                     continue
             if last_error:
                 logger.warning("DuckDuckGo search failed after retries: %s", last_error)
@@ -241,10 +264,14 @@ class StyleKnowledgeHarvester:
         template_ids: Sequence[str] | None = None,
     ) -> None:
         if self._search is None:
-            logger.info("Search provider not configured; skipping soft-rule enrichment.")
+            logger.info(
+                "Search provider not configured; skipping soft-rule enrichment."
+            )
             return
 
-        style = str(user_preferences.get("style") or "general").strip().lower() or "general"
+        style = (
+            str(user_preferences.get("style") or "general").strip().lower() or "general"
+        )
         room_type = str(user_preferences.get("room_type") or "room").strip().lower()
         if _style_has_soft_rules(repo=self._repo, style=style, tenant_id=tenant_id):
             search_logger.info(
@@ -252,19 +279,29 @@ class StyleKnowledgeHarvester:
                 style,
             )
             return
-        search_logger.info("Style harvester start. style=%s room_type=%s", style, room_type)
+        search_logger.info(
+            "Style harvester start. style=%s room_type=%s", style, room_type
+        )
 
         templates = get_soft_rule_templates()
         selected_templates = (
-            {template_id: templates[template_id] for template_id in template_ids or [] if template_id in templates}
+            {
+                template_id: templates[template_id]
+                for template_id in template_ids or []
+                if template_id in templates
+            }
             if template_ids
             else templates
         )
         for template_id, template in selected_templates.items():
             if self._has_existing_knowledge(template_id, style, tenant_id):
-                search_logger.info("Soft-rule knowledge exists: %s/%s", template_id, style)
+                search_logger.info(
+                    "Soft-rule knowledge exists: %s/%s", template_id, style
+                )
                 continue
-            queries = _build_queries(template_id, template, style, room_type, user_preferences)
+            queries = _build_queries(
+                template_id, template, style, room_type, user_preferences
+            )
             results: list[SearchResult] = []
             query_used = ""
             for query in queries:
@@ -275,10 +312,12 @@ class StyleKnowledgeHarvester:
                     break
                 if self._fallback:
                     search_logger.info(
-                        "Primary search empty; fallback to %s", type(self._fallback).__name__
+                        "Primary search empty; fallback to %s",
+                        type(self._fallback).__name__,
                     )
                     logger.info(
-                        "Primary search empty; fallback to %s", type(self._fallback).__name__
+                        "Primary search empty; fallback to %s",
+                        type(self._fallback).__name__,
                     )
                     results = self._fallback.search(query, top_k=5)
                     if results:
@@ -322,7 +361,9 @@ class StyleKnowledgeHarvester:
                 user_preferences=user_preferences,
                 results=results,
             )
-            search_logger.info("Summaries generated: %d for %s", len(summaries), template_id)
+            search_logger.info(
+                "Summaries generated: %d for %s", len(summaries), template_id
+            )
             _store_summaries(
                 repo=self._repo,
                 client=self._client,
@@ -443,7 +484,9 @@ def _summarize_results(
                     "field": str(field),
                     "summary": str(summary),
                     "url": url,
-                    "sources": [str(src) for src in sources] if isinstance(sources, list) else [],
+                    "sources": [str(src) for src in sources]
+                    if isinstance(sources, list)
+                    else [],
                 }
             )
         else:
@@ -521,7 +564,10 @@ def _llm_extract_rules(
     )
     try:
         response = client.chat_completion(
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
             model_key="helper",
             temperature=0.1,
         )
@@ -581,11 +627,14 @@ def _map_rules_to_fields(
     user = (
         "Return JSON with shape: {items: [{field, summary, sources}]}. "
         "You MUST include every field from context_fields. "
-        "If no info, set summary=\"\" and sources=[].\n\n"
+        'If no info, set summary="" and sources=[].\n\n'
         f"INPUT: {json.dumps(payload, ensure_ascii=True)}"
     )
     response = client.chat_completion(
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
         model_key="helper",
         temperature=0.1,
     )
@@ -680,7 +729,13 @@ def _store_summaries(
             category="soft_rule",
             tags=tags,
             source=url,
-            meta={"query": query, "field": field, "style": style, "url": url, "links": links},
+            meta={
+                "query": query,
+                "field": field,
+                "style": style,
+                "url": url,
+                "links": links,
+            },
         )
         repo.create_knowledge(knowledge)
         embedding = _embed_text(client, summary)
@@ -691,7 +746,12 @@ def _store_summaries(
                     content=summary,
                     vector=embedding,
                     model=client.get_model_name("embedding"),
-                    meta={"source": url, "field": field, "style": style, "links": links},
+                    meta={
+                        "source": url,
+                        "field": field,
+                        "style": style,
+                        "links": links,
+                    },
                 )
             )
 
@@ -808,7 +868,9 @@ async def _crawl_async(results: list[SearchResult]) -> list[SearchResult]:
             for result in results:
                 url = _normalize_url(result.url)
                 if not url:
-                    search_logger.warning("crawl4ai skipped invalid url: %s", result.url)
+                    search_logger.warning(
+                        "crawl4ai skipped invalid url: %s", result.url
+                    )
                     enriched.append(result)
                     continue
                 try:

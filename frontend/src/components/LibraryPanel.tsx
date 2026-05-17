@@ -1,40 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  createObject3DFromImage,
-  createObject3DFromPrompt,
-  fetchInventory,
-  getObject3DJobStatus,
-  listGeneratedRenders,
-} from '../api';
 import { useEditorStore } from '../store';
 import { InventoryItem } from '../types';
 
-type CustomObjectMode = 'prompt' | 'image';
+type LibrarySectionKey = 'owned' | 'shared';
 
 export const LibraryPanel: React.FC = () => {
   const inventory = useEditorStore((state) => state.inventory);
   const roomType = useEditorStore((state) => state.userInput.room_type);
-  const tenantId = useEditorStore((state) => state.tenantId);
-  const setInventory = useEditorStore((state) => state.setInventory);
-  const setSavedRenders = useEditorStore((state) => state.setSavedRenders);
-  const appendRunLog = useEditorStore((state) => state.appendRunLog);
   const [searchQuery, setSearchQuery] = useState('');
   const [styleFilter, setStyleFilter] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('all');
-  const [mode, setMode] = useState<CustomObjectMode>('prompt');
-  const [objectName, setObjectName] = useState('');
-  const [category, setCategory] = useState('custom_object');
-  const [widthMm, setWidthMm] = useState('600');
-  const [depthMm, setDepthMm] = useState('600');
-  const [heightMm, setHeightMm] = useState('900');
-  const [prompt, setPrompt] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [creatorError, setCreatorError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeJobStatus, setActiveJobStatus] = useState<Awaited<
-    ReturnType<typeof getObject3DJobStatus>
-  > | null>(null);
+  const [openSections, setOpenSections] = useState<Record<LibrarySectionKey, boolean>>({
+    owned: false,
+    shared: false,
+  });
 
   const styleOptions = useMemo(() => {
     const tags = new Set<string>();
@@ -54,30 +33,37 @@ export const LibraryPanel: React.FC = () => {
     const normalizedStyle = styleFilter.trim().toLowerCase();
     const normalizedRoomType = roomTypeFilter === 'current' ? roomType : roomTypeFilter;
 
-    return inventory.filter((item) => {
-      const haystack = [item.name, item.category, ...(item.style_tags ?? [])]
-        .join(' ')
-        .toLowerCase();
-      if (query && !haystack.includes(query)) {
-        return false;
-      }
-      if (
-        normalizedStyle &&
-        !(item.style_tags ?? []).some((tag) =>
-          String(tag).toLowerCase().includes(normalizedStyle)
-        )
-      ) {
-        return false;
-      }
-      if (
-        normalizedRoomType &&
-        normalizedRoomType !== 'all' &&
-        !matchesRoomType(item, normalizedRoomType)
-      ) {
-        return false;
-      }
-      return true;
-    });
+    return inventory
+      .filter((item) => {
+        const haystack = [item.name, item.category, ...(item.style_tags ?? [])]
+          .join(' ')
+          .toLowerCase();
+        if (query && !haystack.includes(query)) {
+          return false;
+        }
+        if (
+          normalizedStyle &&
+          !(item.style_tags ?? []).some((tag) =>
+            String(tag).toLowerCase().includes(normalizedStyle)
+          )
+        ) {
+          return false;
+        }
+        if (
+          normalizedRoomType &&
+          normalizedRoomType !== 'all' &&
+          !matchesRoomType(item, normalizedRoomType)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((left, right) =>
+        left.name.localeCompare(right.name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      );
   }, [inventory, roomType, roomTypeFilter, searchQuery, styleFilter]);
 
   const ownedInventory = visibleInventory.filter(
@@ -88,221 +74,23 @@ export const LibraryPanel: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!activeJobId) {
-      return undefined;
+    const hasActiveFilter =
+      searchQuery.trim() !== '' || styleFilter.trim() !== '' || roomTypeFilter !== 'all';
+    if (hasActiveFilter) {
+      setOpenSections({ owned: true, shared: true });
     }
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status = await getObject3DJobStatus(activeJobId);
-        if (cancelled) {
-          return;
-        }
-        setActiveJobStatus(status);
-        if (status.stage === 'done') {
-          const [nextInventory, nextRenders] = await Promise.all([
-            fetchInventory(tenantId),
-            listGeneratedRenders(),
-          ]);
-          if (cancelled) {
-            return;
-          }
-          setInventory(nextInventory);
-          setSavedRenders(nextRenders);
-          appendRunLog(
-            `Custom object "${status.result?.persisted_asset_name ?? objectName}" is now available in your library.`
-          );
-          setCreating(false);
-          return;
-        }
-        if (status.stage === 'error') {
-          setCreatorError(status.error ?? '3D generation failed.');
-          setCreating(false);
-          return;
-        }
-        window.setTimeout(poll, 2000);
-      } catch (pollError) {
-        if (!cancelled) {
-          setCreatorError(
-            pollError instanceof Error ? pollError.message : 'Failed to track 3D job.'
-          );
-          setCreating(false);
-        }
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeJobId,
-    appendRunLog,
-    objectName,
-    setInventory,
-    setSavedRenders,
-    tenantId,
-  ]);
+  }, [roomTypeFilter, searchQuery, styleFilter]);
 
-  const handleCreateObject = async () => {
-    setCreatorError(null);
-    const normalizedName = objectName.trim();
-    const normalizedCategory = category.trim();
-    const width = Number(widthMm);
-    const depth = Number(depthMm);
-    const height = Number(heightMm);
-    if (!normalizedName || !normalizedCategory) {
-      setCreatorError('Name and category are required.');
-      return;
-    }
-    if (!Number.isFinite(width) || !Number.isFinite(depth) || !Number.isFinite(height)) {
-      setCreatorError('Please enter valid numeric dimensions.');
-      return;
-    }
-    if (width <= 0 || depth <= 0 || height <= 0) {
-      setCreatorError('Dimensions must be positive.');
-      return;
-    }
-    if (mode === 'prompt' && !prompt.trim()) {
-      setCreatorError('Please describe the object you want to generate.');
-      return;
-    }
-    if (mode === 'image' && !imageFile) {
-      setCreatorError('Please upload an image for TripoSR preprocessing.');
-      return;
-    }
-
-    setCreating(true);
-    setActiveJobStatus(null);
-    try {
-      const response =
-        mode === 'prompt'
-          ? await createObject3DFromPrompt({
-              name: normalizedName,
-              category: normalizedCategory,
-              width_mm: width,
-              depth_mm: depth,
-              height_mm: height,
-              prompt: prompt.trim(),
-            })
-          : await createObject3DFromImage({
-              file: imageFile as File,
-              name: normalizedName,
-              category: normalizedCategory,
-              width_mm: width,
-              depth_mm: depth,
-              height_mm: height,
-            });
-      setActiveJobId(response.job_id);
-      appendRunLog(`Started custom 3D object job: ${response.job_id}`);
-    } catch (creationError) {
-      setCreating(false);
-      setCreatorError(
-        creationError instanceof Error ? creationError.message : 'Failed to create object.'
-      );
-    }
+  const toggleSection = (section: LibrarySectionKey) => {
+    setOpenSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
   };
 
   return (
     <aside className="panel library-panel">
       <h3>Library</h3>
-      <div className="custom-object-card">
-        <div className="custom-object-header">
-          <strong>Create Custom 3D Object</strong>
-          <span>Saved into your private library</span>
-        </div>
-        <div className="custom-mode-toggle">
-          <button
-            className={mode === 'prompt' ? 'active' : ''}
-            onClick={() => setMode('prompt')}
-            type="button"
-          >
-            Prompt
-          </button>
-          <button
-            className={mode === 'image' ? 'active' : ''}
-            onClick={() => setMode('image')}
-            type="button"
-          >
-            Upload Image
-          </button>
-        </div>
-        <div className="custom-object-form">
-          <input
-            type="text"
-            value={objectName}
-            onChange={(event) => setObjectName(event.target.value)}
-            placeholder="Object name"
-          />
-          <input
-            type="text"
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            placeholder="Category"
-          />
-          <div className="custom-dimension-grid">
-            <input
-              type="number"
-              min="1"
-              value={widthMm}
-              onChange={(event) => setWidthMm(event.target.value)}
-              placeholder="Width (mm)"
-            />
-            <input
-              type="number"
-              min="1"
-              value={depthMm}
-              onChange={(event) => setDepthMm(event.target.value)}
-              placeholder="Depth (mm)"
-            />
-            <input
-              type="number"
-              min="1"
-              value={heightMm}
-              onChange={(event) => setHeightMm(event.target.value)}
-              placeholder="Height (mm)"
-            />
-          </div>
-          {mode === 'prompt' ? (
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="A white ceramic floor vase with soft rounded shoulders on a plain white background"
-              rows={5}
-            />
-          ) : (
-            <label className="file-input">
-              <span>{imageFile ? imageFile.name : 'Choose an object image'}</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
-              />
-            </label>
-          )}
-          {creatorError ? <div className="inline-error">{creatorError}</div> : null}
-          {activeJobStatus ? (
-            <div className="job-status-card">
-              <strong>{activeJobStatus.stage}</strong>
-              <span>{activeJobStatus.message || 'Working on your object...'}</span>
-              {activeJobStatus.artifact_urls.preprocessed_image ? (
-                <img
-                  src={activeJobStatus.artifact_urls.preprocessed_image}
-                  alt="Preprocessed object reference"
-                />
-              ) : null}
-            </div>
-          ) : null}
-          <button
-            className="primary-button"
-            disabled={creating}
-            onClick={handleCreateObject}
-            type="button"
-          >
-            {creating ? 'Generating...' : 'Create object'}
-          </button>
-        </div>
-      </div>
-
       <div className="library-filters">
         <input
           type="search"
@@ -339,8 +127,18 @@ export const LibraryPanel: React.FC = () => {
           <p className="muted">No inventory matches the current filters.</p>
         ) : (
           <>
-            <LibrarySection label={`Your objects (${ownedInventory.length})`} items={ownedInventory} />
-            <LibrarySection label={`Shared inventory (${sharedInventory.length})`} items={sharedInventory} />
+            <LibrarySection
+              isOpen={openSections.owned}
+              items={ownedInventory}
+              label="Your objects"
+              onToggle={() => toggleSection('owned')}
+            />
+            <LibrarySection
+              isOpen={openSections.shared}
+              items={sharedInventory}
+              label="Shared inventory"
+              onToggle={() => toggleSection('shared')}
+            />
           </>
         )}
       </div>
@@ -348,19 +146,38 @@ export const LibraryPanel: React.FC = () => {
   );
 };
 
-const LibrarySection: React.FC<{ label: string; items: InventoryItem[] }> = ({
+const LibrarySection: React.FC<{
+  isOpen: boolean;
+  label: string;
+  items: InventoryItem[];
+  onToggle: () => void;
+}> = ({
+  isOpen,
   label,
   items,
+  onToggle,
 }) => {
   if (items.length === 0) {
     return null;
   }
   return (
     <div className="library-section">
-      <div className="library-section-title">{label}</div>
-      {items.map((item) => (
-        <LibraryItem key={item.asset_id} item={item} />
-      ))}
+      <button
+        type="button"
+        className="library-section-trigger"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+      >
+        <span>{label}</span>
+        <strong>{items.length}</strong>
+      </button>
+      {isOpen ? (
+        <div className="library-section-items">
+          {items.map((item) => (
+            <LibraryItem key={item.asset_id} item={item} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };

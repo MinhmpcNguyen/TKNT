@@ -38,6 +38,24 @@ export const LayoutVariantsGallery: React.FC = () => {
   const layoutVariants = useEditorStore((state) => state.layoutVariants);
   const selectedVariantId = useEditorStore((state) => state.selectedVariantId);
   const selectLayoutVariant = useEditorStore((state) => state.selectLayoutVariant);
+  const setFloorplan = useEditorStore((state) => state.setFloorplan);
+  const setDesign = useEditorStore((state) => state.setDesign);
+  const setStyledResult = useEditorStore((state) => state.setStyledResult);
+  const setViewMode = useEditorStore((state) => state.setViewMode);
+  const setVariantPickerOpen = useEditorStore((state) => state.setVariantPickerOpen);
+  const appendRunLog = useEditorStore((state) => state.appendRunLog);
+
+  const applyVariantToEditor = (variant: LayoutVariant) => {
+    if (variant.design) {
+      setFloorplan(variant.design.floorplan_geometry);
+      setDesign(variant.design);
+    }
+    setStyledResult(variant.styled_result);
+    selectLayoutVariant(variant.variant_id);
+    setViewMode('2d');
+    setVariantPickerOpen(false);
+    appendRunLog(`Selected layout: ${variant.label}`);
+  };
 
   if (!layoutVariants.length) {
     return (
@@ -58,8 +76,8 @@ export const LayoutVariantsGallery: React.FC = () => {
         <div>
           <h2>Design Options</h2>
           <p>
-            Compare {layoutVariants.length} layouts, click one card to inspect it,
-            then choose it from the toolbar.
+            Compare {layoutVariants.length} layouts. Click to inspect, double-click
+            to load one into the editor.
           </p>
         </div>
         <div className="layout-variants-count">{layoutVariants.length} options</div>
@@ -79,6 +97,7 @@ export const LayoutVariantsGallery: React.FC = () => {
               type="button"
               className={`layout-variant-card${isSelected ? ' selected' : ''}`}
               onClick={() => selectLayoutVariant(variant.variant_id)}
+              onDoubleClick={() => applyVariantToEditor(variant)}
             >
               <div className="layout-variant-card-header">
                 <div>

@@ -1,0 +1,28 @@
+{
+  "status": "OK",
+  "total_dropped_items": 3,
+  "clusters": [
+    {
+      "cluster_id": "sleep_core",
+      "items": [
+        {
+          "object_id": "nightstand_2",
+          "reason": "support_slot_failed"
+        }
+      ]
+    },
+    {
+      "cluster_id": "work_study",
+      "items": [
+        {
+          "object_id": "desk",
+          "reason": "optional_trial_anchor_cluster_not_placed"
+        },
+        {
+          "object_id": "chair",
+          "reason": "optional_trial_anchor_cluster_not_placed"
+        }
+      ]
+    }
+  ]
+}

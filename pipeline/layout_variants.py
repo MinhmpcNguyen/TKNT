@@ -26,6 +26,9 @@ class _VariantCandidate:
     state_signature: str = ""
 
 
+_BackfillRank = tuple[int, int, int, int, int, int, int, float, int, int]
+
+
 def select_distinct_final_gallery_candidates(
     *,
     candidates: list[dict[str, Any]],
@@ -98,6 +101,8 @@ def select_distinct_final_gallery_candidates(
             selected_indices=selected_indices,
             seen_state=seen_state,
             seen_visual_family=seen_visual_family,
+            seen_concept=seen_concept,
+            seen_anchor=seen_anchor,
         )
         if backfill_row is None:
             break
@@ -159,18 +164,28 @@ def _best_backfill_candidate(
     selected_indices: set[int],
     seen_state: set[str],
     seen_visual_family: set[str],
+    seen_concept: set[str],
+    seen_anchor: set[str],
 ) -> tuple[int, _VariantCandidate, dict[str, Any]] | None:
-    best_rank: tuple[int, int, int, int, float, int, int] | None = None
+    best_rank: _BackfillRank | None = None
     best_row: tuple[int, _VariantCandidate, dict[str, Any]] | None = None
     for pool_index, (candidate, raw) in enumerate(pool):
         if pool_index in selected_indices:
             continue
         if candidate.state_signature and candidate.state_signature in seen_state:
             continue
+        if not _candidate_adds_backfill_diversity(
+            candidate,
+            selected_candidates=selected_candidates,
+            seen_visual_family=seen_visual_family,
+        ):
+            continue
         rank = _candidate_backfill_rank_tuple(
             candidate,
             selected_candidates=selected_candidates,
             seen_visual_family=seen_visual_family,
+            seen_concept=seen_concept,
+            seen_anchor=seen_anchor,
             pool_index=pool_index,
         )
         if best_rank is None or rank > best_rank:
@@ -179,17 +194,66 @@ def _best_backfill_candidate(
     return best_row
 
 
+def _candidate_adds_backfill_diversity(
+    candidate: _VariantCandidate,
+    *,
+    selected_candidates: list[_VariantCandidate],
+    seen_visual_family: set[str],
+) -> bool:
+    if not selected_candidates:
+        return True
+    if (
+        candidate.visual_family_signature
+        and candidate.visual_family_signature not in seen_visual_family
+    ):
+        return True
+    selected_macro_signatures = {
+        row.macro_layout_signature
+        for row in selected_candidates
+        if row.macro_layout_signature
+    }
+    return bool(
+        candidate.macro_layout_signature
+        and candidate.macro_layout_signature not in selected_macro_signatures
+    )
+
+
 def _candidate_backfill_rank_tuple(
     candidate: _VariantCandidate,
     *,
     selected_candidates: list[_VariantCandidate],
     seen_visual_family: set[str],
+    seen_concept: set[str],
+    seen_anchor: set[str],
     pool_index: int,
-) -> tuple[int, int, int, int, float, int, int]:
+) -> _BackfillRank:
+    concept_is_new = int(
+        bool(
+            candidate.concept_signature
+            and candidate.concept_signature not in seen_concept
+        )
+    )
+    anchor_is_new = int(
+        bool(
+            candidate.anchor_signature
+            and candidate.anchor_signature not in seen_anchor
+        )
+    )
     visual_family_is_new = int(
         bool(
             candidate.visual_family_signature
             and candidate.visual_family_signature not in seen_visual_family
+        )
+    )
+    selected_macro_signatures = {
+        row.macro_layout_signature
+        for row in selected_candidates
+        if row.macro_layout_signature
+    }
+    macro_layout_is_new = int(
+        bool(
+            candidate.macro_layout_signature
+            and candidate.macro_layout_signature not in selected_macro_signatures
         )
     )
     if selected_candidates:
@@ -203,6 +267,9 @@ def _candidate_backfill_rank_tuple(
         candidate
     )
     return (
+        concept_is_new,
+        anchor_is_new,
+        macro_layout_is_new,
         visual_family_is_new,
         distance,
         gallery_eligible,
@@ -333,7 +400,7 @@ def build_final_gallery_selection_summary(
         else:
             notes.append(
                 "Final gallery returned fewer options because remaining candidates "
-                "were exact duplicate layout states."
+                "were too visually similar to selected options."
             )
     elif collapsed_visual_families:
         notes.append(

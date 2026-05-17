@@ -88,7 +88,7 @@ _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
         "collision_layer": "floor_underlay",
         "place_on": {"target_instance_id": "floor", "method": "floor"},
     },
-    "ceiling_lamp": {
+    "ceiling_light": {
         "width": 450,
         "height": 450,
         "collision_layer": "ceiling",

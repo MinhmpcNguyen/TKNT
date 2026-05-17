@@ -71,7 +71,7 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
             ["distinct", "distinct"],
         )
 
-    def test_selector_backfills_same_visual_family_to_preserve_count(self) -> None:
+    def test_selector_caps_backfill_to_meaningful_visual_families(self) -> None:
         candidates = [
             _candidate("option_1", _layout(0)),
             _candidate("exact_duplicate", _layout(0)),
@@ -88,7 +88,7 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
             max_variants=5,
         )
 
-        self.assertEqual(len(selected), 5)
+        self.assertEqual(len(selected), 2)
         self.assertNotIn("exact_duplicate", {row["source"] for row in selected})
         self.assertEqual(
             len({row["state_signature"] for row in selected}),
@@ -98,11 +98,27 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
             [row["gallery_selection_mode"] for row in selected].count("distinct"),
             2,
         )
+        self.assertEqual(selected[1]["source"], "option_5")
+
+    def test_selector_does_not_backfill_unseen_concept_when_layout_is_too_similar(
+        self,
+    ) -> None:
+        selected = layout_variants.select_distinct_final_gallery_candidates(
+            candidates=[
+                _candidate("concept:concept_01", _layout(0), score=100),
+                _candidate("concept:concept_01", _layout(260), score=99),
+                _candidate("concept:concept_02", _layout(50), score=10),
+            ],
+            max_variants=2,
+        )
+
         self.assertEqual(
-            [row["gallery_selection_mode"] for row in selected].count(
-                "fallback_near_distinct"
-            ),
-            3,
+            [row["source"] for row in selected],
+            ["concept:concept_01"],
+        )
+        self.assertEqual(
+            [row["gallery_selection_mode"] for row in selected],
+            ["distinct"],
         )
 
 

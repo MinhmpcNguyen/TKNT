@@ -1268,59 +1268,6 @@ def _cluster_intents_by_id(payload: Dict[str, Any]) -> Dict[str, set[str]]:
             if text:
                 slot.add(text)
 
-    def _targeted_object_nudge_offsets(
-        cluster_id: str, object_id: str, intents: set[str]
-    ) -> list[tuple[int, int]]:
-        obj = object_state_by_key.get((cluster_id, object_id))
-        if not isinstance(obj, dict):
-            return []
-        cluster_rot = int(obj.get("cluster_rot") or obj.get("rotation_ccw") or 0)
-        relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
-        reference_object = _reference_object_for_enum(
-            cluster_id=cluster_id,
-            object_id=object_id,
-            relation_target=relation_target,
-        )
-        if not isinstance(reference_object, dict):
-            return []
-        reference_front = parse_vec2(reference_object.get("front_world"))
-        if reference_front is None:
-            return []
-        obj_center = (
-            float((obj.get("world_center") or {}).get("x") or 0.0),
-            float((obj.get("world_center") or {}).get("y") or 0.0),
-        )
-        ref_center = (
-            float((reference_object.get("world_center") or {}).get("x") or 0.0),
-            float((reference_object.get("world_center") or {}).get("y") or 0.0),
-        )
-        world_vectors: list[tuple[float, float] | None] = []
-        if intents & {"not_behind_anchor_view", "in_front_of_anchor"}:
-            rel_vec = _vec_from_to(ref_center, obj_center)
-            raw_dot = _dot(reference_front, rel_vec)
-            signed = (
-                0.0
-                if raw_dot is None
-                else raw_dot * _distance_between_points(ref_center, obj_center)
-            )
-            threshold = 120.0 if "in_front_of_anchor" in intents else 0.0
-            if signed < threshold:
-                world_vectors.append(reference_front)
-        seen: set[tuple[int, int]] = set()
-        out: list[tuple[int, int]] = []
-        for vector in world_vectors:
-            local_dir = _world_vector_to_local(cluster_rot, vector)
-            if local_dir is None:
-                continue
-            for dx, dy in _offsets_from_vector(
-                local_dir[0], local_dir[1], include_far_steps=False
-            ):
-                if (dx, dy) == (0, 0) or (dx, dy) in seen:
-                    continue
-                seen.add((dx, dy))
-                out.append((dx, dy))
-        return out[:4]
-
     for row in relation_plan.get("object_orientations") or []:
         if not isinstance(row, dict):
             continue
@@ -4674,6 +4621,59 @@ def EnumeratePhase2RepairMoves(
         if isinstance(ref, dict) and str(ref.get("object_id") or "") != object_id:
             return ref
         return None
+
+    def _targeted_object_nudge_offsets(
+        cluster_id: str, object_id: str, intents: set[str]
+    ) -> list[tuple[int, int]]:
+        obj = object_state_by_key.get((cluster_id, object_id))
+        if not isinstance(obj, dict):
+            return []
+        cluster_rot = int(obj.get("cluster_rot") or obj.get("rotation_ccw") or 0)
+        relation_target = relation_object_targets.get((cluster_id, object_id)) or {}
+        reference_object = _reference_object_for_enum(
+            cluster_id=cluster_id,
+            object_id=object_id,
+            relation_target=relation_target,
+        )
+        if not isinstance(reference_object, dict):
+            return []
+        reference_front = parse_vec2(reference_object.get("front_world"))
+        if reference_front is None:
+            return []
+        obj_center = (
+            float((obj.get("world_center") or {}).get("x") or 0.0),
+            float((obj.get("world_center") or {}).get("y") or 0.0),
+        )
+        ref_center = (
+            float((reference_object.get("world_center") or {}).get("x") or 0.0),
+            float((reference_object.get("world_center") or {}).get("y") or 0.0),
+        )
+        world_vectors: list[tuple[float, float] | None] = []
+        if intents & {"not_behind_anchor_view", "in_front_of_anchor"}:
+            rel_vec = _vec_from_to(ref_center, obj_center)
+            raw_dot = _dot(reference_front, rel_vec)
+            signed = (
+                0.0
+                if raw_dot is None
+                else raw_dot * _distance_between_points(ref_center, obj_center)
+            )
+            threshold = 120.0 if "in_front_of_anchor" in intents else 0.0
+            if signed < threshold:
+                world_vectors.append(reference_front)
+        seen: set[tuple[int, int]] = set()
+        out: list[tuple[int, int]] = []
+        for vector in world_vectors:
+            local_dir = _world_vector_to_local(cluster_rot, vector)
+            if local_dir is None:
+                continue
+            for dx, dy in _offsets_from_vector(
+                local_dir[0], local_dir[1], include_far_steps=False
+            ):
+                if (dx, dy) == (0, 0) or (dx, dy) in seen:
+                    continue
+                seen.add((dx, dy))
+                out.append((dx, dy))
+        return out[:4]
 
     def _front_override_dirs(
         cluster_id: str, object_id: str, intents: set[str]

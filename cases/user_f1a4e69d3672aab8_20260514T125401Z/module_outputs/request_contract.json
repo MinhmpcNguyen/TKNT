@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "source": "brief_text_heuristic",
+  "objects": [
+    {
+      "object_type": "chair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a compact dining table with dining chairs",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "dining_chair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a compact dining table with dining chairs",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "dining_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a compact dining table with dining chairs",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "fridge",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a fridge",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "kitchen_base_cabinet",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a prep counter with base cabinets",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "kitchen_island",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "keep circulation clear and do not add an island unless it clearly fits",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false
+    },
+    {
+      "object_type": "sink",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a sink",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    },
+    {
+      "object_type": "stove",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a stove",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": true
+    }
+  ],
+  "groups": [],
+  "notes": [
+    "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+  ]
+}

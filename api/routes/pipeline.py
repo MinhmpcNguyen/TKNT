@@ -103,6 +103,9 @@ class SnapshotImageRenderRequest(BaseModel):
     snapshot_payload: dict[str, Any] | None = None
     snapshot_path: str | None = None
     snapshot_image_data_url: str | None = None
+    depth_map_image_data_url: str | None = None
+    edge_map_image_data_url: str | None = None
+    segmentation_map_image_data_url: str | None = None
     layout_reference_image_data_url: str | None = None
     annotated_reference_image_data_url: str | None = None
     scene_reference_image_data_url: str | None = None
@@ -424,6 +427,9 @@ def render_snapshot_image_route(
             render = render_snapshot_image(
                 req.snapshot_payload,
                 snapshot_image_data_url=req.snapshot_image_data_url,
+                depth_map_image_data_url=req.depth_map_image_data_url,
+                edge_map_image_data_url=req.edge_map_image_data_url,
+                segmentation_map_image_data_url=req.segmentation_map_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
                 annotated_reference_image_data_url=(
                     req.annotated_reference_image_data_url
@@ -441,6 +447,9 @@ def render_snapshot_image_route(
             render = render_snapshot_image_from_path(
                 req.snapshot_path or "",
                 snapshot_image_data_url=req.snapshot_image_data_url,
+                depth_map_image_data_url=req.depth_map_image_data_url,
+                edge_map_image_data_url=req.edge_map_image_data_url,
+                segmentation_map_image_data_url=req.segmentation_map_image_data_url,
                 layout_reference_image_data_url=req.layout_reference_image_data_url,
                 annotated_reference_image_data_url=(
                     req.annotated_reference_image_data_url
@@ -517,6 +526,14 @@ def render_snapshot_image_route(
                     "layout_reference_enabled": bool(
                         render["request"]["layout_reference_enabled"]
                     ),
+                    "geometry_references_used": render["request"].get(
+                        "geometry_references_used"
+                    ),
+                    "geometry_reference_image_mime_types": render["request"].get(
+                        "geometry_reference_image_mime_types"
+                    ),
+                    "validation": metadata_payload.get("validation"),
+                    "retry_count": render["image"].get("retry_count"),
                     "layout_reference_used": bool(
                         render["request"]["layout_reference_used"]
                     ),

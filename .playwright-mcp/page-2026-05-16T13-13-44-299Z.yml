@@ -1,0 +1,27 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - heading "Inventory GLB Visual Check" [level=1] [ref=e4]
+    - generic [ref=e5]: tenant=demo_tenant | family=coffee_table | style=japandi
+    - generic [ref=e6]: matched=12 | variants=7 | files=7
+    - generic [ref=e7]:
+      - generic [ref=e8]: Assets
+      - combobox "Assets" [ref=e9]:
+        - option "coffee_table_001 | ready" [selected]
+        - option "coffee_table_002 | ready"
+        - option "coffee_table_003 | ready"
+        - option "coffee_table_004 | ready"
+        - option "coffee_table_005 | ready"
+        - option "coffee_table_006 | ready"
+        - option "coffee_table_007 | ready"
+        - option "coffee_table_008 | no variant"
+        - option "coffee_table_009 | no variant"
+        - option "coffee_table_010 | no variant"
+        - option "coffee_table_011 | no variant"
+        - option "coffee_table_012 | no variant"
+    - generic [ref=e10]: DB metadata
+    - generic [ref=e11]: "coffee_table_001 | Coffee Table 1 material: wood style_tags: [\"midcentury\", \"modern\"] variant[japandi]: present metadata_key=japandi url: /assets/inventory_models/demo_tenant/japandi/coffee_table_001.glb local_path: /Users/Yuki/TKNT/frontend/public/assets/inventory_models/demo_tenant/japandi/coffee_table_001.glb objaverse_uid: 57deef7271a64287bf19dec4ed1bd1b0 similarity=0.16442446410655975 curation: status=saved source=existing source_asset=coffee_table_001 orientation: status=reviewed front=-z offset=0.0 x=0.0 z=0.0 preview_override: enabled=yes contexts=[\"panel\"] files: - /Users/Yuki/TKNT/frontend/public/assets/inventory_models/demo_tenant/japandi/coffee_table_001.glb exists=yes size=4.3 MB"
+  - main [ref=e12]:
+    - iframe [ref=e13]:
+      - generic [active] [ref=f1e1]:
+        - generic [ref=f1e2]: coffee_table_001 [japandi] offset=0 x=0 z=0
+        - generic [ref=f1e3]: White arrow = 2D plan front. Drag to orbit, scroll to zoom.

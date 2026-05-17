@@ -35,6 +35,7 @@ from agent.solver.solver import (  # noqa: E402
     _object_level_face_pair_issues,
     _object_level_orientation_issues,
     _object_level_required_face_pairs,
+    _repair_object_level_solution_geometry,
     _rect_inside_polygon,
     _search_anchor_solutions,
     _support_slot_relaxation_penalty,
@@ -611,6 +612,48 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
 
         self.assertEqual(droppable, {"side_table", "floor_lamp"})
 
+    def test_surface_without_required_seat_fails_gallery_eligibility(self) -> None:
+        cluster_program = _object_program_cluster(
+            cluster_id="work_study",
+            object_id="desk",
+            category="desk",
+            dims={"L": 1000, "W": 500, "H": 760},
+            support_edges=[
+                {
+                    "object_id": "chair",
+                    "relative_to": "desk",
+                    "support_role": "secondary_seat",
+                    "band_intent": "flank_band",
+                    "orientation": "face_base",
+                }
+            ],
+        )
+        desk = _materialize_object_row(cluster_program, "desk", 1000, 1000, 0)
+
+        verify = _verify_object_level_solution(
+            solution={
+                "placed_objects": [desk],
+                "dropped_inventory_by_cluster": {
+                    "work_study": [
+                        {"object_id": "chair", "reason": "support_slot_failed"}
+                    ]
+                },
+            },
+            world={
+                "room_bbox": (0, 0, 6000, 4000),
+                "room_polygon": (),
+                "clusters_by_id": {"work_study": cluster_program},
+                "protected_regions": [],
+                "cluster_forbidden_regions": [],
+            },
+            room_model={},
+            relation_plan={},
+        )
+
+        self.assertFalse(verify["hard_valid"])
+        self.assertFalse(verify["gallery_eligible"])
+        self.assertIn("missing_surface_seat_pair", verify["quality_gate_reasons"])
+
     def test_frontal_support_ignores_side_band_options(self) -> None:
         edge = {
             "object_id": "coffee_table",
@@ -805,6 +848,90 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             verify["blocking_functional_geometry_issues"][0]["blocked_object_id"],
             "bookshelf",
         )
+
+    def test_geometry_repair_keeps_support_out_of_anchor_front_access(self) -> None:
+        cluster_program = {
+            "cluster_id": "kitchen_workflow_core",
+            "object_program": {
+                "object_specs_by_id": {
+                    "kitchen_base_cabinet": {
+                        "object_id": "kitchen_base_cabinet",
+                        "category": "kitchen_base_cabinet",
+                        "role": "dominant_anchor",
+                        "priority": "anchor",
+                        "rep_dims_mm": {"L": 620, "W": 560, "H": 900},
+                        "allowed_rotations": [270],
+                        "front": "top",
+                    },
+                    "fridge": {
+                        "object_id": "fridge",
+                        "category": "fridge",
+                        "role": "support",
+                        "priority": "secondary",
+                        "rep_dims_mm": {"L": 640, "W": 600, "H": 1800},
+                        "allowed_rotations": [270],
+                        "front": "top",
+                    },
+                }
+            },
+            "cluster_rules": {
+                "access_requirements": [
+                    {
+                        "id": "kitchen_base_cabinet",
+                        "type": "front_clearance",
+                        "required": True,
+                    },
+                    {"id": "fridge", "type": "front_clearance", "required": True},
+                ]
+            },
+        }
+        base_cabinet = _materialize_object_row(
+            cluster_program,
+            "kitchen_base_cabinet",
+            2400,
+            1950,
+            270,
+        )
+        blocking_fridge = _materialize_object_row(
+            cluster_program,
+            "fridge",
+            1800,
+            1950,
+            270,
+            relative_to="kitchen_base_cabinet",
+        )
+        world = {
+            "room_bbox": (0, 0, 4500, 4000),
+            "room_polygon": (),
+            "clusters_by_id": {"kitchen_workflow_core": cluster_program},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        before = _verify_object_level_solution(
+            solution={"placed_objects": [base_cabinet, blocking_fridge]},
+            world=world,
+            room_model={},
+            relation_plan={},
+        )
+        self.assertFalse(before["front_access_ok"])
+
+        repair = _repair_object_level_solution_geometry(
+            solution={"placed_objects": [base_cabinet, blocking_fridge]},
+            world=world,
+            grid_mm=50,
+        )
+        assert repair is not None
+        repaired_rows = repair["placed_objects"]
+        after = _verify_object_level_solution(
+            solution={"placed_objects": repaired_rows},
+            world=world,
+            room_model={},
+            relation_plan={},
+        )
+
+        self.assertTrue(after["front_access_ok"])
+        self.assertEqual(repair["summary"]["status"], "repaired")
 
     def test_cluster_forbidden_regions_reuse_protected_topology_policy(self) -> None:
         corridor_bbox = (0, 0, 1200, 1800)

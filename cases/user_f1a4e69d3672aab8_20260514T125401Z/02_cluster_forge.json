@@ -1,0 +1,1406 @@
+{
+  "status": "OK",
+  "clusters": [
+    {
+      "cluster_id": "kitchen_workflow_core",
+      "tag": "kitchen",
+      "members": [
+        "kitchen_base_cabinet",
+        "fridge",
+        "sink",
+        "stove",
+        "dishwasher"
+      ],
+      "anchors": [
+        "kitchen_base_cabinet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "kitchen_base_cabinet",
+          "b": "fridge"
+        },
+        {
+          "type": "no_overlap",
+          "a": "kitchen_base_cabinet",
+          "b": "sink"
+        },
+        {
+          "type": "no_overlap",
+          "a": "kitchen_base_cabinet",
+          "b": "stove"
+        },
+        {
+          "type": "no_overlap",
+          "a": "kitchen_base_cabinet",
+          "b": "dishwasher"
+        },
+        {
+          "type": "no_overlap",
+          "a": "fridge",
+          "b": "sink"
+        },
+        {
+          "type": "no_overlap",
+          "a": "fridge",
+          "b": "stove"
+        },
+        {
+          "type": "no_overlap",
+          "a": "fridge",
+          "b": "dishwasher"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sink",
+          "b": "stove"
+        },
+        {
+          "type": "no_overlap",
+          "a": "sink",
+          "b": "dishwasher"
+        },
+        {
+          "type": "no_overlap",
+          "a": "stove",
+          "b": "dishwasher"
+        },
+        {
+          "type": "requires_access",
+          "id": "kitchen_base_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "fridge",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "sink",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "stove",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dishwasher",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "fridge",
+          "b": "kitchen_base_cabinet",
+          "weight": 6
+        },
+        {
+          "type": "prefer_near",
+          "a": "sink",
+          "b": "kitchen_base_cabinet",
+          "weight": 6
+        },
+        {
+          "type": "prefer_near",
+          "a": "stove",
+          "b": "kitchen_base_cabinet",
+          "weight": 6
+        },
+        {
+          "type": "prefer_near",
+          "a": "dishwasher",
+          "b": "kitchen_base_cabinet",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "kitchen_base_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "fridge": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "sink": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "stove": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dishwasher": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "kitchen_base_cabinet": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "fridge": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "sink": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "stove": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "dishwasher": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "kitchen_base_cabinet",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "fridge",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "sink",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "stove",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dishwasher",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "fridge",
+            "relative_to": "kitchen_base_cabinet",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "support_role": "wall_support",
+            "band_intent": "wall_band",
+            "gap_min": 0,
+            "gap_max": 40,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "sink",
+            "relative_to": "kitchen_base_cabinet",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "support_role": "wall_support",
+            "band_intent": "wall_band",
+            "gap_min": 0,
+            "gap_max": 40,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "stove",
+            "relative_to": "sink",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "support_role": "wall_support",
+            "band_intent": "wall_band",
+            "gap_min": 0,
+            "gap_max": 40,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          },
+          {
+            "id": "dishwasher",
+            "relative_to": "sink",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "same_direction",
+            "support_role": "wall_support",
+            "band_intent": "wall_band",
+            "gap_min": 0,
+            "gap_max": 40,
+            "side_options": [
+              "left",
+              "right"
+            ]
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "kitchen_base_cabinet"
+        ],
+        "allow_empty_cluster": false,
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_3300_anchor",
+            "wall_3_usable_200_3900_anchor",
+            "wall_4_usable_2017_3300_anchor",
+            "wall_1_usable_200_1317_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "layout_role": "primary",
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_dishwasher",
+          "reduce_kitchen_base_cabinet_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.0,
+          "drop_order_bias": "drop_last",
+          "object_hints": [
+            {
+              "object_type": "kitchen_base_cabinet",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "fridge",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "sink",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "stove",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "dishwasher",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.55,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "kitchen_base_cabinet",
+          "dominant_anchor_candidates": [
+            "kitchen_base_cabinet"
+          ],
+          "placement_order": [
+            "kitchen_base_cabinet",
+            "fridge",
+            "sink",
+            "stove",
+            "dishwasher"
+          ],
+          "support_chain": [
+            {
+              "object_id": "fridge",
+              "relative_to": "kitchen_base_cabinet",
+              "support_role": "wall_support",
+              "band_intent": "wall_band",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            },
+            {
+              "object_id": "sink",
+              "relative_to": "kitchen_base_cabinet",
+              "support_role": "wall_support",
+              "band_intent": "wall_band",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            },
+            {
+              "object_id": "stove",
+              "relative_to": "sink",
+              "support_role": "wall_support",
+              "band_intent": "wall_band",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            },
+            {
+              "object_id": "dishwasher",
+              "relative_to": "sink",
+              "support_role": "wall_support",
+              "band_intent": "wall_band",
+              "orientation": "same_direction",
+              "kind": "anchor_side"
+            }
+          ],
+          "protected_ids": [
+            "kitchen_base_cabinet"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "kitchen",
+          "cluster_id": "kitchen_workflow_core"
+        }
+      }
+    },
+    {
+      "cluster_id": "kitchen_storage_support",
+      "tag": "kitchen",
+      "members": [
+        "kitchen_tall_cabinet"
+      ],
+      "anchors": [
+        "kitchen_tall_cabinet"
+      ],
+      "hard_constraints": [
+        {
+          "type": "requires_access",
+          "id": "kitchen_tall_cabinet",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "kitchen_tall_cabinet": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "kitchen_tall_cabinet": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "kitchen_tall_cabinet",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [],
+        "dominant_anchor_candidates": [
+          "kitchen_tall_cabinet"
+        ],
+        "allow_empty_cluster": true,
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_3300_anchor",
+            "wall_3_usable_200_3900_anchor",
+            "wall_4_usable_2017_3300_anchor",
+            "wall_1_usable_200_1317_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "layout_role": "secondary",
+        "degradation_ladder": [
+          "drop_if_room_capacity_tight_under_style_policy",
+          "drop_pantry_cabinet"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.45,
+          "drop_order_bias": "drop_late",
+          "object_hints": [
+            {
+              "object_type": "kitchen_tall_cabinet",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.45,
+              "drop_order_bias": "drop_late",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "kitchen_tall_cabinet",
+          "dominant_anchor_candidates": [
+            "kitchen_tall_cabinet"
+          ],
+          "placement_order": [
+            "kitchen_tall_cabinet"
+          ],
+          "support_chain": [],
+          "protected_ids": [
+            "kitchen_tall_cabinet"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "kitchen",
+          "cluster_id": "kitchen_storage_support"
+        }
+      }
+    },
+    {
+      "cluster_id": "kitchen_dining_core",
+      "tag": "kitchen",
+      "members": [
+        "dining_table",
+        "dining_chair"
+      ],
+      "anchors": [
+        "dining_table"
+      ],
+      "hard_constraints": [
+        {
+          "type": "no_overlap",
+          "a": "dining_table",
+          "b": "dining_chair"
+        },
+        {
+          "type": "requires_access",
+          "id": "dining_table",
+          "mode": "front_clearance",
+          "required": null
+        },
+        {
+          "type": "requires_access",
+          "id": "dining_chair",
+          "mode": "front_clearance",
+          "required": null
+        }
+      ],
+      "soft_constraints": [
+        {
+          "type": "prefer_near",
+          "a": "dining_chair",
+          "b": "dining_table",
+          "weight": 6
+        }
+      ],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "dining_table": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "dining_chair": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {
+          "dining_table": {
+            "front": "top",
+            "notes": "functional front"
+          },
+          "dining_chair": {
+            "front": "top",
+            "notes": "functional front"
+          }
+        },
+        "access_requirements": [
+          {
+            "id": "dining_table",
+            "type": "front_clearance",
+            "required": true
+          },
+          {
+            "id": "dining_chair",
+            "type": "front_clearance",
+            "required": true
+          }
+        ],
+        "semantic_placements": [
+          {
+            "id": "dining_chair",
+            "relative_to": "dining_table",
+            "kind": "anchor_side",
+            "proximity": "balanced",
+            "selection": "best_fit",
+            "orientation": "face_base",
+            "support_role": "secondary_seat",
+            "band_intent": "flank_band",
+            "gap_min": 120,
+            "gap_max": 320,
+            "side_options": [
+              "head",
+              "foot",
+              "left",
+              "right"
+            ]
+          }
+        ],
+        "dominant_anchor_candidates": [
+          "dining_table"
+        ],
+        "allow_empty_cluster": false,
+        "zone_claims": {
+          "preferred_regions": [
+            "floating_center_zone",
+            "window_1_daylight"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "layout_role": "secondary",
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_dining_chair",
+          "drop_dining_table",
+          "reduce_dining_table_count",
+          "reduce_dining_chair_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.0,
+          "drop_order_bias": "drop_late",
+          "object_hints": [
+            {
+              "object_type": "dining_table",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_late",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "dining_chair",
+              "min_keep": 1,
+              "max_keep": 2,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.45,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "dining_table",
+          "dominant_anchor_candidates": [
+            "dining_table"
+          ],
+          "placement_order": [
+            "dining_table",
+            "dining_chair"
+          ],
+          "support_chain": [
+            {
+              "object_id": "dining_chair",
+              "relative_to": "dining_table",
+              "support_role": "secondary_seat",
+              "band_intent": "flank_band",
+              "orientation": "face_base",
+              "kind": "anchor_side"
+            }
+          ],
+          "protected_ids": [
+            "dining_table"
+          ],
+          "droppable_ids": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "kitchen",
+          "cluster_id": "kitchen_dining_core"
+        }
+      }
+    }
+  ],
+  "semantic_layout_program": {
+    "status": "OK",
+    "room_type": "kitchen",
+    "style_policy": {
+      "style_name": "balanced",
+      "style_tags": [
+        "minimal",
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "balanced_to_medium",
+        "center_openness_bias": "high",
+        "wall_loading_bias": "perimeter",
+        "symmetry_bias": "balanced",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "medium_high",
+        "floating_cluster_tolerance": "low",
+        "material_weight_bias": "light",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "support_optional": {
+          "allow_only_if_space_surplus": true
+        },
+        "decor": {
+          "max_items_per_cluster": 1
+        },
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 1.06,
+        "optional_utility_bias": -0.45,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": []
+    },
+    "request_contract": {
+      "version": 1,
+      "source": "brief_text_heuristic",
+      "objects": [
+        {
+          "object_type": "chair",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a compact dining table with dining chairs",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": false
+        },
+        {
+          "object_type": "dining_chair",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a compact dining table with dining chairs",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "dining_table",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a compact dining table with dining chairs",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "fridge",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "include a fridge",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "kitchen_base_cabinet",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a prep counter with base cabinets",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "kitchen_island",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "keep circulation clear and do not add an island unless it clearly fits",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": false
+        },
+        {
+          "object_type": "sink",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a sink",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        },
+        {
+          "object_type": "stove",
+          "intent": "must_keep",
+          "min_keep": 1,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "a stove",
+          "reason": "explicitly requested in the brief",
+          "available_in_program": true
+        }
+      ],
+      "groups": [],
+      "notes": [
+        "Request contract is inferred from explicit brief object mentions; tier count may degrade but should not silently drop protected items."
+      ]
+    },
+    "active_clusters": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "layout_role": "primary",
+        "priority": "core",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "kitchen_workflow_zone",
+        "dominant_anchor_candidates": [
+          "kitchen_base_cabinet"
+        ],
+        "required_bundles": [
+          {
+            "bundle_id": "kitchen_workflow_core_bundle",
+            "objects": [
+              {
+                "object_type": "kitchen_base_cabinet",
+                "role": "dominant_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "fridge",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "sink",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "stove",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": null
+              },
+              {
+                "object_type": "dishwasher",
+                "role": "workflow_anchor",
+                "required": false,
+                "max_keep": 1
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_3300_anchor",
+            "wall_3_usable_200_3900_anchor",
+            "wall_4_usable_2017_3300_anchor",
+            "wall_1_usable_200_1317_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_dishwasher",
+          "reduce_kitchen_base_cabinet_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "indispensable",
+          "preserve_level": "highest",
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.0,
+          "drop_order_bias": "drop_last",
+          "object_hints": [
+            {
+              "object_type": "kitchen_base_cabinet",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "fridge",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "sink",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "stove",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_last",
+              "preserve_level": "highest",
+              "preferred_size_tier": "M"
+            },
+            {
+              "object_type": "dishwasher",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.55,
+              "drop_order_bias": "drop_early",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "layout_role": "secondary",
+        "priority": "support",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "kitchen_storage_zone",
+        "dominant_anchor_candidates": [
+          "kitchen_tall_cabinet"
+        ],
+        "required_bundles": [
+          {
+            "bundle_id": "kitchen_storage_support_bundle",
+            "objects": [
+              {
+                "object_type": "kitchen_tall_cabinet",
+                "role": "support",
+                "required": false,
+                "max_keep": 1
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_3300_anchor",
+            "wall_3_usable_200_3900_anchor",
+            "wall_4_usable_2017_3300_anchor",
+            "wall_1_usable_200_1317_anchor"
+          ],
+          "avoid_regions": [
+            "center_openness_core",
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "drop_if_room_capacity_tight_under_style_policy",
+          "drop_pantry_cabinet"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.45,
+          "drop_order_bias": "drop_late",
+          "object_hints": [
+            {
+              "object_type": "kitchen_tall_cabinet",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.45,
+              "drop_order_bias": "drop_late",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
+      },
+      {
+        "cluster_id": "kitchen_dining_core",
+        "layout_role": "secondary",
+        "priority": "core",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "kitchen_floating_support_zone",
+        "dominant_anchor_candidates": [
+          "dining_table"
+        ],
+        "required_bundles": [
+          {
+            "bundle_id": "kitchen_dining_core_bundle",
+            "objects": [
+              {
+                "object_type": "dining_table",
+                "role": "dominant_anchor",
+                "required": true,
+                "max_keep": 1
+              },
+              {
+                "object_type": "dining_chair",
+                "role": "workflow_anchor",
+                "required": true,
+                "max_keep": 2
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "floating_center_zone",
+            "window_1_daylight"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor",
+            "center_openness_core"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "none",
+          "floating_allowed": false
+        },
+        "relation_intents": [
+          {
+            "type": "near",
+            "target": null,
+            "target_cluster": "kitchen_workflow_core",
+            "strength": "soft"
+          }
+        ],
+        "degradation_ladder": [
+          "shrink_optional_support",
+          "drop_dining_chair",
+          "drop_dining_table",
+          "reduce_dining_table_count",
+          "reduce_dining_chair_count"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.0,
+          "drop_order_bias": "drop_late",
+          "object_hints": [
+            {
+              "object_type": "dining_table",
+              "min_keep": 1,
+              "max_keep": 1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.0,
+              "drop_order_bias": "drop_late",
+              "preserve_level": "high",
+              "preferred_size_tier": "S"
+            },
+            {
+              "object_type": "dining_chair",
+              "min_keep": 1,
+              "max_keep": 2,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.45,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
+      }
+    ],
+    "global_layout_intent": {
+      "primary_focus": "kitchen",
+      "space_character": "calm_kitchen_workflow",
+      "prefer_open_center": true,
+      "prefer_core_before_support": true,
+      "prefer_clear_primary_circulation": true,
+      "style_name": "balanced",
+      "style_policy_summary": {
+        "target_density": "balanced_to_medium",
+        "center_openness_bias": "high",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low"
+      }
+    },
+    "macro_relations": {
+      "adjacency_preferences": [
+        {
+          "a": "kitchen_workflow_core",
+          "b": "kitchen_workflow_core",
+          "relation": "near",
+          "priority": "high"
+        },
+        {
+          "a": "kitchen_workflow_core",
+          "b": "kitchen_dining_core",
+          "relation": "near",
+          "priority": "medium"
+        }
+      ],
+      "separation_preferences": [],
+      "orientation_preferences": [],
+      "keep_open_regions": [
+        {
+          "region": "center_openness_core",
+          "reason": "preserve open center and circulation"
+        },
+        {
+          "type": "center_lane",
+          "near": "room_center",
+          "priority": "high",
+          "reason": "Style policy reserves center openness."
+        }
+      ],
+      "reserved_regions": [
+        {
+          "region": "door_1_entry_clearance",
+          "reason": "entry and primary circulation stay clear"
+        },
+        {
+          "region": "entry_to_center_corridor",
+          "reason": "entry and primary circulation stay clear"
+        },
+        {
+          "region": "room_center",
+          "reason": "Very high openness bias from style policy."
+        }
+      ]
+    },
+    "selection_constraints": {
+      "dominant_anchor_required": [],
+      "dominant_workflow_required": [],
+      "group_caps": [
+        {
+          "objects": [
+            "kitchen_tall_cabinet",
+            "pantry_cabinet"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "kitchen_island"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "dining_table"
+          ],
+          "max_keep": 1
+        },
+        {
+          "objects": [
+            "bar_stool",
+            "dining_chair"
+          ],
+          "max_keep": 2
+        }
+      ],
+      "group_minimums": []
+    },
+    "controlled_degradation": {
+      "cluster_drop_order": [
+        "kitchen_storage_support",
+        "kitchen_dining_core",
+        "kitchen_workflow_core"
+      ],
+      "bundle_drop_order": [
+        "kitchen_storage_support_bundle",
+        "kitchen_dining_core_bundle",
+        "kitchen_workflow_core_bundle"
+      ],
+      "never_drop_first": []
+    },
+    "quality_targets": {
+      "functionality_weight": 1.0,
+      "naturalness_weight": 1.12,
+      "semantic_coherence_weight": 1.06,
+      "spatial_quality_weight": 1.15
+    },
+    "missing": [],
+    "conflicts": [],
+    "confidence": 0.86,
+    "notes": [
+      "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
+      "Kept the canonical kitchen clusters and did not add an island cluster as a required element because the room is compact and the brief prioritizes clear circulation.",
+      "Tier hints are set to preserve the full workflow core and compact eat-in set, while making storage and island elements conditional on real surplus.",
+      "14.26m2 kitchen supports full workflow plus compact eat-in dining, but not a generous island program.",
+      "Perimeter loading and high center openness favor keeping core appliances and a small dining set, while island/bar-stool items should be filtered out unless surplus is unusually high.",
+      "Storage is useful but secondary; prefer one compact tall/pantry element only when space remains comfortable.",
+      "Dishwasher is optional and should be the first workflow add-on to drop if the room tightens.",
+      "Active clusters mapped to kitchen workflow, storage, and eat-in dining.",
+      "Window/daylight kept available for dining and secondary work surfaces; center and entry clearance protected.",
+      "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
+      "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+      "Request contract attached before tier count so explicit functional objects are protected from silent pruning."
+    ]
+  },
+  "style_policy": {
+    "style_name": "balanced",
+    "style_tags": [
+      "minimal",
+      "cozy"
+    ],
+    "layout_policy": {
+      "target_density": "balanced_to_medium",
+      "center_openness_bias": "high",
+      "wall_loading_bias": "perimeter",
+      "symmetry_bias": "balanced",
+      "cluster_spacing_bias": "soft",
+      "clutter_tolerance": "low",
+      "decor_tolerance": "low",
+      "daylight_bias": "medium_high",
+      "floating_cluster_tolerance": "low",
+      "material_weight_bias": "light",
+      "visual_balance_bias": "calm"
+    },
+    "cluster_policy_overrides": {
+      "sleep_core": {
+        "prefer_breathing_room": true
+      },
+      "primary_core": {
+        "prefer_breathing_room": true
+      },
+      "support_optional": {
+        "allow_only_if_space_surplus": true
+      },
+      "decor": {
+        "max_items_per_cluster": 1
+      },
+      "lounge_reading": {
+        "allow_only_if_space_surplus": true
+      }
+    },
+    "policy_weights": {
+      "density_multiplier": 1.06,
+      "optional_utility_bias": -0.45,
+      "decor_utility_bias": -0.9,
+      "openness_weight": 1.15,
+      "symmetry_weight": 1.0,
+      "naturalness_weight": 1.12,
+      "semantic_coherence_weight": 1.06,
+      "spatial_quality_weight": 1.15
+    },
+    "search_settings": {
+      "style_policy_variants": 1,
+      "final_palette_candidates": 3,
+      "decor_plan_candidates": 3,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    },
+    "controller": {
+      "phase_early": "style_policy_compiler",
+      "phase_late": "final_stylist_decorator",
+      "llm_seed_used": true,
+      "validation": "deterministic_policy_normalization"
+    },
+    "notes": []
+  },
+  "notes": [
+    "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
+    "Kept the canonical kitchen clusters and did not add an island cluster as a required element because the room is compact and the brief prioritizes clear circulation.",
+    "Tier hints are set to preserve the full workflow core and compact eat-in set, while making storage and island elements conditional on real surplus.",
+    "14.26m2 kitchen supports full workflow plus compact eat-in dining, but not a generous island program.",
+    "Perimeter loading and high center openness favor keeping core appliances and a small dining set, while island/bar-stool items should be filtered out unless surplus is unusually high.",
+    "Storage is useful but secondary; prefer one compact tall/pantry element only when space remains comfortable.",
+    "Dishwasher is optional and should be the first workflow add-on to drop if the room tightens.",
+    "Active clusters mapped to kitchen workflow, storage, and eat-in dining.",
+    "Window/daylight kept available for dining and secondary work surfaces; center and entry clearance protected.",
+    "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
+    "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+    "Request contract attached before tier count so explicit functional objects are protected from silent pruning."
+  ],
+  "missing": []
+}

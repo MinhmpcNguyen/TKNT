@@ -186,7 +186,10 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             )
 
         self.assertIsNotNone(program.profile_shadow_trace)
+        self.assertIsNotNone(program.profile_layout_trace)
         assert program.profile_shadow_trace is not None
+        assert program.profile_layout_trace is not None
+        self.assertEqual(program.profile_layout_trace, program.profile_shadow_trace)
         self.assertEqual(program.profile_shadow_trace["mode"], "active")
         self.assertTrue(program.profile_shadow_trace["layout_traits_enabled"])
         cluster_payload = (

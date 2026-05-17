@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { checkDesign, getClusterComposer, getClusterList, getPipelineArtifact, getPipelineResult, getPipelineStatus, runPipeline } from '../api';
+import {
+  createSavedLayout,
+  getPipelineArtifact,
+  getPipelineResult,
+  getPipelineStatus,
+  runPipeline,
+} from '../api';
 import { useEditorStore } from '../store';
-import { Placement, Point } from '../types';
+import { LayoutVariant, Placement, Point } from '../types';
 import { preparePipelineResultLayouts } from '../utils/pipelineLayouts';
 
 const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 3600;
@@ -35,7 +41,6 @@ export const Toolbar: React.FC = () => {
     setFloorplan,
     drawWallMode,
     setDrawWallMode,
-    setRunLogs,
     appendRunLog,
     clearRunLogs,
     setRunStatus,
@@ -43,11 +48,12 @@ export const Toolbar: React.FC = () => {
     setAdditionRequests,
     setCaseId,
     setPipelineStage,
-    setClusterPreviews,
-    updateClusterPreview,
     layoutVariants,
-    selectedVariantId,
     variantPickerOpen,
+    savedLayouts,
+    setSavedLayouts,
+    setActiveRootLayoutId,
+    selectSavedRender,
     setLayoutVariants,
     selectLayoutVariant,
     setVariantPickerOpen,
@@ -58,18 +64,19 @@ export const Toolbar: React.FC = () => {
   } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressPercent, setProgressPercent] = useState<number | null>(null);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [readyNotice, setReadyNotice] = useState<string | null>(null);
+  const [layoutName, setLayoutName] = useState('');
+  const [savingLayout, setSavingLayout] = useState(false);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
   const galleryOpen = variantPickerOpen && layoutVariants.length > 0;
 
   type LoadFinalResult = {
     variantCount: number;
   };
 
-  const applyVariantToEditor = (variantId: string | null) => {
-    const variant =
-      layoutVariants.find((item) => item.variant_id === variantId) ?? layoutVariants[0];
-    if (!variant) {
-      return;
-    }
+  const applyVariant = (variant: LayoutVariant) => {
     if (variant.design) {
       setFloorplan(variant.design.floorplan_geometry);
       setDesign(variant.design);
@@ -78,7 +85,6 @@ export const Toolbar: React.FC = () => {
     selectLayoutVariant(variant.variant_id);
     setViewMode('2d');
     setVariantPickerOpen(false);
-    appendRunLog(`Selected layout: ${variant.label}`);
   };
 
   const handleGenerate = async () => {
@@ -86,6 +92,9 @@ export const Toolbar: React.FC = () => {
     const manualPlacements = collectManualPlacements(design?.placements ?? []);
     setLoading(true);
     setError(null);
+    setProgressPercent(0);
+    setProgressLabel('Starting layout generation');
+    setReadyNotice(null);
     clearRunLogs();
     setAdditionRequests([]);
     setRunStatus('Queued pipeline build', null);
@@ -126,7 +135,6 @@ export const Toolbar: React.FC = () => {
       }
       setCaseId(caseResp.case_id);
       setPipelineStage('queued');
-      setClusterPreviews({});
       const caseId = caseResp.case_id;
       let done = false;
       let lastStage = '';
@@ -163,11 +171,23 @@ export const Toolbar: React.FC = () => {
           setDesign(prepared.design);
         }
         if (prepared.variants.length > 0) {
-          setLayoutVariants(prepared.variants, prepared.selectedVariantId);
-          setVariantPickerOpen(true);
+          const primaryVariant =
+            prepared.variants.find(
+              (variant) => variant.variant_id === prepared.selectedVariantId
+            ) ?? prepared.variants[0];
+          setLayoutVariants(prepared.variants, primaryVariant.variant_id);
+          applyVariant(primaryVariant);
+          setProgressPercent(100);
+          setProgressLabel(
+            `Option 1/${prepared.variants.length} loaded`
+          );
+          setReadyNotice(formatReadyOptionNotice(prepared.variants.length));
         } else {
           clearLayoutVariants();
           setVariantPickerOpen(false);
+          setProgressPercent(100);
+          setProgressLabel('Layout ready');
+          setReadyNotice(null);
         }
         setViolations([]);
         setLastDesignMeta({ iteration: null, attempt: null });
@@ -179,6 +199,14 @@ export const Toolbar: React.FC = () => {
       for (let i = 0; i < maxPollSeconds && !done; i += 1) {
         const status = await getPipelineStatus(caseId);
         const progressLabel = formatPipelineProgress(status);
+        setProgressPercent(computePipelineProgressPercent(status));
+        if (progressLabel) {
+          setProgressLabel(progressLabel);
+        }
+        const readyOptionNotice = formatStatusReadyOptionNotice(status);
+        if (readyOptionNotice) {
+          setReadyNotice(readyOptionNotice);
+        }
         setRunStatus(progressLabel, null);
         if (status.stage) {
           setPipelineStage(status.stage);
@@ -204,6 +232,9 @@ export const Toolbar: React.FC = () => {
         }
         if (status.stage === 'error') {
           setError(status.error ?? 'Pipeline error');
+          setProgressLabel(status.error ?? 'Pipeline error');
+          setProgressPercent(null);
+          setReadyNotice(null);
           done = true;
           break;
         }
@@ -214,15 +245,6 @@ export const Toolbar: React.FC = () => {
               `Loaded ${finalState.variantCount} final design option${finalState.variantCount === 1 ? '' : 's'}.`
             );
             lastLoadedVariantCount = finalState.variantCount;
-          }
-          try {
-            const list = await getClusterList(caseId);
-            for (const clusterId of list.clusters ?? []) {
-              const preview = await getClusterComposer(caseId, clusterId);
-              updateClusterPreview(clusterId, preview);
-            }
-          } catch {
-            // ignore preview errors
           }
           done = true;
           break;
@@ -236,6 +258,10 @@ export const Toolbar: React.FC = () => {
         const status = await getPipelineStatus(caseId);
         if (status.stage === 'done') {
           const progressLabel = formatPipelineProgress(status);
+          setProgressPercent(100);
+          if (progressLabel) {
+            setProgressLabel(progressLabel);
+          }
           setRunStatus(progressLabel, null);
           setPipelineStage('done');
           const statusActions = Array.isArray(status.actions) ? status.actions : [];
@@ -258,36 +284,41 @@ export const Toolbar: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generate failed');
       setRunStatus('error', null);
+      setProgressLabel(err instanceof Error ? err.message : 'Generate failed');
+      setProgressPercent(null);
+      setReadyNotice(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCheck = async () => {
-    if (!floorplan || !design) return;
-    setLoading(true);
-    setError(null);
+  const handleSaveLayout = async () => {
+    if (!floorplan) {
+      setLayoutError('Create or load a floorplan before saving.');
+      return;
+    }
+    setSavingLayout(true);
+    setLayoutError(null);
     try {
-      const violations = await checkDesign({
-        floorplan_geometry: floorplan,
-        placements: design.placements,
-        constraints: {
-          description: userInput.description,
-          room_type: userInput.room_type,
-          floor_area_m2: userInput.floor_area_m2,
-          height: userInput.height,
-          shape_points: userInput.shape_points,
-          location_floor: userInput.location_floor,
-          bathrooms: userInput.bathrooms,
-          windows: userInput.windows,
-          window_direction: userInput.window_direction,
+      const saved = await createSavedLayout({
+        name: layoutName.trim() || `Layout ${new Date().toLocaleString()}`,
+        floorplan_json: floorplan as unknown as Record<string, unknown>,
+        design_json: (design ?? null) as unknown as Record<string, unknown> | null,
+        styled_result_json:
+          (styledResult ?? null) as Record<string, unknown> | null,
+        meta: {
+          saved_by_user_id: currentUser?.id ?? 'user',
         },
       });
-      setViolations(violations);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Check failed');
+      setSavedLayouts([saved, ...savedLayouts.filter((item) => item.id !== saved.id)]);
+      setActiveRootLayoutId(saved.id);
+      selectSavedRender(null);
+      setLayoutName('');
+      appendRunLog(`Saved layout "${saved.name}" to the current account.`);
+    } catch (saveError) {
+      setLayoutError(saveError instanceof Error ? saveError.message : 'Failed to save layout.');
     } finally {
-      setLoading(false);
+      setSavingLayout(false);
     }
   };
 
@@ -306,17 +337,6 @@ export const Toolbar: React.FC = () => {
       <button onClick={handleGenerate} disabled={loading}>
         {loading ? 'Working…' : 'Generate'}
       </button>
-      <button onClick={handleCheck} disabled={loading || galleryOpen || !design}>
-        Check
-      </button>
-      {layoutVariants.length > 0 && galleryOpen ? (
-        <button
-          onClick={() => applyVariantToEditor(selectedVariantId)}
-          disabled={loading || !selectedVariantId}
-        >
-          Choose Layout
-        </button>
-      ) : null}
       {layoutVariants.length > 0 && !galleryOpen ? (
         <button
           onClick={() => {
@@ -400,7 +420,38 @@ export const Toolbar: React.FC = () => {
       >
         Reset Room
       </button>
+      <div className="toolbar-save-layout">
+        <input
+          type="text"
+          value={layoutName}
+          onChange={(event) => setLayoutName(event.target.value)}
+          placeholder="Layout name"
+          aria-label="Layout name"
+        />
+        <button
+          className="primary-button"
+          disabled={savingLayout || !floorplan}
+          onClick={handleSaveLayout}
+          type="button"
+        >
+          {savingLayout ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+      {(loading || progressLabel || readyNotice) && (
+        <div className={`toolbar-loading${error ? ' error' : ''}`} aria-live="polite">
+          {loading ? <span className="toolbar-spinner" aria-hidden="true" /> : null}
+          <span className="toolbar-loading-copy">
+            <strong>
+              {readyNotice ?? progressLabel ?? 'Working'}
+            </strong>
+            {typeof progressPercent === 'number' ? (
+              <span>{Math.round(progressPercent)}%</span>
+            ) : null}
+          </span>
+        </div>
+      )}
       {error && <span className="toolbar-status error">{error}</span>}
+      {layoutError && <span className="toolbar-status error">{layoutError}</span>}
     </div>
   );
 };
@@ -465,4 +516,71 @@ function formatPipelineStatusAction(action: {
     return body;
   }
   return `${stage}: ${body}`;
+}
+
+function computePipelineProgressPercent(status: {
+  stage?: string | null;
+  progress_current?: number | null;
+  progress_total?: number | null;
+}): number | null {
+  const stage = String(status.stage ?? '').trim();
+  if (stage === 'done') {
+    return 100;
+  }
+  if (stage === 'error') {
+    return null;
+  }
+  const stageRanges: Record<string, { start: number; end: number }> = {
+    queued: { start: 2, end: 6 },
+    running: { start: 6, end: 10 },
+    room_interpreter: { start: 10, end: 18 },
+    stylist_style_policy: { start: 18, end: 24 },
+    cluster_forge: { start: 24, end: 32 },
+    tier_count: { start: 32, end: 38 },
+    cluster_output_merger: { start: 38, end: 42 },
+    cluster_relation_planner: { start: 42, end: 54 },
+    solver: { start: 54, end: 74 },
+    stylist: { start: 74, end: 92 },
+    layout_variants: { start: 92, end: 98 },
+  };
+  const range = stageRanges[stage] ?? { start: 6, end: 12 };
+  const current =
+    typeof status.progress_current === 'number' && Number.isFinite(status.progress_current)
+      ? status.progress_current
+      : null;
+  const total =
+    typeof status.progress_total === 'number' && Number.isFinite(status.progress_total)
+      ? status.progress_total
+      : null;
+  if (current === null || total === null || total <= 0) {
+    return range.start;
+  }
+  const ratio = Math.min(1, Math.max(0, current / total));
+  return range.start + (range.end - range.start) * ratio;
+}
+
+function formatStatusReadyOptionNotice(status: {
+  stage?: string | null;
+  progress_current?: number | null;
+  progress_total?: number | null;
+}): string | null {
+  if (status.stage !== 'stylist') {
+    return null;
+  }
+  const current =
+    typeof status.progress_current === 'number' && Number.isFinite(status.progress_current)
+      ? status.progress_current
+      : null;
+  const total =
+    typeof status.progress_total === 'number' && Number.isFinite(status.progress_total)
+      ? status.progress_total
+      : null;
+  if (current === null || total === null || total <= 1 || current <= 1) {
+    return null;
+  }
+  return `Option ${Math.min(current, total)}/${total} ready`;
+}
+
+function formatReadyOptionNotice(variantCount: number): string | null {
+  return variantCount > 1 ? `Option 2/${variantCount} ready` : null;
 }

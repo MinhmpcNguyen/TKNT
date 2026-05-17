@@ -1,0 +1,162 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "TKNT Floorplan Editor" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Shared inventory for everyone, plus your own GLB objects, saved layouts, and render history.
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - strong [ref=e10]: Minh
+        - generic [ref=e11]: ntm.cmv@gmail.com
+      - button "Log out" [ref=e12] [cursor=pointer]
+  - generic [ref=e13]:
+    - combobox [ref=e14]:
+      - option "Office" [selected]
+      - option "Bedroom"
+      - option "Living Room"
+      - option "Studio"
+      - option "Kitchen"
+    - button "Generate" [ref=e15] [cursor=pointer]
+    - button "2D" [ref=e16] [cursor=pointer]
+    - button "3D" [ref=e17] [cursor=pointer]
+    - button "Edit Room" [ref=e18] [cursor=pointer]
+    - button "Draw Line" [disabled] [ref=e19]
+    - button "Delete Point" [disabled] [ref=e20]
+    - button "Reset Room" [ref=e21] [cursor=pointer]
+    - generic [ref=e22]:
+      - textbox "Layout name" [ref=e23]
+      - button "Save" [ref=e24] [cursor=pointer]
+  - generic [ref=e25]:
+    - generic [ref=e26]:
+      - button "‹ Hide" [expanded] [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: ‹
+        - generic [ref=e29]: Hide
+      - complementary [ref=e31]:
+        - heading "Library" [level=3] [ref=e32]
+        - generic [ref=e33]:
+          - searchbox "Search by name or type" [ref=e34]
+          - combobox [ref=e35]:
+            - option "All styles" [selected]
+            - option "boho"
+            - option "classic"
+            - option "coastal"
+            - option "industrial"
+            - option "japandi"
+            - option "midcentury"
+            - option "minimal"
+            - option "modern"
+            - option "scandinavian"
+            - option "wabi_sabi"
+          - combobox [ref=e36]:
+            - option "All rooms" [selected]
+            - option "Current room"
+            - option "Bedroom"
+            - option "Living Room"
+            - option "Studio"
+            - option "Office"
+            - option "Kitchen"
+        - generic [ref=e37]:
+          - button "Your objects 3" [ref=e39] [cursor=pointer]:
+            - generic [ref=e40]: Your objects
+            - strong [ref=e41]: "3"
+          - button "Shared inventory 919" [ref=e43] [cursor=pointer]:
+            - generic [ref=e44]: Shared inventory
+            - strong [ref=e45]: "919"
+    - generic [ref=e481]:
+      - generic [ref=e482]: 3D Preview
+      - generic [ref=e483]:
+        - button "Capture" [ref=e484] [cursor=pointer]
+        - button "Generate Image" [ref=e485] [cursor=pointer]
+        - button "Reset" [ref=e486] [cursor=pointer]
+        - button "Delete" [disabled] [ref=e487]
+        - button "Edit" [disabled] [ref=e488]
+        - generic [ref=e489]:
+          - generic [ref=e490]:
+            - generic [ref=e491]:
+              - generic [ref=e492]: Quick Camera View
+              - generic [ref=e493]:
+                - button "Previous camera view" [ref=e494] [cursor=pointer]: ‹
+                - generic [ref=e495]:
+                  - strong [ref=e496]: Corner 1
+                  - generic [ref=e497]: Mid-height · X 0.0m · Y 0.0m
+                - button "Next camera view" [ref=e498] [cursor=pointer]: ›
+            - generic [ref=e499]:
+              - generic [ref=e500]: Style
+              - button "Hiện đại reference Hiện đại ▼" [ref=e501] [cursor=pointer]:
+                - img "Hiện đại reference" [ref=e502]
+                - generic [ref=e504]: Hiện đại
+                - generic [ref=e505]: ▼
+            - generic [ref=e506]:
+              - generic [ref=e507]: Lighting
+              - button "Ban ngày 1 — Hừng Đông reference Ban ngày 1 — Hừng Đông ▼" [ref=e508] [cursor=pointer]:
+                - img "Ban ngày 1 — Hừng Đông reference" [ref=e509]
+                - generic [ref=e511]: Ban ngày 1 — Hừng Đông
+                - generic [ref=e512]: ▼
+            - generic [ref=e513]:
+              - generic [ref=e514]: Scenery
+              - button "No image Không có ▼" [ref=e515] [cursor=pointer]:
+                - generic [ref=e517]: No image
+                - generic [ref=e519]: Không có
+                - generic [ref=e520]: ▼
+          - group [ref=e521]:
+            - generic "Appearance 3 surfaces - 14 objects ▼" [ref=e522] [cursor=pointer]:
+              - generic [ref=e523]: Appearance
+              - generic [ref=e524]: 3 surfaces - 14 objects
+              - text: ▼
+    - generic [ref=e51]:
+      - button "‹ Workspace" [ref=e531] [cursor=pointer]:
+        - generic [ref=e53]: ‹
+        - generic [ref=e54]: Workspace
+      - generic:
+        - complementary:
+          - button "User Input office · japandi Edit":
+            - generic:
+              - generic: User Input
+              - generic: office · japandi
+            - generic: Edit
+        - generic:
+          - button "My Workspace 12 layouts · 5 renders Hide" [expanded]:
+            - generic:
+              - generic: My Workspace
+              - generic: 12 layouts · 5 renders
+            - generic: Hide
+          - generic:
+            - generic:
+              - strong: Minh
+              - generic: ntm.cmv@gmail.com
+            - generic:
+              - generic:
+                - searchbox "Search saved layouts"
+              - button "Saved Layouts 12":
+                - generic: Saved Layouts
+                - strong: "12"
+            - generic:
+              - button "Saved Renders 5" [expanded]:
+                - generic: Saved Renders
+                - strong: "5"
+              - paragraph: Showing renders linked to the loaded root layout.
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - strong: gpt-image-1.5
+                    - generic: snapshot_render
+                - generic:
+                  - img
+                  - generic:
+                    - strong: gpt-image-1.5
+                    - generic: snapshot_render
+                - generic:
+                  - img
+                  - generic:
+                    - strong: gpt-image-1.5
+                    - generic: snapshot_render
+                - generic:
+                  - img
+                  - generic:
+                    - strong: gpt-image-1.5
+                    - generic: snapshot_render
+                - generic:
+                  - img
+                  - generic:
+                    - strong: google/gemini-2.5-flash-image
+                    - generic: snapshot_render

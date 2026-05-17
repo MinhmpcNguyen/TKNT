@@ -1,0 +1,1642 @@
+{
+  "solution_id": "object_sol_17",
+  "absolute_layout": {
+    "status": "PARTIAL",
+    "layout_kind": "object_level_anchor_first",
+    "room_id": "room_1",
+    "room_type": "kitchen",
+    "room": {
+      "unit": "mm",
+      "room_id": "room_1",
+      "name": "Main",
+      "room_type": "kitchen",
+      "polygon_ccw": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3500,
+          "y": 0
+        },
+        {
+          "x": 3500,
+          "y": 3950
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "area_mm2": 13912500,
+      "area_m2": 13.912,
+      "perimeter_mm": 14950,
+      "centroid_mm": {
+        "x": 1746,
+        "y": 1988
+      },
+      "principal_axis": {
+        "angle_deg": -90,
+        "vector": {
+          "x": 0.0,
+          "y": -1.0
+        },
+        "confidence": 0.268
+      },
+      "bbox_mm": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 3500,
+        "max_y": 4000
+      },
+      "ceiling_height_mm": 2800
+    },
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "kind": "door",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1608
+            },
+            {
+              "x": 0,
+              "y": 2608
+            }
+          ],
+          "original_segment_mm": [
+            {
+              "x": 0,
+              "y": 1608
+            },
+            {
+              "x": 0,
+              "y": 2608
+            }
+          ],
+          "wall_id": "wall_4",
+          "width_mm": 1000,
+          "wall_t_start_mm": 1392,
+          "wall_t_end_mm": 2392,
+          "snap_distance_mm": 0,
+          "swing_radius_mm": 900,
+          "hinge_hint": "LEFT"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "kind": "window",
+          "segment_mm": [
+            {
+              "x": 567,
+              "y": 0
+            },
+            {
+              "x": 2567,
+              "y": 0
+            }
+          ],
+          "original_segment_mm": [
+            {
+              "x": 567,
+              "y": 7
+            },
+            {
+              "x": 2567,
+              "y": 2
+            }
+          ],
+          "wall_id": "wall_1",
+          "width_mm": 2000,
+          "wall_t_start_mm": 567,
+          "wall_t_end_mm": 2567,
+          "snap_distance_mm": 7,
+          "clearance_mm": 150
+        }
+      ]
+    },
+    "affordance_map": {
+      "usable_walls": [
+        {
+          "id": "wall_2_usable_200_3750",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 3500,
+              "y": 200
+            },
+            {
+              "x": 3500,
+              "y": 3750
+            }
+          ],
+          "length_mm": 3550,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 3750,
+          "inward_normal": {
+            "x": -1.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "wall_3_usable_200_3300",
+          "wall_id": "wall_3",
+          "segment_mm": [
+            {
+              "x": 3300,
+              "y": 3953
+            },
+            {
+              "x": 200,
+              "y": 3997
+            }
+          ],
+          "length_mm": 3100,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 3300,
+          "inward_normal": {
+            "x": -0.014284256782850143,
+            "y": -0.99989797479951
+          }
+        },
+        {
+          "id": "wall_4_usable_200_1292",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 3800
+            },
+            {
+              "x": 0,
+              "y": 2708
+            }
+          ],
+          "length_mm": 1092,
+          "wall_t_start_mm": 200,
+          "wall_t_end_mm": 1292,
+          "inward_normal": {
+            "x": 1.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "wall_4_usable_2492_3800",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1508
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "length_mm": 1308,
+          "wall_t_start_mm": 2492,
+          "wall_t_end_mm": 3800,
+          "inward_normal": {
+            "x": 1.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "blocked_walls": [
+        {
+          "wall_id": "wall_1",
+          "length_mm": 3500,
+          "blocked_intervals_mm": [
+            {
+              "start_mm": 0,
+              "end_mm": 200,
+              "reason": "corner_start"
+            },
+            {
+              "start_mm": 417,
+              "end_mm": 2717,
+              "reason": "window:window_1"
+            },
+            {
+              "start_mm": 3300,
+              "end_mm": 3500,
+              "reason": "corner_end"
+            }
+          ]
+        }
+      ],
+      "entry_landing_zones": [
+        {
+          "id": "door_1_entry_clearance",
+          "type": "entry_clearance",
+          "polygon_ccw": [
+            {
+              "x": 0,
+              "y": 2708
+            },
+            {
+              "x": 0,
+              "y": 1508
+            },
+            {
+              "x": 900,
+              "y": 1508
+            },
+            {
+              "x": 900,
+              "y": 2708
+            }
+          ],
+          "hard": true,
+          "source_id": "door_1"
+        }
+      ],
+      "circulation_corridors": [
+        {
+          "id": "corridor_1",
+          "from": "entry",
+          "to": "room_center",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2108
+            },
+            {
+              "x": 1746,
+              "y": 1988
+            }
+          ],
+          "width_mm": 900,
+          "score": 0.438
+        },
+        {
+          "id": "corridor_2",
+          "from": "entry",
+          "to": "deep_room",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2108
+            },
+            {
+              "x": 3400,
+              "y": 0
+            }
+          ],
+          "width_mm": 900,
+          "score": 1.0
+        },
+        {
+          "id": "corridor_3",
+          "from": "entry",
+          "to": "window:window_1",
+          "polyline_mm": [
+            {
+              "x": 0,
+              "y": 2108
+            },
+            {
+              "x": 1567,
+              "y": 0
+            }
+          ],
+          "width_mm": 900,
+          "score": 0.657
+        }
+      ],
+      "daylight_regions": [
+        {
+          "id": "window_1_daylight",
+          "source_window_id": "window_1",
+          "near_polygon_ccw": [
+            {
+              "x": 417,
+              "y": 0
+            },
+            {
+              "x": 2717,
+              "y": 0
+            },
+            {
+              "x": 2717,
+              "y": 1600
+            },
+            {
+              "x": 417,
+              "y": 1600
+            }
+          ],
+          "mid_polygon_ccw": [
+            {
+              "x": 267,
+              "y": 0
+            },
+            {
+              "x": 2867,
+              "y": 0
+            },
+            {
+              "x": 2867,
+              "y": 3000
+            },
+            {
+              "x": 267,
+              "y": 3000
+            }
+          ],
+          "score": 1.0
+        }
+      ],
+      "privacy_regions": [
+        {
+          "id": "privacy_back_zone",
+          "bbox_mm": {
+            "min_x": 3000,
+            "min_y": 0,
+            "max_x": 3400,
+            "max_y": 3800
+          },
+          "centroid_mm": {
+            "x": 3317,
+            "y": 1117
+          },
+          "score": 0.8
+        }
+      ],
+      "focal_surfaces": [
+        {
+          "id": "wall_2_usable_200_3750_focal",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 3500,
+              "y": 200
+            },
+            {
+              "x": 3500,
+              "y": 3750
+            }
+          ],
+          "score": 1.0,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_3_usable_200_3300_focal",
+          "wall_id": "wall_3",
+          "segment_mm": [
+            {
+              "x": 3300,
+              "y": 3953
+            },
+            {
+              "x": 200,
+              "y": 3997
+            }
+          ],
+          "score": 0.886,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_4_usable_2492_3800_focal",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1508
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "score": 0.374,
+          "reason": "long usable wall with low opening interruption"
+        },
+        {
+          "id": "wall_4_usable_200_1292_focal",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 3800
+            },
+            {
+              "x": 0,
+              "y": 2708
+            }
+          ],
+          "score": 0.312,
+          "reason": "long usable wall with low opening interruption"
+        }
+      ],
+      "center_openness_regions": [
+        {
+          "id": "center_openness_core",
+          "centroid_mm": {
+            "x": 1700,
+            "y": 2000
+          },
+          "bbox_mm": {
+            "min_x": 1400,
+            "min_y": 1600,
+            "max_x": 2000,
+            "max_y": 2400
+          },
+          "score": 1.0
+        }
+      ],
+      "wall_anchor_candidates": [
+        {
+          "id": "wall_2_usable_200_3750_anchor",
+          "wall_id": "wall_2",
+          "segment_mm": [
+            {
+              "x": 3500,
+              "y": 200
+            },
+            {
+              "x": 3500,
+              "y": 3750
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 3500,
+              "y": 200
+            },
+            {
+              "x": 3500,
+              "y": 3750
+            },
+            {
+              "x": 2800,
+              "y": 3750
+            },
+            {
+              "x": 2800,
+              "y": 200
+            }
+          ],
+          "max_backed_width_mm": 3550,
+          "score": 1.0
+        },
+        {
+          "id": "wall_3_usable_200_3300_anchor",
+          "wall_id": "wall_3",
+          "segment_mm": [
+            {
+              "x": 3300,
+              "y": 3953
+            },
+            {
+              "x": 200,
+              "y": 3997
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 3300,
+              "y": 3953
+            },
+            {
+              "x": 200,
+              "y": 3997
+            },
+            {
+              "x": 190,
+              "y": 3297
+            },
+            {
+              "x": 3290,
+              "y": 3253
+            }
+          ],
+          "max_backed_width_mm": 3100,
+          "score": 1.0
+        },
+        {
+          "id": "wall_4_usable_2492_3800_anchor",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1508
+            },
+            {
+              "x": 0,
+              "y": 200
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 0,
+              "y": 1508
+            },
+            {
+              "x": 0,
+              "y": 200
+            },
+            {
+              "x": 700,
+              "y": 200
+            },
+            {
+              "x": 700,
+              "y": 1508
+            }
+          ],
+          "max_backed_width_mm": 1308,
+          "score": 0.436
+        },
+        {
+          "id": "wall_4_usable_200_1292_anchor",
+          "wall_id": "wall_4",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 3800
+            },
+            {
+              "x": 0,
+              "y": 2708
+            }
+          ],
+          "anchor_polygon_ccw": [
+            {
+              "x": 0,
+              "y": 3800
+            },
+            {
+              "x": 0,
+              "y": 2708
+            },
+            {
+              "x": 700,
+              "y": 2708
+            },
+            {
+              "x": 700,
+              "y": 3800
+            }
+          ],
+          "max_backed_width_mm": 1092,
+          "score": 0.364
+        }
+      ],
+      "floating_zone_candidates": [
+        {
+          "id": "floating_center_zone",
+          "centroid_mm": {
+            "x": 1700,
+            "y": 2000
+          },
+          "bbox_mm": {
+            "min_x": 1400,
+            "min_y": 1600,
+            "max_x": 2000,
+            "max_y": 2400
+          },
+          "score": 0.487
+        }
+      ],
+      "soft_usage_hints": {
+        "active_entry": true,
+        "prefer_private_back_zone": false,
+        "prefer_daylit_work_zone": false,
+        "prefer_open_center": true,
+        "likely_primary_focus": "longest_usable_wall"
+      }
+    },
+    "topology": {
+      "wall_graph": {
+        "nodes": [
+          {
+            "id": "wall_1",
+            "start_mm": {
+              "x": 0,
+              "y": 0
+            },
+            "end_mm": {
+              "x": 3500,
+              "y": 0
+            },
+            "length_mm": 3500,
+            "inward_normal": {
+              "x": -0.0,
+              "y": 1.0
+            }
+          },
+          {
+            "id": "wall_2",
+            "start_mm": {
+              "x": 3500,
+              "y": 0
+            },
+            "end_mm": {
+              "x": 3500,
+              "y": 3950
+            },
+            "length_mm": 3950,
+            "inward_normal": {
+              "x": -1.0,
+              "y": 0.0
+            }
+          },
+          {
+            "id": "wall_3",
+            "start_mm": {
+              "x": 3500,
+              "y": 3950
+            },
+            "end_mm": {
+              "x": 0,
+              "y": 4000
+            },
+            "length_mm": 3500,
+            "inward_normal": {
+              "x": -0.014284256782850143,
+              "y": -0.99989797479951
+            }
+          },
+          {
+            "id": "wall_4",
+            "start_mm": {
+              "x": 0,
+              "y": 4000
+            },
+            "end_mm": {
+              "x": 0,
+              "y": 0
+            },
+            "length_mm": 4000,
+            "inward_normal": {
+              "x": 1.0,
+              "y": 0.0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "from": "wall_1",
+            "to": "wall_4",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_1",
+            "to": "wall_2",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_2",
+            "to": "wall_3",
+            "type": "adjacent"
+          },
+          {
+            "from": "wall_3",
+            "to": "wall_4",
+            "type": "adjacent"
+          }
+        ]
+      },
+      "entry_node": {
+        "id": "entry",
+        "type": "entry",
+        "point_mm": {
+          "x": 0,
+          "y": 2108
+        }
+      },
+      "window_nodes": [
+        {
+          "id": "window:window_1",
+          "type": "window",
+          "point_mm": {
+            "x": 1567,
+            "y": 0
+          },
+          "opening_id": "window_1"
+        }
+      ],
+      "passage_graph": {
+        "nodes": [
+          {
+            "id": "entry",
+            "type": "entry",
+            "point_mm": {
+              "x": 0,
+              "y": 2108
+            }
+          },
+          {
+            "id": "room_center",
+            "type": "center",
+            "point_mm": {
+              "x": 1746,
+              "y": 1988
+            }
+          },
+          {
+            "id": "window:window_1",
+            "type": "window",
+            "point_mm": {
+              "x": 1567,
+              "y": 0
+            },
+            "opening_id": "window_1"
+          }
+        ],
+        "edges": [
+          {
+            "from": "entry",
+            "to": "room_center",
+            "corridor_id": "corridor_1",
+            "width_mm": 900
+          },
+          {
+            "from": "entry",
+            "to": "deep_room",
+            "corridor_id": "corridor_2",
+            "width_mm": 900
+          },
+          {
+            "from": "entry",
+            "to": "window:window_1",
+            "corridor_id": "corridor_3",
+            "width_mm": 900
+          }
+        ]
+      },
+      "room_subzones": [
+        {
+          "id": "zone_back_right",
+          "label": "back_right",
+          "centroid_mm": {
+            "x": 2600,
+            "y": 2900
+          },
+          "bbox_mm": {
+            "min_x": 1800,
+            "min_y": 2000,
+            "max_x": 3400,
+            "max_y": 3800
+          },
+          "sample_count": 90
+        },
+        {
+          "id": "zone_front_right",
+          "label": "front_right",
+          "centroid_mm": {
+            "x": 2623,
+            "y": 942
+          },
+          "bbox_mm": {
+            "min_x": 1800,
+            "min_y": 0,
+            "max_x": 3400,
+            "max_y": 1800
+          },
+          "sample_count": 86
+        },
+        {
+          "id": "zone_front_left",
+          "label": "front_left",
+          "centroid_mm": {
+            "x": 830,
+            "y": 865
+          },
+          "bbox_mm": {
+            "min_x": 0,
+            "min_y": 0,
+            "max_x": 1600,
+            "max_y": 1800
+          },
+          "sample_count": 74
+        },
+        {
+          "id": "zone_back_left",
+          "label": "back_left",
+          "centroid_mm": {
+            "x": 914,
+            "y": 3071
+          },
+          "bbox_mm": {
+            "min_x": 0,
+            "min_y": 2000,
+            "max_x": 1600,
+            "max_y": 3800
+          },
+          "sample_count": 70
+        }
+      ]
+    },
+    "objects": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "kitchen_base_cabinet",
+        "category": "kitchen_base_cabinet",
+        "x": 1450,
+        "y": 3350,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 620,
+        "h": 560,
+        "rect": [
+          1450,
+          3350,
+          2070,
+          3910
+        ],
+        "bbox": {
+          "min_x": 1450,
+          "min_y": 3350,
+          "max_x": 2070,
+          "max_y": 3910
+        },
+        "center": {
+          "x": 1760,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "object_id": "kitchen_tall_cabinet",
+        "category": "kitchen_tall_cabinet",
+        "x": 2900,
+        "y": 0,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 590,
+        "h": 580,
+        "rect": [
+          2900,
+          0,
+          3490,
+          580
+        ],
+        "bbox": {
+          "min_x": 2900,
+          "min_y": 0,
+          "max_x": 3490,
+          "max_y": 580
+        },
+        "center": {
+          "x": 3195,
+          "y": 290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "fridge",
+        "category": "fridge",
+        "x": 2150,
+        "y": 3150,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 640,
+        "h": 600,
+        "rect": [
+          2150,
+          3150,
+          2790,
+          3750
+        ],
+        "bbox": {
+          "min_x": 2150,
+          "min_y": 3150,
+          "max_x": 2790,
+          "max_y": 3750
+        },
+        "center": {
+          "x": 2470,
+          "y": 3450
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "sink",
+        "category": "sink",
+        "x": 800,
+        "y": 3200,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 580,
+        "h": 490,
+        "rect": [
+          800,
+          3200,
+          1380,
+          3690
+        ],
+        "bbox": {
+          "min_x": 800,
+          "min_y": 3200,
+          "max_x": 1380,
+          "max_y": 3690
+        },
+        "center": {
+          "x": 1090,
+          "y": 3445
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "stove",
+        "category": "stove",
+        "x": 150,
+        "y": 3000,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 610,
+        "h": 580,
+        "rect": [
+          150,
+          3000,
+          760,
+          3580
+        ],
+        "bbox": {
+          "min_x": 150,
+          "min_y": 3000,
+          "max_x": 760,
+          "max_y": 3580
+        },
+        "center": {
+          "x": 455,
+          "y": 3290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "sink",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      }
+    ],
+    "placements": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "kitchen_base_cabinet",
+        "category": "kitchen_base_cabinet",
+        "x": 1450,
+        "y": 3350,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 620,
+        "h": 560,
+        "rect": [
+          1450,
+          3350,
+          2070,
+          3910
+        ],
+        "bbox": {
+          "min_x": 1450,
+          "min_y": 3350,
+          "max_x": 2070,
+          "max_y": 3910
+        },
+        "center": {
+          "x": 1760,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "object_id": "kitchen_tall_cabinet",
+        "category": "kitchen_tall_cabinet",
+        "x": 2900,
+        "y": 0,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 590,
+        "h": 580,
+        "rect": [
+          2900,
+          0,
+          3490,
+          580
+        ],
+        "bbox": {
+          "min_x": 2900,
+          "min_y": 0,
+          "max_x": 3490,
+          "max_y": 580
+        },
+        "center": {
+          "x": 3195,
+          "y": 290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "fridge",
+        "category": "fridge",
+        "x": 2150,
+        "y": 3150,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 640,
+        "h": 600,
+        "rect": [
+          2150,
+          3150,
+          2790,
+          3750
+        ],
+        "bbox": {
+          "min_x": 2150,
+          "min_y": 3150,
+          "max_x": 2790,
+          "max_y": 3750
+        },
+        "center": {
+          "x": 2470,
+          "y": 3450
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "sink",
+        "category": "sink",
+        "x": 800,
+        "y": 3200,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 580,
+        "h": 490,
+        "rect": [
+          800,
+          3200,
+          1380,
+          3690
+        ],
+        "bbox": {
+          "min_x": 800,
+          "min_y": 3200,
+          "max_x": 1380,
+          "max_y": 3690
+        },
+        "center": {
+          "x": 1090,
+          "y": 3445
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "stove",
+        "category": "stove",
+        "x": 150,
+        "y": 3000,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 610,
+        "h": 580,
+        "rect": [
+          150,
+          3000,
+          760,
+          3580
+        ],
+        "bbox": {
+          "min_x": 150,
+          "min_y": 3000,
+          "max_x": 760,
+          "max_y": 3580
+        },
+        "center": {
+          "x": 455,
+          "y": 3290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "sink",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      }
+    ],
+    "object_placements": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "kitchen_base_cabinet",
+        "category": "kitchen_base_cabinet",
+        "x": 1450,
+        "y": 3350,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 620,
+        "h": 560,
+        "rect": [
+          1450,
+          3350,
+          2070,
+          3910
+        ],
+        "bbox": {
+          "min_x": 1450,
+          "min_y": 3350,
+          "max_x": 2070,
+          "max_y": 3910
+        },
+        "center": {
+          "x": 1760,
+          "y": 3630
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "object_id": "kitchen_tall_cabinet",
+        "category": "kitchen_tall_cabinet",
+        "x": 2900,
+        "y": 0,
+        "rot": 0,
+        "rotation_ccw": 0,
+        "w": 590,
+        "h": 580,
+        "rect": [
+          2900,
+          0,
+          3490,
+          580
+        ],
+        "bbox": {
+          "min_x": 2900,
+          "min_y": 0,
+          "max_x": 3490,
+          "max_y": 580
+        },
+        "center": {
+          "x": 3195,
+          "y": 290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": 1
+        },
+        "front_side_world": "top",
+        "relative_to": null,
+        "role": "dominant_anchor",
+        "priority": "anchor",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "fridge",
+        "category": "fridge",
+        "x": 2150,
+        "y": 3150,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 640,
+        "h": 600,
+        "rect": [
+          2150,
+          3150,
+          2790,
+          3750
+        ],
+        "bbox": {
+          "min_x": 2150,
+          "min_y": 3150,
+          "max_x": 2790,
+          "max_y": 3750
+        },
+        "center": {
+          "x": 2470,
+          "y": 3450
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "sink",
+        "category": "sink",
+        "x": 800,
+        "y": 3200,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 580,
+        "h": 490,
+        "rect": [
+          800,
+          3200,
+          1380,
+          3690
+        ],
+        "bbox": {
+          "min_x": 800,
+          "min_y": 3200,
+          "max_x": 1380,
+          "max_y": 3690
+        },
+        "center": {
+          "x": 1090,
+          "y": 3445
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "kitchen_base_cabinet",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      },
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "stove",
+        "category": "stove",
+        "x": 150,
+        "y": 3000,
+        "rot": 180,
+        "rotation_ccw": 180,
+        "w": 610,
+        "h": 580,
+        "rect": [
+          150,
+          3000,
+          760,
+          3580
+        ],
+        "bbox": {
+          "min_x": 150,
+          "min_y": 3000,
+          "max_x": 760,
+          "max_y": 3580
+        },
+        "center": {
+          "x": 455,
+          "y": 3290
+        },
+        "front_token": "top",
+        "front_world": {
+          "dx": 0,
+          "dy": -1
+        },
+        "front_side_world": "bottom",
+        "relative_to": "sink",
+        "role": "support",
+        "priority": "primary",
+        "requires_front_access": true
+      }
+    ],
+    "clusters": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_ids": [
+          "kitchen_base_cabinet",
+          "fridge",
+          "sink",
+          "stove"
+        ],
+        "dominant_anchor_id": "kitchen_base_cabinet",
+        "bbox": {
+          "min_x": 150,
+          "min_y": 3000,
+          "max_x": 2790,
+          "max_y": 3910
+        }
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "object_ids": [
+          "kitchen_tall_cabinet"
+        ],
+        "dominant_anchor_id": "kitchen_tall_cabinet",
+        "bbox": {
+          "min_x": 2900,
+          "min_y": 0,
+          "max_x": 3490,
+          "max_y": 580
+        }
+      }
+    ],
+    "cluster_instances": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_ids": [
+          "kitchen_base_cabinet",
+          "fridge",
+          "sink",
+          "stove"
+        ],
+        "dominant_anchor_id": "kitchen_base_cabinet",
+        "bbox": {
+          "min_x": 150,
+          "min_y": 3000,
+          "max_x": 2790,
+          "max_y": 3910
+        }
+      },
+      {
+        "cluster_id": "kitchen_storage_support",
+        "object_ids": [
+          "kitchen_tall_cabinet"
+        ],
+        "dominant_anchor_id": "kitchen_tall_cabinet",
+        "bbox": {
+          "min_x": 2900,
+          "min_y": 0,
+          "max_x": 3490,
+          "max_y": 580
+        }
+      }
+    ],
+    "coverage": {
+      "expected_cluster_ids": [
+        "kitchen_workflow_core",
+        "kitchen_storage_support"
+      ],
+      "present_cluster_ids": [
+        "kitchen_storage_support",
+        "kitchen_workflow_core"
+      ],
+      "missing_cluster_ids": []
+    },
+    "complete": true,
+    "gallery_eligible": false,
+    "coverage_ratio": 1.0,
+    "missing_cluster_ids": [],
+    "notes": [
+      "Absolute layout was emitted directly by the object-level solver.",
+      "Cluster local composition and phase-2 repair were bypassed in this flow."
+    ],
+    "solver_debug": {
+      "selected_concept_id": "concept_04",
+      "dropped_inventory_by_cluster": {
+        "kitchen_workflow_core": [
+          {
+            "object_id": "dishwasher",
+            "reason": "support_slot_failed"
+          }
+        ]
+      },
+      "verify_summary": {
+        "geometry_valid": true,
+        "hard_valid": false,
+        "complete": true,
+        "gallery_eligible": false,
+        "coverage_ratio": 1.0,
+        "missing_cluster_ids": [],
+        "dropped_trial_cluster_ids": [],
+        "present_cluster_ids": [
+          "kitchen_storage_support",
+          "kitchen_workflow_core"
+        ],
+        "offending_clusters": [
+          "kitchen_workflow_core"
+        ],
+        "primary_pair_ok": true,
+        "orientation_issues": [],
+        "blocking_orientation_issues": [],
+        "protected_region_issues": [],
+        "blocking_protected_region_issues": [],
+        "forbidden_region_issues": [],
+        "blocking_forbidden_region_issues": [],
+        "functional_geometry_issues": [
+          {
+            "cluster_id": "kitchen_workflow_core",
+            "object_id": "fridge",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.8,
+            "overlap_area_mm2": 307200
+          }
+        ],
+        "blocking_functional_geometry_issues": [
+          {
+            "cluster_id": "kitchen_workflow_core",
+            "object_id": "fridge",
+            "reason": "view_corridor_blocked",
+            "violation_severity": "blocking",
+            "overlap_ratio": 0.8,
+            "overlap_area_mm2": 307200
+          }
+        ],
+        "face_pair_issues": [],
+        "critical_issue_count": 0,
+        "blocking_issue_count": 1,
+        "view_corridor_ok": false,
+        "front_access_ok": true,
+        "protected_region_penalty": 0.0,
+        "forbidden_region_penalty": 0.0,
+        "soft_issue_count": 0,
+        "soft_constraint_score": 10,
+        "quality_gate_reasons": [
+          "view_corridor_blocked"
+        ],
+        "layout_score": 510,
+        "geometry_repair": {
+          "status": "clean",
+          "moved_objects": [],
+          "total_shift_mm": 0,
+          "penalty": 0
+        },
+        "geometry_repair_penalty": 0
+      },
+      "geometry_repair": {
+        "status": "clean",
+        "moved_objects": [],
+        "total_shift_mm": 0,
+        "penalty": 0
+      }
+    }
+  },
+  "layout_score": 510,
+  "hard_valid": false,
+  "geometry_valid": true,
+  "complete": true,
+  "gallery_eligible": false,
+  "coverage_ratio": 1.0,
+  "missing_cluster_ids": [],
+  "verify_summary": {
+    "geometry_valid": true,
+    "hard_valid": false,
+    "complete": true,
+    "gallery_eligible": false,
+    "coverage_ratio": 1.0,
+    "missing_cluster_ids": [],
+    "dropped_trial_cluster_ids": [],
+    "present_cluster_ids": [
+      "kitchen_storage_support",
+      "kitchen_workflow_core"
+    ],
+    "offending_clusters": [
+      "kitchen_workflow_core"
+    ],
+    "primary_pair_ok": true,
+    "orientation_issues": [],
+    "blocking_orientation_issues": [],
+    "protected_region_issues": [],
+    "blocking_protected_region_issues": [],
+    "forbidden_region_issues": [],
+    "blocking_forbidden_region_issues": [],
+    "functional_geometry_issues": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "fridge",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.8,
+        "overlap_area_mm2": 307200
+      }
+    ],
+    "blocking_functional_geometry_issues": [
+      {
+        "cluster_id": "kitchen_workflow_core",
+        "object_id": "fridge",
+        "reason": "view_corridor_blocked",
+        "violation_severity": "blocking",
+        "overlap_ratio": 0.8,
+        "overlap_area_mm2": 307200
+      }
+    ],
+    "face_pair_issues": [],
+    "critical_issue_count": 0,
+    "blocking_issue_count": 1,
+    "view_corridor_ok": false,
+    "front_access_ok": true,
+    "protected_region_penalty": 0.0,
+    "forbidden_region_penalty": 0.0,
+    "soft_issue_count": 0,
+    "soft_constraint_score": 10,
+    "quality_gate_reasons": [
+      "view_corridor_blocked"
+    ],
+    "layout_score": 510,
+    "geometry_repair": {
+      "status": "clean",
+      "moved_objects": [],
+      "total_shift_mm": 0,
+      "penalty": 0
+    },
+    "geometry_repair_penalty": 0
+  },
+  "dropped_inventory_by_cluster": {
+    "kitchen_workflow_core": [
+      {
+        "object_id": "dishwasher",
+        "reason": "support_slot_failed"
+      }
+    ]
+  },
+  "state_signature": "kitchen_storage_support|kitchen_tall_cabinet|0|2900|0|3490|580\nkitchen_workflow_core|fridge|180|2150|3150|2790|3750\nkitchen_workflow_core|kitchen_base_cabinet|180|1450|3350|2070|3910\nkitchen_workflow_core|sink|180|800|3200|1380|3690\nkitchen_workflow_core|stove|180|150|3000|760|3580",
+  "notes": [
+    "Object-level solver kept this geometry-valid arrangement for ranked constraint search.",
+    "soft_issue_count=0",
+    "blocking_issue_count=1"
+  ]
+}

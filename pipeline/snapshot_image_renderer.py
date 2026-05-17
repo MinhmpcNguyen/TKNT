@@ -15,7 +15,7 @@ from typing import Literal
 from uuid import uuid4
 
 import httpx
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageFilter, UnidentifiedImageError
 
 from config import config_file, load_config, root_config
 from pipeline.image_flow_logging import (
@@ -324,6 +324,9 @@ def render_snapshot_image(
     snapshot_payload: Mapping[str, object],
     *,
     snapshot_image_data_url: str,
+    depth_map_image_data_url: str | None = None,
+    edge_map_image_data_url: str | None = None,
+    segmentation_map_image_data_url: str | None = None,
     user_prompt: str | None = None,
     layout_reference_image_data_url: str | None = None,
     annotated_reference_image_data_url: str | None = None,
@@ -338,7 +341,41 @@ def render_snapshot_image(
 ) -> dict[str, object]:
     image_flow_trace_id = trace_id or uuid4().hex
     resolved_config = config or SnapshotImageRenderConfig.from_env()
+    geometry_reference_requested = any(
+        value
+        for value in (
+            depth_map_image_data_url,
+            edge_map_image_data_url,
+            segmentation_map_image_data_url,
+        )
+    )
+    if render_mode == "generate" and geometry_reference_requested:
+        if resolved_config.image_provider != "openai":
+            raise ValueError(
+                "Geometry reference rendering requires TKNT_IMAGE_PROVIDER=openai "
+                "so the image call uses gpt-image-1.5."
+            )
+        if resolved_config.openai_image_model != _DEFAULT_OPENAI_IMAGE_MODEL:
+            raise ValueError(
+                "Geometry reference rendering is locked to gpt-image-1.5. "
+                f"Configured OpenAI image model: {resolved_config.openai_image_model}."
+            )
     structural_image_data_url = _normalize_image_data_url(snapshot_image_data_url)
+    normalized_depth_map = (
+        _normalize_image_data_url(depth_map_image_data_url)
+        if depth_map_image_data_url
+        else None
+    )
+    normalized_edge_map = (
+        _normalize_image_data_url(edge_map_image_data_url)
+        if edge_map_image_data_url
+        else None
+    )
+    normalized_segmentation_map = (
+        _normalize_image_data_url(segmentation_map_image_data_url)
+        if segmentation_map_image_data_url
+        else None
+    )
     normalized_scene_reference = (
         _normalize_image_data_url(scene_reference_image_data_url)
         if scene_reference_image_data_url
@@ -407,6 +444,9 @@ def render_snapshot_image(
         layout_lock_prompt=layout_lock_prompt,
         layout_reference_used=layout_reference_used,
         annotated_reference_used=annotated_reference_used,
+        depth_map_used=normalized_depth_map is not None,
+        edge_map_used=normalized_edge_map is not None,
+        segmentation_map_used=normalized_segmentation_map is not None,
         scene_reference_mode=resolved_scene_reference_mode,
     )
     aspect_ratio = _resolve_canvas_aspect_ratio(snapshot_payload)
@@ -435,6 +475,11 @@ def render_snapshot_image(
             "layout_reference_enabled": layout_reference_enabled,
             "layout_reference_used": layout_reference_used,
             "annotated_reference_used": annotated_reference_used,
+            "geometry_references_used": _geometry_references_used_payload(
+                depth_map_image_data_url=normalized_depth_map,
+                edge_map_image_data_url=normalized_edge_map,
+                segmentation_map_image_data_url=normalized_segmentation_map,
+            ),
             "scene_reference_used": scene_reference_used,
             "reference_only_camera_transfer_used": (
                 reference_only_camera_transfer_used
@@ -453,6 +498,11 @@ def render_snapshot_image(
             "images": {
                 "source": summarize_image_data_url(source_image_data_url),
                 "structural": summarize_image_data_url(structural_image_data_url),
+                "depth_map": summarize_image_data_url(normalized_depth_map),
+                "edge_map": summarize_image_data_url(normalized_edge_map),
+                "segmentation_map": summarize_image_data_url(
+                    normalized_segmentation_map
+                ),
                 "annotated_reference": summarize_image_data_url(
                     normalized_annotated_reference if annotated_reference_used else None
                 ),
@@ -483,6 +533,9 @@ def render_snapshot_image(
                 system_prompt=active_system_prompt,
                 user_prompt=normalized_user_prompt,
                 source_image_data_url=source_image_data_url,
+                depth_map_image_data_url=normalized_depth_map,
+                edge_map_image_data_url=normalized_edge_map,
+                segmentation_map_image_data_url=normalized_segmentation_map,
                 annotated_reference_image_data_url=(
                     normalized_annotated_reference if annotated_reference_used else None
                 ),
@@ -511,6 +564,9 @@ def render_snapshot_image(
                 system_prompt=active_system_prompt,
                 user_prompt=normalized_user_prompt,
                 source_image_data_url=source_image_data_url,
+                depth_map_image_data_url=normalized_depth_map,
+                edge_map_image_data_url=normalized_edge_map,
+                segmentation_map_image_data_url=normalized_segmentation_map,
                 annotated_reference_image_data_url=(
                     normalized_annotated_reference if annotated_reference_used else None
                 ),
@@ -560,6 +616,18 @@ def render_snapshot_image(
             "structural_image_mime_type": _extract_data_url_mime_type(
                 structural_image_data_url
             ),
+            "geometry_references_used": _geometry_references_used_payload(
+                depth_map_image_data_url=normalized_depth_map,
+                edge_map_image_data_url=normalized_edge_map,
+                segmentation_map_image_data_url=normalized_segmentation_map,
+            ),
+            "geometry_reference_image_mime_types": (
+                _geometry_reference_mime_types_payload(
+                    depth_map_image_data_url=normalized_depth_map,
+                    edge_map_image_data_url=normalized_edge_map,
+                    segmentation_map_image_data_url=normalized_segmentation_map,
+                )
+            ),
             "layout_reference_enabled": layout_reference_enabled,
             "layout_reference_used": layout_reference_used,
             "layout_reference_image_mime_type": (
@@ -606,6 +674,7 @@ def render_snapshot_image(
                 _serialize_edit_operation(operation)
                 for operation in normalized_operations
             ],
+            "validation": image_result.get("validation"),
         },
     }
 
@@ -615,6 +684,9 @@ def render_snapshot_image_from_path(
     *,
     user_prompt: str | None = None,
     snapshot_image_data_url: str | None = None,
+    depth_map_image_data_url: str | None = None,
+    edge_map_image_data_url: str | None = None,
+    segmentation_map_image_data_url: str | None = None,
     layout_reference_image_data_url: str | None = None,
     annotated_reference_image_data_url: str | None = None,
     scene_reference_image_data_url: str | None = None,
@@ -646,6 +718,9 @@ def render_snapshot_image_from_path(
     return render_snapshot_image(
         payload,
         snapshot_image_data_url=image_data_url,
+        depth_map_image_data_url=depth_map_image_data_url,
+        edge_map_image_data_url=edge_map_image_data_url,
+        segmentation_map_image_data_url=segmentation_map_image_data_url,
         user_prompt=user_prompt,
         layout_reference_image_data_url=layout_reference_image_data_url,
         annotated_reference_image_data_url=annotated_reference_image_data_url,
@@ -677,6 +752,44 @@ def _normalize_openai_image_quality(value: str | None) -> str:
     if normalized in _SUPPORTED_OPENAI_IMAGE_QUALITIES:
         return normalized
     return _DEFAULT_OPENAI_IMAGE_QUALITY
+
+
+def _geometry_references_used_payload(
+    *,
+    depth_map_image_data_url: str | None,
+    edge_map_image_data_url: str | None,
+    segmentation_map_image_data_url: str | None,
+) -> dict[str, bool]:
+    return {
+        "depth_map": depth_map_image_data_url is not None,
+        "edge_map": edge_map_image_data_url is not None,
+        "segmentation_map": segmentation_map_image_data_url is not None,
+    }
+
+
+def _geometry_reference_mime_types_payload(
+    *,
+    depth_map_image_data_url: str | None,
+    edge_map_image_data_url: str | None,
+    segmentation_map_image_data_url: str | None,
+) -> dict[str, str | None]:
+    return {
+        "depth_map": (
+            _extract_data_url_mime_type(depth_map_image_data_url)
+            if depth_map_image_data_url is not None
+            else None
+        ),
+        "edge_map": (
+            _extract_data_url_mime_type(edge_map_image_data_url)
+            if edge_map_image_data_url is not None
+            else None
+        ),
+        "segmentation_map": (
+            _extract_data_url_mime_type(segmentation_map_image_data_url)
+            if segmentation_map_image_data_url is not None
+            else None
+        ),
+    }
 
 
 def _data_url_to_openai_image_file(
@@ -776,6 +889,9 @@ def _generate_image_with_openai(
     system_prompt: str,
     user_prompt: str,
     source_image_data_url: str,
+    depth_map_image_data_url: str | None,
+    edge_map_image_data_url: str | None,
+    segmentation_map_image_data_url: str | None,
     annotated_reference_image_data_url: str | None,
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
@@ -795,68 +911,97 @@ def _generate_image_with_openai(
     size = _normalize_openai_image_size(openai_image_size)
     quality = _normalize_openai_image_quality(openai_image_quality)
     combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+    geometry_references_used = any(
+        value is not None
+        for value in (
+            depth_map_image_data_url,
+            edge_map_image_data_url,
+            segmentation_map_image_data_url,
+        )
+    )
     mask_file = _build_openai_edit_mask_file(
         source_image_data_url,
         edit_operations=edit_operations,
     )
 
     image_files: list[tuple[str, tuple[str, bytes, str]]] = []
-    image_files.append(
-        (
-            "image[]",
-            _data_url_to_openai_image_file(
-                source_image_data_url,
-                filename_stem="source",
-                force_png=mask_file is not None,
-            ),
+    image_slots: list[dict[str, object]] = []
+
+    def append_image_slot(
+        *,
+        role: str,
+        data_url: str,
+        filename_stem: str,
+        force_png: bool = False,
+    ) -> None:
+        image_slots.append(
+            {
+                "image_number": len(image_slots) + 1,
+                "role": role,
+                "summary": summarize_image_data_url(data_url),
+            }
         )
+        image_files.append(
+            (
+                "image[]",
+                _data_url_to_openai_image_file(
+                    data_url,
+                    filename_stem=filename_stem,
+                    force_png=force_png,
+                ),
+            )
+        )
+
+    append_image_slot(
+        role="clean_3d_source",
+        data_url=source_image_data_url,
+        filename_stem="source",
+        force_png=mask_file is not None,
     )
+    if depth_map_image_data_url is not None:
+        append_image_slot(
+            role="depth_map_geometry_reference",
+            data_url=depth_map_image_data_url,
+            filename_stem="depth_map",
+        )
+    if edge_map_image_data_url is not None:
+        append_image_slot(
+            role="edge_map_geometry_reference",
+            data_url=edge_map_image_data_url,
+            filename_stem="edge_map",
+        )
+    if segmentation_map_image_data_url is not None:
+        append_image_slot(
+            role="segmentation_map_geometry_reference",
+            data_url=segmentation_map_image_data_url,
+            filename_stem="segmentation_map",
+        )
+    if scene_reference_image_data_url is not None:
+        append_image_slot(
+            role="scene_reference_appearance_only",
+            data_url=scene_reference_image_data_url,
+            filename_stem="scene_reference",
+        )
+    if layout_reference_image_data_url is not None:
+        append_image_slot(
+            role="top_down_layout_reference",
+            data_url=layout_reference_image_data_url,
+            filename_stem="layout_reference",
+        )
+    if annotated_reference_image_data_url is not None:
+        append_image_slot(
+            role="structural_identity_guide",
+            data_url=annotated_reference_image_data_url,
+            filename_stem="edit_guide",
+        )
+    for i, ref_url in enumerate(reference_image_data_urls):
+        append_image_slot(
+            role=f"object_appearance_reference_{i + 1}",
+            data_url=ref_url,
+            filename_stem=f"reference_{i + 1}",
+        )
     if mask_file is not None:
         image_files.append(("mask", mask_file))
-
-    if layout_reference_image_data_url is not None:
-        image_files.append(
-            (
-                "image[]",
-                _data_url_to_openai_image_file(
-                    layout_reference_image_data_url,
-                    filename_stem="layout_reference",
-                ),
-            )
-        )
-
-    if annotated_reference_image_data_url is not None:
-        image_files.append(
-            (
-                "image[]",
-                _data_url_to_openai_image_file(
-                    annotated_reference_image_data_url,
-                    filename_stem="edit_guide",
-                ),
-            )
-        )
-
-    if scene_reference_image_data_url is not None:
-        image_files.append(
-            (
-                "image[]",
-                _data_url_to_openai_image_file(
-                    scene_reference_image_data_url,
-                    filename_stem="scene_reference",
-                ),
-            )
-        )
-
-    for i, ref_url in enumerate(reference_image_data_urls):
-        image_files.append(
-            (
-                "image[]",
-                _data_url_to_openai_image_file(
-                    ref_url,
-                    filename_stem=f"reference_{i + 1}",
-                ),
-            )
-        )
 
     endpoint = f"{openai_base_url.rstrip('/')}/images/edits"
     headers = {"Authorization": f"Bearer {openai_api_key}"}
@@ -868,11 +1013,100 @@ def _generate_image_with_openai(
         "quality": quality,
     }
 
+    image_result = _post_openai_images_edit(
+        trace_id=trace_id,
+        model_name=model_name,
+        endpoint=endpoint,
+        headers=headers,
+        form_data=form_data,
+        image_files=image_files,
+        image_slots=image_slots,
+        mask_used=mask_file is not None,
+        aspect_ratio=aspect_ratio,
+        size=size,
+        quality=quality,
+        attempt_name="geometry_locked" if geometry_references_used else "standard",
+        combined_prompt=combined_prompt,
+    )
+    validation = _validate_generated_geometry_against_reference(
+        generated_image_data_url=str(image_result["data_url"]),
+        edge_map_image_data_url=edge_map_image_data_url,
+        expected_aspect_ratio=aspect_ratio,
+    )
+    image_result["validation"] = validation
+    image_result["retry_count"] = 0
+    image_result["request_strategy"] = (
+        "openai_edit_geometry_locked" if geometry_references_used else "openai_edit"
+    )
+    image_result["generation_config_applied"] = True
+
+    if geometry_references_used and _geometry_validation_should_retry(validation):
+        retry_prompt = _build_geometry_retry_prompt(combined_prompt, validation)
+        log_image_flow_event(
+            "openai.images_edit.geometry_retry",
+            {
+                "trace_id": trace_id,
+                "model_name": model_name,
+                "validation": validation,
+                "retry_reason": validation.get("reason"),
+            },
+        )
+        retry_result = _post_openai_images_edit(
+            trace_id=trace_id,
+            model_name=model_name,
+            endpoint=endpoint,
+            headers=headers,
+            form_data={**form_data, "prompt": retry_prompt},
+            image_files=image_files,
+            image_slots=image_slots,
+            mask_used=mask_file is not None,
+            aspect_ratio=aspect_ratio,
+            size=size,
+            quality=quality,
+            attempt_name="geometry_retry",
+            combined_prompt=retry_prompt,
+        )
+        retry_validation = _validate_generated_geometry_against_reference(
+            generated_image_data_url=str(retry_result["data_url"]),
+            edge_map_image_data_url=edge_map_image_data_url,
+            expected_aspect_ratio=aspect_ratio,
+        )
+        if retry_validation.get("status") == "failed":
+            retry_validation = {
+                **retry_validation,
+                "status": "failed_best_effort",
+            }
+        retry_result["validation"] = retry_validation
+        retry_result["retry_count"] = 1
+        retry_result["request_strategy"] = "openai_edit_geometry_retry"
+        retry_result["generation_config_applied"] = True
+        return retry_result
+
+    return image_result
+
+
+def _post_openai_images_edit(
+    *,
+    trace_id: str,
+    model_name: str,
+    endpoint: str,
+    headers: Mapping[str, str],
+    form_data: Mapping[str, str],
+    image_files: list[tuple[str, tuple[str, bytes, str]]],
+    image_slots: list[dict[str, object]],
+    mask_used: bool,
+    aspect_ratio: str,
+    size: str,
+    quality: str,
+    attempt_name: str,
+    combined_prompt: str,
+) -> dict[str, object]:
     log_image_flow_event(
         "openai.images_edit.attempt_input",
         {
             "trace_id": trace_id,
             "model_name": model_name,
+            "attempt": attempt_name,
             "endpoint": endpoint,
             "size": size,
             "quality": quality,
@@ -880,7 +1114,9 @@ def _generate_image_with_openai(
             "image_count": sum(
                 1 for field_name, _ in image_files if field_name == "image[]"
             ),
-            "mask_used": mask_file is not None,
+            "image_slots": image_slots,
+            "mask_used": mask_used,
+            "combined_prompt": combined_prompt,
         },
     )
 
@@ -903,6 +1139,7 @@ def _generate_image_with_openai(
             {
                 "trace_id": trace_id,
                 "model_name": model_name,
+                "attempt": attempt_name,
                 "status_code": response.status_code,
                 "elapsed_ms": elapsed_ms,
                 "response_body": body[:2000],
@@ -932,6 +1169,7 @@ def _generate_image_with_openai(
         {
             "trace_id": trace_id,
             "model_name": model_name,
+            "attempt": attempt_name,
             "elapsed_ms": elapsed_ms,
             "mime_type": mime_type,
             "byte_length": len(image_bytes),
@@ -947,10 +1185,160 @@ def _generate_image_with_openai(
         "size": size,
         "quality": quality,
         "aspect_ratio": aspect_ratio,
-        "request_strategy": "openai_edit",
-        "generation_config_applied": True,
         "raw_response": {k: v for k, v in parsed.items() if k != "data"},
     }
+
+
+def _validate_generated_geometry_against_reference(
+    *,
+    generated_image_data_url: str,
+    edge_map_image_data_url: str | None,
+    expected_aspect_ratio: str,
+) -> dict[str, object]:
+    if edge_map_image_data_url is None:
+        return {
+            "status": "skipped",
+            "reason": "edge_map_reference_missing",
+        }
+
+    try:
+        generated_image = Image.open(
+            BytesIO(_data_url_to_bytes(generated_image_data_url))
+        ).convert("RGB")
+        edge_map = Image.open(BytesIO(_data_url_to_bytes(edge_map_image_data_url))).convert(
+            "L"
+        )
+    except (binascii.Error, OSError, UnidentifiedImageError) as exc:
+        return {
+            "status": "skipped",
+            "reason": "geometry_validation_image_decode_failed",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        }
+
+    generated_width, generated_height = generated_image.size
+    if generated_width <= 2 or generated_height <= 2:
+        return {
+            "status": "skipped",
+            "reason": "generated_image_too_small_for_geometry_validation",
+            "generated_size": [generated_width, generated_height],
+        }
+
+    if edge_map.size != generated_image.size:
+        edge_map = edge_map.resize(generated_image.size, Image.Resampling.BILINEAR)
+
+    reference_mask = _reference_edge_mask(edge_map)
+    reference_count = sum(1 for value in reference_mask if value)
+    total_pixels = max(1, len(reference_mask))
+    reference_coverage = reference_count / total_pixels
+    if reference_coverage < 0.001:
+        return {
+            "status": "skipped",
+            "reason": "edge_map_reference_too_sparse",
+            "reference_edge_coverage": round(reference_coverage, 6),
+        }
+
+    generated_edge_image = generated_image.convert("L").filter(ImageFilter.FIND_EDGES)
+    generated_mask_image = _threshold_edge_image(generated_edge_image)
+    dilated_generated = generated_mask_image.filter(ImageFilter.MaxFilter(7))
+    dilated_generated_data = list(dilated_generated.getdata())
+    matched_reference_count = sum(
+        1
+        for reference_value, generated_value in zip(
+            reference_mask, dilated_generated_data, strict=False
+        )
+        if reference_value and generated_value > 0
+    )
+    edge_alignment_score = matched_reference_count / max(1, reference_count)
+    generated_aspect = generated_width / generated_height
+    target_aspect = _aspect_ratio_value(expected_aspect_ratio)
+    aspect_delta = (
+        abs(generated_aspect - target_aspect) / target_aspect
+        if target_aspect > 0
+        else 0.0
+    )
+    edge_alignment_threshold = 0.095
+    status = "passed" if edge_alignment_score >= edge_alignment_threshold else "failed"
+    reason = (
+        "camera_or_edge_alignment_score_below_threshold"
+        if status == "failed"
+        else "geometry_reference_alignment_acceptable"
+    )
+    return {
+        "status": status,
+        "reason": reason,
+        "edge_alignment_score": round(edge_alignment_score, 4),
+        "edge_alignment_threshold": edge_alignment_threshold,
+        "reference_edge_coverage": round(reference_coverage, 6),
+        "generated_size": [generated_width, generated_height],
+        "expected_aspect_ratio": expected_aspect_ratio,
+        "generated_aspect_ratio": round(generated_aspect, 4),
+        "aspect_delta": round(aspect_delta, 4),
+    }
+
+
+def _geometry_validation_should_retry(validation: Mapping[str, object]) -> bool:
+    return validation.get("status") == "failed"
+
+
+def _build_geometry_retry_prompt(
+    combined_prompt: str,
+    validation: Mapping[str, object],
+) -> str:
+    return (
+        combined_prompt
+        + "\n\nGeometry retry instruction:\n"
+        "The previous output drifted away from the supplied geometry references. "
+        "Regenerate the same scene with stronger adherence to the clean 3D source, "
+        "depth map, edge map, segmentation map, and structural guide. Keep wall "
+        "corners, window/opening positions, object silhouettes, screen bboxes, "
+        "depth order, and camera framing aligned with those references. Do not "
+        "zoom out, dolly backward, widen the field of view, shrink the furniture, "
+        "or reveal more room than the clean 3D source image. Treat style, "
+        "lighting, and scenery presets as finish-only changes.\n"
+        "Validation reason: "
+        + _string(validation.get("reason"), fallback="geometry_alignment_failed")
+    )
+
+
+def _reference_edge_mask(edge_map: Image.Image) -> list[bool]:
+    normalized = edge_map.convert("L")
+    histogram = normalized.histogram()
+    dark_count = sum(histogram[:48])
+    bright_count = sum(histogram[208:])
+    invert = dark_count < bright_count
+    data = list(normalized.getdata())
+    if invert:
+        return [value < 96 for value in data]
+    return [value > 96 for value in data]
+
+
+def _threshold_edge_image(edge_image: Image.Image) -> Image.Image:
+    histogram = edge_image.histogram()
+    total = sum(histogram)
+    target = max(1, int(total * 0.9))
+    running = 0
+    threshold = 32
+    for value, count in enumerate(histogram):
+        running += count
+        if running >= target:
+            threshold = max(24, value)
+            break
+    return edge_image.point(lambda value: 255 if value >= threshold else 0)
+
+
+def _aspect_ratio_value(value: str) -> float:
+    left, separator, right = value.partition(":")
+    if not separator:
+        return 0.0
+    try:
+        width = float(left)
+        height = float(right)
+    except ValueError:
+        return 0.0
+    if width <= 0 or height <= 0:
+        return 0.0
+    return width / height
 
 
 def _generate_image_with_gemini(
@@ -965,6 +1353,9 @@ def _generate_image_with_gemini(
     system_prompt: str,
     user_prompt: str,
     source_image_data_url: str,
+    depth_map_image_data_url: str | None,
+    edge_map_image_data_url: str | None,
+    segmentation_map_image_data_url: str | None,
     annotated_reference_image_data_url: str | None,
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
@@ -989,6 +1380,9 @@ def _generate_image_with_gemini(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         source_image_data_url=source_image_data_url,
+        depth_map_image_data_url=depth_map_image_data_url,
+        edge_map_image_data_url=edge_map_image_data_url,
+        segmentation_map_image_data_url=segmentation_map_image_data_url,
         annotated_reference_image_data_url=annotated_reference_image_data_url,
         scene_reference_image_data_url=scene_reference_image_data_url,
         layout_reference_image_data_url=layout_reference_image_data_url,
@@ -1089,6 +1483,9 @@ def _build_gemini_request_attempts(
     system_prompt: str,
     user_prompt: str,
     source_image_data_url: str,
+    depth_map_image_data_url: str | None,
+    edge_map_image_data_url: str | None,
+    segmentation_map_image_data_url: str | None,
     annotated_reference_image_data_url: str | None,
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
@@ -1113,6 +1510,36 @@ def _build_gemini_request_attempts(
             aspect_ratio=aspect_ratio,
         )
         if scene_reference_image_data_url is not None
+        else None
+    )
+    normalized_depth_map_image_data_url = (
+        _normalize_gemini_input_image_data_url(
+            depth_map_image_data_url,
+            model_name=model_name,
+            image_size=image_size,
+            aspect_ratio=aspect_ratio,
+        )
+        if depth_map_image_data_url is not None
+        else None
+    )
+    normalized_edge_map_image_data_url = (
+        _normalize_gemini_input_image_data_url(
+            edge_map_image_data_url,
+            model_name=model_name,
+            image_size=image_size,
+            aspect_ratio=aspect_ratio,
+        )
+        if edge_map_image_data_url is not None
+        else None
+    )
+    normalized_segmentation_map_image_data_url = (
+        _normalize_gemini_input_image_data_url(
+            segmentation_map_image_data_url,
+            model_name=model_name,
+            image_size=image_size,
+            aspect_ratio=aspect_ratio,
+        )
+        if segmentation_map_image_data_url is not None
         else None
     )
     normalized_annotated_reference_image_data_url = (
@@ -1153,10 +1580,21 @@ def _build_gemini_request_attempts(
         data_url is not None
         for data_url in (
             normalized_scene_reference_image_data_url,
+            normalized_depth_map_image_data_url,
+            normalized_edge_map_image_data_url,
+            normalized_segmentation_map_image_data_url,
             normalized_annotated_reference_image_data_url,
             normalized_layout_reference_image_data_url,
         )
     ) or bool(normalized_reference_image_data_urls)
+    if normalized_depth_map_image_data_url is not None:
+        content.append(_data_url_to_inline_part(normalized_depth_map_image_data_url))
+    if normalized_edge_map_image_data_url is not None:
+        content.append(_data_url_to_inline_part(normalized_edge_map_image_data_url))
+    if normalized_segmentation_map_image_data_url is not None:
+        content.append(
+            _data_url_to_inline_part(normalized_segmentation_map_image_data_url)
+        )
     if normalized_scene_reference_image_data_url is not None:
         content.append(
             _data_url_to_inline_part(normalized_scene_reference_image_data_url)
@@ -1304,6 +1742,9 @@ def _line_references_supplemental_image(line: str) -> bool:
         or "previously rendered same-room reference" in line
         or "labeled 3D target-view reference" in line
         or "user-drawn edit-region guide" in line
+        or "deterministic depth map" in line
+        or "deterministic edge map" in line
+        or "deterministic segmentation map" in line
     ):
         return True
     return line.startswith("The top-down layout image is supplemental")
@@ -1611,6 +2052,9 @@ def _build_final_user_prompt(
     layout_lock_prompt: str = "",
     layout_reference_used: bool = False,
     annotated_reference_used: bool = False,
+    depth_map_used: bool = False,
+    edge_map_used: bool = False,
+    segmentation_map_used: bool = False,
     scene_reference_mode: SceneReferenceMode = "none",
 ) -> str:
     raw_user_prompt = _string(user_prompt)
@@ -1620,6 +2064,9 @@ def _build_final_user_prompt(
             scene_reference_mode=scene_reference_mode,
             layout_reference_used=layout_reference_used,
             annotated_reference_used=annotated_reference_used,
+            depth_map_used=depth_map_used,
+            edge_map_used=edge_map_used,
+            segmentation_map_used=segmentation_map_used,
         )
         if image_role_prompt:
             prompt_parts.append(image_role_prompt)
@@ -1636,7 +2083,11 @@ def _build_final_user_prompt(
             prompt_parts.append(appearance_memory_prompt)
         if preset_prompt:
             prompt_parts.append(
-                "Apply these selected presets as finish realism, lighting, and exterior scenery only. They must not change architecture, openings, built-ins, object colors, object shape, object count, object size, or object placement:\n"
+                "Apply these selected presets as finish realism, material texture, "
+                "lighting/illumination, and exterior scenery visible through existing "
+                "openings only. They must not change architecture, openings, "
+                "built-ins, object colors, object shape, object count, object size, "
+                "camera, depth order, occlusion, or object placement:\n"
                 + preset_prompt
             )
         return "\n\n".join(prompt_parts)
@@ -1844,14 +2295,50 @@ def _build_generate_image_role_prompt(
     scene_reference_mode: SceneReferenceMode,
     layout_reference_used: bool,
     annotated_reference_used: bool,
+    depth_map_used: bool,
+    edge_map_used: bool,
+    segmentation_map_used: bool,
 ) -> str:
-    prompt_parts: list[str] = []
-    next_image_number = 2
     if scene_reference_mode == "scene_reference_camera_transfer":
+        prompt_parts: list[str] = [
+            "Image 1 is a previously rendered source reference. Transfer it to "
+            "the newly selected target camera only where it does not conflict "
+            "with the geometry references and labeled 3D layout guide."
+        ]
+    else:
+        prompt_parts = [
+            "Image 1 is the clean 3D source render and the primary source of "
+            "truth for camera, framing, room shell, object positions, object "
+            "sizes, visible colors, occlusion, and depth order. Preserve the "
+            "same apparent pixel scale: do not dolly out, zoom out, widen the "
+            "lens, reveal extra floor/walls, or make the furniture smaller in "
+            "frame."
+        ]
+    next_image_number = 2
+    if depth_map_used:
         prompt_parts.append(
-            "Image 1 is a previously rendered source reference. Transfer it to the newly selected target camera only where it does not conflict with the labeled 3D layout guide."
+            f"Image {next_image_number} is a deterministic depth map from the "
+            "same Three.js camera. Use it only as a geometry/depth-order "
+            "reference, never as style or material."
         )
-    elif scene_reference_mode == "target_layout_with_scene_reference":
+        next_image_number += 1
+    if edge_map_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is a deterministic edge map from the "
+            "same clean 3D source. Align wall seams, openings, furniture "
+            "silhouettes, and major object boundaries to it at the same screen "
+            "scale and crop."
+        )
+        next_image_number += 1
+    if segmentation_map_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is a deterministic segmentation map "
+            "from the same Three.js scene. Each flat color marks a locked "
+            "object or room surface region; use it to preserve object count, "
+            "placement, and silhouettes."
+        )
+        next_image_number += 1
+    if scene_reference_mode == "target_layout_with_scene_reference":
         prompt_parts.append(
             f"Image {next_image_number} is a previously rendered same-room reference. Use it only for realistic finish continuity and object identity when it agrees with the 3D layout."
         )
@@ -1894,6 +2381,7 @@ def _build_generate_layout_lock_prompt(
         "Layout lock instructions:",
         "Use the input 3D layout image as the exact target view.",
         "Match the camera angle, framing, perspective, room boundaries, visible wall panels, crisp corner seams, openings, furniture placement, object count, object color, object shape, object size, depth order, and occlusion shown in that image.",
+        "Camera crop lock: keep the same apparent field of view and object pixel scale as the 3D source. Do not zoom out, dolly backward, use a wider lens, shrink the furniture, or reveal additional floor/walls beyond the source framing.",
         "The labels, dark structural edge overlays, and guide marks are only for understanding the layout. They must not appear as labels, black outlines, or guide graphics in the final render.",
         "Existing objects may gain photorealistic texture and finish detail, but not a different color, identity, silhouette, footprint, pose, size, or position.",
         "Do not add extra decor or accessories unless they already exist in the 3D layout or the user explicitly requested them.",

@@ -26,7 +26,6 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
                 "mattress",
                 "headboard",
                 "rug",
-                "throw_blanket",
                 "cushion",
                 "pet_bed",
             ],
@@ -91,7 +90,6 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
                 "headboard",
                 "rug",
                 "cushion",
-                "throw_blanket",
             ],
             "nightstand": [
                 "bedside_lamp",
@@ -145,7 +143,6 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
                 "mattress",
                 "headboard",
                 "rug",
-                "throw_blanket",
                 "pet_bed",
             ],
             "nightstand": [
@@ -209,7 +206,6 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
             "sofa": [
                 "rug",
                 "cushion",
-                "throw_blanket",
             ],
             "tv_console": [
                 "speaker",
@@ -518,7 +514,6 @@ ROOM_SURFACE_GROUPS: dict[str, dict[str, Any]] = {
                 "headboard",
                 "bedside_lamp",
                 "cushion",
-                "throw_blanket",
             ],
             "desk": [
                 "monitor",

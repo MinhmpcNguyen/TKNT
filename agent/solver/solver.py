@@ -42,6 +42,7 @@ from typing import Any
 
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
 from layout.room_profiles.registry import is_profile_trait_object
+from layout.semantic_roles import is_seat_like, is_work_surface_like
 from layout.variant_family import FALLBACK_GENERIC_VARIANT_FAMILY
 from layout.variant_family import GENERIC_VARIANT_FAMILIES
 from layout.variant_family import ROLE_VARIANT_FAMILY_ALLOWLISTS
@@ -7525,6 +7526,7 @@ def _place_support_objects_for_solution(
         if isinstance(world.get("protected_regions"), Sequence)
         else []
     )
+    seated_surface_supports = _surface_seat_supports_by_cluster(world)
     results: list[dict[str, Any]] = []
     tasks: list[tuple[str, str, Mapping[str, Any], str]] = []
 
@@ -7654,6 +7656,15 @@ def _place_support_objects_for_solution(
                 break
 
         if object_id in droppable and object_id not in protected:
+            if _dropping_last_surface_seat_support(
+                cluster_id=cluster_id,
+                object_id=object_id,
+                base_id=base_id,
+                placed_by_id=placed_by_id,
+                remaining_tasks=tasks[index + 1 :],
+                seated_surface_supports=seated_surface_supports,
+            ):
+                return
             dropped_inventory_by_cluster.setdefault(cluster_id, []).append(
                 {"object_id": object_id, "reason": "support_slot_failed"}
             )
@@ -7763,6 +7774,7 @@ def _repair_object_level_solution_geometry(
             original_rows_by_key=original_rows_by_key,
             repaired_by_key=repaired_by_key,
             occupied_rects=occupied_rects,
+            front_access_rows=tuple(repaired_by_key.values()),
             world=world,
             grid_mm=grid_mm,
         )
@@ -7812,10 +7824,17 @@ def _best_object_geometry_repair_rect(
     original_rows_by_key: Mapping[tuple[str, str], Mapping[str, Any]],
     repaired_by_key: Mapping[tuple[str, str], Mapping[str, Any]],
     occupied_rects: Sequence[tuple[int, int, int, int]],
+    front_access_rows: Sequence[Mapping[str, Any]],
     world: Mapping[str, Any],
     grid_mm: int,
 ) -> tuple[int, int, int, int] | None:
-    if _object_rect_is_usable(original_rect, occupied_rects, world, row=row):
+    if _object_rect_is_usable(
+        original_rect,
+        occupied_rects,
+        world,
+        row=row,
+        front_access_rows=front_access_rows,
+    ):
         return original_rect
 
     room_bbox = world["room_bbox"]
@@ -7852,7 +7871,13 @@ def _best_object_geometry_repair_rect(
             return
         seen.add(key)
         rect = (sx, sy, sx + width, sy + height)
-        if not _object_rect_is_usable(rect, occupied_rects, world, row=row):
+        if not _object_rect_is_usable(
+            rect,
+            occupied_rects,
+            world,
+            row=row,
+            front_access_rows=front_access_rows,
+        ):
             return
         candidates.append(
             (
@@ -7907,6 +7932,7 @@ def _object_rect_is_usable(
     world: Mapping[str, Any],
     *,
     row: Mapping[str, Any] | None = None,
+    front_access_rows: Sequence[Mapping[str, Any]] = (),
 ) -> bool:
     if not _rect_inside_room_footprint(rect, world):
         return False
@@ -7914,6 +7940,13 @@ def _object_rect_is_usable(
         return False
     if row is None:
         return True
+    if _rect_blocks_front_access_rows(
+        rect=rect,
+        row=row,
+        front_access_rows=front_access_rows,
+        room_bbox=world["room_bbox"],
+    ):
+        return False
     forbidden_regions = (
         world.get("cluster_forbidden_regions")
         if isinstance(world.get("cluster_forbidden_regions"), Sequence)
@@ -7930,6 +7963,30 @@ def _object_rect_is_usable(
             forbidden_regions=forbidden_regions,
         )
     )
+
+
+def _rect_blocks_front_access_rows(
+    *,
+    rect: tuple[int, int, int, int],
+    row: Mapping[str, Any],
+    front_access_rows: Sequence[Mapping[str, Any]],
+    room_bbox: tuple[int, int, int, int],
+) -> bool:
+    candidate = dict(row)
+    candidate["rect"] = rect
+    if _object_allowed_in_front_access_zone(candidate):
+        return False
+    candidate_key = _object_repair_key(candidate)
+    for front_access_row in front_access_rows:
+        front_access_key = _object_repair_key(front_access_row)
+        if candidate_key is not None and front_access_key == candidate_key:
+            continue
+        access_zone = _front_access_zone_for_row(front_access_row, room_bbox)
+        if access_zone is None:
+            continue
+        if _rect_overlap_ratio(rect, access_zone) > 0.02:
+            return True
+    return False
 
 
 def _forbidden_region_issue_blocks_geometry(issue: Mapping[str, Any]) -> bool:
@@ -8154,6 +8211,122 @@ def _droppable_object_ids(object_program: Mapping[str, Any]) -> set[str]:
             if object_id and object_id in members:
                 droppable.add(object_id)
     return droppable
+
+
+def _surface_seat_supports_by_cluster(
+    world: Mapping[str, Any],
+) -> dict[str, dict[str, set[str]]]:
+    clusters_by_id = (
+        world.get("clusters_by_id")
+        if isinstance(world.get("clusters_by_id"), Mapping)
+        else {}
+    )
+    out: dict[str, dict[str, set[str]]] = {}
+    for cluster_id, cluster_program in clusters_by_id.items():
+        if not isinstance(cluster_program, Mapping):
+            continue
+        object_program = (
+            cluster_program.get("object_program")
+            if isinstance(cluster_program.get("object_program"), Mapping)
+            else {}
+        )
+        by_base = _surface_seat_supports_by_base(object_program)
+        if by_base:
+            out[str(cluster_id)] = by_base
+    return out
+
+
+def _surface_seat_supports_by_base(
+    object_program: Mapping[str, Any],
+) -> dict[str, set[str]]:
+    support_edges = (
+        object_program.get("support_edges")
+        if isinstance(object_program.get("support_edges"), Sequence)
+        and not isinstance(object_program.get("support_edges"), str)
+        else []
+    )
+    out: dict[str, set[str]] = {}
+    for edge in support_edges:
+        if not isinstance(edge, Mapping):
+            continue
+        object_id = str(edge.get("object_id") or "").strip()
+        relative_to = str(edge.get("relative_to") or "").strip()
+        if not object_id or not relative_to:
+            continue
+        support_role = str(edge.get("support_role") or "").strip().lower()
+        band_intent = str(edge.get("band_intent") or "").strip().lower()
+        if not _object_program_id_is_work_surface(object_program, relative_to):
+            continue
+        if not _object_program_id_is_seat(object_program, object_id):
+            continue
+        if support_role == "secondary_seat" or band_intent == "flank_band":
+            out.setdefault(relative_to, set()).add(object_id)
+    return out
+
+
+def _object_program_id_is_work_surface(
+    object_program: Mapping[str, Any], object_id: str
+) -> bool:
+    spec = _object_program_spec(object_program, object_id)
+    return is_work_surface_like(_object_program_kind(object_id, spec))
+
+
+def _object_program_id_is_seat(
+    object_program: Mapping[str, Any], object_id: str
+) -> bool:
+    spec = _object_program_spec(object_program, object_id)
+    return is_seat_like(_object_program_kind(object_id, spec))
+
+
+def _object_program_spec(
+    object_program: Mapping[str, Any], object_id: str
+) -> Mapping[str, Any] | None:
+    specs = (
+        object_program.get("object_specs_by_id")
+        if isinstance(object_program.get("object_specs_by_id"), Mapping)
+        else {}
+    )
+    spec = specs.get(object_id)
+    return spec if isinstance(spec, Mapping) else None
+
+
+def _object_program_kind(
+    object_id: str,
+    spec: Mapping[str, Any] | None,
+) -> str:
+    if isinstance(spec, Mapping):
+        for key in ("category", "base_object_id", "object_id"):
+            value = spec.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return object_id
+
+
+def _dropping_last_surface_seat_support(
+    *,
+    cluster_id: str,
+    object_id: str,
+    base_id: str,
+    placed_by_id: Mapping[tuple[str, str], Mapping[str, Any]],
+    remaining_tasks: Sequence[tuple[str, str, Mapping[str, Any], str]],
+    seated_surface_supports: Mapping[str, Mapping[str, set[str]]],
+) -> bool:
+    required_seats = seated_surface_supports.get(cluster_id, {}).get(base_id, set())
+    if object_id not in required_seats:
+        return False
+    if any(
+        (cluster_id, seat_id) in placed_by_id
+        for seat_id in required_seats
+        if seat_id != object_id
+    ):
+        return False
+    return not any(
+        next_cluster_id == cluster_id
+        and next_base_id == base_id
+        and next_object_id in required_seats
+        and next_object_id != object_id
+        for next_cluster_id, next_object_id, _edge, next_base_id in remaining_tasks
+    )
 
 
 def _normalized_support_side_options(edge: Mapping[str, Any]) -> list[str]:
@@ -8714,6 +8887,12 @@ def _verify_object_level_solution(
         world=world,
         relation_plan=relation_plan,
     )
+    functional_geometry_issues.extend(
+        _object_level_surface_seat_pair_issues(
+            placed_objects=placed_objects,
+            world=world,
+        )
+    )
     blocking_functional_geometry_issues = [
         issue
         for issue in functional_geometry_issues
@@ -9177,6 +9356,47 @@ def _object_level_functional_geometry_issues(
                     ),
                 }
             )
+    return issues
+
+
+def _object_level_surface_seat_pair_issues(
+    *,
+    placed_objects: Sequence[Mapping[str, Any]],
+    world: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    seated_surface_supports = _surface_seat_supports_by_cluster(world)
+    if not seated_surface_supports:
+        return []
+
+    rows = [row for row in placed_objects if isinstance(row, Mapping)]
+    placed_by_cluster_and_id = {
+        (str(row.get("cluster_id") or ""), str(row.get("object_id") or ""))
+        for row in rows
+    }
+    issues: list[dict[str, Any]] = []
+    for row in rows:
+        cluster_id = str(row.get("cluster_id") or "")
+        object_id = str(row.get("object_id") or "")
+        required_seats = seated_surface_supports.get(cluster_id, {}).get(
+            object_id,
+            set(),
+        )
+        if not required_seats:
+            continue
+        if any(
+            (cluster_id, seat_id) in placed_by_cluster_and_id
+            for seat_id in required_seats
+        ):
+            continue
+        issues.append(
+            {
+                "cluster_id": cluster_id,
+                "object_id": object_id,
+                "reason": "missing_surface_seat_pair",
+                "violation_severity": "blocking",
+                "missing_support_ids": sorted(required_seats),
+            }
+        )
     return issues
 
 

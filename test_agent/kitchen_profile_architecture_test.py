@@ -117,9 +117,15 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             if isinstance(row, dict)
         }
         dining = clusters_by_id["kitchen_dining_core"]
+        self.assertEqual(dining["layout_role"], "support")
         self.assertEqual(dining["semantic_role"], "kitchen_dining_zone")
         self.assertTrue(dining["zone_claims"]["floating_allowed"])
         self.assertEqual(dining["zone_claims"]["wall_affinity"], "medium")
+        self.assertEqual(dining["zone_claims"]["daylight_affinity"], "high")
+        self.assertIn(
+            "claim_daylight",
+            {row["type"] for row in dining["relation_intents"]},
+        )
 
         cluster_payload = semantic_program_to_cluster_forge_payload(payload)
         dining_payload = next(
@@ -211,8 +217,10 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             normalized_dining["semantic_role"],
             "kitchen_dining_zone",
         )
+        self.assertEqual(normalized_dining["layout_role"], "support")
         self.assertTrue(normalized_dining["zone_claims"]["floating_allowed"])
         self.assertEqual(normalized_dining["zone_claims"]["wall_affinity"], "medium")
+        self.assertEqual(normalized_dining["zone_claims"]["daylight_affinity"], "high")
 
     def test_tier_count_preserves_kitchen_core_without_forcing_island(self) -> None:
         def fake_estimate_budget(**kwargs: Any) -> dict[str, Any]:

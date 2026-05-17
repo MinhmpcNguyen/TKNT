@@ -14,7 +14,7 @@ _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
     "bed": ("bed", "queen bed", "king bed", "single bed", "double bed"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
-    "ceiling_lamp": ("ceiling lamp", "ceiling light", "overhead light"),
+    "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
     "coffee_table": ("coffee table", "tea table", "center table"),
     "desk": ("desk", "work desk", "study desk", "vanity"),
@@ -66,7 +66,7 @@ _COUNT_WORDS = {
     "four": 4,
 }
 _NON_FUNCTIONAL_CONTRACT_TYPES = {
-    "ceiling_lamp",
+    "ceiling_light",
     "rug",
 } | all_profile_non_functional_contract_types()
 _HARD_CONTRACT_INTENTS = {"must_keep", "must_try"}

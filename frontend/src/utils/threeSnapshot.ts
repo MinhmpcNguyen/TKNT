@@ -167,10 +167,13 @@ export function buildThreeSnapshotArtifact(
   const visibleObjects: VisibleSnapshotObject[] = [];
   const raycaster = new THREE.Raycaster();
   const canvasRect = renderer.domElement.getBoundingClientRect();
-  const canvasWidth = Math.max(1, Math.round(canvasRect.width || renderer.domElement.width || 1));
+  const canvasWidth = Math.max(
+    1,
+    Math.round(renderer.domElement.width || canvasRect.width || 1)
+  );
   const canvasHeight = Math.max(
     1,
-    Math.round(canvasRect.height || renderer.domElement.height || 1)
+    Math.round(renderer.domElement.height || canvasRect.height || 1)
   );
 
   for (const [objectId, proxy] of proxyById.entries()) {

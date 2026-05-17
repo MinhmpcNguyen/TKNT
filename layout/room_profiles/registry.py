@@ -369,6 +369,29 @@ def profile_semantic_role_for_objects(
     return None
 
 
+def profile_layout_role_for_objects(
+    *,
+    cluster_id: object,
+    object_types: Sequence[str],
+    room_type: object | None,
+) -> str | None:
+    profile = _profile_for_objects(object_types, room_type=room_type)
+    if profile is None or not _profile_layout_semantics_enabled(profile):
+        return None
+
+    canonical_types = set(_profile_canonical_object_types(profile, object_types))
+    cluster_key = normalize_profile_token(cluster_id)
+    if (
+        profile.canonical_room_type == "kitchen"
+        and (
+            "dining" in cluster_key
+            or canonical_types & {"dining_table", "dining_chair"}
+        )
+    ):
+        return "support"
+    return None
+
+
 def profile_zone_claims_for_objects(
     *,
     cluster_id: object,
@@ -381,7 +404,30 @@ def profile_zone_claims_for_objects(
     if profile is None or not _profile_layout_semantics_enabled(profile):
         return None
 
+    canonical_types = set(_profile_canonical_object_types(profile, object_types))
     traits = _profile_object_trait_set(profile, object_types)
+    if (
+        profile.canonical_room_type == "kitchen"
+        and "floating" in traits
+        and "wall_backed" not in traits
+        and canonical_types & {"dining_table", "dining_chair"}
+    ):
+        return {
+            "preferred_regions": _profile_regions(
+                _profile_regions(affordance_summary.get("daylight_regions"))
+                + _profile_regions(affordance_summary.get("floating_zone_candidates"))
+            ),
+            "avoid_regions": _profile_regions(
+                _profile_regions(affordance_summary.get("entry_landing_zones"))
+                + _profile_regions(
+                    affordance_summary.get("primary_circulation_corridors")
+                )
+            ),
+            "wall_affinity": "medium",
+            "daylight_affinity": "high",
+            "privacy_affinity": "none",
+            "floating_allowed": True,
+        }
     if "floating" in traits and "wall_backed" not in traits:
         return {
             "preferred_regions": _profile_regions(
@@ -430,6 +476,7 @@ def profile_relation_intents_for_objects(
     if profile is None or not _profile_layout_semantics_enabled(profile):
         return []
 
+    canonical_types = set(_profile_canonical_object_types(profile, object_types))
     traits = _profile_object_trait_set(profile, object_types)
     intents: list[dict[str, Any]] = []
     if "workflow" in traits:
@@ -441,6 +488,13 @@ def profile_relation_intents_for_objects(
         )
     elif "floating" in traits:
         workflow_target = profile.relation_targets.get("workflow")
+        if (
+            profile.canonical_room_type == "kitchen"
+            and canonical_types & {"dining_table", "dining_chair"}
+        ):
+            intents.append(
+                {"type": "claim_daylight", "target": "window_side", "strength": "soft"}
+            )
         if workflow_target:
             intents.append(
                 {
@@ -509,7 +563,7 @@ def profile_macro_relations_for_active_clusters(
     }
 
 
-def profile_shadow_trace_for_active_clusters(
+def profile_layout_trace_for_active_clusters(
     *,
     room_type: object,
     active_clusters: Sequence[Mapping[str, Any]],
@@ -604,6 +658,17 @@ def profile_shadow_trace_for_active_clusters(
         "promotion_readiness": promotion_readiness,
         "clusters": clusters,
     }
+
+
+def profile_shadow_trace_for_active_clusters(
+    *,
+    room_type: object,
+    active_clusters: Sequence[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    return profile_layout_trace_for_active_clusters(
+        room_type=room_type,
+        active_clusters=active_clusters,
+    )
 
 
 def _profile_promotion_readiness(

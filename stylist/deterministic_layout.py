@@ -25,6 +25,7 @@ DEFAULT_WINDOW_COLOR = "#D7E3EE"
 DEFAULT_OBJECT_COLOR = "#CFCAC2"
 
 STRUCTURAL_SKIP_TYPES = {"mattress", "headboard"}
+AUTO_DECOR_SKIP_TYPES = {"throw_blanket"}
 UNDERLAY_TYPES = {"rug"}
 OPENING_MOUNTED_TYPES = {"curtain", "blind"}
 CEILING_MOUNTED_TYPES = {"ceiling_light", "pendant_light", "track_light"}
@@ -66,9 +67,9 @@ MAX_ITEMS_BY_ANCHOR: dict[str, int] = {
 }
 
 ANCHOR_PRIORITY: dict[str, tuple[str, ...]] = {
-    "bed": ("rug", "throw_blanket", "cushion", "pet_bed"),
-    "sofa": ("rug", "cushion", "throw_blanket"),
-    "sectional_sofa": ("rug", "cushion", "throw_blanket"),
+    "bed": ("rug", "cushion", "pet_bed"),
+    "sofa": ("rug", "cushion"),
+    "sectional_sofa": ("rug", "cushion"),
     "nightstand": ("bedside_lamp",),
     "desk": (
         "desk_lamp",
@@ -656,7 +657,7 @@ def _filter_already_present_item_families(
 def _object_family(object_type: str) -> str:
     normalized = object_type.strip().lower().replace("-", "_").replace(" ", "_")
     if normalized in {"ceiling_lamp", "ceiling_light", "overhead_light"}:
-        return "ceiling_lamp"
+        return "ceiling_light"
     if normalized in {"rug", "carpet"}:
         return "rug"
     if normalized in {"stove", "cooktop", "hob", "range"}:
@@ -683,6 +684,8 @@ def _select_anchor_candidates(
     selected: list[str] = []
     for item_type in ordered:
         if item_type in STRUCTURAL_SKIP_TYPES:
+            continue
+        if item_type in AUTO_DECOR_SKIP_TYPES:
             continue
         if _is_disallowed_anchor_attachment(anchor=anchor, item_type=item_type):
             continue

@@ -1,0 +1,107 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "TKNT Floorplan Editor" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Shared inventory for everyone, plus your own GLB objects, saved layouts, and render history.
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - strong [ref=e10]: Minh
+        - generic [ref=e11]: ntm.cmv@gmail.com
+      - button "Log out" [ref=e12] [cursor=pointer]
+  - generic [ref=e13]:
+    - combobox [ref=e14]:
+      - option "Office" [selected]
+      - option "Bedroom"
+      - option "Living Room"
+      - option "Studio"
+      - option "Kitchen"
+    - button "Generate" [ref=e15] [cursor=pointer]
+    - button "2D" [ref=e16] [cursor=pointer]
+    - button "3D" [ref=e17] [cursor=pointer]
+    - button "Edit Room" [ref=e18] [cursor=pointer]
+    - button "Draw Line" [disabled] [ref=e19]
+    - button "Delete Point" [disabled] [ref=e20]
+    - button "Reset Room" [ref=e21] [cursor=pointer]
+    - generic [ref=e22]:
+      - textbox "Layout name" [ref=e23]
+      - button "Save" [ref=e24] [cursor=pointer]
+  - generic [ref=e25]:
+    - complementary [ref=e27]:
+      - heading "Library" [level=3] [ref=e28]
+      - generic [ref=e29]:
+        - searchbox "Search by name or type" [ref=e30]
+        - combobox [ref=e31]:
+          - option "All styles" [selected]
+          - option "boho"
+          - option "classic"
+          - option "coastal"
+          - option "industrial"
+          - option "japandi"
+          - option "midcentury"
+          - option "minimal"
+          - option "modern"
+          - option "scandinavian"
+          - option "wabi_sabi"
+        - combobox [ref=e32]:
+          - option "All rooms" [selected]
+          - option "Current room"
+          - option "Bedroom"
+          - option "Living Room"
+          - option "Studio"
+          - option "Office"
+          - option "Kitchen"
+      - generic [ref=e33]:
+        - button "Your objects 3" [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: Your objects
+          - strong [ref=e37]: "3"
+        - button "Shared inventory 919" [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]: Shared inventory
+          - strong [ref=e41]: "919"
+    - generic [ref=e46]:
+      - complementary [ref=e47]:
+        - button "User Input office · japandi Edit" [ref=e461] [cursor=pointer]:
+          - generic [ref=e49]:
+            - generic [ref=e50]: User Input
+            - generic [ref=e51]: office · japandi
+          - generic [ref=e52]: Edit
+      - generic [ref=e109]:
+        - button "My Workspace 12 layouts · 4 renders Hide" [expanded] [ref=e462] [cursor=pointer]:
+          - generic [ref=e111]:
+            - generic [ref=e112]: My Workspace
+            - generic [ref=e113]: 12 layouts · 4 renders
+          - generic [ref=e114]: Hide
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - strong [ref=e117]: Minh
+            - generic [ref=e118]: ntm.cmv@gmail.com
+          - generic [ref=e119]:
+            - searchbox "Search saved layouts" [ref=e121]
+            - button "Saved Layouts 12" [ref=e122] [cursor=pointer]:
+              - generic [ref=e123]: Saved Layouts
+              - strong [ref=e124]: "12"
+          - generic [ref=e186]:
+            - button "Saved Renders 4" [expanded] [ref=e463] [cursor=pointer]:
+              - generic [ref=e188]: Saved Renders
+              - strong [ref=e189]: "4"
+            - paragraph [ref=e464]: Showing renders linked to the loaded root layout.
+            - generic [ref=e190]:
+              - generic [ref=e191] [cursor=pointer]:
+                - img [ref=e192]
+                - generic [ref=e193]:
+                  - strong [ref=e194]: gpt-image-1.5
+                  - generic [ref=e195]: snapshot_render
+              - generic [ref=e196] [cursor=pointer]:
+                - img [ref=e197]
+                - generic [ref=e198]:
+                  - strong [ref=e199]: gpt-image-1.5
+                  - generic [ref=e200]: snapshot_render
+              - generic [ref=e201] [cursor=pointer]:
+                - img [ref=e202]
+                - generic [ref=e203]:
+                  - strong [ref=e204]: gpt-image-1.5
+                  - generic [ref=e205]: snapshot_render
+              - generic [ref=e456] [cursor=pointer]:
+                - img [ref=e457]
+                - generic [ref=e458]:
+                  - strong [ref=e459]: google/gemini-2.5-flash-image
+                  - generic [ref=e460]: snapshot_render

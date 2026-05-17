@@ -108,7 +108,7 @@ class RequestContractTest(unittest.TestCase):
 
         self.assertEqual(
             [row["object_type"] for row in missing],
-            ["ceiling_lamp", "rug"],
+            ["ceiling_light", "rug"],
         )
 
     def test_llm_contract_groups_are_sanitized_against_contract_objects(self) -> None:

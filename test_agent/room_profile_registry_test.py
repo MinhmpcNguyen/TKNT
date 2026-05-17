@@ -46,6 +46,33 @@ class RoomProfileRegistryTest(unittest.TestCase):
         )
         self.assertEqual(trace["promotion_readiness"]["status"], "active")
 
+    def test_profile_layout_trace_keeps_shadow_name_as_compat_alias(self) -> None:
+        active_clusters = [
+            {
+                "cluster_id": "kitchen_workflow_core",
+                "required_bundles": [
+                    {
+                        "objects": [
+                            {"object_type": "fridge"},
+                            {"object_type": "sink"},
+                        ]
+                    }
+                ],
+            }
+        ]
+
+        layout_trace = _registry.profile_layout_trace_for_active_clusters(
+            room_type="kitchen",
+            active_clusters=active_clusters,
+        )
+        shadow_trace = _registry.profile_shadow_trace_for_active_clusters(
+            room_type="kitchen",
+            active_clusters=active_clusters,
+        )
+
+        self.assertEqual(layout_trace, shadow_trace)
+        self.assertEqual(layout_trace["mode"], "active")
+
     def test_kitchen_profile_defaults_to_eat_in_dining(self) -> None:
         room_rule = _registry.semantic_room_rule_for("kitchen")
 

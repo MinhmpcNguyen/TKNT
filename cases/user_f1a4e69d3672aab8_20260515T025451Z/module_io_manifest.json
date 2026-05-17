@@ -1,0 +1,165 @@
+{
+  "case_id": "user_f1a4e69d3672aab8_20260515T025451Z",
+  "scope": "pipeline.orchestrator.run_case",
+  "generated_at_utc": "2026-05-15T02:54:51.569277+00:00",
+  "modules": [
+    {
+      "module": "room_interpreter",
+      "implementation": "agent.room_interpreter.RoomInterpreter.generate",
+      "inputs": [
+        "prepared_input_payload",
+        "description",
+        "special_notes"
+      ],
+      "output": "room model with normalized geometry, openings, room metadata, notes, and conflicts",
+      "output_artifact": "module_outputs/room_interpreter.json",
+      "legacy_artifact": "01_room_interpreter.json"
+    },
+    {
+      "module": "stylist_style_policy",
+      "implementation": "agent.stylist.Stylist.compile_style_policy",
+      "inputs": [
+        "room_type",
+        "planning_guidance_text",
+        "room_output"
+      ],
+      "output": "style policy used by semantic planning and final styling",
+      "output_artifact": "module_outputs/stylist_style_policy.json",
+      "legacy_artifact": null
+    },
+    {
+      "module": "cluster_forge",
+      "implementation": "agent.cluster_forge.ClusterForge.generate",
+      "inputs": [
+        "room_type",
+        "planning_guidance_text",
+        "room_output",
+        "inventory_catalog",
+        "style_policy"
+      ],
+      "output": "semantic layout program and cluster definitions with anchor-first policies",
+      "output_artifact": "module_outputs/cluster_forge.json",
+      "legacy_artifact": "02_cluster_forge.json"
+    },
+    {
+      "module": "request_contract",
+      "implementation": "agent.request_contract.request_contract_from_payload",
+      "inputs": [
+        "planning_guidance_text",
+        "cluster_output"
+      ],
+      "output": "request-aware object contract inferred before tier count",
+      "output_artifact": "module_outputs/request_contract.json",
+      "legacy_artifact": null
+    },
+    {
+      "module": "tier_count_director",
+      "implementation": "agent.tier_count_director.TierCountDirector.generate",
+      "inputs": [
+        "planning_guidance_text",
+        "room_output",
+        "prepared_input_payload",
+        "cluster_output"
+      ],
+      "output": "inventory tier/count decisions per cluster",
+      "output_artifact": "module_outputs/tier_count_director.json",
+      "legacy_artifact": "03_tier_count.json"
+    },
+    {
+      "module": "cluster_output_merger",
+      "implementation": "cluster_composer.merge.merge_cluster_outputs",
+      "inputs": [
+        "cluster_output",
+        "tier_output"
+      ],
+      "output": "solver-ready merged object program with filtered anchor/support graph",
+      "output_artifact": "module_outputs/cluster_output_merger.json",
+      "legacy_artifact": "04_cluster_merged.json"
+    },
+    {
+      "module": "cluster_relation_planner_bundle",
+      "implementation": "agent.cluster_relation_planner.ClusterRelationPlanner.generate_bundle",
+      "inputs": [
+        "room_output",
+        "merged_object_program",
+        "target_count"
+      ],
+      "output": "bundle of deterministic anchor-first macro concepts",
+      "output_artifact": "module_outputs/cluster_relation_planner_bundle.json",
+      "legacy_artifact": "05c_seed_relation_plans.json"
+    },
+    {
+      "module": "cluster_relation_plan",
+      "implementation": "agent.seed_concept_generator.solver_plan_from_concept",
+      "inputs": [
+        "macro_concept",
+        "room_output",
+        "room_type"
+      ],
+      "output": "canonical relation plan consumed by the object-level solver",
+      "output_artifact": "module_outputs/cluster_relation_plan.json",
+      "legacy_artifact": "05b_cluster_relation_plan.json"
+    },
+    {
+      "module": "object_level_solver",
+      "implementation": "agent.solver.solver.MacroClusterSolver.generate_object_layout",
+      "inputs": [
+        "room_output",
+        "merged_object_program",
+        "relation_plan",
+        "cluster_output"
+      ],
+      "output": "absolute object-level layout solved directly from anchors and support constraints",
+      "output_artifact": "module_outputs/object_level_solver.json",
+      "legacy_artifact": "06a_cluster_solver.json"
+    },
+    {
+      "module": "controlled_accessory_refill",
+      "implementation": "pipeline.dropped_inventory.controlled_accessory_refill",
+      "inputs": [
+        "room_output",
+        "absolute_layout",
+        "cluster_output",
+        "dropped_inventory_by_cluster",
+        "refill_policy"
+      ],
+      "output": "optional accessory refill summary and updated absolute layout when eligible",
+      "output_artifact": "module_outputs/controlled_accessory_refill.json",
+      "legacy_artifact": "07b_accessory_refill.json"
+    },
+    {
+      "module": "absolute_layout",
+      "implementation": "agent.solver.solver.MacroClusterSolver.generate_object_layout:absolute_layout",
+      "inputs": [
+        "object_level_solver output",
+        "manual_placements"
+      ],
+      "output": "canonical absolute layout consumed by Stylist",
+      "output_artifact": "module_outputs/absolute_layout.json",
+      "legacy_artifact": "07_absolute_layout.json"
+    },
+    {
+      "module": "stylist",
+      "implementation": "agent.stylist.Stylist.generate_style_plan/apply_style_plan",
+      "inputs": [
+        "absolute_layout",
+        "stylist_user_context",
+        "tenant_id"
+      ],
+      "output": "styled result with selected inventory/assets/material/style metadata",
+      "output_artifact": "module_outputs/stylist.json",
+      "legacy_artifact": "08_stylist.json"
+    },
+    {
+      "module": "layout_variants",
+      "implementation": "pipeline.layout_variants.select_distinct_final_gallery_candidates",
+      "inputs": [
+        "final styled candidates",
+        "target_final_count"
+      ],
+      "output": "final selectable gallery variants",
+      "output_artifact": "module_outputs/layout_variants.json",
+      "legacy_artifact": "09_layout_variants.json"
+    }
+  ]
+}

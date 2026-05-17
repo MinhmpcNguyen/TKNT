@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   fetchRenderPresets,
   getGeneratedRenderDetail,
@@ -11,6 +12,13 @@ import {
   type SnapshotImageRenderApiResponse,
   type SnapshotImageRenderResult,
 } from '../api';
+import {
+  buildPaymentReference,
+  formatVnd,
+  getMonthlyImagesRemaining,
+  type BillingChargeKind,
+} from '../billing';
+import { BillingPaymentModal } from './BillingPaymentModal';
 import { useEditorStore } from '../store';
 import {
   DesignPlanV1,
@@ -28,7 +36,10 @@ import {
   type ThreeSnapshotRenderState,
   type VisibleSnapshotObject,
 } from '../utils/threeSnapshot';
-import { buildStructuralPerspectiveReferenceImageDataUrl } from '../utils/annotatedPerspectiveReference';
+import {
+  buildEdgeMapReferenceImageDataUrl,
+  buildStructuralPerspectiveReferenceImageDataUrl,
+} from '../utils/annotatedPerspectiveReference';
 import {
   resolvePlanObjectYawRad,
   yawRadToPlanRotationDeg,
@@ -132,6 +143,7 @@ const SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD = 0.5;
 const MAX_RENDERER_PIXEL_RATIO = 2;
 const SNAPSHOT_REFERENCE_MIN_LONG_EDGE_PX = 3072;
 const SNAPSHOT_REFERENCE_MAX_LONG_EDGE_PX = 4096;
+const SNAPSHOT_REFERENCE_TARGET_ASPECT = 1536 / 1024;
 const STRUCTURAL_EDGE_COLOR_HEX = '#111827';
 const STRUCTURAL_EDGE_OPACITY = 0.72;
 const EDIT_BOX_COLORS = [
@@ -1091,6 +1103,182 @@ function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
 }
 
+type TemporaryVisibilityRecord = {
+  node: { visible: boolean };
+  visible: boolean;
+};
+
+type TemporaryMaterialRecord = {
+  material: unknown;
+  mesh: { material: unknown };
+};
+
+function hideNode(
+  records: TemporaryVisibilityRecord[],
+  node: unknown
+): void {
+  if (!node || typeof node !== 'object' || !('visible' in node)) {
+    return;
+  }
+  const visibleNode = node as { visible: boolean };
+  records.push({ node: visibleNode, visible: visibleNode.visible });
+  visibleNode.visible = false;
+}
+
+function hideAiSnapshotHelperNodes(scene: any): TemporaryVisibilityRecord[] {
+  const hiddenNodes: TemporaryVisibilityRecord[] = [];
+  scene.traverse((node: any) => {
+    if (
+      (node?.userData?.aiRenderHide === true ||
+        node?.userData?.aiStructuralEdge === true ||
+        node?.userData?.structuralEdgeOverlay === true) &&
+      typeof node.visible === 'boolean'
+    ) {
+      hideNode(hiddenNodes, node);
+    }
+  });
+  return hiddenNodes;
+}
+
+function restoreVisibility(records: TemporaryVisibilityRecord[]): void {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    records[index].node.visible = records[index].visible;
+  }
+}
+
+function renderDepthMapDataUrl(params: {
+  THREE: any;
+  renderer: any;
+  scene: any;
+  camera: any;
+}): string {
+  const { THREE, renderer, scene, camera } = params;
+  const materialRecords: TemporaryMaterialRecord[] = [];
+  const hiddenNodes: TemporaryVisibilityRecord[] = [];
+  const depthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.BasicDepthPacking,
+    side: THREE.DoubleSide,
+  });
+  const previousBackground = scene.background ?? null;
+
+  try {
+    scene.traverse((node: any) => {
+      if (
+        node?.userData?.aiStructuralEdge === true &&
+        typeof node.visible === 'boolean'
+      ) {
+        hideNode(hiddenNodes, node);
+        return;
+      }
+      if (!node?.isMesh || !node.material) {
+        return;
+      }
+      materialRecords.push({ mesh: node, material: node.material });
+      node.material = depthMaterial;
+    });
+    scene.background = new THREE.Color('#ffffff');
+    renderer.render(scene, camera);
+    return canvasToDataUrl(renderer.domElement);
+  } finally {
+    for (const record of materialRecords) {
+      record.mesh.material = record.material;
+    }
+    restoreVisibility(hiddenNodes);
+    depthMaterial.dispose?.();
+    scene.background = previousBackground;
+  }
+}
+
+function renderSegmentationMapDataUrl(params: {
+  THREE: any;
+  renderer: any;
+  scene: any;
+  camera: any;
+}): string {
+  const { THREE, renderer, scene, camera } = params;
+  const materialRecords: TemporaryMaterialRecord[] = [];
+  const hiddenNodes: TemporaryVisibilityRecord[] = [];
+  const materialBySegment = new Map<string, any>();
+  const previousBackground = scene.background ?? null;
+
+  const materialForSegment = (segmentKey: string): any => {
+    const existing = materialBySegment.get(segmentKey);
+    if (existing) {
+      return existing;
+    }
+    const color = colorForSegmentKey(THREE, segmentKey);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    materialBySegment.set(segmentKey, material);
+    return material;
+  };
+
+  try {
+    scene.traverse((node: any) => {
+      if (
+        node?.userData?.aiStructuralEdge === true &&
+        typeof node.visible === 'boolean'
+      ) {
+        hideNode(hiddenNodes, node);
+        return;
+      }
+      if (!node?.isMesh || !node.material) {
+        return;
+      }
+      const segmentKey = resolveSegmentationKey(node);
+      materialRecords.push({ mesh: node, material: node.material });
+      node.material = materialForSegment(segmentKey);
+    });
+    scene.background = new THREE.Color('#000000');
+    renderer.render(scene, camera);
+    return canvasToDataUrl(renderer.domElement);
+  } finally {
+    for (const record of materialRecords) {
+      record.mesh.material = record.material;
+    }
+    restoreVisibility(hiddenNodes);
+    for (const material of materialBySegment.values()) {
+      material.dispose?.();
+    }
+    scene.background = previousBackground;
+  }
+}
+
+function resolveSegmentationKey(node: any): string {
+  let current: any = node;
+  while (current) {
+    if (typeof current.userData?.objectId === 'string') {
+      return `object:${current.userData.objectId}`;
+    }
+    if (typeof current.userData?.wallId === 'string') {
+      return `wall:${current.userData.wallId || 'wall'}`;
+    }
+    if (typeof current.userData?.roomSurface === 'string') {
+      return `surface:${current.userData.roomSurface}`;
+    }
+    if (typeof current.userData?.openingId === 'string') {
+      return `opening:${current.userData.openingType ?? 'opening'}:${
+        current.userData.openingId
+      }`;
+    }
+    current = current.parent;
+  }
+  return 'scene:unclassified';
+}
+
+function colorForSegmentKey(THREE: any, segmentKey: string): any {
+  let hash = 2166136261;
+  for (let index = 0; index < segmentKey.length; index += 1) {
+    hash ^= segmentKey.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const hue = ((hash >>> 0) % 360) / 360;
+  return new THREE.Color().setHSL(hue, 0.76, 0.56);
+}
+
 function resolveSnapshotReferenceRenderSize(canvas: HTMLCanvasElement): {
   height: number;
   width: number;
@@ -1103,10 +1291,10 @@ function resolveSnapshotReferenceRenderSize(canvas: HTMLCanvasElement): {
     currentLongEdge,
     SNAPSHOT_REFERENCE_MAX_LONG_EDGE_PX
   );
-  const scale = targetLongEdge / currentLongEdge;
+  const targetAspect = SNAPSHOT_REFERENCE_TARGET_ASPECT;
   return {
-    width: Math.max(1, Math.round(currentWidth * scale)),
-    height: Math.max(1, Math.round(currentHeight * scale)),
+    width: Math.max(1, Math.round(targetLongEdge)),
+    height: Math.max(1, Math.round(targetLongEdge / targetAspect)),
   };
 }
 
@@ -1437,17 +1625,16 @@ function readSavedRenderVisibleObjects(
   });
 }
 
-function isSavedRenderReusable(render: GeneratedRenderRecord): boolean {
-  return render.source === 'snapshot_render' && readSavedRenderVisibleObjects(render).length > 0;
+function notifyRenderFocus(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('tknt:render-focus'));
+  }
 }
 
 function buildSavedRenderSnapshotArtifact(
   render: GeneratedRenderRecord
-): ThreeSnapshotArtifact | null {
+): ThreeSnapshotArtifact {
   const visibleObjects = readSavedRenderVisibleObjects(render);
-  if (visibleObjects.length === 0) {
-    return null;
-  }
 
   const cameraPayload = isRecord(render.meta.camera)
     ? (render.meta.camera as ThreeSnapshotArtifact['camera'])
@@ -1670,18 +1857,6 @@ function mergePresetSelections(
   };
 }
 
-function resolveEditPromptDelta(
-  sourceRender: SnapshotImageRenderResult,
-  currentPrompt: string
-): string {
-  const trimmedPrompt = currentPrompt.trim();
-  if (!trimmedPrompt) {
-    return '';
-  }
-  const previousPrompt = sourceRender.request.raw_user_prompt?.trim() ?? '';
-  return trimmedPrompt === previousPrompt ? '' : currentPrompt;
-}
-
 function withEffectivePresetSelection(
   render: SnapshotImageRenderResult,
   presetSelection: SnapshotImagePresetSelection,
@@ -1743,6 +1918,13 @@ type EditBoxDraft = {
 type ObjectAppearanceReference = ObjectReplacementReference & {
   rootLayoutId: string | null;
   sourceRenderId: string | null;
+};
+
+type PendingBillingPayment = {
+  amountVnd: number;
+  chargeKind: BillingChargeKind;
+  reason: string;
+  reference: string;
 };
 
 const OBJECT_APPEARANCE_REFERENCES_META_KEY = 'object_appearance_references';
@@ -2009,6 +2191,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
     setStyledResult,
     clearLayoutVariants,
     upsertSavedRender,
+    appendRunLog,
+    consumeMonthlyImageCredit,
+    recordPaidImageUse,
   } = useEditorStore();
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -2034,10 +2219,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
     text: string;
   } | null>(null);
   const [isRenderingImage, setIsRenderingImage] = useState(false);
+  const [pendingBillingPayment, setPendingBillingPayment] =
+    useState<PendingBillingPayment | null>(null);
+  const [billingCountdownSeconds, setBillingCountdownSeconds] = useState(0);
+  const pendingBillingPaymentRef = useRef<PendingBillingPayment | null>(null);
+  const pendingBillingResolverRef = useRef<
+    ((payment: PendingBillingPayment | null) => void) | null
+  >(null);
   const [renderedSnapshotImage, setRenderedSnapshotImage] =
     useState<SnapshotImageRenderResult | null>(null);
   const [savedRenderId, setSavedRenderId] = useState<string | null>(null);
-  const [renderPrompt, setRenderPrompt] = useState('');
   const [renderPresets, setRenderPresets] =
     useState<SnapshotImagePresets | null>(null);
   const [presetSelection, setPresetSelection] =
@@ -2070,6 +2261,93 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const [cameraPresets, setCameraPresets] = useState<CameraPreset[]>([]);
   const [activeCameraPresetId, setActiveCameraPresetId] = useState<string | null>(null);
   const applyingCameraPresetRef = useRef(false);
+
+  const finishPendingBillingPayment = useCallback((completed: boolean): void => {
+    const resolver = pendingBillingResolverRef.current;
+    const payment = completed ? pendingBillingPaymentRef.current : null;
+    pendingBillingResolverRef.current = null;
+    pendingBillingPaymentRef.current = null;
+    setPendingBillingPayment(null);
+    setBillingCountdownSeconds(0);
+    resolver?.(payment);
+  }, []);
+
+  const requestBillingPayment = useCallback(
+    (payment: PendingBillingPayment): Promise<PendingBillingPayment | null> => {
+      pendingBillingPaymentRef.current = payment;
+      setPendingBillingPayment(payment);
+      setBillingCountdownSeconds(10);
+      return new Promise((resolve) => {
+        pendingBillingResolverRef.current = resolve;
+      });
+    },
+    []
+  );
+
+  const ensureImageBilling = useCallback(
+    async (chargeKind: BillingChargeKind): Promise<boolean> => {
+      const chargeLabel = chargeKind === 'edit' ? 'edit' : 'generation';
+      if (consumeMonthlyImageCredit()) {
+        const latestSettings = useEditorStore.getState().billingSettings;
+        appendRunLog(
+          `Image ${chargeLabel} used one monthly credit (${getMonthlyImagesRemaining(
+            latestSettings
+          )} left).`
+        );
+        return true;
+      }
+
+      const latestSettings = useEditorStore.getState().billingSettings;
+      const payment: PendingBillingPayment = {
+        amountVnd: latestSettings.perUsePriceVnd,
+        chargeKind,
+        reason:
+          latestSettings.mode === 'monthly'
+            ? 'Monthly image quota is used up. Scan this QR to continue once.'
+            : 'Pay per image is selected. Scan this QR to continue.',
+        reference: buildPaymentReference(chargeKind),
+      };
+      setRenderStatus({
+        tone: 'neutral',
+        text: `Waiting for mock QR payment (${formatVnd(payment.amountVnd)}).`,
+      });
+      const completedPayment = await requestBillingPayment(payment);
+      if (!completedPayment) {
+        setRenderStatus({
+          tone: 'error',
+          text: 'Payment was cancelled. Image rendering was not started.',
+        });
+        return false;
+      }
+
+      recordPaidImageUse();
+      appendRunLog(
+        `Image ${chargeLabel} unlocked by mock payment ${completedPayment.reference}.`
+      );
+      return true;
+    },
+    [
+      appendRunLog,
+      consumeMonthlyImageCredit,
+      recordPaidImageUse,
+      requestBillingPayment,
+    ]
+  );
+
+  useEffect(() => {
+    if (!pendingBillingPayment) {
+      return;
+    }
+    const expiresAtMs = Date.now() + 10000;
+    const intervalId = window.setInterval(() => {
+      const nextSeconds = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
+      setBillingCountdownSeconds(nextSeconds);
+      if (nextSeconds <= 0) {
+        finishPendingBillingPayment(true);
+      }
+    }, 250);
+    return () => window.clearInterval(intervalId);
+  }, [finishPendingBillingPayment, pendingBillingPayment]);
 
   useEffect(() => {
     editModeRef.current = editMode;
@@ -2739,6 +3017,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
     snapshotArtifact: ThreeSnapshotArtifact;
     snapshotImageDataUrl: string;
     cleanSnapshotImageDataUrl: string;
+    depthMapImageDataUrl: string;
+    edgeMapImageDataUrl: string;
+    segmentationMapImageDataUrl: string;
   }> {
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
@@ -2756,33 +3037,28 @@ export const ThreeDPreviewPanel: React.FC = () => {
       );
     }
 
-    const hiddenNodes: Array<{ visible: boolean; node: { visible: boolean } }> = [];
-    const hideNode = (node: unknown): void => {
-      if (!node || typeof node !== 'object' || !('visible' in node)) {
-        return;
-      }
-      const visible = (node as { visible: boolean }).visible;
-      hiddenNodes.push({ node: node as { visible: boolean }, visible });
-      (node as { visible: boolean }).visible = false;
-    };
+    const hiddenNodes: TemporaryVisibilityRecord[] = [];
+    const previousPixelRatio =
+      typeof renderer.getPixelRatio === 'function' ? renderer.getPixelRatio() : null;
+    const previousCameraAspect =
+      typeof camera.aspect === 'number' ? camera.aspect : null;
+    const restoreRect = renderer.domElement.parentElement?.getBoundingClientRect();
+    const restoreWidth = Math.max(
+      1,
+      Math.round(restoreRect?.width || renderer.domElement.clientWidth || 1)
+    );
+    const restoreHeight = Math.max(
+      1,
+      Math.round(restoreRect?.height || renderer.domElement.clientHeight || 1)
+    );
 
     try {
       const rotatorGroup = rotatorGroupRef.current;
       if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
-        hideNode(rotatorGroup);
+        hideNode(hiddenNodes, rotatorGroup);
       }
-      scene.traverse((node: any) => {
-        if (node?.userData?.aiRenderHide === true && typeof node.visible === 'boolean') {
-          hideNode(node);
-        }
-      });
-      controlsRef.current?.update?.();
-      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
+      hiddenNodes.push(...hideAiSnapshotHelperNodes(scene));
       const renderSize = resolveSnapshotReferenceRenderSize(renderer.domElement);
-      const previousPixelRatio =
-        typeof renderer.getPixelRatio === 'function' ? renderer.getPixelRatio() : null;
-      const previousCameraAspect =
-        typeof camera.aspect === 'number' ? camera.aspect : null;
 
       if (typeof renderer.setPixelRatio === 'function') {
         renderer.setPixelRatio(1);
@@ -2792,25 +3068,27 @@ export const ThreeDPreviewPanel: React.FC = () => {
         camera.aspect = renderSize.width / renderSize.height;
         camera.updateProjectionMatrix?.();
       }
+      controlsRef.current?.update?.();
+      const snapshotArtifact = buildThreeSnapshotArtifact(renderState);
       renderer.render(scene, camera);
       const sourceImageDataUrl = canvasToDataUrl(renderer.domElement);
-
-      if (previousPixelRatio !== null && typeof renderer.setPixelRatio === 'function') {
-        renderer.setPixelRatio(previousPixelRatio);
-      }
-      const restoreRect = renderer.domElement.parentElement?.getBoundingClientRect();
-      const restoreWidth = Math.max(
-        1,
-        Math.round(restoreRect?.width || renderer.domElement.clientWidth || 1)
-      );
-      const restoreHeight = Math.max(
-        1,
-        Math.round(restoreRect?.height || renderer.domElement.clientHeight || 1)
-      );
-      renderer.setSize(restoreWidth, restoreHeight, false);
-      if (previousCameraAspect !== null) {
-        camera.aspect = previousCameraAspect;
-        camera.updateProjectionMatrix?.();
+      const depthMapImageDataUrl = renderDepthMapDataUrl({
+        THREE: renderState.THREE,
+        renderer,
+        scene,
+        camera,
+      });
+      const segmentationMapImageDataUrl = renderSegmentationMapDataUrl({
+        THREE: renderState.THREE,
+        renderer,
+        scene,
+        camera,
+      });
+      const edgeMapImageDataUrl = await buildEdgeMapReferenceImageDataUrl({
+        sourceImageDataUrl,
+      });
+      if (!edgeMapImageDataUrl) {
+        throw new Error('Unable to build the edge-map 3D snapshot image.');
       }
       const labeledImageDataUrl = await buildStructuralPerspectiveReferenceImageDataUrl({
         sourceImageDataUrl,
@@ -2823,10 +3101,19 @@ export const ThreeDPreviewPanel: React.FC = () => {
         snapshotArtifact,
         snapshotImageDataUrl: labeledImageDataUrl,
         cleanSnapshotImageDataUrl: sourceImageDataUrl,
+        depthMapImageDataUrl,
+        edgeMapImageDataUrl,
+        segmentationMapImageDataUrl,
       };
     } finally {
-      for (let index = hiddenNodes.length - 1; index >= 0; index -= 1) {
-        hiddenNodes[index].node.visible = hiddenNodes[index].visible;
+      restoreVisibility(hiddenNodes);
+      if (previousPixelRatio !== null && typeof renderer.setPixelRatio === 'function') {
+        renderer.setPixelRatio(previousPixelRatio);
+      }
+      renderer.setSize(restoreWidth, restoreHeight, false);
+      if (previousCameraAspect !== null) {
+        camera.aspect = previousCameraAspect;
+        camera.updateProjectionMatrix?.();
       }
       controlsRef.current?.update?.();
       renderer.render(scene, camera);
@@ -2853,16 +3140,22 @@ export const ThreeDPreviewPanel: React.FC = () => {
     }
 
     setIsRenderingImage(true);
-    setRenderStatus({
-      tone: 'neutral',
-      text: 'Capturing the clean 3D view plus structural guide and generating image...',
-    });
-
     try {
+      const billingApproved = await ensureImageBilling('generate');
+      if (!billingApproved) {
+        return;
+      }
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Capturing clean 3D view, depth, edge, segmentation, and structural guide...',
+      });
       const {
         snapshotArtifact,
         snapshotImageDataUrl,
         cleanSnapshotImageDataUrl,
+        depthMapImageDataUrl,
+        edgeMapImageDataUrl,
+        segmentationMapImageDataUrl,
       } =
         await captureCurrentAiSnapshot();
       const appearanceMemoryOperations = buildAppearanceMemoryOperations(snapshotArtifact);
@@ -2870,11 +3163,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
         {
           snapshotPayload: snapshotArtifact as Record<string, unknown>,
           snapshotImageDataUrl: cleanSnapshotImageDataUrl,
+          depthMapImageDataUrl,
+          edgeMapImageDataUrl,
+          segmentationMapImageDataUrl,
           layoutReferenceImageDataUrl: null,
           annotatedReferenceImageDataUrl: snapshotImageDataUrl,
           sceneReferenceImageDataUrl: null,
           sceneReferenceMode: 'none',
-          userPrompt: renderPrompt,
+          userPrompt: '',
           renderMode: 'generate',
           presetSelection,
           rootLayoutId: activeRootLayoutId,
@@ -2882,6 +3178,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         }
       );
       setRenderedSnapshotImage(renderResult.render);
+      notifyRenderFocus();
       setLastRenderedSnapshot(snapshotArtifact);
       setLastRenderedSnapshotImageDataUrl(cleanSnapshotImageDataUrl);
       setEditBoxes([]);
@@ -2929,12 +3226,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
       return;
     }
     setIsRenderingImage(true);
-    setRenderStatus({
-      tone: 'neutral',
-      text: 'Applying the requested edit...',
-    });
-
     try {
+      const billingApproved = await ensureImageBilling('edit');
+      if (!billingApproved) {
+        return;
+      }
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Applying the requested edit...',
+      });
       const {
         snapshotArtifact: targetSnapshotArtifact,
         snapshotImageDataUrl: targetSnapshotImageDataUrl,
@@ -2948,12 +3248,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
         renderedSnapshotImage.request.preset_selection,
         editPresetSelection
       );
-      const editPromptDelta = resolveEditPromptDelta(
-        renderedSnapshotImage,
-        renderPrompt
-      );
       const effectiveRawUserPrompt =
-        editPromptDelta.trim() || renderedSnapshotImage.request.raw_user_prompt || null;
+        renderedSnapshotImage.request.raw_user_prompt || null;
 
       const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
@@ -2962,7 +3258,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           layoutReferenceImageDataUrl: targetSnapshotImageDataUrl,
           annotatedReferenceImageDataUrl: editBoxGuideImageDataUrl,
           editSourceImageDataUrl: renderedSnapshotImage.image.data_url,
-          userPrompt: editPromptDelta,
+          userPrompt: '',
           renderMode: 'edit',
           presetSelection: editPresetSelection,
           rootLayoutId: activeRootLayoutId,
@@ -3007,6 +3303,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         effectiveRawUserPrompt
       );
       setRenderedSnapshotImage(renderWithEffectiveState);
+      notifyRenderFocus();
       setLastRenderedSnapshot(targetSnapshotArtifact);
       setLastRenderedSnapshotImageDataUrl(targetSnapshotImageDataUrl);
       setObjectAppearanceReferences(mergedObjectAppearanceReferences);
@@ -3034,7 +3331,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
               source_render_id: savedRenderId,
             },
             [EDIT_DELTA_META_KEY]: {
-              user_prompt: editPromptDelta || null,
+              user_prompt: null,
               preset_selection: editPresetSelection,
               edit_operations: editOperations,
               layout_reference_used: true,
@@ -3075,7 +3372,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
     const selectedRender =
       savedRenders.find((render) => render.id === selectedSavedRenderId) ?? null;
-    if (!selectedRender || !isSavedRenderReusable(selectedRender)) {
+    if (!selectedRender || selectedRender.source !== 'snapshot_render') {
       return;
     }
     const inferredRootLayout = resolveSavedLayoutForRender({
@@ -3105,9 +3402,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
         }
         const hydratedRender = renderDetail.render;
         const snapshotArtifact = buildSavedRenderSnapshotArtifact(hydratedRender);
-        if (!snapshotArtifact) {
-          throw new Error('This saved render does not include enough metadata to edit again.');
-        }
         if (inferredRootLayout) {
           const nextFloorplan =
             inferredRootLayout.floorplan_json as unknown as FloorplanGeometry;
@@ -3132,6 +3426,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             snapshotArtifact
           )
         );
+        notifyRenderFocus();
         setLastRenderedSnapshot(snapshotArtifact);
         setLastRenderedSnapshotImageDataUrl(imageDataUrl);
         setSavedRenderId(hydratedRender.id);
@@ -3430,6 +3725,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const floor = new THREE.Mesh(geom, mat);
           floor.receiveShadow = true;
           floor.castShadow = false;
+          floor.userData = {
+            roomSurface: 'floor',
+          };
           scene.add(floor);
           const outlinePoints = floorPts.map(
             (p) =>
@@ -3805,6 +4103,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const wM = lenMm * MM_TO_M;
 
           const root = new THREE.Group();
+          root.userData = {
+            openingId: doorId,
+            openingType: 'door',
+          };
           root.position.set((pxMm - centerXmm) * MM_TO_M, 0, -(pyMm - centerYmm) * MM_TO_M);
           root.rotation.y = angle;
           openingsGroup.add(root);
@@ -3892,6 +4194,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const wM = lenMm * MM_TO_M;
           const hM = actualHeightMm * MM_TO_M;
           const group = new THREE.Group();
+          group.userData = {
+            openingId: winId,
+            openingType: 'window',
+          };
           group.position.set(
             (pxMm - centerXmm) * MM_TO_M,
             bottomMm * MM_TO_M,
@@ -4689,9 +4995,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
   if (viewMode !== '3d') return null;
 
-  return (
-    <div className="three-panel">
-      <div className="three-panel-header">
+  const controlsSlot =
+    typeof document === 'undefined' ? null : document.getElementById('three-controls-slot');
+
+  const threePanelHeader = (
+    <div className="three-panel-header">
         <div className="three-panel-title">3D Preview</div>
         <div className="three-panel-actions">
           <button
@@ -4814,8 +5122,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 }
               />
             </div>
-            <div className="three-appearance-panel">
-              <div className="three-appearance-title">Appearance</div>
+            <details className="three-appearance-panel">
+              <summary className="three-appearance-summary">
+                <span>Appearance</span>
+                <span>{objects.length > 0 ? `3 surfaces - ${objects.length} objects` : '3 surfaces'}</span>
+              </summary>
+              <div className="three-appearance-content">
               <div className="three-color-grid">
                 <ColorSwatchField
                   label="Walls"
@@ -4859,29 +5171,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   ))}
                 </div>
               ) : null}
-            </div>
-            <div className="three-panel-prompt-note">
-              Current view:{' '}
-              {activeCameraPreset
-                ? `${activeCameraPreset.label} · ${activeCameraPreset.group === 'mid' ? 'mid-height' : 'ceiling'} · ${Math.round(activeCameraPreset.fovDeg)}deg FOV`
-                : 'custom orbit'}.
-              Generate Image always uses the current 3D camera.
-            </div>
-            <label htmlFor="three-render-prompt">Image Prompt</label>
-            <textarea
-              id="three-render-prompt"
-              className="three-panel-prompt-input"
-              rows={3}
-              disabled={isRenderingImage}
-              placeholder="Describe the look you want, for example: warm Japandi materials, soft natural daylight, premium photorealistic styling."
-              value={renderPrompt}
-              onChange={(event) => setRenderPrompt(event.target.value)}
-            />
-            <div className="three-panel-prompt-note">
-              {selectedSavedRenderId && savedRenderId === selectedSavedRenderId
-                ? 'The selected saved render is the edit source. Apply Edit uses the current labeled 3D view as the target camera reference.'
-                : 'Generate Image sends a clean 3D snapshot as the source plus a labeled structural guide. Labels guide the model but must not appear in the render.'}
-            </div>
+              </div>
+            </details>
             {activeObjectAppearanceEntries.length > 0 ? (
               <div className="three-memory-strip">
                 <span>
@@ -5126,6 +5417,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           </div>
         </div>
       </div>
+  );
+
+  return (
+    <div className="three-panel">
+      {controlsSlot ? createPortal(threePanelHeader, controlsSlot) : threePanelHeader}
       <div className="three-panel-body">
         <div ref={containerRef} className="three-panel-canvas" />
         {error ? (
@@ -5294,43 +5590,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   ) : null}
                 </div>
               </div>
-            <div className="three-render-meta">
-              <div className="three-render-section">
-                <strong>User Prompt</strong>
-                <p>{renderedSnapshotImage.request.user_prompt}</p>
-              </div>
-              <div className="three-render-section">
-                <strong>System Prompt Source</strong>
-                <p>
-                  {renderedSnapshotImage.request.render_mode === 'edit'
-                    ? 'Edit prompt + source render image'
-                    : 'Generate prompt + labeled 3D source image'}
-                  {renderedSnapshotImage.request.layout_reference_used
-                    ? ' + labeled 3D target-view reference.'
-                    : '.'}
-                </p>
-              </div>
-              {renderedSnapshotImage.request.layout_reference_used ? (
-                <div className="three-render-section">
-                  <strong>Target View Reference</strong>
-                  <p>
-                    The current labeled 3D view was sent as the camera and layout
-                    reference for the edit. Labels and guides are instructions only.
-                  </p>
-                </div>
-              ) : null}
-              {(renderedSnapshotImage.request.reference_image_count ?? 0) > 0 ? (
-                <div className="three-render-section">
-                  <strong>Object Memory</strong>
-                  <p>
-                    {renderedSnapshotImage.request.reference_image_count} object
-                    reference image(s) were paired by object id for appearance only.
-                  </p>
-                </div>
-              ) : null}
-            </div>
           </div>
         </div>
+      ) : null}
+      {pendingBillingPayment ? (
+        <BillingPaymentModal
+          amountVnd={pendingBillingPayment.amountVnd}
+          chargeKind={pendingBillingPayment.chargeKind}
+          countdownSeconds={billingCountdownSeconds}
+          reason={pendingBillingPayment.reason}
+          reference={pendingBillingPayment.reference}
+          onCancel={() => finishPendingBillingPayment(false)}
+        />
       ) : null}
     </div>
   );

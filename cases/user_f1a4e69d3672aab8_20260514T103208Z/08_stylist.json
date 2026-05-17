@@ -1,0 +1,496 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "kitchen",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 3600,
+        "y": 0
+      },
+      {
+        "x": 3500,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "obstacles": [],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 0,
+              "y": 1600
+            },
+            {
+              "x": 0,
+              "y": 2600
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 692,
+              "y": 0
+            },
+            {
+              "x": 2692,
+              "y": 0
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#F3EFE7",
+      "floor_color_hex": "#C8A77E",
+      "ceiling_color_hex": "#FAF7F2"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#D8CBB8"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#DDE7EE"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "kitchen_base_cabinet",
+      "object_type": "kitchen_base_cabinet",
+      "source": "existing",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 2900,
+          "y": 1700
+        },
+        {
+          "x": 3460,
+          "y": 1700
+        },
+        {
+          "x": 3460,
+          "y": 2320
+        },
+        {
+          "x": 2900,
+          "y": 2320
+        }
+      ],
+      "bbox": {
+        "min_x": 2900,
+        "min_y": 1700,
+        "max_x": 3460,
+        "max_y": 2320
+      },
+      "color_hex": "#D8CBB8",
+      "material": "matte_laminate",
+      "place_on": null
+    },
+    {
+      "instance_id": "kitchen_tall_cabinet",
+      "object_type": "kitchen_tall_cabinet",
+      "source": "existing",
+      "cluster_id": "kitchen_storage_support",
+      "polygon_ccw": [
+        {
+          "x": 1450,
+          "y": 3400
+        },
+        {
+          "x": 2040,
+          "y": 3400
+        },
+        {
+          "x": 2040,
+          "y": 3980
+        },
+        {
+          "x": 1450,
+          "y": 3980
+        }
+      ],
+      "bbox": {
+        "min_x": 1450,
+        "min_y": 3400,
+        "max_x": 2040,
+        "max_y": 3980
+      },
+      "color_hex": "#CBB79E",
+      "material": "matte_laminate",
+      "place_on": null
+    },
+    {
+      "instance_id": "fridge",
+      "object_type": "fridge",
+      "source": "existing",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 2900,
+          "y": 1000
+        },
+        {
+          "x": 3500,
+          "y": 1000
+        },
+        {
+          "x": 3500,
+          "y": 1640
+        },
+        {
+          "x": 2900,
+          "y": 1640
+        }
+      ],
+      "bbox": {
+        "min_x": 2900,
+        "min_y": 1000,
+        "max_x": 3500,
+        "max_y": 1640
+      },
+      "color_hex": "#E7E3DC",
+      "material": "powder_coated_metal",
+      "place_on": null
+    },
+    {
+      "instance_id": "sink",
+      "object_type": "sink",
+      "source": "existing",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 2950,
+          "y": 2400
+        },
+        {
+          "x": 3440,
+          "y": 2400
+        },
+        {
+          "x": 3440,
+          "y": 2980
+        },
+        {
+          "x": 2950,
+          "y": 2980
+        }
+      ],
+      "bbox": {
+        "min_x": 2950,
+        "min_y": 2400,
+        "max_x": 3440,
+        "max_y": 2980
+      },
+      "color_hex": "#D9E1E8",
+      "material": "stainless_steel",
+      "place_on": null
+    },
+    {
+      "instance_id": "stove",
+      "object_type": "stove",
+      "source": "existing",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 2900,
+          "y": 3050
+        },
+        {
+          "x": 3480,
+          "y": 3050
+        },
+        {
+          "x": 3480,
+          "y": 3660
+        },
+        {
+          "x": 2900,
+          "y": 3660
+        }
+      ],
+      "bbox": {
+        "min_x": 2900,
+        "min_y": 3050,
+        "max_x": 3480,
+        "max_y": 3660
+      },
+      "color_hex": "#6F6A63",
+      "material": "enamel_metal",
+      "place_on": null
+    },
+    {
+      "instance_id": "range_hood_001",
+      "object_type": "range_hood",
+      "source": "existing",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 2840,
+          "y": 3175
+        },
+        {
+          "x": 3540,
+          "y": 3175
+        },
+        {
+          "x": 3540,
+          "y": 3535
+        },
+        {
+          "x": 2840,
+          "y": 3535
+        }
+      ],
+      "bbox": {
+        "min_x": 2840,
+        "min_y": 3175,
+        "max_x": 3540,
+        "max_y": 3535
+      },
+      "color_hex": "#DDE2E6",
+      "material": "powder_coated_metal",
+      "place_on": {
+        "target_instance_id": "stove",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "clock_001",
+      "object_type": "clock",
+      "source": "inventory",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 3160,
+          "y": 1080
+        },
+        {
+          "x": 3580,
+          "y": 1080
+        },
+        {
+          "x": 3580,
+          "y": 1560
+        },
+        {
+          "x": 3160,
+          "y": 1560
+        }
+      ],
+      "bbox": {
+        "min_x": 3160,
+        "min_y": 1080,
+        "max_x": 3580,
+        "max_y": 1560
+      },
+      "color_hex": "#A96F4A",
+      "material": "wood",
+      "place_on": {
+        "target_instance_id": "wall",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "track_light_001",
+      "object_type": "track_light",
+      "source": "inventory",
+      "cluster_id": "kitchen_workflow_core",
+      "polygon_ccw": [
+        {
+          "x": 3155,
+          "y": 915
+        },
+        {
+          "x": 3245,
+          "y": 915
+        },
+        {
+          "x": 3245,
+          "y": 1725
+        },
+        {
+          "x": 3155,
+          "y": 1725
+        }
+      ],
+      "bbox": {
+        "min_x": 3155,
+        "min_y": 915,
+        "max_x": 3245,
+        "max_y": 1725
+      },
+      "color_hex": "#D9D4CC",
+      "material": "powder_coated_metal",
+      "place_on": {
+        "target_instance_id": "ceiling",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "final_style_plan": {
+    "style_name": "balanced",
+    "layout_policy_trace": {
+      "style_name": "balanced",
+      "style_tags": [
+        "minimal",
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "medium",
+        "center_openness_bias": "very_high",
+        "wall_loading_bias": "perimeter",
+        "symmetry_bias": "balanced",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "low",
+        "decor_tolerance": "low",
+        "daylight_bias": "high",
+        "floating_cluster_tolerance": "low",
+        "material_weight_bias": "balanced",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
+        "support_optional": {
+          "allow_only_if_space_surplus": true
+        },
+        "decor": {
+          "max_items_per_cluster": 1
+        },
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 1.06,
+        "optional_utility_bias": -0.45,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.15,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.15
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": []
+    },
+    "palette": {
+      "walls": "warm_off_white",
+      "floor": "light_oak",
+      "primary_wood": "natural_oak",
+      "metal": "matte_black_soft",
+      "textiles": "beige_sand_gray",
+      "walls_hex": "#F3EFE7",
+      "floor_hex": "#C8A77E",
+      "ceiling_hex": "#FAF7F2"
+    },
+    "surface_plan": {
+      "walls": {
+        "finish": "paint",
+        "color_hex": "#F3EFE7"
+      },
+      "floor": {
+        "finish": "floor_finish",
+        "color_hex": "#C8A77E"
+      },
+      "ceiling": {
+        "finish": "ceiling_paint",
+        "color_hex": "#FAF7F2"
+      }
+    },
+    "object_finish_plan": [
+      {
+        "instance_id": "kitchen_base_cabinet",
+        "material": "matte_laminate",
+        "color_hex": "#D8CBB8"
+      },
+      {
+        "instance_id": "kitchen_tall_cabinet",
+        "material": "matte_laminate",
+        "color_hex": "#CBB79E"
+      },
+      {
+        "instance_id": "fridge",
+        "material": "powder_coated_metal",
+        "color_hex": "#E7E3DC"
+      },
+      {
+        "instance_id": "sink",
+        "material": "stainless_steel",
+        "color_hex": "#D9E1E8"
+      },
+      {
+        "instance_id": "stove",
+        "material": "enamel_metal",
+        "color_hex": "#6F6A63"
+      },
+      {
+        "instance_id": "range_hood_001",
+        "material": "powder_coated_metal",
+        "color_hex": "#DDE2E6"
+      },
+      {
+        "instance_id": "clock_001",
+        "material": "wood",
+        "color_hex": "#A96F4A"
+      },
+      {
+        "instance_id": "track_light_001",
+        "material": "powder_coated_metal",
+        "color_hex": "#D9D4CC"
+      }
+    ],
+    "decor_plan": [],
+    "lighting_mood": "soft_daylit_calm",
+    "rules": {
+      "layout_locked": true,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    }
+  },
+  "notes": [
+    "Accessory placement used deterministic support rules and fixed 50 mm spacing.",
+    "warm_neutral_modern",
+    "calm_low_contrast",
+    "accent_minimal"
+  ],
+  "missing": []
+}

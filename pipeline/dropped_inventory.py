@@ -64,6 +64,7 @@ _ACCESSORY_DECOR_TYPES = frozenset(
         "wall_art",
     }
 )
+_ACCESSORY_REFILL_SKIP_TYPES = frozenset({"throw_blanket"})
 _FUNCTIONAL_CORE_TYPES = frozenset(
     {
         "bathroom_core",
@@ -574,6 +575,8 @@ def _accessory_refill_rejection_reason(
         item.get("object_type") or item.get("category")
     )
     category = _normalized_inventory_label(item.get("category"))
+    if object_type in _ACCESSORY_REFILL_SKIP_TYPES:
+        return "accessory_refill_type_disabled"
     if object_type in _FUNCTIONAL_CORE_TYPES:
         return "functional_core_never_refilled"
     if object_type in _FUNCTIONAL_SUPPORT_TYPES:

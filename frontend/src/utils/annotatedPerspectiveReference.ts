@@ -126,6 +126,72 @@ export async function buildStructuralPerspectiveReferenceImageDataUrl(params: {
   return canvas.toDataURL('image/png');
 }
 
+export async function buildEdgeMapReferenceImageDataUrl(params: {
+  sourceImageDataUrl: string;
+}): Promise<string | null> {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const sourceImage = await loadImage(params.sourceImageDataUrl);
+  const width = Math.max(1, sourceImage.naturalWidth || sourceImage.width);
+  const height = Math.max(1, sourceImage.naturalHeight || sourceImage.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) {
+    return null;
+  }
+
+  context.drawImage(sourceImage, 0, 0, width, height);
+  const sourcePixels = context.getImageData(0, 0, width, height);
+  const edgePixels = context.createImageData(width, height);
+  const source = sourcePixels.data;
+  const target = edgePixels.data;
+  const threshold = 18;
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const topLeft = luminanceAt(source, width, x - 1, y - 1);
+      const top = luminanceAt(source, width, x, y - 1);
+      const topRight = luminanceAt(source, width, x + 1, y - 1);
+      const left = luminanceAt(source, width, x - 1, y);
+      const right = luminanceAt(source, width, x + 1, y);
+      const bottomLeft = luminanceAt(source, width, x - 1, y + 1);
+      const bottom = luminanceAt(source, width, x, y + 1);
+      const bottomRight = luminanceAt(source, width, x + 1, y + 1);
+
+      const gx =
+        -topLeft -
+        2 * left -
+        bottomLeft +
+        topRight +
+        2 * right +
+        bottomRight;
+      const gy =
+        -topLeft -
+        2 * top -
+        topRight +
+        bottomLeft +
+        2 * bottom +
+        bottomRight;
+      const magnitude = Math.hypot(gx, gy);
+      const offset = (y * width + x) * 4;
+      const value = magnitude >= threshold ? 255 : 0;
+      target[offset] = value;
+      target[offset + 1] = value;
+      target[offset + 2] = value;
+      target[offset + 3] = 255;
+    }
+  }
+
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, width, height);
+  context.putImageData(edgePixels, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();

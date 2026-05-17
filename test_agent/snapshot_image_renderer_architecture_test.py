@@ -177,6 +177,17 @@ def _gemini_image_payload() -> dict[str, object]:
     }
 
 
+def _openai_image_payload() -> dict[str, object]:
+    return {
+        "created": 1,
+        "data": [
+            {
+                "b64_json": _TINY_PNG_BASE64,
+            }
+        ],
+    }
+
+
 def _gemini_no_image_payload(
     *,
     finish_reason: str,
@@ -244,10 +255,20 @@ class _FakeHttpClient:
         self,
         url: str,
         *,
-        json: dict[str, object],
+        json: dict[str, object] | None = None,
+        data: dict[str, object] | None = None,
+        files: list[object] | None = None,
         headers: dict[str, str],
     ) -> _FakeHttpResponse:
-        self.calls.append({"url": url, "json": json, "headers": headers})
+        self.calls.append(
+            {
+                "url": url,
+                "json": json,
+                "data": data,
+                "files": files,
+                "headers": headers,
+            }
+        )
         if not self._responses:
             raise AssertionError("No fake Gemini response configured.")
         response = self._responses.pop(0)
@@ -257,6 +278,178 @@ class _FakeHttpClient:
 
 
 class SnapshotImageRendererArchitectureTest(unittest.TestCase):
+    def test_openai_generate_sends_geometry_references_in_prompt_matched_order(
+        self,
+    ) -> None:
+        fake_http_client = _FakeHttpClient([_openai_image_payload()])
+        with (
+            mock.patch.object(snapshot_image_renderer, "httpx") as mocked_httpx,
+            mock.patch.object(
+                snapshot_image_renderer,
+                "_validate_generated_geometry_against_reference",
+                return_value={"status": "passed", "reason": "test_pass"},
+            ),
+        ):
+            mocked_httpx.Client.return_value = fake_http_client
+            result = snapshot_image_renderer.render_snapshot_image(
+                _snapshot(),
+                snapshot_image_data_url=_tiny_png_data_url(),
+                depth_map_image_data_url=_tiny_png_data_url(),
+                edge_map_image_data_url=_tiny_png_data_url(),
+                segmentation_map_image_data_url=_tiny_png_data_url(),
+                annotated_reference_image_data_url=_tiny_png_data_url(),
+                user_prompt="Use warm walnut materials and soft evening lighting.",
+                preset_selection={
+                    "style": "modern",
+                    "lighting": "daylight_1",
+                    "scenery": "none",
+                },
+                config=snapshot_image_renderer.SnapshotImageRenderConfig(
+                    image_provider="openai",
+                    openai_api_key="secret",
+                    openai_image_model="gpt-image-1.5",
+                    openai_image_size="1024x1024",
+                    openai_image_quality="medium",
+                    openai_base_url="https://example.com/v1",
+                ),
+            )
+
+        self.assertEqual(
+            result["image"]["request_strategy"],
+            "openai_edit_geometry_locked",
+        )
+        self.assertEqual(result["image"]["retry_count"], 0)
+        self.assertEqual(result["metadata"]["validation"]["status"], "passed")
+        self.assertEqual(
+            result["request"]["geometry_references_used"],
+            {
+                "depth_map": True,
+                "edge_map": True,
+                "segmentation_map": True,
+            },
+        )
+
+        request_call = fake_http_client.calls[0]
+        self.assertEqual(request_call["url"], "https://example.com/v1/images/edits")
+        files = request_call["files"]
+        self.assertIsInstance(files, list)
+        image_file_names = [
+            payload[0]
+            for field_name, payload in files
+            if field_name == "image[]"
+        ]
+        self.assertEqual(
+            image_file_names,
+            [
+                "source.png",
+                "depth_map.png",
+                "edge_map.png",
+                "segmentation_map.png",
+                "edit_guide.png",
+            ],
+        )
+        prompt = request_call["data"]["prompt"]
+        self.assertIn("Image 1 is the clean 3D source render", prompt)
+        self.assertIn("Image 2 is a deterministic depth map", prompt)
+        self.assertIn("Image 3 is a deterministic edge map", prompt)
+        self.assertIn("Image 4 is a deterministic segmentation map", prompt)
+        self.assertIn("Image 5 is a same-camera labeled structural guide", prompt)
+        self.assertIn(
+            "Apply these selected presets as finish realism, material texture, "
+            "lighting/illumination, and exterior scenery visible through existing "
+            "openings only.",
+            prompt,
+        )
+
+    def test_openai_geometry_validation_failure_retries_once(self) -> None:
+        fake_http_client = _FakeHttpClient(
+            [_openai_image_payload(), _openai_image_payload()]
+        )
+        with (
+            mock.patch.object(snapshot_image_renderer, "httpx") as mocked_httpx,
+            mock.patch.object(
+                snapshot_image_renderer,
+                "_validate_generated_geometry_against_reference",
+                side_effect=[
+                    {
+                        "status": "failed",
+                        "reason": "edge_alignment_score_below_threshold",
+                    },
+                    {
+                        "status": "passed",
+                        "reason": "geometry_reference_alignment_acceptable",
+                    },
+                ],
+            ),
+        ):
+            mocked_httpx.Client.return_value = fake_http_client
+            result = snapshot_image_renderer.render_snapshot_image(
+                _snapshot(),
+                snapshot_image_data_url=_tiny_png_data_url(),
+                depth_map_image_data_url=_tiny_png_data_url(),
+                edge_map_image_data_url=_tiny_png_data_url(),
+                segmentation_map_image_data_url=_tiny_png_data_url(),
+                user_prompt="Use warm walnut materials and soft evening lighting.",
+                config=snapshot_image_renderer.SnapshotImageRenderConfig(
+                    image_provider="openai",
+                    openai_api_key="secret",
+                    openai_image_model="gpt-image-1.5",
+                    openai_image_size="1024x1024",
+                    openai_image_quality="medium",
+                    openai_base_url="https://example.com/v1",
+                ),
+            )
+
+        self.assertEqual(len(fake_http_client.calls), 2)
+        self.assertEqual(
+            result["image"]["request_strategy"],
+            "openai_edit_geometry_retry",
+        )
+        self.assertEqual(result["image"]["retry_count"], 1)
+        self.assertEqual(result["metadata"]["validation"]["status"], "passed")
+        retry_prompt = fake_http_client.calls[1]["data"]["prompt"]
+        self.assertIn("Geometry retry instruction:", retry_prompt)
+        self.assertIn("edge_alignment_score_below_threshold", retry_prompt)
+
+    def test_openai_generate_without_geometry_maps_keeps_legacy_strategy(
+        self,
+    ) -> None:
+        fake_http_client = _FakeHttpClient([_openai_image_payload()])
+        with mock.patch.object(snapshot_image_renderer, "httpx") as mocked_httpx:
+            mocked_httpx.Client.return_value = fake_http_client
+            result = snapshot_image_renderer.render_snapshot_image(
+                _snapshot(),
+                snapshot_image_data_url=_tiny_png_data_url(),
+                annotated_reference_image_data_url=_tiny_png_data_url(),
+                user_prompt="Use warm walnut materials and soft evening lighting.",
+                config=snapshot_image_renderer.SnapshotImageRenderConfig(
+                    image_provider="openai",
+                    openai_api_key="secret",
+                    openai_image_model="gpt-image-1.5",
+                    openai_image_size="1024x1024",
+                    openai_image_quality="medium",
+                    openai_base_url="https://example.com/v1",
+                ),
+            )
+
+        self.assertEqual(result["image"]["request_strategy"], "openai_edit")
+        self.assertEqual(result["image"]["retry_count"], 0)
+        self.assertEqual(
+            result["request"]["geometry_references_used"],
+            {
+                "depth_map": False,
+                "edge_map": False,
+                "segmentation_map": False,
+            },
+        )
+        files = fake_http_client.calls[0]["files"]
+        image_file_names = [
+            payload[0]
+            for field_name, payload in files
+            if field_name == "image[]"
+        ]
+        self.assertEqual(image_file_names, ["source.png", "edit_guide.png"])
+
     def test_build_gemini_generation_config_uses_image_response_for_gemini_3_pro_preview(
         self,
     ) -> None:

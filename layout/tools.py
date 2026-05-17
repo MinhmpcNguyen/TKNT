@@ -93,7 +93,9 @@ def build_absolute_layout(
                     {
                         "object_id": obj_id,
                         "cluster_id": cid,
-                        "polygon_ccw": [{"x": int(px), "y": int(py)} for px, py in poly],
+                        "polygon_ccw": [
+                            {"x": int(px), "y": int(py)} for px, py in poly
+                        ],
                         "bbox": bbox,
                         "rotation_ccw": rot,
                         "source_rect": {
@@ -146,7 +148,9 @@ def _rotate_ccw_90s(x: int, y: int, rot: int) -> Tuple[int, int]:
     return x, y
 
 
-def _transform_rect_to_polygon(rect: Dict[str, Any], *, x: int, y: int, rot: int) -> List[Tuple[int, int]]:
+def _transform_rect_to_polygon(
+    rect: Dict[str, Any], *, x: int, y: int, rot: int
+) -> List[Tuple[int, int]]:
     rx = int(rect.get("x", 0))
     ry = int(rect.get("y", 0))
     w = int(rect.get("w", 0))
@@ -207,7 +211,10 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "properties": {
                     "room_model": {"type": "object"},
                     "clusters_outlines": {"type": "object"},
-                    "cluster_transforms": {"type": "array", "items": {"type": "object"}},
+                    "cluster_transforms": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
                 },
                 "required": ["room_model", "clusters_outlines", "cluster_transforms"],
             },

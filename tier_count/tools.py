@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -39,6 +40,23 @@ _SOFT_REQUEST_CONTRACT_INTENTS = {
     "preferred_if_fit",
     "optional_if_surplus",
 }
+_USE_SIZE_RULES_ENV = "TKNT_TIER_COUNT_USE_SIZE_RULES"
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _use_frozen_size_rules() -> bool:
+    return _env_bool(_USE_SIZE_RULES_ENV, default=True)
 
 
 # ============================================================
@@ -315,6 +333,12 @@ def _build_size_profiles(
     return profiles
 
 
+def build_size_profiles_from_inventory(
+    inventory: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return _build_size_profiles(inventory)
+
+
 # ============================================================
 # Tool: get_size_profiles
 # ============================================================
@@ -344,6 +368,10 @@ def _load_inventory_from_db(tenant_id: str) -> list[dict[str, Any]]:
             }
         )
     return items
+
+
+def load_size_profile_inventory_from_db(tenant_id: str) -> list[dict[str, Any]]:
+    return _load_inventory_from_db(tenant_id)
 
 
 def _parse_profiles_payload(content: str) -> dict[str, Any] | None:
@@ -504,7 +532,9 @@ def _build_generic_profile_from_profiles(
 def get_size_profiles(
     *, categories: list[str], tenant_id: str | None = None
 ) -> dict[str, Any]:
-    profiles_payload = _load_profiles_from_db(tenant_id)
+    profiles_payload = (
+        _load_profiles_from_db(tenant_id) if _use_frozen_size_rules() else None
+    )
     if isinstance(profiles_payload, dict):
         profiles_payload = _sanitize_profiles_payload(profiles_payload)
 
