@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "armchair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a lounge armchair",
+      "reason": "Directly requested lounge seating.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a bed",
+      "reason": "Directly requested as a core bedroom anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "with a floor lamp",
+      "reason": "Explicitly paired with the armchair and requested as part of the composition.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a soft rug",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false,
+      "confidence": null
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a wardrobe",
+      "reason": "Directly requested storage element.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "target_if_viable",
+      "min_keep": 1,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "two nightstands if they fit",
+      "reason": "Requested as a bounded pair with fit-dependent reduction allowed after the hard floor.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "chair",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a small desk or vanity",
+      "reason": "Implied seating for the optional desk/vanity work zone, but not explicitly named; kept only as a downstream support possibility.",
+      "available_in_program": true,
+      "confidence": 0.55
+    },
+    {
+      "object_type": "desk",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a small desk or vanity only if there is enough space",
+      "reason": "Fit-dependent and optional if space allows.",
+      "available_in_program": true,
+      "confidence": 0.97
+    },
+    {
+      "object_type": "bookshelf",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "a wardrobe",
+      "reason": "Not requested in the brief.",
+      "available_in_program": true,
+      "confidence": 0.8
+    },
+    {
+      "object_type": "dresser",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "a wardrobe",
+      "reason": "Not requested in the brief.",
+      "available_in_program": false,
+      "confidence": 0.78
+    },
+    {
+      "object_type": "laundry_basket",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "a wardrobe",
+      "reason": "Not requested in the brief.",
+      "available_in_program": false,
+      "confidence": 0.78
+    },
+    {
+      "object_type": "side_table",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "with a floor lamp",
+      "reason": "No side table was requested; avoid inventing extra lounge furniture.",
+      "available_in_program": true,
+      "confidence": 0.72
+    },
+    {
+      "object_type": "storage_cabinet",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "a wardrobe",
+      "reason": "Not requested in the brief.",
+      "available_in_program": false,
+      "confidence": 0.78
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "a wardrobe",
+      "reason": "Not requested in the brief.",
+      "available_in_program": false,
+      "confidence": 0.78
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sleep_core_bundle",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "intent": "must_keep",
+      "priority": "core",
+      "drop_policy": "reduce nightstands only after preserving the bed; keep at least one if possible"
+    },
+    {
+      "group_id": "lounge_reading_bundle",
+      "members": [
+        "armchair",
+        "floor_lamp"
+      ],
+      "intent": "must_keep",
+      "priority": "support",
+      "drop_policy": "drop floor lamp before armchair if space is tight"
+    }
+  ],
+  "notes": [
+    "Soft usage hints favor a private back zone, a daylit work zone, an open center, and a window-view focus.",
+    "The brief explicitly allows reduction of the desk/vanity to fit-dependent optional status.",
+    "No ceiling lamp was explicitly requested.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Requested non-functional objects were restored for downstream placement: rug"
+  ]
+}

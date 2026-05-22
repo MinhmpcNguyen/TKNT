@@ -104,6 +104,12 @@ _GUIDED_TOPOLOGY_POLICY_KEYS = {
     "secondary_zone_placement_bias",
 }
 _FIT_CHECKED_REQUIRED_REGION_IDS: frozenset[str] = frozenset()
+_VIEWING_TARGET_OBJECT_TYPES: frozenset[str] = frozenset(
+    {"tv", "tv_console", "screen", "projector", "monitor", "display"}
+)
+_VIEWING_RELATION_TOKENS: frozenset[str] = frozenset(
+    {"face", "facing", "view", "viewing", "watch", "oriented", "toward"}
+)
 
 
 @dataclass(frozen=True)
@@ -239,6 +245,10 @@ class SeedConceptGenerator:
         room_model = _unwrap_room_model(room_model_json)
         room_type = _room_type(room_model)
         cluster_programs = _build_cluster_programs(clusters_json)
+        object_viewing_pairs = _object_viewing_pairs_from_request_contract(
+            clusters_json=clusters_json,
+            cluster_programs=cluster_programs,
+        )
         style_policy = _extract_style_policy(clusters_json)
         macro_region_map = _build_macro_region_map(room_model)
         region_candidates = _match_clusters_to_macro_regions(
@@ -286,6 +296,7 @@ class SeedConceptGenerator:
             region_candidates=region_candidates,
             style_policy=style_policy,
             target_count=target_count,
+            object_viewing_pairs=object_viewing_pairs,
             guidance_bundle=guidance_bundle,
         )
 
@@ -735,6 +746,239 @@ def _semantic_clusters_by_id(
         if cluster_id is not None:
             out[cluster_id] = cluster
     return out
+
+
+def _request_contract_from_clusters_json(
+    clusters_json: Mapping[str, object],
+) -> Mapping[str, object]:
+    contract = clusters_json.get("request_contract")
+    if isinstance(contract, Mapping):
+        return contract
+    program = clusters_json.get("semantic_layout_program")
+    if isinstance(program, Mapping):
+        contract = program.get("request_contract")
+        if isinstance(contract, Mapping):
+            return contract
+    return {}
+
+
+def _object_viewing_pairs_from_request_contract(
+    *,
+    clusters_json: Mapping[str, object],
+    cluster_programs: Sequence[ClusterProgram],
+) -> list[dict[str, object]]:
+    contract = _request_contract_from_clusters_json(clusters_json)
+    if not contract:
+        return []
+    contract_objects = [
+        row
+        for row in _sequence_or_empty(contract.get("objects"))
+        if isinstance(row, Mapping)
+    ]
+    object_types = [
+        object_type
+        for row in contract_objects
+        if (object_type := _clean_str(row.get("object_type"))) is not None
+    ]
+    object_intents_by_type = {
+        str(row.get("object_type") or ""): str(row.get("intent") or "")
+        for row in contract_objects
+    }
+    out: list[dict[str, object]] = []
+
+    def add_pair(
+        *,
+        viewer_type: str,
+        target_type: str,
+        evidence: str,
+        required: bool,
+        source: str,
+    ) -> None:
+        viewer_ref = _cluster_object_ref_for_type(cluster_programs, viewer_type)
+        target_ref = _cluster_object_ref_for_type(cluster_programs, target_type)
+        if viewer_ref is None or target_ref is None or viewer_ref == target_ref:
+            return
+        row = {
+            "type": "viewing_pair",
+            "viewer_cluster_id": viewer_ref[0],
+            "viewer_object_id": viewer_ref[1],
+            "viewer_object_type": viewer_type,
+            "target_cluster_id": target_ref[0],
+            "target_object_id": target_ref[1],
+            "target_object_type": target_type,
+            "relation": "face_each_other",
+            "required": required,
+            "priority": "high" if required else "medium",
+            "source": source,
+            "evidence": evidence,
+        }
+        key = (
+            row["viewer_cluster_id"],
+            row["viewer_object_id"],
+            row["target_cluster_id"],
+            row["target_object_id"],
+            row["relation"],
+        )
+        existing_keys = {
+            (
+                item.get("viewer_cluster_id"),
+                item.get("viewer_object_id"),
+                item.get("target_cluster_id"),
+                item.get("target_object_id"),
+                item.get("relation"),
+            )
+            for item in out
+        }
+        if key not in existing_keys:
+            out.append(row)
+
+    for group in _sequence_or_empty(contract.get("groups")):
+        if not isinstance(group, Mapping):
+            continue
+        members = [
+            member
+            for member in _string_list(group.get("members"))
+            if member in object_types
+        ]
+        if len(members) < 2:
+            continue
+        text = _normalized_relation_text(
+            group.get("group_id"),
+            group.get("intent"),
+            group.get("drop_policy"),
+        )
+        if not _text_has_viewing_relation(text):
+            continue
+        targets = [member for member in members if _is_viewing_target_type(member)]
+        viewers = [member for member in members if member not in targets]
+        if not targets or not viewers:
+            continue
+        required = _group_requires_viewing_pair(group, object_intents_by_type)
+        for target_type in targets:
+            for viewer_type in viewers:
+                add_pair(
+                    viewer_type=viewer_type,
+                    target_type=target_type,
+                    evidence=text,
+                    required=required,
+                    source="request_contract_group",
+                )
+
+    for row in contract_objects:
+        source_type = _clean_str(row.get("object_type"))
+        if source_type is None:
+            continue
+        text = _normalized_relation_text(row.get("evidence"), row.get("reason"))
+        if not _text_has_viewing_relation(text):
+            continue
+        for other_type in object_types:
+            if other_type == source_type or not _text_mentions_object_type(
+                text, other_type
+            ):
+                continue
+            source_is_target = _is_viewing_target_type(source_type)
+            other_is_target = _is_viewing_target_type(other_type)
+            if source_is_target == other_is_target:
+                continue
+            add_pair(
+                viewer_type=other_type if source_is_target else source_type,
+                target_type=source_type if source_is_target else other_type,
+                evidence=text,
+                required=_contract_object_requires_pair(row),
+                source="request_contract_object",
+            )
+    return out
+
+
+def _cluster_object_ref_for_type(
+    cluster_programs: Sequence[ClusterProgram],
+    object_type: str,
+) -> tuple[str, str] | None:
+    for cluster in cluster_programs:
+        for object_id in cluster.object_ids:
+            if _object_id_matches_type(object_id, object_type):
+                return cluster.cluster_id, object_id
+    return None
+
+
+def _object_id_matches_type(object_id: str, object_type: str) -> bool:
+    object_id_norm = _normalized_object_token(object_id)
+    object_type_norm = _normalized_object_token(object_type)
+    if object_id_norm == object_type_norm:
+        return True
+    if object_id_norm.startswith(f"{object_type_norm}_"):
+        return True
+    object_id_parts = set(object_id_norm.split("_"))
+    object_type_parts = set(object_type_norm.split("_"))
+    return bool(object_type_parts) and object_type_parts.issubset(object_id_parts)
+
+
+def _is_viewing_target_type(object_type: str) -> bool:
+    normalized = _normalized_object_token(object_type)
+    parts = set(normalized.split("_"))
+    return normalized in _VIEWING_TARGET_OBJECT_TYPES or bool(
+        parts & _VIEWING_TARGET_OBJECT_TYPES
+    )
+
+
+def _normalized_relation_text(*values: object) -> str:
+    return " ".join(str(value or "").strip().lower() for value in values if value)
+
+
+def _text_has_viewing_relation(text: str) -> bool:
+    tokens = {
+        token.strip(".,;:()[]{}")
+        for token in text.replace("-", " ").replace("_", " ").split()
+    }
+    return bool(tokens & _VIEWING_RELATION_TOKENS)
+
+
+def _text_mentions_object_type(text: str, object_type: str) -> bool:
+    normalized_object = _normalized_object_token(object_type)
+    text_tokens = {
+        token.strip(".,;:()[]{}")
+        for token in str(text or "")
+        .strip()
+        .lower()
+        .replace("-", " ")
+        .replace("_", " ")
+        .replace("/", " ")
+        .split()
+    }
+    object_parts = [part for part in normalized_object.split("_") if part]
+    if object_parts and all(part in text_tokens for part in object_parts):
+        return True
+    return any(part in text_tokens for part in object_parts if len(part) >= 3)
+
+
+def _normalized_object_token(value: object) -> str:
+    return (
+        str(value or "")
+        .strip()
+        .lower()
+        .replace("-", "_")
+        .replace("/", "_")
+        .replace(" ", "_")
+    )
+
+
+def _group_requires_viewing_pair(
+    group: Mapping[str, object],
+    object_intents_by_type: Mapping[str, str],
+) -> bool:
+    priority = str(group.get("priority") or "").strip().lower()
+    if priority in {"core", "high", "critical", "required"}:
+        return True
+    return any(
+        str(object_intents_by_type.get(member) or "")
+        in {"must_keep", "must_try", "required"}
+        for member in _string_list(group.get("members"))
+    )
+
+
+def _contract_object_requires_pair(row: Mapping[str, object]) -> bool:
+    intent = str(row.get("intent") or "").strip().lower()
+    return intent in {"must_keep", "must_try", "required"}
 
 
 def _build_macro_region_map(room_model: Mapping[str, object]) -> dict[str, object]:
@@ -1594,6 +1838,7 @@ def _instantiate_concept_families(
     region_candidates: Sequence[RegionCandidate],
     style_policy: Mapping[str, object],
     target_count: int,
+    object_viewing_pairs: Sequence[Mapping[str, object]],
     guidance_bundle: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
     family_order = _concept_family_order(
@@ -1663,6 +1908,7 @@ def _instantiate_concept_families(
             cluster_zone_plan=cluster_zone_plan,
             primary_cluster_id=primary_cluster_id,
             secondary_cluster_id=secondary_cluster_id,
+            object_viewing_pairs=object_viewing_pairs,
         )
         concept = {
             "concept_id": f"concept_{index:02d}",
@@ -1684,6 +1930,7 @@ def _instantiate_concept_families(
                 primary_cluster_id=primary_cluster_id,
                 secondary_cluster_id=secondary_cluster_id,
             ),
+            "object_viewing_pairs": [dict(row) for row in object_viewing_pairs],
             "primary_pair_contracts": primary_pair_contracts,
             "anchor_region_preferences_by_cluster": (
                 _anchor_region_preferences_by_cluster(
@@ -3015,7 +3262,13 @@ def _primary_pair_contracts_for_concept(
     cluster_zone_plan: Sequence[Mapping[str, object]],
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
+    object_viewing_pairs: Sequence[Mapping[str, object]] = (),
 ) -> list[dict[str, object]]:
+    viewing_contracts = _primary_pair_contracts_from_object_viewing_pairs(
+        object_viewing_pairs
+    )
+    if viewing_contracts:
+        return viewing_contracts
     if primary_cluster_id is None or secondary_cluster_id is None:
         return []
     primary_row = next(
@@ -3060,6 +3313,56 @@ def _primary_pair_contracts_for_concept(
             }
         )
     return contracts
+
+
+def _primary_pair_contracts_from_object_viewing_pairs(
+    object_viewing_pairs: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in object_viewing_pairs:
+        viewer_cluster_id = _clean_str(row.get("viewer_cluster_id"))
+        target_cluster_id = _clean_str(row.get("target_cluster_id"))
+        if (
+            viewer_cluster_id is None
+            or target_cluster_id is None
+            or viewer_cluster_id == target_cluster_id
+        ):
+            continue
+        key = tuple(sorted((viewer_cluster_id, target_cluster_id)))
+        if key in seen:
+            continue
+        seen.add(key)
+        required = bool(row.get("required", True))
+        out.append(
+            {
+                "pair_type": "face_each_other",
+                "cluster_a": viewer_cluster_id,
+                "cluster_b": target_cluster_id,
+                "strength": "high" if required else "medium",
+                "required": required,
+                "source": "object_viewing_pair",
+            }
+        )
+    return out
+
+
+def _viewing_target_by_cluster(
+    object_viewing_pairs: Sequence[Mapping[str, object]],
+) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for row in object_viewing_pairs:
+        viewer_cluster_id = _clean_str(row.get("viewer_cluster_id"))
+        target_cluster_id = _clean_str(row.get("target_cluster_id"))
+        if (
+            viewer_cluster_id is None
+            or target_cluster_id is None
+            or viewer_cluster_id == target_cluster_id
+        ):
+            continue
+        out.setdefault(viewer_cluster_id, target_cluster_id)
+        out.setdefault(target_cluster_id, viewer_cluster_id)
+    return out
 
 
 def _primary_pair_type_for_family(
@@ -3207,11 +3510,20 @@ def _concept_to_solver_plan(
     family = str(concept.get("concept_family") or "focal_axis")
     policy = _mapping_or_empty(concept.get("topology_policy"))
     constraints = _mapping_or_empty(concept.get("macro_constraints"))
+    object_viewing_pairs = [
+        row
+        for row in _sequence_or_empty(concept.get("object_viewing_pairs"))
+        if isinstance(row, Mapping)
+    ]
     pair_contracts = [
         row
         for row in _sequence_or_empty(concept.get("primary_pair_contracts"))
         if isinstance(row, Mapping)
     ]
+    if not pair_contracts:
+        pair_contracts = _primary_pair_contracts_from_object_viewing_pairs(
+            object_viewing_pairs
+        )
     if not pair_contracts and primary_cluster_id and secondary_cluster_id:
         pair_contracts = [
             {
@@ -3222,6 +3534,7 @@ def _concept_to_solver_plan(
                 "required": True,
             }
         ]
+    viewing_target_by_cluster = _viewing_target_by_cluster(object_viewing_pairs)
 
     affinities = [
         _solver_affinity_for_assignment(row, policy) for row in cluster_zone_plan
@@ -3231,7 +3544,10 @@ def _concept_to_solver_plan(
         for row in cluster_zone_plan
         if (
             item := _solver_orientation_for_assignment(
-                row, primary_cluster_id, secondary_cluster_id
+                row,
+                primary_cluster_id,
+                secondary_cluster_id,
+                viewing_target_by_cluster=viewing_target_by_cluster,
             )
         )
         is not None
@@ -3285,6 +3601,7 @@ def _concept_to_solver_plan(
         "cluster_affinities": _dedupe_by_cluster(affinities),
         "cluster_orientations": _dedupe_by_cluster(orientations),
         "object_orientations": _concept_object_orientations_for_solver(concept),
+        "object_viewing_pairs": [dict(row) for row in object_viewing_pairs],
         "anchor_region_preferences_by_cluster": anchor_region_preferences,
         "anchor_layout_hints_by_cluster": _anchor_layout_hints_by_cluster(
             cluster_zone_plan=cluster_zone_plan
@@ -3391,6 +3708,8 @@ def _solver_orientation_for_assignment(
     row: Mapping[str, object],
     primary_cluster_id: str | None,
     secondary_cluster_id: str | None,
+    *,
+    viewing_target_by_cluster: Mapping[str, str] | None = None,
 ) -> dict[str, object] | None:
     cluster_id = _clean_str(row.get("cluster_id"))
     if cluster_id is None:
@@ -3399,7 +3718,19 @@ def _solver_orientation_for_assignment(
     target_cluster_id: str | None = None
     if row.get("wall_claim") in {"strong", "medium"}:
         intents.extend(["back_to_wall", "axis_parallel_wall"])
-    if cluster_id == primary_cluster_id and secondary_cluster_id:
+    viewing_target = (
+        viewing_target_by_cluster.get(cluster_id)
+        if isinstance(viewing_target_by_cluster, Mapping)
+        else None
+    )
+    if isinstance(viewing_target, str) and viewing_target:
+        intents.append("face_cluster")
+        if cluster_id == primary_cluster_id:
+            intents.append("inward_to_room")
+        else:
+            intents.append("access_to_open_space")
+        target_cluster_id = viewing_target
+    elif cluster_id == primary_cluster_id and secondary_cluster_id:
         intents.extend(["face_cluster", "inward_to_room"])
         target_cluster_id = secondary_cluster_id
     elif cluster_id == secondary_cluster_id and primary_cluster_id:

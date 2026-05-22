@@ -57,6 +57,7 @@ def ensure_user_content_schema() -> None:
             [
                 "user_accounts",
                 "auth_sessions",
+                "saved_layout_cases",
                 "saved_layouts",
                 "generated_renders",
             ]

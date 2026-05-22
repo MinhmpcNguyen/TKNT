@@ -1,0 +1,909 @@
+[
+  {
+    "case_id": "simple_living_01_movie_social",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 5000
+        },
+        {
+          "x": 0,
+          "y": 5000
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Living Room for me? The room is 4.0m x 5.0m. Designed for relaxation and socializing, the living room should feature a comfortable sofa arrangement, ample lighting for different activities, and a designated movie area with a large screen and surround sound for an immersive experience. Include a sofa facing a TV console, a coffee table, a rug, and one or two armchairs if they fit while keeping the room easy to move through.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.0,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 5000
+          },
+          {
+            "x": 0,
+            "y": 5000
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_02_compact_reading",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a compact Living Room for me? The room is 3.4m x 4.2m. It should feel calm and practical for reading, casual conversation, and occasional movie nights. Use a small sofa or loveseat, a slim TV console, a small coffee table, a rug, a bookshelf, and a floor lamp, with a layout that avoids overfurnishing the room.",
+        "room_type": "living_room",
+        "floor_area_m2": 14.28,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "bookshelf",
+        "floor_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 7,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_03_family_media",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a family Living Room for me? The room is 4.5m x 4.5m. It should support everyday lounging, board games, and a comfortable media setup. Include a sectional or large sofa, a TV console with a clear viewing zone, a coffee table, a rug, a bookshelf, and one or two armchairs if possible while keeping the seating group balanced.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.25,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair",
+        "bookshelf"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_04_hosting_lounge",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Living Room for hosting guests? The room is 5.2m x 3.8m. The space should work for conversation first, with a movie area that still feels natural. Include a sofa, a TV console, a coffee table, a rug, and one or two armchairs arranged as a social seating group with enough open floor area between pieces.",
+        "room_type": "living_room",
+        "floor_area_m2": 19.76,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_05_cozy_apartment",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a cozy apartment Living Room for me? The room is 3.0m x 3.6m. It should feel comfortable for one or two people, with a compact media area and a tidy central zone. Use a loveseat or small sofa, a slim TV console, a small coffee table, a rug, and a ceiling lamp, keeping the object count modest so the room does not feel crowded.",
+        "room_type": "living_room",
+        "floor_area_m2": 10.8,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 3,
+      "valid_blocking_count_max": 5,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_01_rest_study",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Bedroom for me? The room is 3.0m x 4.0m. It should be calm, practical, and easy to use for sleeping and light study. Include one bed as the main focal point, a wardrobe, one nightstand, a compact desk with a chair, and a ceiling lamp, with enough open space around the bed and desk for daily use.",
+        "room_type": "bedroom",
+        "floor_area_m2": 12.0,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "desk",
+        "chair",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_02_master_reading",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Master Bedroom for me? The room is 4.0m x 4.5m. The layout should feel restful and polished, with a queen bed as the anchor, two nightstands if they fit, a wardrobe, a soft rug, a reading armchair with a floor lamp, and a ceiling lamp. Keep the furniture balanced and leave comfortable circulation around the sleeping area.",
+        "room_type": "bedroom",
+        "floor_area_m2": 18.0,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "armchair",
+        "floor_lamp",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_03_student_storage",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Student Bedroom for me? The room is 3.2m x 3.6m. It should support sleeping, studying, and storage without feeling cramped. Include a single bed, a wardrobe, a compact desk with a chair, a bookshelf, a ceiling lamp, and one nightstand only if it fits.",
+        "room_type": "bedroom",
+        "floor_area_m2": 11.52,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "desk",
+        "chair",
+        "bookshelf",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_04_guest_vanity",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Guest Bedroom for me? The room is 3.6m x 3.8m. It should be welcoming and efficient, with a comfortable bed, a wardrobe, one or two nightstands, a small desk or vanity with a chair, a rug, and a ceiling lamp. The room should feel ready for guests without adding unnecessary furniture.",
+        "room_type": "bedroom",
+        "floor_area_m2": 13.68,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "desk",
+        "chair",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_05_suite_lounge",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a comfortable Bedroom suite for me? The room is 4.6m x 4.2m. It should feel modern, restful, and slightly luxurious, with a bed, two nightstands if they fit, a wardrobe, a lounge armchair with a floor lamp, a soft rug, and a small desk or vanity only if there is enough space.",
+        "room_type": "bedroom",
+        "floor_area_m2": 19.32,
+        "height": 2800,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "armchair",
+        "floor_lamp",
+        "rug"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  }
+]

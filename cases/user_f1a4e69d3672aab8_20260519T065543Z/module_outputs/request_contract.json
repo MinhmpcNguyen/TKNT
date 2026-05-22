@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "coffee_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a sofa facing a TV console, a coffee table",
+      "reason": "Directly requested as part of the seating arrangement.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a sofa facing a TV console, a coffee table, a rug",
+      "reason": "Directly requested as part of the living room composition.",
+      "available_in_program": false,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "sofa",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a sofa facing a TV console",
+      "reason": "Directly requested as a core seating anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a sofa facing a TV console",
+      "reason": "Directly requested as the media anchor for the movie area.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "armchair",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "one or two armchairs if they fit",
+      "reason": "Requested conditionally based on fit and circulation.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "ample lighting for different activities",
+      "reason": "Lighting is requested, and floor lamp is a viable lighting object in inventory.",
+      "available_in_program": true,
+      "confidence": 0.72
+    },
+    {
+      "object_type": "bookshelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "japandi",
+      "reason": "Potentially compatible with the style, but not explicitly requested.",
+      "available_in_program": true,
+      "confidence": 0.2
+    },
+    {
+      "object_type": "media_shelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "designated movie area with a large screen and surround sound",
+      "reason": "Could support the media area if space allows, but not explicitly required.",
+      "available_in_program": true,
+      "confidence": 0.45
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "main_seating",
+      "members": [
+        "sofa",
+        "coffee_table",
+        "armchair"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "keep sofa and coffee table first; reduce armchairs before removing core seating"
+    },
+    {
+      "group_id": "media_area",
+      "members": [
+        "tv_console",
+        "media_shelf"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "keep tv_console; drop media_shelf first if space is tight"
+    }
+  ],
+  "notes": [
+    "No explicit request for a sectional sofa, side table, or console table.",
+    "The brief emphasizes a media-focused living room with easy circulation, so conditional seating should not block movement.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

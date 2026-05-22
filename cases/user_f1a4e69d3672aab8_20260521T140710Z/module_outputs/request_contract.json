@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "Design a bedroom with a tv, bookshelf, desk, chair, mirror",
+      "reason": "Bedroom anchor implied by compiled sleep core and required for the room program.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "bookshelf",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "bookshelf",
+      "reason": "Directly requested in the brief and supported by the storage/work clusters.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "chair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "chair",
+      "reason": "Directly requested and required to support the desk/work zone.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "desk",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "desk",
+      "reason": "Directly requested and required by the work/study cluster.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "mirror",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "mirror",
+      "reason": "Directly requested decor object; include as a non-functional but explicit item.",
+      "available_in_program": false,
+      "confidence": 0.93
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "tv",
+      "reason": "TV is explicitly requested; tv_console is the available program object type for the media wall anchor.",
+      "available_in_program": true,
+      "confidence": 0.95
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "work_study_bundle",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "intent": "must_keep",
+      "priority": "support",
+      "drop_policy": "drop_chair_before_desk_only_if_needed"
+    }
+  ],
+  "notes": [
+    "Requested style minimalism is a global design constraint, not an object.",
+    "prefer_private_back_zone and prefer_daylit_work_zone are placement hints, not object requests.",
+    "likely_primary_focus=media_wall supports prioritizing the tv_console placement.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

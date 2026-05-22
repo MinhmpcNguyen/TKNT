@@ -25,8 +25,10 @@ def _decision(
     min_keep: int = 0,
     protected: bool = False,
     droppable: bool = False,
+    request_contract_intent: str = "",
+    request_contract_target_count: int = 0,
 ) -> dict[str, Any]:
-    return {
+    row = {
         "object_type": object_type,
         "category": object_type,
         "cluster_id": cluster_id,
@@ -40,6 +42,11 @@ def _decision(
         "size_tier": "M",
         "rep_dims_m": {"L": 0.5, "W": 0.45, "H": 0.55, "source_id": object_type},
     }
+    if request_contract_intent:
+        row["request_contract_intent"] = request_contract_intent
+    if request_contract_target_count > 0:
+        row["request_contract_target_count"] = request_contract_target_count
+    return row
 
 
 class ClusterMergeArchitectureTest(unittest.TestCase):
@@ -230,8 +237,84 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         )
         self.assertEqual(
             object_program["droppable_ids"],
-            ["dining_chair", "dining_chair_2"],
+            ["dining_chair_2"],
         )
+        self.assertEqual(
+            object_program["protected_ids"],
+            ["dining_table", "dining_chair"],
+        )
+
+    def test_merge_reconciles_required_range_instances_without_protecting_extra_copy(
+        self,
+    ) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "sleep_core",
+                    "members": ["bed", "nightstand"],
+                    "anchors": ["bed"],
+                    "cluster_rules": {
+                        "semantic_placements": [
+                            {
+                                "id": "nightstand",
+                                "relative_to": "bed",
+                                "kind": "anchor_side",
+                                "side_options": ["head_left", "head_right"],
+                                "support_role": "side_support",
+                                "band_intent": "beside_base",
+                            },
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "bed",
+                            "protected_ids": ["bed", "nightstand"],
+                            "droppable_ids": ["nightstand"],
+                        },
+                    },
+                }
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "bed",
+                    role="dominant_anchor",
+                    min_keep=1,
+                    protected=True,
+                ),
+                _decision(
+                    "nightstand",
+                    quantity=2,
+                    min_keep=1,
+                    protected=True,
+                    request_contract_intent="target_if_viable",
+                    request_contract_target_count=2,
+                ),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        object_program = merged["clusters"][0]["object_program"]
+        object_specs = object_program["object_specs_by_id"]
+
+        self.assertEqual(
+            merged["clusters"][0]["members"],
+            ["bed", "nightstand", "nightstand_2"],
+        )
+        self.assertEqual(
+            object_program["required_object_ids"],
+            ["bed", "nightstand"],
+        )
+        self.assertEqual(object_program["optional_object_ids"], ["nightstand_2"])
+        self.assertEqual(object_program["protected_ids"], ["bed", "nightstand"])
+        self.assertEqual(object_program["droppable_ids"], ["nightstand_2"])
+        self.assertEqual(
+            set(object_program["protected_ids"]) & set(object_program["droppable_ids"]),
+            set(),
+        )
+        self.assertTrue(object_specs["nightstand"]["protected"])
+        self.assertFalse(object_specs["nightstand"]["droppable"])
+        self.assertFalse(object_specs["nightstand_2"]["protected"])
+        self.assertTrue(object_specs["nightstand_2"]["droppable"])
 
     def test_merge_drops_optional_surface_when_required_seat_was_budget_removed(
         self,

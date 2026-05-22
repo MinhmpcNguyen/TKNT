@@ -253,6 +253,17 @@ def get_runtime_user_content_schema_statements() -> list[str]:
         );
         """,
         """
+        CREATE TABLE IF NOT EXISTS saved_layout_cases (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES user_accounts(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            source_pipeline_case_id TEXT,
+            meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """,
+        """
         CREATE TABLE IF NOT EXISTS saved_layouts (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES user_accounts(id) ON DELETE CASCADE,
@@ -260,10 +271,32 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             floorplan_json JSONB NOT NULL,
             design_json JSONB,
             styled_result_json JSONB,
+            case_id TEXT REFERENCES saved_layout_cases(id) ON DELETE SET NULL,
+            option_id TEXT,
+            option_index INTEGER,
             meta JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        """,
+        "ALTER TABLE saved_layouts ADD COLUMN IF NOT EXISTS case_id TEXT;",
+        "ALTER TABLE saved_layouts ADD COLUMN IF NOT EXISTS option_id TEXT;",
+        "ALTER TABLE saved_layouts ADD COLUMN IF NOT EXISTS option_index INTEGER;",
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'saved_layouts_case_id_fkey'
+            ) THEN
+                ALTER TABLE saved_layouts
+                ADD CONSTRAINT saved_layouts_case_id_fkey
+                FOREIGN KEY (case_id)
+                REFERENCES saved_layout_cases(id)
+                ON DELETE SET NULL;
+            END IF;
+        END $$;
         """,
         """
         CREATE TABLE IF NOT EXISTS generated_renders (
@@ -274,6 +307,10 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             prompt TEXT NOT NULL,
             negative_prompt TEXT,
             storage_path TEXT,
+            root_layout_id TEXT,
+            case_id TEXT,
+            option_id TEXT,
+            option_index INTEGER,
             image_bytes BYTEA,
             mime_type TEXT NOT NULL,
             meta JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -288,10 +325,28 @@ def get_runtime_user_content_schema_statements() -> list[str]:
         ALTER TABLE generated_renders
         ALTER COLUMN storage_path DROP NOT NULL;
         """,
+        "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS root_layout_id TEXT;",
+        "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS case_id TEXT;",
+        "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS option_id TEXT;",
+        "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS option_index INTEGER;",
         "CREATE INDEX IF NOT EXISTS idx_user_accounts_email ON user_accounts (email);",
         "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_saved_layout_cases_user_id ON saved_layout_cases (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_saved_layout_cases_pipeline_case ON saved_layout_cases (source_pipeline_case_id);",
         "CREATE INDEX IF NOT EXISTS idx_saved_layouts_user_id ON saved_layouts (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_saved_layouts_case_id ON saved_layouts (case_id);",
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_layouts_user_case_option
+        ON saved_layouts (user_id, case_id, option_id)
+        WHERE case_id IS NOT NULL AND option_id IS NOT NULL;
+        """,
         "CREATE INDEX IF NOT EXISTS idx_generated_renders_user_id ON generated_renders (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_generated_renders_root_layout_id ON generated_renders (root_layout_id);",
+        """
+        CREATE INDEX IF NOT EXISTS idx_generated_renders_user_case_option
+        ON generated_renders (user_id, case_id, option_id)
+        WHERE case_id IS NOT NULL AND option_id IS NOT NULL;
+        """,
     ]
 
 

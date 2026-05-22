@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 _LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
 _HARD_REQUEST_CONTRACT_INTENTS = {"must_keep", "must_try"}
 _TARGET_REQUEST_CONTRACT_INTENTS = {"target_if_viable", "preferred_if_fit"}
+_FLOOR_REQUEST_CONTRACT_INTENTS = (
+    _HARD_REQUEST_CONTRACT_INTENTS | _TARGET_REQUEST_CONTRACT_INTENTS
+)
 
 
 def _layout_speed_mode() -> str:
@@ -917,10 +920,10 @@ def _apply_request_contract_to_object(
     preferred_count = max(1, target_count)
     current_max = _positive_int(out.get("max_keep"), default=preferred_count)
     if intent in _TARGET_REQUEST_CONTRACT_INTENTS:
-        out["min_keep"] = 0
-        out["max_keep"] = max(current_max, preferred_count)
+        out["min_keep"] = min_keep
+        out["max_keep"] = max(current_max, preferred_count, min_keep)
         out["tier_count_explicit"] = True
-        out["keep_if_space_surplus"] = True
+        out["keep_if_space_surplus"] = min_keep <= 0
         out["space_surplus_threshold"] = min(
             0.35,
             _coerce_ratio(out.get("space_surplus_threshold"), default=0.45),
@@ -934,9 +937,14 @@ def _apply_request_contract_to_object(
             "high",
         )
         if str(out.get("role") or "") not in {"dominant_anchor", "workflow_anchor"}:
-            out["required"] = False
-            out["protected"] = False
-            out["droppable"] = True
+            out["required"] = min_keep > 0
+            out["protected"] = min_keep > 0
+            out["droppable"] = min_keep <= 0
+        if min_keep > 0:
+            out["drop_order_bias"] = _stronger_drop_order(
+                str(out.get("drop_order_bias") or "neutral"),
+                "drop_last",
+            )
         return out
 
     if intent == "optional_if_surplus":
@@ -986,7 +994,7 @@ def _apply_request_contract_to_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         for obj in objects
         if _request_contract_min_keep_from_object(obj) > 0
         and str(obj.get("request_contract_intent") or "")
-        in _HARD_REQUEST_CONTRACT_INTENTS
+        in _FLOOR_REQUEST_CONTRACT_INTENTS
     ]
     target_objects = [
         obj
@@ -5698,7 +5706,7 @@ def _request_contract_degradation_report(
     reduced: list[dict[str, Any]] = []
     for draft in draft_decisions:
         intent = str(draft.get("request_contract_intent") or "")
-        if intent not in _HARD_REQUEST_CONTRACT_INTENTS:
+        if intent not in _FLOOR_REQUEST_CONTRACT_INTENTS:
             continue
         min_keep = max(0, _int_value(draft.get("min_keep"), default=0))
         if min_keep <= 0:

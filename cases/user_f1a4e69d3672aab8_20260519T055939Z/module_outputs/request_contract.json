@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "Include a bed",
+      "reason": "Explicitly requested as a required bedroom anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "ceiling_light",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "ceiling light",
+      "reason": "Explicitly requested lighting fixture.",
+      "available_in_program": false,
+      "confidence": 0.95
+    },
+    {
+      "object_type": "curtains",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "curtains",
+      "reason": "Explicitly requested window treatment.",
+      "available_in_program": false,
+      "confidence": 0.95
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "A tv should face the bed",
+      "reason": "TV support is explicitly required to satisfy the facing relation.",
+      "available_in_program": true,
+      "confidence": 0.96
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "wardrobe on a solid wall",
+      "reason": "Explicitly requested storage element with placement constraint.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "two nightstands if they fit",
+      "reason": "Requested as a fit-dependent pair with an upper bound of two.",
+      "available_in_program": true,
+      "confidence": 0.98
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sleep_core_bundle",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "intent": "must_keep",
+      "priority": "core",
+      "drop_policy": "keep bed; reduce nightstands first if space is limited"
+    },
+    {
+      "group_id": "media_relation",
+      "members": [
+        "bed",
+        "tv_console"
+      ],
+      "intent": "must_keep",
+      "priority": "core",
+      "drop_policy": "preserve facing relation; if conflict, keep bed and tv console over non-explicit items"
+    }
+  ],
+  "notes": [
+    "Do not place the bed directly beside the entry door.",
+    "Maintain comfortable circulation around the bed.",
+    "Wardrobe should be on a solid wall.",
+    "Modern style is requested but not encoded as an object.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

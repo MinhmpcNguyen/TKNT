@@ -1,11 +1,72 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage, Group, Circle, Text } from 'react-konva';
 import { useEditorStore } from '../store';
 import { clamp, polygonBounds, toCanvas, fromCanvas } from '../utils/geometry';
-import { DirectionVector, Door, InventoryItem, Placement, Point, Window } from '../types';
+import { Door, InventoryItem, Placement, Point, Window } from '../types';
+import {
+  frontWorldToLocalSide,
+  planRotationToCanvasDeg,
+} from '../utils/planOrientation';
 import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
+const DOOR_MARKER_COLOR = '#2f3437';
+const DOOR_LABEL_FILL = '#fff3e7';
+const DOOR_LABEL_STROKE = '#d2a06a';
+const DOOR_LABEL_TEXT = '#704417';
+const WINDOW_MARKER_COLOR = '#4f9fbd';
+const WINDOW_LABEL_FILL = '#edf8ff';
+const WINDOW_LABEL_STROKE = '#8ec6d9';
+const WINDOW_LABEL_TEXT = '#2e6f86';
+const OPENING_WALL_CUT_FILL = '#f8f6f1';
+const ROTATE_CONTROL_FILL = '#fff7eb';
+const ROTATE_CONTROL_STROKE = '#a46a2a';
+const ROTATE_CONTROL_HIGHLIGHT = '#f4a13c';
+const OBJECT_COLOR_POPOVER_WIDTH = 252;
+const OBJECT_COLOR_SWATCHES = [
+  '#cfcac2',
+  '#6b7280',
+  '#9f7a68',
+  '#d9a441',
+  '#4f7f6f',
+  '#4f6f9f',
+];
+
+type OpeningOverlay = {
+  normal: Point;
+  tangent: Point;
+  label: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+};
+
+function segmentFrameTowardPoint(
+  start: Point,
+  end: Point,
+  target: Point,
+): { tangent: Point; normal: Point } {
+  const tangent = normalizedVector({
+    x: end.x - start.x,
+    y: end.y - start.y,
+  });
+  const firstNormal = { x: -tangent.y, y: tangent.x };
+  const mid = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  };
+  const towardTarget = {
+    x: target.x - mid.x,
+    y: target.y - mid.y,
+  };
+  const normal =
+    firstNormal.x * towardTarget.x + firstNormal.y * towardTarget.y >= 0
+      ? firstNormal
+      : { x: -firstNormal.x, y: -firstNormal.y };
+  return { tangent, normal };
+}
 
 function frontMarkerPoints(
   width: number,
@@ -34,29 +95,117 @@ function frontMarkerPoints(
   }
 }
 
-function frontWorldToCanvasLocalSide(
-  frontWorld: DirectionVector | null | undefined,
-  rotationDeg: number,
-): 'top' | 'bottom' | 'left' | 'right' | null {
-  if (!frontWorld) {
-    return null;
+function openingOverlay(
+  start: Point,
+  end: Point,
+  roomCenter: Point,
+  labelWidth: number,
+  labelHeight: number,
+): OpeningOverlay {
+  const mid = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  };
+  const { tangent, normal } = segmentFrameTowardPoint(start, end, roomCenter);
+  const labelNormal = { x: -normal.x, y: -normal.y };
+  const labelGap = 28;
+  const labelCenter = {
+    x: mid.x + labelNormal.x * labelGap,
+    y: mid.y + labelNormal.y * labelGap,
+  };
+  return {
+    normal,
+    tangent,
+    label: {
+      x: labelCenter.x - labelWidth / 2,
+      y: labelCenter.y - labelHeight / 2,
+      width: labelWidth,
+      height: labelHeight,
+    },
+  };
+}
+
+function buildDoorSwing(
+  door: Door,
+  start: Point,
+  end: Point,
+  overlay: OpeningOverlay,
+): {
+  arc: number[];
+  leaf: number[];
+} {
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  const radius = clamp(segmentLength * 0.86, 28, 92);
+  const hingeSide = door.hinge_side === 'right' ? 'right' : 'left';
+  const hinge = hingeSide === 'right' ? end : start;
+  const closedVector =
+    hingeSide === 'right'
+      ? { x: -overlay.tangent.x, y: -overlay.tangent.y }
+      : overlay.tangent;
+  const swingNormal =
+    door.open_direction === 'out'
+      ? { x: -overlay.normal.x, y: -overlay.normal.y }
+      : overlay.normal;
+  const startAngle = Math.atan2(closedVector.y, closedVector.x);
+  const endAngle = Math.atan2(swingNormal.y, swingNormal.x);
+  const angleDelta = normalizedAngleDelta(endAngle - startAngle);
+  const arc: number[] = [];
+  const steps = 12;
+  for (let index = 0; index <= steps; index += 1) {
+    const angle = startAngle + (angleDelta * index) / steps;
+    arc.push(hinge.x + Math.cos(angle) * radius, hinge.y + Math.sin(angle) * radius);
   }
-  const dx = Number(frontWorld.dx);
-  const dy = Number(frontWorld.dy);
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-    return null;
+  return {
+    arc,
+    leaf: [
+      hinge.x,
+      hinge.y,
+      hinge.x + swingNormal.x * radius,
+      hinge.y + swingNormal.y * radius,
+    ],
+  };
+}
+
+function normalizedVector(vector: Point): Point {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length <= 1e-6) {
+    return { x: 1, y: 0 };
   }
-  const radians = (((rotationDeg % 360) + 360) % 360 * Math.PI) / 180;
-  const targetX = dx;
-  const targetY = -dy;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const localX = cos * targetX + sin * targetY;
-  const localY = -sin * targetX + cos * targetY;
-  if (Math.abs(localX) >= Math.abs(localY)) {
-    return localX >= 0 ? 'right' : 'left';
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+  };
+}
+
+function normalizedAngleDelta(value: number): number {
+  let delta = value;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function normalizeColorInput(value: string | null | undefined): string {
+  return /^#[0-9a-f]{6}$/i.test(value ?? '') ? value ?? '#cfcac2' : '#cfcac2';
+}
+
+function polygonCenter(points: Point[]): Point {
+  if (points.length === 0) {
+    return { x: 0, y: 0 };
   }
-  return localY >= 0 ? 'bottom' : 'top';
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT')
+  );
 }
 
 export const Canvas2D: React.FC = () => {
@@ -71,10 +220,13 @@ export const Canvas2D: React.FC = () => {
     selectPlacement,
     selectCorner,
     selectedWallId,
+    selectedOpeningId,
+    selectedOpeningType,
     selectWall,
     selectOpening,
     updatePlacement,
     removePlacement,
+    removeOpening,
     updateWall,
     violations,
     setDesign,
@@ -102,6 +254,55 @@ export const Canvas2D: React.FC = () => {
 
   const width = 900;
   const height = 650;
+  const selectedPlacement =
+    design?.placements.find((placement) => placement.placement_id === selectedPlacementId) ?? null;
+  const selectedPlacementCanvasPoint = selectedPlacement
+    ? toCanvasPoint(selectedPlacement.position_mm)
+    : null;
+  const selectedPlacementColor = normalizeColorInput(selectedPlacement?.color_hex);
+  const selectedColorControlPosition = selectedPlacementCanvasPoint
+    ? {
+        left: clamp(selectedPlacementCanvasPoint.x + 18, 12, width - OBJECT_COLOR_POPOVER_WIDTH),
+        top: clamp(selectedPlacementCanvasPoint.y - 52, 12, height - 48),
+      }
+    : null;
+  const selectedCornerPoint =
+    roomEditMode && floorplan && selectedCornerIndex !== null
+      ? floorplan.room.polygon_mm[selectedCornerIndex] ?? null
+      : null;
+  const selectedCornerCanvasPoint = selectedCornerPoint
+    ? toCanvasPoint(selectedCornerPoint)
+    : null;
+  const selectedCornerDeletePosition =
+    selectedCornerCanvasPoint && floorplan && floorplan.room.polygon_mm.length > 3
+      ? {
+          left: clamp(selectedCornerCanvasPoint.x + 16, 8, width - 74),
+          top: clamp(selectedCornerCanvasPoint.y + 12, 8, height - 34),
+        }
+      : null;
+
+  const deleteRoomCorner = useCallback(
+    (index: number) => {
+      if (!floorplan) return;
+      const points = floorplan.room.polygon_mm;
+      if (points.length <= 3 || index < 0 || index >= points.length) return;
+      const removed = points[index];
+      const nextPoints = points.filter((_, pointIndex) => pointIndex !== index);
+      const nextWalls = floorplan.walls.filter((wall) => {
+        const p1 = wall.p1_mm;
+        const p2 = wall.p2_mm;
+        return !pointsEqual(p1, removed) && !pointsEqual(p2, removed);
+      });
+      setFloorplan({
+        ...floorplan,
+        room: { ...floorplan.room, polygon_mm: nextPoints },
+        walls: nextWalls,
+      });
+      selectCorner(null);
+      selectWall(null);
+    },
+    [floorplan, selectCorner, selectWall, setFloorplan],
+  );
 
   useEffect(() => {
     if (!snapshotEnabled || !design || !lastDesignMeta) return;
@@ -122,6 +323,38 @@ export const Canvas2D: React.FC = () => {
     });
     setLastSnapshotKey(key);
   }, [design, lastDesignMeta, snapshotEnabled, lastSnapshotKey]);
+
+  useEffect(() => {
+    if (!selectedOpeningId || !selectedOpeningType) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      removeOpening(selectedOpeningType, selectedOpeningId);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [removeOpening, selectedOpeningId, selectedOpeningType]);
+
+  useEffect(() => {
+    if (!roomEditMode || selectedCornerIndex === null) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      deleteRoomCorner(selectedCornerIndex);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteRoomCorner, roomEditMode, selectedCornerIndex]);
 
   const handleWheel = (evt: any) => {
     evt.evt.preventDefault();
@@ -216,6 +449,65 @@ export const Canvas2D: React.FC = () => {
     setDrawingLine({ ...drawingLine, end: nextEnd });
   };
 
+  const selectNearestRoomCorner = (canvasPoint: Point) => {
+    if (!roomEditMode || !floorplan) return false;
+    const nearest = findNearestCanvasPoint(
+      floorplan.room.polygon_mm,
+      canvasPoint,
+      toCanvasPoint,
+      30,
+    );
+    if (!nearest) return false;
+    selectCorner(nearest.index);
+    if (drawWallMode && selectedCornerIndex === nearest.index) {
+      setDrawingLine({
+        startIndex: nearest.index,
+        end: floorplan.room.polygon_mm[nearest.index],
+      });
+    }
+    return true;
+  };
+
+  const handleStageMouseDown = () => {
+    const pointer = stageRef.current?.getPointerPosition();
+    if (!pointer) return;
+    selectNearestRoomCorner(pointer);
+  };
+
+  const handleCanvasMouseDown = (evt: React.MouseEvent<HTMLDivElement>) => {
+    if (!dropZoneRef.current) return;
+    const target = evt.target;
+    if (
+      target instanceof Element &&
+      target.closest('.canvas-corner-delete-button, .canvas-object-color-popover')
+    ) {
+      return;
+    }
+    const boundsRect = dropZoneRef.current.getBoundingClientRect();
+    selectNearestRoomCorner({
+      x: evt.clientX - boundsRect.left,
+      y: evt.clientY - boundsRect.top,
+    });
+  };
+
+  const handleCanvasTouchStart = (evt: React.TouchEvent<HTMLDivElement>) => {
+    if (!dropZoneRef.current) return;
+    const touch = evt.touches[0];
+    if (!touch) return;
+    const target = evt.target;
+    if (
+      target instanceof Element &&
+      target.closest('.canvas-corner-delete-button, .canvas-object-color-popover')
+    ) {
+      return;
+    }
+    const boundsRect = dropZoneRef.current.getBoundingClientRect();
+    selectNearestRoomCorner({
+      x: touch.clientX - boundsRect.left,
+      y: touch.clientY - boundsRect.top,
+    });
+  };
+
   const handleStageMouseUp = () => {
     if (!drawingLine || !floorplan) return;
     const startPoint = floorplan.room.polygon_mm[drawingLine.startIndex];
@@ -292,18 +584,6 @@ export const Canvas2D: React.FC = () => {
       const p2 = toCanvasPoint(wall.p2_mm);
       const isSelected = selectedWallId === wall.wall_id;
       const strokeColor = isSelected ? "#d9534f" : (wall.color_hex || "#555");
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      const nx = -dy / len;
-      const ny = dx / len;
-      const labelPos = { x: mid.x + nx * 12, y: mid.y + ny * 12 };
-      const lengthMm = Math.hypot(
-        wall.p2_mm.x - wall.p1_mm.x,
-        wall.p2_mm.y - wall.p1_mm.y,
-      );
-      const lengthLabel = `${(lengthMm / 1000).toFixed(2)} m`;
       return (
         <Group key={wall.wall_id}>
           <Line
@@ -313,7 +593,6 @@ export const Canvas2D: React.FC = () => {
             lineCap="round"
             onClick={() => {
               selectWall(wall.wall_id);
-              selectCorner(null);
             }}
             onDblClick={() => {
               if (!roomEditMode || !floorplan) return;
@@ -324,13 +603,54 @@ export const Canvas2D: React.FC = () => {
             }}
             draggable={false}
           />
+        </Group>
+      );
+    });
+  };
+
+  const renderWallLabels = () => {
+    if (!floorplan) return null;
+    const roomCenter = toCanvasPoint(polygonCenter(floorplan.room.polygon_mm));
+    return floorplan.walls.map((wall) => {
+      const p1 = toCanvasPoint(wall.p1_mm);
+      const p2 = toCanvasPoint(wall.p2_mm);
+      const { normal } = segmentFrameTowardPoint(p1, p2, roomCenter);
+      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const lengthMm = Math.hypot(
+        wall.p2_mm.x - wall.p1_mm.x,
+        wall.p2_mm.y - wall.p1_mm.y,
+      );
+      const lengthLabel = `${(lengthMm / 1000).toFixed(2)} m`;
+      const labelWidth = Math.max(48, lengthLabel.length * 6.4 + 10);
+      const labelHeight = 16;
+      const labelCenter = {
+        x: mid.x + normal.x * 24,
+        y: mid.y + normal.y * 24,
+      };
+      return (
+        <Group
+          key={`wall-label-${wall.wall_id}`}
+          x={labelCenter.x - labelWidth / 2}
+          y={labelCenter.y - labelHeight / 2}
+          listening={false}
+        >
+          <Rect
+            width={labelWidth}
+            height={labelHeight}
+            fill="rgba(248,246,241,0.82)"
+            stroke="rgba(109,102,92,0.16)"
+            strokeWidth={1}
+            cornerRadius={4}
+          />
           <Text
             text={lengthLabel}
-            x={labelPos.x + 4}
-            y={labelPos.y - 8}
+            x={0}
+            y={2}
+            width={labelWidth}
             fontSize={11}
             fill="#6d665c"
             fontStyle="bold"
+            align="center"
           />
         </Group>
       );
@@ -359,80 +679,176 @@ export const Canvas2D: React.FC = () => {
     );
   };
 
+  const renderCornerDeleteButton = (index: number, position: Point) => (
+    <Group
+      x={position.x}
+      y={position.y}
+      onMouseDown={(evt) => {
+        evt.cancelBubble = true;
+      }}
+      onClick={(evt) => {
+        evt.cancelBubble = true;
+        deleteRoomCorner(index);
+      }}
+      onTap={(evt) => {
+        evt.cancelBubble = true;
+        deleteRoomCorner(index);
+      }}
+    >
+      <Rect
+        width={58}
+        height={20}
+        fill="#d9534f"
+        stroke="#b52b27"
+        cornerRadius={4}
+        shadowColor="#000"
+        shadowBlur={2}
+        shadowOpacity={0.15}
+      />
+      <Text
+        text="Delete"
+        fontSize={11}
+        fill="#fff"
+        x={10}
+        y={4}
+        listening={false}
+      />
+    </Group>
+  );
+
   const renderRoomHandles = () => {
     if (!floorplan || !roomEditMode) return null;
     return floorplan.room.polygon_mm.map((point, idx) => {
       const pos = toCanvasPoint(point);
       const isSelected = selectedCornerIndex === idx;
+      const selectRoomCorner = (evt: any) => {
+        evt.cancelBubble = true;
+        selectCorner(idx);
+        if (!drawWallMode || !floorplan) return;
+        if (selectedCornerIndex !== idx) {
+          return;
+        }
+        setDrawingLine({ startIndex: idx, end: floorplan.room.polygon_mm[idx] });
+      };
       return (
-        <Group key={`corner-${idx}`}>
+        <Group
+          key={`corner-${idx}`}
+          x={pos.x}
+          y={pos.y}
+          draggable={!drawWallMode}
+          onMouseDown={selectRoomCorner}
+          onTouchStart={selectRoomCorner}
+          onClick={selectRoomCorner}
+          onTap={selectRoomCorner}
+          onDragStart={(evt) => {
+            evt.cancelBubble = true;
+            selectCorner(idx);
+          }}
+          onDragMove={(evt) => {
+            evt.cancelBubble = true;
+            selectCorner(idx);
+            const nextPoint = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
+            const oldPoint = floorplan.room.polygon_mm[idx];
+            const nextPoints = [...floorplan.room.polygon_mm];
+            nextPoints[idx] = nextPoint;
+            const updatedWalls = floorplan.walls.map((wall) => {
+              if (wall.locked) {
+                return wall;
+              }
+              const p1 = wall.p1_mm;
+              const p2 = wall.p2_mm;
+              if (pointsEqual(p1, oldPoint)) {
+                return { ...wall, p1_mm: nextPoint };
+              }
+              if (pointsEqual(p2, oldPoint)) {
+                return { ...wall, p2_mm: nextPoint };
+              }
+              return wall;
+            });
+            setFloorplan({
+              ...floorplan,
+              room: { ...floorplan.room, polygon_mm: nextPoints },
+              walls: updatedWalls,
+            });
+          }}
+        >
           <Circle
-            x={pos.x}
-            y={pos.y}
+            radius={18}
+            fill="rgba(213, 140, 84, 0.01)"
+            stroke="rgba(213, 140, 84, 0)"
+          />
+          <Circle
             radius={8}
             fill={isSelected ? "#ffd28b" : "#ffffff"}
             stroke="#2f2f2f"
             strokeWidth={1.5}
-            draggable={!drawWallMode}
-            onClick={() => {
-              selectCorner(idx);
-              selectWall(null);
-            }}
-            onMouseDown={() => {
-              if (!roomEditMode || !drawWallMode || !floorplan) return;
-              if (selectedCornerIndex !== idx) {
-                selectCorner(idx);
-                return;
-              }
-              setDrawingLine({ startIndex: idx, end: floorplan.room.polygon_mm[idx] });
-            }}
-            onDragMove={(evt) => {
-              const nextPoint = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
-              const oldPoint = floorplan.room.polygon_mm[idx];
-              const nextPoints = [...floorplan.room.polygon_mm];
-              nextPoints[idx] = nextPoint;
-              const updatedWalls = floorplan.walls.map((wall) => {
-                if (wall.locked) {
-                  return wall;
-                }
-                const p1 = wall.p1_mm;
-                const p2 = wall.p2_mm;
-                if (pointsEqual(p1, oldPoint)) {
-                  return { ...wall, p1_mm: nextPoint };
-                }
-                if (pointsEqual(p2, oldPoint)) {
-                  return { ...wall, p2_mm: nextPoint };
-                }
-                return wall;
-              });
-              setFloorplan({
-                ...floorplan,
-                room: { ...floorplan.room, polygon_mm: nextPoints },
-                walls: updatedWalls,
-              });
-            }}
-            onDragEnd={() => {
-              return;
-            }}
+            listening={false}
           />
           <Text
             text={`${idx + 1}`}
-            x={pos.x + 10}
-            y={pos.y - 10}
+            x={10}
+            y={-10}
             fontSize={12}
             fill="#6d665c"
+            listening={false}
           />
+          {isSelected && floorplan.room.polygon_mm.length > 3
+            ? renderCornerDeleteButton(idx, { x: 14, y: 10 })
+            : null}
         </Group>
       );
     });
   };
 
+  const renderOpeningDeleteButton = (
+    type: 'door' | 'window',
+    id: string,
+    position: Point,
+  ) => (
+    <Group
+      x={position.x}
+      y={position.y}
+      onClick={(evt) => {
+        evt.cancelBubble = true;
+        removeOpening(type, id);
+      }}
+      onTap={(evt) => {
+        evt.cancelBubble = true;
+        removeOpening(type, id);
+      }}
+    >
+      <Rect
+        width={58}
+        height={20}
+        fill="#d9534f"
+        stroke="#b52b27"
+        cornerRadius={4}
+        shadowColor="#000"
+        shadowBlur={2}
+        shadowOpacity={0.15}
+      />
+      <Text
+        text="Delete"
+        fontSize={11}
+        fill="#fff"
+        x={10}
+        y={4}
+      />
+    </Group>
+  );
+
   const renderOpenings = () => {
     if (!floorplan) return null;
+    const roomCenter = toCanvasPoint(polygonCenter(floorplan.room.polygon_mm));
     const doorShapes = floorplan.openings.doors.map((door) => {
       const p1 = toCanvasPoint(door.start_mm);
       const p2 = toCanvasPoint(door.end_mm);
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const overlay = openingOverlay(p1, p2, roomCenter, 38, 18);
+      const swing = buildDoorSwing(door, p1, p2, overlay);
+      const wall = floorplan.walls.find((row) => row.wall_id === door.wall_id);
+      const wallCutStrokeWidth = Math.max(11, (wall?.thickness_mm ?? 100) * scale + 4);
+      const isSelected =
+        selectedOpeningType === 'door' && selectedOpeningId === door.door_id;
       return (
         <Group
           key={door.door_id}
@@ -474,23 +890,74 @@ export const Canvas2D: React.FC = () => {
         >
           <Line
             points={[p1.x, p1.y, p2.x, p2.y]}
-            stroke={door.color_hex || '#2f2f2f'}
-            strokeWidth={4}
+            stroke={OPENING_WALL_CUT_FILL}
+            strokeWidth={wallCutStrokeWidth}
+            lineCap="butt"
+            listening={false}
           />
-          <Text
-            text="door"
-            fontSize={11}
-            fill="#2f2f2f"
-            x={mid.x + 6}
-            y={mid.y - 10}
+          <Line
+            points={swing.leaf}
+            stroke={door.color_hex || DOOR_MARKER_COLOR}
+            strokeWidth={2}
+            opacity={0.78}
+            lineCap="round"
+            listening={false}
           />
+          <Line
+            points={swing.arc}
+            stroke={door.color_hex || DOOR_MARKER_COLOR}
+            strokeWidth={1.6}
+            opacity={0.58}
+            dash={[4, 3]}
+            lineCap="round"
+            listening={false}
+          />
+          <Line
+            points={[p1.x, p1.y, p2.x, p2.y]}
+            stroke={door.color_hex || DOOR_MARKER_COLOR}
+            strokeWidth={isSelected ? 7 : 5}
+            lineCap="butt"
+          />
+          <Group x={overlay.label.x} y={overlay.label.y} listening={false}>
+            <Rect
+              width={overlay.label.width}
+              height={overlay.label.height}
+              fill={DOOR_LABEL_FILL}
+              stroke={DOOR_LABEL_STROKE}
+              strokeWidth={1}
+              cornerRadius={4}
+              shadowColor="#6b4c2a"
+              shadowBlur={3}
+              shadowOpacity={0.12}
+            />
+            <Text
+              text="door"
+              fontSize={10}
+              fontStyle="bold"
+              fill={DOOR_LABEL_TEXT}
+              x={0}
+              y={2.5}
+              width={overlay.label.width}
+              align="center"
+            />
+          </Group>
+          {isSelected
+            ? renderOpeningDeleteButton('door', door.door_id, {
+                x: overlay.label.x + overlay.label.width + 6,
+                y: overlay.label.y - 1,
+              })
+            : null}
         </Group>
       );
     });
     const windowShapes = floorplan.openings.windows.map((window) => {
       const p1 = toCanvasPoint(window.start_mm);
       const p2 = toCanvasPoint(window.end_mm);
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const overlay = openingOverlay(p1, p2, roomCenter, 48, 18);
+      const wall = floorplan.walls.find((row) => row.wall_id === window.wall_id);
+      const wallCutStrokeWidth = Math.max(11, (wall?.thickness_mm ?? 100) * scale + 4);
+      const isSelected =
+        selectedOpeningType === 'window' && selectedOpeningId === window.window_id;
       return (
         <Group
           key={window.window_id}
@@ -532,17 +999,54 @@ export const Canvas2D: React.FC = () => {
         >
           <Line
             points={[p1.x, p1.y, p2.x, p2.y]}
-            stroke={window.color_hex || '#4f7c9b'}
-            strokeWidth={4}
-            dash={[6, 6]}
+            stroke={OPENING_WALL_CUT_FILL}
+            strokeWidth={wallCutStrokeWidth}
+            lineCap="butt"
+            listening={false}
           />
-          <Text
-            text="window"
-            fontSize={11}
-            fill="#4f7c9b"
-            x={mid.x + 6}
-            y={mid.y - 10}
+          <Line
+            points={[p1.x, p1.y, p2.x, p2.y]}
+            stroke={window.color_hex || WINDOW_MARKER_COLOR}
+            strokeWidth={isSelected ? 7 : 5}
+            dash={[8, 6]}
+            lineCap="butt"
           />
+          <Line
+            points={[p1.x, p1.y, p2.x, p2.y]}
+            stroke="rgba(255,255,255,0.82)"
+            strokeWidth={1.4}
+            lineCap="butt"
+            listening={false}
+          />
+          <Group x={overlay.label.x} y={overlay.label.y} listening={false}>
+            <Rect
+              width={overlay.label.width}
+              height={overlay.label.height}
+              fill={WINDOW_LABEL_FILL}
+              stroke={WINDOW_LABEL_STROKE}
+              strokeWidth={1}
+              cornerRadius={4}
+              shadowColor="#2e6f86"
+              shadowBlur={3}
+              shadowOpacity={0.12}
+            />
+            <Text
+              text="window"
+              fontSize={10}
+              fontStyle="bold"
+              fill={WINDOW_LABEL_TEXT}
+              x={0}
+              y={2.5}
+              width={overlay.label.width}
+              align="center"
+            />
+          </Group>
+          {isSelected
+            ? renderOpeningDeleteButton('window', window.window_id, {
+                x: overlay.label.x + overlay.label.width + 6,
+                y: overlay.label.y - 1,
+              })
+            : null}
         </Group>
       );
     });
@@ -605,8 +1109,8 @@ export const Canvas2D: React.FC = () => {
       const showHoverTag = false;
       const tagText = labelText;
       const frontSide =
-        frontWorldToCanvasLocalSide(placement.front_world, placement.rotation_deg) ??
         placement.front_side_local ??
+        frontWorldToLocalSide(placement.front_world, placement.rotation_deg) ??
         'top';
       const frontPoints = frontMarkerPoints(w, d, frontSide);
       const baseSize = Math.max(0, Math.min(w, d));
@@ -954,10 +1458,11 @@ export const Canvas2D: React.FC = () => {
           key={placement.placement_id}
           x={pos.x}
           y={pos.y}
-          rotation={placement.rotation_deg}
+          rotation={planRotationToCanvasDeg(placement.rotation_deg)}
           draggable={!isLocked}
           onDragMove={(evt) => {
             if (isLocked) return;
+            if (evt.target !== evt.currentTarget) return;
             const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
             updatePlacement({ ...placement, position_mm: newPos });
           }}
@@ -1074,38 +1579,71 @@ export const Canvas2D: React.FC = () => {
             </Group>
           )}
           {isSelected && !isLocked && (
-            <>
+            <Group
+              x={w / 2 + 18}
+              y={0}
+              rotation={-planRotationToCanvasDeg(placement.rotation_deg)}
+            >
               <Line
-                points={[0, 0, w / 2 + 18, 0]}
+                points={[-18, 0, 0, 0]}
                 stroke="rgba(51, 51, 51, 0.45)"
                 strokeWidth={1.5}
                 dash={[5, 5]}
                 listening={false}
               />
-              <Text
-                text="Rotate"
-                x={w / 2 + 24}
-                y={-8}
-                fontSize={11}
-                fill="#6d665c"
-                listening={false}
-              />
-              <Circle
-                x={w / 2 + 18}
-                y={0}
-                radius={10}
-                fill="#fff7eb"
-                stroke="#a46a2a"
-                strokeWidth={2}
+              <Group
                 draggable
+                y={0}
+                onMouseDown={(evt) => {
+                  evt.cancelBubble = true;
+                }}
+                onTouchStart={(evt) => {
+                  evt.cancelBubble = true;
+                }}
+                onDragStart={(evt) => {
+                  evt.cancelBubble = true;
+                }}
                 onDragMove={(evt) => {
-                  const localX = evt.target.x();
-                  const localY = evt.target.y();
+                  evt.cancelBubble = true;
+                  const pointer = stageRef.current?.getPointerPosition();
+                  if (!pointer) return;
+                  const worldPoint = fromCanvasPoint({ x: pointer.x, y: pointer.y });
+                  const localX = worldPoint.x - placement.position_mm.x;
+                  const localY = worldPoint.y - placement.position_mm.y;
                   const rad = Math.atan2(localY, localX);
                   updatePlacement({ ...placement, rotation_deg: (rad * 180) / Math.PI });
+                  evt.target.position({ x: 0, y: 0 });
                 }}
-              />
-            </>
+              >
+                <Circle
+                  radius={16}
+                  fill={ROTATE_CONTROL_FILL}
+                  stroke={ROTATE_CONTROL_STROKE}
+                  strokeWidth={2.5}
+                  shadowColor="#000"
+                  shadowBlur={4}
+                  shadowOpacity={0.18}
+                />
+                <Line
+                  points={[-5, -2, 0, -7, 6, -2]}
+                  stroke={ROTATE_CONTROL_HIGHLIGHT}
+                  strokeWidth={2.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  closed
+                  listening={false}
+                />
+                <Line
+                  points={[-6, 5, 0, 9, 7, 5]}
+                  stroke={ROTATE_CONTROL_HIGHLIGHT}
+                  strokeWidth={2.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  closed
+                  listening={false}
+                />
+              </Group>
+            </Group>
           )}
         </Group>
       );
@@ -1118,12 +1656,68 @@ export const Canvas2D: React.FC = () => {
       className="canvas-drop-zone"
       onDrop={handleDrop}
       onDragOver={(evt) => evt.preventDefault()}
+      onMouseDown={handleCanvasMouseDown}
+      onTouchStart={handleCanvasTouchStart}
     >
+      {selectedPlacement && selectedColorControlPosition ? (
+        <div
+          className="canvas-object-color-popover"
+          style={{
+            left: selectedColorControlPosition.left,
+            top: selectedColorControlPosition.top,
+          }}
+          onClick={(evt) => evt.stopPropagation()}
+          onMouseDown={(evt) => evt.stopPropagation()}
+        >
+          <span>Color</span>
+          <div className="canvas-object-color-swatches" aria-label="Object color presets">
+            {OBJECT_COLOR_SWATCHES.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={
+                  color.toLowerCase() === selectedPlacementColor.toLowerCase() ? 'selected' : ''
+                }
+                style={{ backgroundColor: color }}
+                aria-label={`Set object color ${color}`}
+                onClick={() => updatePlacement({ ...selectedPlacement, color_hex: color })}
+              />
+            ))}
+          </div>
+          <input
+            type="color"
+            aria-label="Object color"
+            value={selectedPlacementColor}
+            onChange={(evt) =>
+              updatePlacement({ ...selectedPlacement, color_hex: evt.target.value })
+            }
+          />
+        </div>
+      ) : null}
+      {selectedCornerDeletePosition && selectedCornerIndex !== null ? (
+        <button
+          type="button"
+          className="canvas-corner-delete-button"
+          style={{
+            left: selectedCornerDeletePosition.left,
+            top: selectedCornerDeletePosition.top,
+          }}
+          onClick={(evt) => {
+            evt.stopPropagation();
+            deleteRoomCorner(selectedCornerIndex);
+          }}
+          onMouseDown={(evt) => evt.stopPropagation()}
+        >
+          Delete
+        </button>
+      ) : null}
       <Stage
         width={width}
         height={height}
         ref={stageRef}
         onWheel={handleWheel}
+        onMouseDown={handleStageMouseDown}
+        onTouchStart={handleStageMouseDown}
         onDblClick={handleStageDoubleClick}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
@@ -1145,8 +1739,9 @@ export const Canvas2D: React.FC = () => {
               />
             );
           })()}
-          {renderOpenings()}
           {renderPlacements()}
+          {renderOpenings()}
+          {renderWallLabels()}
           {renderRoomHandles()}
         </Layer>
       </Stage>
@@ -1316,6 +1911,23 @@ function findNearestPoint(
   }
   if (!best) return null;
   return { point: best.point, index: best.index };
+}
+
+function findNearestCanvasPoint(
+  points: Point[],
+  target: Point,
+  toCanvasPoint: (point: Point) => Point,
+  maxDistancePx: number,
+): { point: Point; index: number } | null {
+  let best: { point: Point; index: number; distance: number } | null = null;
+  for (const [index, point] of points.entries()) {
+    const canvasPoint = toCanvasPoint(point);
+    const distance = Math.hypot(canvasPoint.x - target.x, canvasPoint.y - target.y);
+    if (distance <= maxDistancePx && (!best || distance < best.distance)) {
+      best = { point, index, distance };
+    }
+  }
+  return best ? { point: best.point, index: best.index } : null;
 }
 
 type WallSnap = { start: Point; end: Point; wall_id: string };

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from copy import deepcopy
 from typing import Any, Literal
 from uuid import uuid4
@@ -24,18 +25,27 @@ from pipeline.snapshot_prompt_compiler import (
 )
 from pipeline.snapshot_image_renderer import (
     SnapshotEditOperation,
+    SnapshotLockedGeometryAtlas,
+    SnapshotLockedGeometryAtlasObject,
+    SnapshotLockedGeometryReference,
     render_snapshot_image,
     render_snapshot_image_from_path,
 )
 from pipeline.image_flow_logging import log_image_flow_event
-from services.user_content_service import UserContentService
+from pipeline.account_layout_autosave import build_saved_layout_option_drafts
+from services.user_content_service import (
+    LayoutOptionPersistenceRequest,
+    UserContentService,
+)
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
+logger = logging.getLogger(__name__)
 
 
 class PipelineRunRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     input_payload: dict[str, Any]
+    case_name: str | None = None
     description: str | None = None
     special_notes: str | None = None
 
@@ -99,6 +109,33 @@ class SnapshotImageEditOperationRequest(BaseModel):
     target_color: str | None = None
 
 
+class SnapshotImageLockedGeometryReferenceRequest(BaseModel):
+    object_id: str
+    object_name: str | None = None
+    image_data_url: str | None = None
+    source: str | None = None
+    screen_bbox_px: dict[str, float] | None = None
+
+
+class SnapshotImageLockedGeometryAtlasObjectRequest(BaseModel):
+    object_id: str
+    object_name: str | None = None
+    screen_bbox_px: dict[str, float] | None = None
+    atlas_index: int = 0
+    cell_index: int = 0
+    cell_label: str | None = None
+    cell_bbox_norm: dict[str, float] | None = None
+
+
+class SnapshotImageLockedGeometryAtlasRequest(BaseModel):
+    atlas_index: int = 0
+    image_data_url: str | None = None
+    source: str | None = None
+    objects: list[SnapshotImageLockedGeometryAtlasObjectRequest] = Field(
+        default_factory=list
+    )
+
+
 class SnapshotImageRenderRequest(BaseModel):
     snapshot_payload: dict[str, Any] | None = None
     snapshot_path: str | None = None
@@ -115,12 +152,20 @@ class SnapshotImageRenderRequest(BaseModel):
         "scene_reference_camera_transfer",
     ] = "none"
     user_prompt: str | None = None
-    render_mode: Literal["generate", "edit"] = "generate"
+    render_mode: Literal["generate", "edit", "camera_rerender"] = "generate"
     preset_selection: SnapshotImagePresetSelection = Field(
         default_factory=lambda: SnapshotImagePresetSelection()
     )
     root_layout_id: str | None = None
+    case_id: str | None = None
+    option_id: str | None = None
     edit_operations: list[SnapshotImageEditOperationRequest] = Field(
+        default_factory=list
+    )
+    locked_geometry_references: list[SnapshotImageLockedGeometryReferenceRequest] = (
+        Field(default_factory=list)
+    )
+    locked_geometry_atlases: list[SnapshotImageLockedGeometryAtlasRequest] = Field(
         default_factory=list
     )
     edit_source_image_data_url: str | None = None
@@ -263,8 +308,33 @@ def _enrich_rotation_ccw(
 
 
 def _run_in_thread(**kwargs: Any) -> None:
+    account_user_id = kwargs.pop("account_user_id", None)
+    account_case_name = kwargs.pop("account_case_name", None)
     try:
         run_case(**kwargs)
+        if isinstance(account_user_id, str) and account_user_id.strip():
+            try:
+                _autosave_pipeline_case(
+                    account_user_id=account_user_id,
+                    case_id=str(kwargs["case_id"]),
+                    cases_root=str(kwargs["cases_root"]),
+                    case_name=account_case_name
+                    if isinstance(account_case_name, str)
+                    else None,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Pipeline account autosave failed for case %s: %s",
+                    kwargs.get("case_id"),
+                    exc,
+                )
+                _append_status_action(
+                    case_id=str(kwargs["case_id"]),
+                    cases_root=str(kwargs["cases_root"]),
+                    stage="account_autosave_warning",
+                    message=f"Generated layouts were not saved to account: {exc}",
+                    error=str(exc),
+                )
     except Exception as exc:  # noqa: BLE001
         paths = case_paths(kwargs["case_id"], kwargs["cases_root"])
         existing_payload: dict[str, Any] = {}
@@ -302,11 +372,135 @@ def _run_in_thread(**kwargs: Any) -> None:
         )
 
 
+def _autosave_pipeline_case(
+    *,
+    account_user_id: str,
+    case_id: str,
+    cases_root: str,
+    case_name: str | None,
+) -> None:
+    service = UserContentService()
+    user = service.get_user_by_id(account_user_id)
+    if user is None:
+        raise ValueError(f"Cannot autosave layouts for unknown user {account_user_id}.")
+
+    paths = case_paths(case_id, cases_root)
+    resolved_case_name = _resolve_account_case_name(case_name, case_id)
+    drafts = build_saved_layout_option_drafts(
+        case_id=case_id,
+        case_name=resolved_case_name,
+        room_payload=_load_json_payload(paths.room_interpreter),
+        stylist_payload=_load_json_payload(paths.stylist),
+        absolute_layout_payload=_load_json_payload(paths.absolute_layout),
+        layout_variants_payload=_load_json_payload(paths.layout_variants),
+    )
+    if not drafts:
+        _append_status_action(
+            case_id=case_id,
+            cases_root=cases_root,
+            stage="account_autosave_warning",
+            message="No generated layout options were available for account autosave.",
+            error=None,
+        )
+        return
+
+    saved = service.upsert_layout_case_options(
+        user=user,
+        case_id=case_id,
+        case_name=resolved_case_name,
+        options=[
+            LayoutOptionPersistenceRequest(
+                option_id=draft.option_id,
+                option_index=draft.option_index,
+                name=draft.name,
+                floorplan_json=draft.floorplan_json,
+                design_json=draft.design_json,
+                styled_result_json=draft.styled_result_json,
+                meta=draft.meta,
+            )
+            for draft in drafts
+        ],
+        meta={
+            "source": "pipeline_autosave",
+            "source_pipeline_case_id": case_id,
+            "option_count": len(drafts),
+        },
+    )
+    _append_status_action(
+        case_id=case_id,
+        cases_root=cases_root,
+        stage="account_autosave",
+        message=(
+            f"Saved {len(saved)} generated layout option"
+            f"{'' if len(saved) == 1 else 's'} to account case."
+        ),
+        error=None,
+    )
+
+
+def _resolve_account_case_name(case_name: str | None, case_id: str) -> str:
+    if case_name is not None and case_name.strip():
+        return case_name.strip()
+    return f"Layout case {case_id}"
+
+
+def _load_json_payload(path: Any) -> object:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+
+def _append_status_action(
+    *,
+    case_id: str,
+    cases_root: str,
+    stage: str,
+    message: str,
+    error: str | None,
+) -> None:
+    paths = case_paths(case_id, cases_root)
+    payload: dict[str, Any] = {}
+    if paths.status.exists():
+        try:
+            payload = json.loads(paths.status.read_text())
+        except Exception:
+            payload = {}
+    actions = payload.get("actions")
+    action_history = (
+        [item for item in actions if isinstance(item, dict)]
+        if isinstance(actions, list)
+        else []
+    )
+    updated_at_utc = _now_utc_iso()
+    action_history.append(
+        {
+            "stage": stage,
+            "message": message,
+            "updated_at_utc": updated_at_utc,
+            "progress_current": payload.get("progress_current"),
+            "progress_total": payload.get("progress_total"),
+            "error": error,
+        }
+    )
+    payload.update(
+        {
+            "case_id": case_id,
+            "stage": payload.get("stage", "done"),
+            "updated_at_utc": updated_at_utc,
+            "actions": action_history,
+        }
+    )
+    _write_json(paths.status, payload)
+
+
 @router.post("/run", response_model=PipelineRunResponse)
 def run_pipeline(
-    req: PipelineRunRequest, background: BackgroundTasks
+    req: PipelineRunRequest,
+    background: BackgroundTasks,
+    current_user: UserAccount | None = Depends(get_optional_current_user),
 ) -> PipelineRunResponse:
-    case_id = _make_case_id(req.user_id)
+    pipeline_user_id = str(current_user.id) if current_user is not None else req.user_id
+    case_id = _make_case_id(pipeline_user_id)
     paths = case_paths(case_id)
     paths.root.mkdir(parents=True, exist_ok=True)
 
@@ -322,11 +516,13 @@ def run_pipeline(
     background.add_task(
         _run_in_thread,
         input_payload=req.input_payload,
-        user_id=req.user_id,
+        user_id=pipeline_user_id,
         description=req.description,
         special_notes=req.special_notes,
         cases_root=str(paths.root.parent),
         case_id=case_id,
+        account_user_id=str(current_user.id) if current_user is not None else None,
+        account_case_name=req.case_name or req.description,
     )
 
     return PipelineRunResponse(
@@ -390,6 +586,31 @@ def render_snapshot_image_route(
             detail="Provide either snapshot_payload or snapshot_path.",
         )
 
+    render_layout_context = None
+    if current_user is not None:
+        render_layout_context = user_content_service.resolve_render_layout_context(
+            user=current_user,
+            root_layout_id=req.root_layout_id,
+            case_id=req.case_id,
+            option_id=req.option_id,
+        )
+        if render_layout_context is None:
+            log_image_flow_event(
+                "snapshot_image.layout_context_error",
+                {
+                    "trace_id": trace_id,
+                    "status_code": 404,
+                    "root_layout_id": req.root_layout_id,
+                    "case_id": req.case_id,
+                    "option_id": req.option_id,
+                    "error_message": "Render layout option not found.",
+                },
+            )
+            raise HTTPException(
+                status_code=404,
+                detail="Render layout option not found.",
+            )
+
     try:
         edit_operations = [
             SnapshotEditOperation(
@@ -402,6 +623,36 @@ def render_snapshot_image_route(
                 target_color=item.target_color,
             )
             for item in req.edit_operations
+        ]
+        locked_geometry_references = [
+            SnapshotLockedGeometryReference(
+                object_id=item.object_id,
+                object_name=item.object_name,
+                image_data_url=item.image_data_url,
+                source=item.source,
+                screen_bbox_px=item.screen_bbox_px,
+            )
+            for item in req.locked_geometry_references
+        ]
+        locked_geometry_atlases = [
+            SnapshotLockedGeometryAtlas(
+                atlas_index=atlas.atlas_index,
+                image_data_url=atlas.image_data_url,
+                source=atlas.source,
+                objects=[
+                    SnapshotLockedGeometryAtlasObject(
+                        object_id=item.object_id,
+                        object_name=item.object_name,
+                        screen_bbox_px=item.screen_bbox_px,
+                        atlas_index=item.atlas_index,
+                        cell_index=item.cell_index,
+                        cell_label=item.cell_label,
+                        cell_bbox_norm=item.cell_bbox_norm,
+                    )
+                    for item in atlas.objects
+                ],
+            )
+            for atlas in req.locked_geometry_atlases
         ]
         preset_selection = req.preset_selection.model_dump()
         if req.snapshot_payload is not None:
@@ -440,6 +691,8 @@ def render_snapshot_image_route(
                 render_mode=req.render_mode,
                 preset_selection=preset_selection,
                 edit_operations=edit_operations,
+                locked_geometry_references=locked_geometry_references,
+                locked_geometry_atlases=locked_geometry_atlases,
                 edit_source_image_data_url=req.edit_source_image_data_url,
                 trace_id=trace_id,
             )
@@ -460,6 +713,8 @@ def render_snapshot_image_route(
                 render_mode=req.render_mode,
                 preset_selection=preset_selection,
                 edit_operations=edit_operations,
+                locked_geometry_references=locked_geometry_references,
+                locked_geometry_atlases=locked_geometry_atlases,
                 edit_source_image_data_url=req.edit_source_image_data_url,
                 trace_id=trace_id,
             )
@@ -499,6 +754,11 @@ def render_snapshot_image_route(
 
     saved_render: dict[str, Any] | None = None
     if current_user is not None:
+        if render_layout_context is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Render layout context was not resolved.",
+            )
         try:
             metadata = render.get("metadata") if isinstance(render, dict) else None
             metadata_payload = metadata if isinstance(metadata, dict) else {}
@@ -513,6 +773,30 @@ def render_snapshot_image_route(
                     "raw_user_prompt": render["request"].get("raw_user_prompt"),
                     "render_mode": str(
                         render["request"].get("render_mode", "generate")
+                    ),
+                    "layout_lock_mode": render["request"].get("layout_lock_mode"),
+                    "object_memory_used": render["request"].get("object_memory_used"),
+                    "locked_items": render["request"].get("locked_items"),
+                    "visibility_diagnostics": render["request"].get(
+                        "visibility_diagnostics"
+                    ),
+                    "locked_geometry_references": render["request"].get(
+                        "locked_geometry_references"
+                    ),
+                    "locked_geometry_atlases": render["request"].get(
+                        "locked_geometry_atlases"
+                    ),
+                    "locked_geometry_atlas_count": render["request"].get(
+                        "locked_geometry_atlas_count"
+                    ),
+                    "locked_geometry_object_count": render["request"].get(
+                        "locked_geometry_object_count"
+                    ),
+                    "geometry_atlas_omitted_object_ids": render["request"].get(
+                        "geometry_atlas_omitted_object_ids"
+                    ),
+                    "geometry_lock_policy": render["request"].get(
+                        "geometry_lock_policy"
                     ),
                     "preset_selection": render["request"].get("preset_selection"),
                     "edit_operations": render["request"].get("edit_operations"),
@@ -552,8 +836,15 @@ def render_snapshot_image_route(
                             False,
                         )
                     ),
-                    "root_layout_id": req.root_layout_id,
+                    "root_layout_id": render_layout_context.root_layout_id,
+                    "case_id": render_layout_context.case_id,
+                    "option_id": render_layout_context.option_id,
+                    "option_index": render_layout_context.option_index,
                 },
+                root_layout_id=render_layout_context.root_layout_id,
+                case_id=render_layout_context.case_id,
+                option_id=render_layout_context.option_id,
+                option_index=render_layout_context.option_index,
             )
             saved_render = user_content_service.serialize_generated_render(
                 saved,
@@ -567,6 +858,11 @@ def render_snapshot_image_route(
                     "model_name": saved.model_name,
                     "mime_type": saved.mime_type,
                     "storage_path": saved.storage_path,
+                    "root_layout_id": str(saved.root_layout_id)
+                    if saved.root_layout_id
+                    else None,
+                    "case_id": str(saved.case_id) if saved.case_id else None,
+                    "option_id": saved.option_id,
                     "meta": dict(saved.meta or {}),
                 },
             )

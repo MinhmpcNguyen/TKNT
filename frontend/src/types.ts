@@ -113,6 +113,10 @@ export type SavedLayoutRecord = {
   floorplan_json: Record<string, unknown>;
   design_json?: Record<string, unknown> | null;
   styled_result_json?: Record<string, unknown> | null;
+  case_id?: string | null;
+  option_id?: string | null;
+  option_index?: number | null;
+  case_name?: string | null;
   meta: Record<string, unknown>;
   created_at?: string | null;
   updated_at?: string | null;
@@ -124,6 +128,10 @@ export type GeneratedRenderRecord = {
   model_name: string;
   prompt: string;
   negative_prompt?: string | null;
+  root_layout_id?: string | null;
+  case_id?: string | null;
+  option_id?: string | null;
+  option_index?: number | null;
   mime_type: string;
   meta: Record<string, unknown>;
   created_at?: string | null;
@@ -159,6 +167,8 @@ export type LayoutVariant = {
   styled_result: Record<string, unknown>;
   design: DesignPlanV1 | null;
   cluster_previews?: Record<string, unknown>;
+  saved_layout_id?: string | null;
+  saved_layout_case_id?: string | null;
 };
 
 export type Violation = {

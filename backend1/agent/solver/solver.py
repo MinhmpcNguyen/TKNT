@@ -113,6 +113,7 @@ OBJECT_LEVEL_GEOMETRY_REPAIR_LOCAL_RADIUS_MM = 1800
 OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT = 0.8
 OBJECT_LEVEL_SUPPORT_ALIGNMENT_FACTORS = (-0.35, 0.0, 0.35)
 OBJECT_LEVEL_WALL_CONTACT_TOLERANCE_MM = 1
+OBJECT_LEVEL_NEAR_WALL_FRONT_ACCESS_TOLERANCE_MM = 150
 OBJECT_LEVEL_FRONT_ALIGNMENT_MIN_DOT = 0.45
 OBJECT_LEVEL_FRONT_ACCESS_DEPTH_MM = 750
 OBJECT_LEVEL_VIEW_CORRIDOR_WIDTH_MM = 900
@@ -6382,6 +6383,12 @@ def _generate_anchor_pose_candidates(
     if not hint and region_preference:
         hint = region_preference
     placement_behavior = _placement_behavior_from_rows(hint, region_preference)
+    requires_near_wall_inward = _anchor_requires_near_wall_inward_contract(
+        cluster_id=cluster_id,
+        object_id=anchor_id,
+        cluster_program=cluster_program,
+        relation_plan=relation_plan,
+    )
     zone_assignment = str(hint.get("zone_assignment") or "")
     required_region_ids = _string_sequence(hint.get("required_region_ids"))
     forbidden_region_ids = _dedupe_string_sequence(
@@ -6521,6 +6528,19 @@ def _generate_anchor_pose_candidates(
                         anchor_kind=anchor_kind,
                         placement_behavior=placement_behavior,
                     )
+                    near_wall_fronts = _near_wall_inward_front_options(
+                        rect=rect,
+                        room_bbox=world["room_bbox"],
+                    )
+                    if (
+                        requires_near_wall_inward
+                        and near_wall_fronts
+                        and not _front_matches_any_required_direction(
+                            front_world=front_world,
+                            desired_fronts=near_wall_fronts,
+                        )
+                    ):
+                        continue
                     orientation_score = _front_alignment_score(
                         front_world=front_world,
                         desired_front=desired_front,
@@ -7100,6 +7120,57 @@ def _object_level_orientation_intents(
     return intents
 
 
+def _orientation_intents_require_near_wall_inward(intents: set[str]) -> bool:
+    return bool(
+        intents
+        & {
+            "access_to_open_space",
+            "back_to_wall",
+            "front_to_open_space",
+        }
+    )
+
+
+def _anchor_requires_near_wall_inward_contract(
+    *,
+    cluster_id: str,
+    object_id: str,
+    cluster_program: Mapping[str, Any],
+    relation_plan: Mapping[str, Any] | None,
+) -> bool:
+    if not _object_requires_front_access(cluster_program, object_id):
+        return False
+    intents = _object_level_orientation_intents(
+        cluster_id=cluster_id,
+        object_id=object_id,
+        relation_plan=relation_plan,
+        include_cluster=True,
+    )
+    return _orientation_intents_require_near_wall_inward(intents)
+
+
+def _row_requires_near_wall_inward_contract(
+    *,
+    row: Mapping[str, Any],
+    relation_plan: Mapping[str, Any] | None,
+) -> bool:
+    if not _is_cluster_anchor_row(row):
+        return False
+    if not _row_requires_front_access_zone(row):
+        return False
+    cluster_id = str(row.get("cluster_id") or "")
+    object_id = str(row.get("object_id") or "")
+    if not cluster_id or not object_id:
+        return False
+    intents = _object_level_orientation_intents(
+        cluster_id=cluster_id,
+        object_id=object_id,
+        relation_plan=relation_plan,
+        include_cluster=True,
+    )
+    return _orientation_intents_require_near_wall_inward(intents)
+
+
 def _object_level_target_cluster_id(
     *,
     cluster_id: str,
@@ -7153,6 +7224,40 @@ def _wall_contact_inward_front(
     return min(flush_contacts, key=lambda item: item[0])[1]
 
 
+def _wall_contact_inward_front_options(
+    *,
+    rect: tuple[int, int, int, int],
+    room_bbox: tuple[int, int, int, int],
+    tolerance_mm: int = OBJECT_LEVEL_WALL_CONTACT_TOLERANCE_MM,
+) -> list[tuple[float, float]]:
+    contacts = [
+        (abs(rect[0] - room_bbox[0]), (1.0, 0.0)),
+        (abs(room_bbox[2] - rect[2]), (-1.0, 0.0)),
+        (abs(rect[1] - room_bbox[1]), (0.0, 1.0)),
+        (abs(room_bbox[3] - rect[3]), (0.0, -1.0)),
+    ]
+    return [
+        front for distance, front in contacts if distance <= max(0, int(tolerance_mm))
+    ]
+
+
+def _near_wall_inward_front_options(
+    *,
+    rect: tuple[int, int, int, int],
+    room_bbox: tuple[int, int, int, int],
+    tolerance_mm: int = OBJECT_LEVEL_NEAR_WALL_FRONT_ACCESS_TOLERANCE_MM,
+) -> list[tuple[float, float]]:
+    contacts = [
+        (abs(rect[0] - room_bbox[0]), (1.0, 0.0)),
+        (abs(room_bbox[2] - rect[2]), (-1.0, 0.0)),
+        (abs(rect[1] - room_bbox[1]), (0.0, 1.0)),
+        (abs(room_bbox[3] - rect[3]), (0.0, -1.0)),
+    ]
+    return [
+        front for distance, front in contacts if distance <= max(0, int(tolerance_mm))
+    ]
+
+
 def _front_alignment_score(
     *,
     front_world: tuple[float, float],
@@ -7173,6 +7278,35 @@ def _front_matches_required_direction(
     if front_world is None or desired_front is None:
         return False
     return _dot_normalized(front_world, desired_front) >= float(min_dot)
+
+
+def _front_matches_any_required_direction(
+    *,
+    front_world: tuple[float, float],
+    desired_fronts: Sequence[tuple[float, float]],
+    min_dot: float = OBJECT_LEVEL_FRONT_ALIGNMENT_MIN_DOT,
+) -> bool:
+    return any(
+        _front_matches_required_direction(
+            front_world=front_world,
+            desired_front=desired_front,
+            min_dot=min_dot,
+        )
+        for desired_front in desired_fronts
+    )
+
+
+def _best_aligned_required_front(
+    *,
+    front_world: tuple[float, float],
+    desired_fronts: Sequence[tuple[float, float]],
+) -> tuple[float, float] | None:
+    if not desired_fronts:
+        return None
+    return max(
+        desired_fronts,
+        key=lambda desired_front: _dot_normalized(front_world, desired_front),
+    )
 
 
 def _dot_normalized(
@@ -9110,7 +9244,10 @@ def _object_level_blocking_orientation_issues(
     }
     blocking: list[dict[str, Any]] = []
     for issue in orientation_issues:
-        if str(issue.get("reason") or "").strip().lower() != "wall_contact_inward":
+        if str(issue.get("reason") or "").strip().lower() not in {
+            "near_wall_inward",
+            "wall_contact_inward",
+        }:
             continue
         row = rows_by_key.get(
             (str(issue.get("cluster_id") or ""), str(issue.get("object_id") or ""))
@@ -9419,12 +9556,45 @@ def _object_level_orientation_issues(
             relation_plan=relation_plan,
             include_cluster=_is_cluster_anchor_row(row),
         )
-        wall_contact_front = _wall_contact_inward_front(
+        wall_contact_fronts = _wall_contact_inward_front_options(
             rect=rect,
             room_bbox=room_bbox,
         )
-        if wall_contact_front is not None:
-            required_checks.append(("wall_contact_inward", wall_contact_front))
+        front = _front_tuple(row.get("front_world"))
+        if wall_contact_fronts and front is not None:
+            wall_contact_front = _best_aligned_required_front(
+                front_world=front,
+                desired_fronts=wall_contact_fronts,
+            )
+            if (
+                wall_contact_front is not None
+                and not _front_matches_any_required_direction(
+                    front_world=front,
+                    desired_fronts=wall_contact_fronts,
+                )
+            ):
+                required_checks.append(("wall_contact_inward", wall_contact_front))
+        elif _row_requires_near_wall_inward_contract(
+            row=row,
+            relation_plan=relation_plan,
+        ):
+            near_wall_fronts = _near_wall_inward_front_options(
+                rect=rect,
+                room_bbox=room_bbox,
+            )
+            if near_wall_fronts and front is not None:
+                near_wall_front = _best_aligned_required_front(
+                    front_world=front,
+                    desired_fronts=near_wall_fronts,
+                )
+                if (
+                    near_wall_front is not None
+                    and not _front_matches_any_required_direction(
+                        front_world=front,
+                        desired_fronts=near_wall_fronts,
+                    )
+                ):
+                    required_checks.append(("near_wall_inward", near_wall_front))
         if "face_cluster" in intents:
             target_cluster_id = _object_level_target_cluster_id(
                 cluster_id=cluster_id,

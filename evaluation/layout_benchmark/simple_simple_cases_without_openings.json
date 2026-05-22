@@ -1,0 +1,830 @@
+[
+  {
+    "case_id": "simple_simple_living_01_4m0x5m0",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 5000
+        },
+        {
+          "x": 0,
+          "y": 5000
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 4.0m x 5.0m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 5000
+          },
+          {
+            "x": 0,
+            "y": 5000
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_02_3m4x4m2",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 3.4m x 4.2m.",
+        "room_type": "living_room",
+        "floor_area_m2": 14.28,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 7,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_03_4m5x4m5",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 4.5m x 4.5m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.25,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_04_5m2x3m8",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 5.2m x 3.8m.",
+        "room_type": "living_room",
+        "floor_area_m2": 19.76,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_05_3m0x3m6",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 3.0m x 3.6m.",
+        "room_type": "living_room",
+        "floor_area_m2": 10.8,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 3,
+      "valid_blocking_count_max": 5,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_01_3m0x4m0",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.0m x 4.0m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 12,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_02_4m0x4m5",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 4.0m x 4.5m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 18,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_03_3m2x3m6",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.2m x 3.6m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 11.52,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_04_3m6x3m8",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.6m x 3.8m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 13.68,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_05_4m6x4m2",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 4.6m x 4.2m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 19.32,
+        "height": 2800,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  }
+]

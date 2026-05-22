@@ -306,6 +306,92 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             )
         )
 
+    def test_request_contract_viewing_pair_projects_to_object_and_cluster_contracts(
+        self,
+    ) -> None:
+        room_model = _bedroom_room_model()
+        clusters = _bedroom_media_clusters()
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=1,
+        )
+
+        concept = bundle["concepts"][0]
+        self.assertEqual(
+            concept["object_viewing_pairs"],
+            [
+                {
+                    "type": "viewing_pair",
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "target_object_type": "tv_console",
+                    "relation": "face_each_other",
+                    "required": True,
+                    "priority": "high",
+                    "source": "request_contract_group",
+                    "evidence": "media_pair composition tv must remain oriented to bed",
+                }
+            ],
+        )
+        self.assertEqual(
+            concept["primary_pair_contracts"][0]["source"],
+            "object_viewing_pair",
+        )
+
+        solver_plan = solver_plan_from_concept(
+            concept=concept,
+            room_model_json=room_model,
+            room_type="bedroom",
+        )
+
+        self.assertEqual(
+            solver_plan["object_viewing_pairs"],
+            concept["object_viewing_pairs"],
+        )
+        self.assertEqual(
+            solver_plan["cluster_directional_relations"],
+            [
+                {
+                    "a": "sleep_core",
+                    "b": "media_optional",
+                    "relation": "face_each_other",
+                    "priority": "high",
+                    "reason": "Projection from primary_pair_contract=face_each_other.",
+                }
+            ],
+        )
+
+    def test_request_contract_object_evidence_can_create_viewing_pair(self) -> None:
+        room_model = _bedroom_room_model()
+        clusters = _bedroom_media_clusters()
+        request_contract = clusters["request_contract"]
+        assert isinstance(request_contract, dict)
+        request_contract["groups"] = []
+        objects = request_contract["objects"]
+        assert isinstance(objects, list)
+        objects[1] = {
+            "object_type": "tv_console",
+            "intent": "must_keep",
+            "evidence": "A tv should face the bed",
+            "reason": "TV support is required to satisfy the facing relationship.",
+        }
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=1,
+        )
+
+        pair = bundle["concepts"][0]["object_viewing_pairs"][0]
+        self.assertEqual(pair["viewer_object_id"], "bed")
+        self.assertEqual(pair["target_object_id"], "tv_console")
+        self.assertEqual(pair["source"], "request_contract_object")
+
     def test_living_profile_traits_do_not_relabel_seed_clusters_as_kitchen(
         self,
     ) -> None:
@@ -474,6 +560,65 @@ def _bedroom_clusters() -> dict[str, object]:
                 },
             },
         ]
+    }
+
+
+def _bedroom_media_clusters() -> dict[str, object]:
+    return {
+        "request_contract": {
+            "objects": [
+                {"object_type": "bed", "intent": "must_keep"},
+                {"object_type": "tv_console", "intent": "must_keep"},
+                {"object_type": "wardrobe", "intent": "must_keep"},
+            ],
+            "groups": [
+                {
+                    "group_id": "media_pair",
+                    "members": ["bed", "tv_console"],
+                    "intent": "composition",
+                    "priority": "core",
+                    "drop_policy": "tv must remain oriented to bed",
+                }
+            ],
+        },
+        "clusters": [
+            {
+                "cluster_id": "sleep_core",
+                "members": ["bed", "nightstand"],
+                "anchors": ["bed"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "medium",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+            {
+                "cluster_id": "media_optional",
+                "members": ["tv_console"],
+                "anchors": ["tv_console"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "low",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+            {
+                "cluster_id": "storage_core",
+                "members": ["wardrobe"],
+                "anchors": ["wardrobe"],
+                "cluster_rules": {
+                    "zone_claims": {
+                        "wall_affinity": "high",
+                        "daylight_affinity": "low",
+                        "floating_allowed": False,
+                    }
+                },
+            },
+        ],
     }
 
 

@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ROOM_TYPE_OPTIONS,
+  STYLE_OPTIONS,
+  matchesStyleOption,
+  normalizeRoomType,
+  normalizeStyle,
+} from '../options';
 import { useEditorStore } from '../store';
 import { InventoryItem } from '../types';
-
-type LibrarySectionKey = 'owned' | 'shared';
 
 export const LibraryPanel: React.FC = () => {
   const inventory = useEditorStore((state) => state.inventory);
@@ -10,28 +15,13 @@ export const LibraryPanel: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [styleFilter, setStyleFilter] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('all');
-  const [openSections, setOpenSections] = useState<Record<LibrarySectionKey, boolean>>({
-    owned: false,
-    shared: false,
-  });
-
-  const styleOptions = useMemo(() => {
-    const tags = new Set<string>();
-    for (const item of inventory) {
-      for (const tag of item.style_tags ?? []) {
-        const normalized = String(tag).trim();
-        if (normalized) {
-          tags.add(normalized);
-        }
-      }
-    }
-    return Array.from(tags).sort((left, right) => left.localeCompare(right));
-  }, [inventory]);
+  const [isSharedOpen, setIsSharedOpen] = useState(false);
 
   const visibleInventory = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const normalizedStyle = styleFilter.trim().toLowerCase();
-    const normalizedRoomType = roomTypeFilter === 'current' ? roomType : roomTypeFilter;
+    const normalizedStyle = styleFilter ? normalizeStyle(styleFilter) : null;
+    const normalizedRoomType =
+      roomTypeFilter === 'current' ? normalizeRoomType(roomType) : roomTypeFilter;
 
     return inventory
       .filter((item) => {
@@ -43,9 +33,7 @@ export const LibraryPanel: React.FC = () => {
         }
         if (
           normalizedStyle &&
-          !(item.style_tags ?? []).some((tag) =>
-            String(tag).toLowerCase().includes(normalizedStyle)
-          )
+          !(item.style_tags ?? []).some((tag) => matchesStyleOption(tag, normalizedStyle))
         ) {
           return false;
         }
@@ -66,9 +54,6 @@ export const LibraryPanel: React.FC = () => {
       );
   }, [inventory, roomType, roomTypeFilter, searchQuery, styleFilter]);
 
-  const ownedInventory = visibleInventory.filter(
-    (item) => item.attributes?.ownership_scope === 'owned'
-  );
   const sharedInventory = visibleInventory.filter(
     (item) => item.attributes?.ownership_scope !== 'owned'
   );
@@ -77,16 +62,9 @@ export const LibraryPanel: React.FC = () => {
     const hasActiveFilter =
       searchQuery.trim() !== '' || styleFilter.trim() !== '' || roomTypeFilter !== 'all';
     if (hasActiveFilter) {
-      setOpenSections({ owned: true, shared: true });
+      setIsSharedOpen(true);
     }
   }, [roomTypeFilter, searchQuery, styleFilter]);
-
-  const toggleSection = (section: LibrarySectionKey) => {
-    setOpenSections((current) => ({
-      ...current,
-      [section]: !current[section],
-    }));
-  };
 
   return (
     <aside className="panel library-panel">
@@ -100,9 +78,9 @@ export const LibraryPanel: React.FC = () => {
         />
         <select value={styleFilter} onChange={(event) => setStyleFilter(event.target.value)}>
           <option value="">All styles</option>
-          {styleOptions.map((style) => (
-            <option key={style} value={style}>
-              {style}
+          {STYLE_OPTIONS.map((style) => (
+            <option key={style.value} value={style.value}>
+              {style.label}
             </option>
           ))}
         </select>
@@ -112,34 +90,26 @@ export const LibraryPanel: React.FC = () => {
         >
           <option value="all">All rooms</option>
           <option value="current">Current room</option>
-          <option value="bedroom">Bedroom</option>
-          <option value="living_room">Living Room</option>
-          <option value="studio">Studio</option>
-          <option value="office">Office</option>
-          <option value="kitchen">Kitchen</option>
+          {ROOM_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
 
       <div className="library-list">
         {inventory.length === 0 ? (
           <p className="muted">No inventory loaded yet.</p>
-        ) : visibleInventory.length === 0 ? (
+        ) : sharedInventory.length === 0 ? (
           <p className="muted">No inventory matches the current filters.</p>
         ) : (
-          <>
-            <LibrarySection
-              isOpen={openSections.owned}
-              items={ownedInventory}
-              label="Your objects"
-              onToggle={() => toggleSection('owned')}
-            />
-            <LibrarySection
-              isOpen={openSections.shared}
-              items={sharedInventory}
-              label="Shared inventory"
-              onToggle={() => toggleSection('shared')}
-            />
-          </>
+          <LibrarySection
+            isOpen={isSharedOpen}
+            items={sharedInventory}
+            label="Shared inventory"
+            onToggle={() => setIsSharedOpen((current) => !current)}
+          />
         )}
       </div>
     </aside>

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
@@ -21,7 +21,18 @@ class SavedLayoutRecord(BaseModel):
     floorplan_json: dict[str, Any]
     design_json: dict[str, Any] | None = None
     styled_result_json: dict[str, Any] | None = None
+    case_id: str | None = None
+    option_id: str | None = None
+    option_index: int | None = None
+    case_name: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class SavedLayoutCaseRecord(BaseModel):
+    id: str
+    name: str
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -34,12 +45,28 @@ class SavedLayoutCreateRequest(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class SavedLayoutUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    floorplan_json: dict[str, Any]
+    design_json: dict[str, Any] | None = None
+    styled_result_json: dict[str, Any] | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class SavedLayoutCaseUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+
+
 class GeneratedRenderRecord(BaseModel):
     id: str
     source: str
     model_name: str
     prompt: str
     negative_prompt: str | None = None
+    root_layout_id: str | None = None
+    case_id: str | None = None
+    option_id: str | None = None
+    option_index: int | None = None
     mime_type: str
     meta: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None
@@ -61,12 +88,13 @@ def get_user_content_service() -> UserContentService:
 
 @router.get("/layouts", response_model=list[SavedLayoutRecord])
 def list_layouts(
+    case_id: str | None = Query(default=None),
     user: UserAccount = Depends(get_current_user),
     service: UserContentService = Depends(get_user_content_service),
 ) -> list[SavedLayoutRecord]:
     return [
         SavedLayoutRecord(**service.serialize_saved_layout(layout))
-        for layout in service.list_layouts(user=user)
+        for layout in service.list_layouts(user=user, case_id=case_id)
     ]
 
 
@@ -88,6 +116,57 @@ def create_layout(
         else None,
         meta=_coerce_json_dict(request.meta),
     )
+    return SavedLayoutRecord(**service.serialize_saved_layout(layout))
+
+
+@router.patch("/layout-cases/{case_id}", response_model=SavedLayoutCaseRecord)
+def update_layout_case(
+    case_id: str,
+    request: SavedLayoutCaseUpdateRequest,
+    user: UserAccount = Depends(get_current_user),
+    service: UserContentService = Depends(get_user_content_service),
+) -> SavedLayoutCaseRecord:
+    layout_case = service.update_layout_case_name(
+        user=user,
+        case_id=case_id,
+        name=request.name,
+    )
+    if layout_case is None:
+        raise HTTPException(status_code=404, detail="Layout case not found.")
+    return SavedLayoutCaseRecord(
+        id=str(layout_case.id),
+        name=layout_case.name,
+        created_at=layout_case.created_at.isoformat()
+        if layout_case.created_at
+        else None,
+        updated_at=layout_case.updated_at.isoformat()
+        if layout_case.updated_at
+        else None,
+    )
+
+
+@router.patch("/layouts/{layout_id}", response_model=SavedLayoutRecord)
+def update_layout(
+    layout_id: str,
+    request: SavedLayoutUpdateRequest,
+    user: UserAccount = Depends(get_current_user),
+    service: UserContentService = Depends(get_user_content_service),
+) -> SavedLayoutRecord:
+    layout = service.update_layout(
+        user=user,
+        layout_id=layout_id,
+        name=request.name,
+        floorplan_json=_coerce_json_dict(request.floorplan_json),
+        design_json=_coerce_json_dict(request.design_json)
+        if request.design_json is not None
+        else None,
+        styled_result_json=_coerce_json_dict(request.styled_result_json)
+        if request.styled_result_json is not None
+        else None,
+        meta=_coerce_json_dict(request.meta),
+    )
+    if layout is None:
+        raise HTTPException(status_code=404, detail="Layout not found.")
     return SavedLayoutRecord(**service.serialize_saved_layout(layout))
 
 

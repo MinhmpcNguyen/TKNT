@@ -1,0 +1,1509 @@
+[
+  {
+    "case_id": "simple_living_01_movie_social",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 5000
+        },
+        {
+          "x": 0,
+          "y": 5000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 5000
+              },
+              {
+                "x": 2800,
+                "y": 5000
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Living Room for me? The room is 4.0m x 5.0m. Designed for relaxation and socializing, the living room should feature a comfortable sofa arrangement, ample lighting for different activities, and a designated movie area with a large screen and surround sound for an immersive experience. Include a sofa facing a TV console, a coffee table, a rug, and one or two armchairs if they fit while keeping the room easy to move through. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.2m to 2.8m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 5000
+          },
+          {
+            "x": 0,
+            "y": 5000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 5000
+            },
+            {
+              "x": 2800,
+              "y": 5000
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_02_compact_reading",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 510,
+                "y": 0
+              },
+              {
+                "x": 1410,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1100,
+                "y": 4200
+              },
+              {
+                "x": 2300,
+                "y": 4200
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a compact Living Room for me? The room is 3.4m x 4.2m. It should feel calm and practical for reading, casual conversation, and occasional movie nights. Use a small sofa or loveseat, a slim TV console, a small coffee table, a rug, a bookshelf, and a floor lamp, with a layout that avoids overfurnishing the room. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.1m to 2.3m.",
+        "room_type": "living_room",
+        "floor_area_m2": 14.28,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 510,
+              "y": 0
+            },
+            {
+              "x": 1410,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1100,
+              "y": 4200
+            },
+            {
+              "x": 2300,
+              "y": 4200
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "bookshelf",
+        "floor_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 7,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_03_family_media",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1450,
+                "y": 4500
+              },
+              {
+                "x": 3050,
+                "y": 4500
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a family Living Room for me? The room is 4.5m x 4.5m. It should support everyday lounging, board games, and a comfortable media setup. Include a sectional or large sofa, a TV console with a clear viewing zone, a coffee table, a rug, a bookshelf, and one or two armchairs if possible while keeping the seating group balanced. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.4m to 3.0m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.25,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1450,
+              "y": 4500
+            },
+            {
+              "x": 3050,
+              "y": 4500
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair",
+        "bookshelf"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_04_hosting_lounge",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1800,
+                "y": 3800
+              },
+              {
+                "x": 3400,
+                "y": 3800
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Living Room for hosting guests? The room is 5.2m x 3.8m. The space should work for conversation first, with a movie area that still feels natural. Include a sofa, a TV console, a coffee table, a rug, and one or two armchairs arranged as a social seating group with enough open floor area between pieces. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.8m to 3.4m.",
+        "room_type": "living_room",
+        "floor_area_m2": 19.76,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1800,
+              "y": 3800
+            },
+            {
+              "x": 3400,
+              "y": 3800
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_living_05_cozy_apartment",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 450,
+                "y": 0
+              },
+              {
+                "x": 1350,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 900,
+                "y": 3600
+              },
+              {
+                "x": 2100,
+                "y": 3600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a cozy apartment Living Room for me? The room is 3.0m x 3.6m. It should feel comfortable for one or two people, with a compact media area and a tidy central zone. Use a loveseat or small sofa, a slim TV console, a small coffee table, a rug, and a ceiling lamp, keeping the object count modest so the room does not feel crowded. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 0.9m to 2.1m.",
+        "room_type": "living_room",
+        "floor_area_m2": 10.8,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 450,
+              "y": 0
+            },
+            {
+              "x": 1350,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 900,
+              "y": 3600
+            },
+            {
+              "x": 2100,
+              "y": 3600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 3,
+      "valid_blocking_count_max": 5,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_01_rest_study",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 450,
+                "y": 0
+              },
+              {
+                "x": 1350,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 900,
+                "y": 4000
+              },
+              {
+                "x": 2100,
+                "y": 4000
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Bedroom for me? The room is 3.0m x 4.0m. It should be calm, practical, and easy to use for sleeping and light study. Include one bed as the main focal point, a wardrobe, one nightstand, a compact desk with a chair, and a ceiling lamp, with enough open space around the bed and desk for daily use. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 0.9m to 2.1m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 12,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 450,
+              "y": 0
+            },
+            {
+              "x": 1350,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 900,
+              "y": 4000
+            },
+            {
+              "x": 2100,
+              "y": 4000
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "desk",
+        "chair",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_02_master_reading",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 4500
+              },
+              {
+                "x": 2800,
+                "y": 4500
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Master Bedroom for me? The room is 4.0m x 4.5m. The layout should feel restful and polished, with a queen bed as the anchor, two nightstands if they fit, a wardrobe, a soft rug, a reading armchair with a floor lamp, and a ceiling lamp. Keep the furniture balanced and leave comfortable circulation around the sleeping area. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.2m to 2.8m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 18,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 4500
+            },
+            {
+              "x": 2800,
+              "y": 4500
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "armchair",
+        "floor_lamp",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_03_student_storage",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 480,
+                "y": 0
+              },
+              {
+                "x": 1380,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1000,
+                "y": 3600
+              },
+              {
+                "x": 2200,
+                "y": 3600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Student Bedroom for me? The room is 3.2m x 3.6m. It should support sleeping, studying, and storage without feeling cramped. Include a single bed, a wardrobe, a compact desk with a chair, a bookshelf, a ceiling lamp, and one nightstand only if it fits. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.0m to 2.2m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 11.52,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 480,
+              "y": 0
+            },
+            {
+              "x": 1380,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1000,
+              "y": 3600
+            },
+            {
+              "x": 2200,
+              "y": 3600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "desk",
+        "chair",
+        "bookshelf",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_04_guest_vanity",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 540,
+                "y": 0
+              },
+              {
+                "x": 1440,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 3800
+              },
+              {
+                "x": 2400,
+                "y": 3800
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a Guest Bedroom for me? The room is 3.6m x 3.8m. It should be welcoming and efficient, with a comfortable bed, a wardrobe, one or two nightstands, a small desk or vanity with a chair, a rug, and a ceiling lamp. The room should feel ready for guests without adding unnecessary furniture. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.2m to 2.4m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 13.68,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 540,
+              "y": 0
+            },
+            {
+              "x": 1440,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 3800
+            },
+            {
+              "x": 2400,
+              "y": 3800
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "desk",
+        "chair",
+        "rug",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_bedroom_05_suite_lounge",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1500,
+                "y": 4200
+              },
+              {
+                "x": 3100,
+                "y": 4200
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Could you please design a comfortable Bedroom suite for me? The room is 4.6m x 4.2m. It should feel modern, restful, and slightly luxurious, with a bed, two nightstands if they fit, a wardrobe, a lounge armchair with a floor lamp, a soft rug, and a small desk or vanity only if there is enough space. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.5m to 3.1m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 19.32,
+        "height": 2800,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1500,
+              "y": 4200
+            },
+            {
+              "x": 3100,
+              "y": 4200
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "nightstand",
+        "armchair",
+        "floor_lamp",
+        "rug"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  }
+]

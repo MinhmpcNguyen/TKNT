@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "coffee_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a coffee table",
+      "reason": "Explicitly requested and also required by the seating bundle.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 2,
+      "evidence": "ample lighting for different activities",
+      "reason": "Lighting is explicitly requested; floor lamp is the available lighting object and cluster hints require at least one.",
+      "available_in_program": true,
+      "confidence": 0.9
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a rug",
+      "reason": "Explicitly requested decor/floor object.",
+      "available_in_program": false,
+      "confidence": 0.97
+    },
+    {
+      "object_type": "sofa",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "Include a sofa",
+      "reason": "Directly requested as a core seating anchor and required by the main seating cluster.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "sofa facing a TV console",
+      "reason": "Directly requested as the media anchor for the movie area.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "armchair",
+      "intent": "target_if_viable",
+      "min_keep": 1,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "one or two armchairs if they fit",
+      "reason": "Requested as a fit-dependent range; keep at least one if possible, up to two when space allows.",
+      "available_in_program": true,
+      "confidence": 0.96
+    },
+    {
+      "object_type": "media_shelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "movie area with a large screen and surround sound",
+      "reason": "Supports the media zone but is not explicitly named; only keep if space permits.",
+      "available_in_program": true,
+      "confidence": 0.62
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "main_seating_bundle",
+      "members": [
+        "sofa",
+        "coffee_table",
+        "armchair",
+        "floor_lamp"
+      ],
+      "intent": "must_keep",
+      "priority": "core",
+      "drop_policy": "shrink_optional_support_then_drop_secondary_support"
+    },
+    {
+      "group_id": "media_bundle",
+      "members": [
+        "tv_console",
+        "media_shelf"
+      ],
+      "intent": "must_keep",
+      "priority": "core",
+      "drop_policy": "drop_media_shelf_first"
+    }
+  ],
+  "notes": [
+    "No explicit request for side_table, sectional_sofa, storage_cabinet, console_table, or pet_bed.",
+    "The brief asks for a large screen and surround sound, but only tv_console is available in the provided object types; no separate screen or speaker object type is encoded.",
+    "Maintain easy circulation and avoid overfilling the room.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

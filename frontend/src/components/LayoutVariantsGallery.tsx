@@ -43,6 +43,10 @@ export const LayoutVariantsGallery: React.FC = () => {
   const setStyledResult = useEditorStore((state) => state.setStyledResult);
   const setViewMode = useEditorStore((state) => state.setViewMode);
   const setVariantPickerOpen = useEditorStore((state) => state.setVariantPickerOpen);
+  const setActiveRootLayoutId = useEditorStore((state) => state.setActiveRootLayoutId);
+  const setActiveLayoutCaseId = useEditorStore((state) => state.setActiveLayoutCaseId);
+  const setActiveSavedLayoutId = useEditorStore((state) => state.setActiveSavedLayoutId);
+  const selectSavedRender = useEditorStore((state) => state.selectSavedRender);
   const appendRunLog = useEditorStore((state) => state.appendRunLog);
 
   const applyVariantToEditor = (variant: LayoutVariant) => {
@@ -52,6 +56,10 @@ export const LayoutVariantsGallery: React.FC = () => {
     }
     setStyledResult(variant.styled_result);
     selectLayoutVariant(variant.variant_id);
+    setActiveLayoutCaseId(variant.saved_layout_case_id ?? null);
+    setActiveSavedLayoutId(variant.saved_layout_id ?? null);
+    setActiveRootLayoutId(variant.saved_layout_id ?? null);
+    selectSavedRender(null);
     setViewMode('2d');
     setVariantPickerOpen(false);
     appendRunLog(`Selected layout: ${variant.label}`);

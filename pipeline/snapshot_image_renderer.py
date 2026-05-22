@@ -15,7 +15,7 @@ from typing import Literal
 from uuid import uuid4
 
 import httpx
-from PIL import Image, ImageFilter, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageFilter, UnidentifiedImageError
 
 from config import config_file, load_config, root_config
 from pipeline.image_flow_logging import (
@@ -25,7 +25,10 @@ from pipeline.image_flow_logging import (
     summarize_gemini_response,
     summarize_image_data_url,
 )
-from pipeline.snapshot_prompt_compiler import compile_snapshot_prompt
+from pipeline.snapshot_prompt_compiler import (
+    SnapshotPromptCompilerConfig,
+    compile_snapshot_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +179,8 @@ _GEMINI_25_IMAGE_OUTPUT_SIZES: dict[str, dict[str, tuple[int, int]]] = {
 }
 _GENERATE_SYSTEM_PROMPT = (
     "You are converting a coarse 3D interior blockout into a final photorealistic render.\n\n"
-    "Use the input 3D layout image as the exact source of truth for the camera view, framing, room layout, room shell, openings, furniture placement, object scale, object shape, object color, surface color, and occlusion.\n"
+    "Use the input 3D layout image as the absolute source of truth for the camera view, framing, room layout, room shell, openings, furniture placement, object scale, object shape, object color, surface color, and occlusion.\n"
+    "This is visual refinement only. Do not rationalize, simplify, redesign, complete, or improve the layout beyond making the exact visible 3D scene look photorealistic.\n"
     "The labels, dark structural edge overlays, and guide marks are only there to identify objects and boundaries. Never render labels, guide lines, callouts, colored boxes, black outline strokes, UI marks, numbers, or any other annotation.\n"
     "Object reference images may be provided for appearance memory. Use them only for the paired object's style, material, and identity, never for camera or layout.\n"
     "Do not add, remove, move, resize, rotate, straighten, center, or replace architecture, openings, built-ins, or main furniture unless the prompt explicitly assigns an object reference to it.\n"
@@ -187,17 +191,25 @@ _GENERATE_SYSTEM_PROMPT = (
     "Render a photorealistic version of the exact view shown in the 3D layout image. Treat this as visual refinement, not a redesign.\n"
     "No people, no text, no watermark, no room-type change."
 )
+_CAMERA_RERENDER_SYSTEM_PROMPT = (
+    "You are re-rendering a previously approved interior design from a new 3D camera view.\n\n"
+    "Use the new input 3D layout image as the absolute source of truth for camera, room shell, openings, object placement, object scale, object silhouettes, depth order, and occlusion.\n"
+    "Use the previous photorealistic render and object reference images only as appearance memory for style continuity, materials, colors, and the identity of objects the user already edited.\n"
+    "Do not infer the new camera angle from the old photo. The new 3D layout view controls all geometry.\n"
+    "Do not add, remove, move, resize, rotate, straighten, center, or replace architecture, openings, built-ins, or main furniture. Do not rationalize or redesign the layout.\n"
+    "The labels, dark structural edge overlays, and guide marks are only instructions. Never render labels, guide lines, callouts, colored boxes, black outline strokes, UI marks, numbers, or any annotation.\n"
+    "Output a clean photorealistic render of the exact new 3D view. No people, no text, no watermark, no room-type change."
+)
 _EDIT_SYSTEM_PROMPT = (
     "You are editing an existing photorealistic interior image.\n\n"
-    "The first input image is the photorealistic source image to edit.\n"
-    "If a labeled 3D layout reference image is provided, use it only as the target camera/view and layout guide. Match that view exactly, but do not reproduce any label, guide line, callout, colored box, black outline stroke, UI mark, number, or annotation in the output.\n"
+    "The first input image is the approved photorealistic source image to edit and is the source of truth for every unedited pixel region, object, material, light relationship, camera, and layout.\n"
     "If an edit-region guide image is provided, it contains colored bounding boxes and region ID labels (such as R1, R2, R3) drawn over a copy of the photo. Use the boxes and labels only to locate which regions to edit and what operation applies to each. The boxes, ID text, outlines, colored fills, tinted overlays, and all other guide graphics are instructions only — they must never appear in the output image.\n"
     "If replacement reference images are provided, use them only for the appearance of the explicitly paired object or region.\n"
-    "Preserve room identity, materials, style continuity, architecture, openings, and every unedited object unless the prompt explicitly asks for a change.\n"
+    "Change only the explicitly requested selected object, drawn region, or global preset attribute. Preserve room identity, materials, style continuity, architecture, openings, camera, layout, object count, object shapes, positions, scale, and every unedited object unless the prompt explicitly asks for that exact target to change.\n"
     "Output a clean photorealistic interior photograph. No colored rectangles, no region IDs, no label text, no guide graphics, no annotations of any kind, no people, no watermarks, no room-type change."
 )
 
-RenderMode = Literal["generate", "edit"]
+RenderMode = Literal["generate", "edit", "camera_rerender"]
 SceneReferenceMode = Literal[
     "none",
     "target_layout_with_scene_reference",
@@ -300,6 +312,50 @@ class SnapshotEditOperation:
 
 
 @dataclass(frozen=True)
+class SnapshotLockedGeometryReference:
+    object_id: str
+    object_name: str | None = None
+    image_data_url: str | None = None
+    source: str | None = None
+    screen_bbox_px: Mapping[str, float] | None = None
+
+
+@dataclass(frozen=True)
+class SnapshotLockedGeometryAtlasObject:
+    object_id: str
+    object_name: str | None = None
+    screen_bbox_px: Mapping[str, float] | None = None
+    atlas_index: int = 0
+    cell_index: int = 0
+    cell_label: str | None = None
+    cell_bbox_norm: Mapping[str, float] | None = None
+
+
+@dataclass(frozen=True)
+class SnapshotLockedGeometryAtlas:
+    atlas_index: int
+    image_data_url: str | None = None
+    source: str | None = None
+    objects: list[SnapshotLockedGeometryAtlasObject] | None = None
+
+
+def _system_prompt_for_render_mode(render_mode: RenderMode) -> str:
+    if render_mode == "edit":
+        return _EDIT_SYSTEM_PROMPT
+    if render_mode == "camera_rerender":
+        return _CAMERA_RERENDER_SYSTEM_PROMPT
+    return _GENERATE_SYSTEM_PROMPT
+
+
+def _layout_lock_mode_for_render_mode(render_mode: RenderMode) -> str:
+    if render_mode == "edit":
+        return "source_image_edit_lock"
+    if render_mode == "camera_rerender":
+        return "camera_rerender_layout_lock"
+    return "strict_generate_layout_lock"
+
+
+@dataclass(frozen=True)
 class _GeminiRequestAttempt:
     name: str
     payload: dict[str, object]
@@ -335,6 +391,8 @@ def render_snapshot_image(
     render_mode: RenderMode = "generate",
     preset_selection: Mapping[str, object] | None = None,
     edit_operations: list[SnapshotEditOperation] | None = None,
+    locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
     edit_source_image_data_url: str | None = None,
     config: SnapshotImageRenderConfig | None = None,
     trace_id: str | None = None,
@@ -349,7 +407,18 @@ def render_snapshot_image(
             segmentation_map_image_data_url,
         )
     )
-    if render_mode == "generate" and geometry_reference_requested:
+    if render_mode == "camera_rerender" and not all(
+        (
+            depth_map_image_data_url,
+            edge_map_image_data_url,
+            segmentation_map_image_data_url,
+        )
+    ):
+        raise ValueError(
+            "Camera re-render requires depth_map_image_data_url, "
+            "edge_map_image_data_url, and segmentation_map_image_data_url."
+        )
+    if render_mode in {"generate", "camera_rerender"} and geometry_reference_requested:
         if resolved_config.image_provider != "openai":
             raise ValueError(
                 "Geometry reference rendering requires TKNT_IMAGE_PROVIDER=openai "
@@ -400,10 +469,21 @@ def render_snapshot_image(
         and normalized_scene_reference is not None
         else structural_image_data_url
     )
-    visible_objects = _extract_visible_objects(snapshot_payload)
+    visibility_diagnostics = _build_visibility_diagnostics(snapshot_payload)
+    effective_snapshot_payload = _snapshot_payload_with_effective_visible_objects(
+        snapshot_payload,
+        visibility_diagnostics=visibility_diagnostics,
+    )
+    visible_objects = _extract_visible_objects(effective_snapshot_payload)
     normalized_operations = _normalize_edit_operations(
         edit_operations or [],
         visible_objects=visible_objects,
+    )
+    normalized_locked_geometry_references = _normalize_locked_geometry_references(
+        locked_geometry_references or []
+    )
+    normalized_locked_geometry_atlases = _normalize_locked_geometry_atlases(
+        locked_geometry_atlases or []
     )
     preset_prompt = _build_preset_prompt(preset_selection)
     normalized_annotated_reference = (
@@ -417,24 +497,24 @@ def render_snapshot_image(
         if layout_reference_image_data_url
         else None
     )
-    layout_reference_enabled = (
-        resolved_config.include_layout_2d_reference or render_mode == "edit"
-    )
+    layout_reference_enabled = resolved_config.include_layout_2d_reference
     layout_reference_used = (
         render_mode == "generate"
         and not reference_only_camera_transfer_used
         and not annotated_reference_used
         and resolved_config.include_layout_2d_reference
         and normalized_layout_reference is not None
-    ) or (render_mode == "edit" and normalized_layout_reference is not None)
+    )
     layout_lock_prompt = (
         _build_generate_layout_lock_prompt(
             scene_reference_mode=resolved_scene_reference_mode,
-            snapshot_payload=snapshot_payload,
+            snapshot_payload=effective_snapshot_payload,
         )
-        if render_mode == "generate"
+        if render_mode in {"generate", "camera_rerender"}
         else ""
     )
+    locked_items = _build_locked_items(effective_snapshot_payload)
+    layout_lock_mode = _layout_lock_mode_for_render_mode(render_mode)
     normalized_user_prompt = _build_final_user_prompt(
         user_prompt=user_prompt,
         render_mode=render_mode,
@@ -448,8 +528,10 @@ def render_snapshot_image(
         edge_map_used=normalized_edge_map is not None,
         segmentation_map_used=normalized_segmentation_map is not None,
         scene_reference_mode=resolved_scene_reference_mode,
+        locked_geometry_references=normalized_locked_geometry_references,
+        locked_geometry_atlases=normalized_locked_geometry_atlases,
     )
-    aspect_ratio = _resolve_canvas_aspect_ratio(snapshot_payload)
+    aspect_ratio = _resolve_canvas_aspect_ratio(effective_snapshot_payload)
     reference_images = [
         operation.replacement_image_data_url
         for operation in normalized_operations
@@ -484,6 +566,23 @@ def render_snapshot_image(
             "reference_only_camera_transfer_used": (
                 reference_only_camera_transfer_used
             ),
+            "layout_lock_mode": layout_lock_mode,
+            "locked_item_count": len(locked_items),
+            "locked_items": locked_items,
+            "visibility_diagnostics": visibility_diagnostics,
+            "locked_geometry_references": [
+                _serialize_locked_geometry_reference(reference)
+                for reference in normalized_locked_geometry_references
+            ],
+            "locked_geometry_atlases": [
+                _serialize_locked_geometry_atlas(atlas)
+                for atlas in normalized_locked_geometry_atlases
+            ],
+            **_geometry_lock_metadata(
+                locked_items=locked_items,
+                atlases=normalized_locked_geometry_atlases,
+                references=normalized_locked_geometry_references,
+            ),
             "raw_user_prompt": _string(user_prompt) or None,
             "normalized_user_prompt": normalized_user_prompt,
             "preset_prompt": preset_prompt,
@@ -517,13 +616,19 @@ def render_snapshot_image(
                 "replacement_references": [
                     summarize_image_data_url(data_url) for data_url in reference_images
                 ],
+                "locked_geometry_references": [
+                    summarize_image_data_url(reference.image_data_url)
+                    for reference in normalized_locked_geometry_references
+                ],
+                "locked_geometry_atlases": [
+                    summarize_image_data_url(atlas.image_data_url)
+                    for atlas in normalized_locked_geometry_atlases
+                ],
             },
         },
     )
 
-    active_system_prompt = (
-        _EDIT_SYSTEM_PROMPT if render_mode == "edit" else _GENERATE_SYSTEM_PROMPT
-    )
+    active_system_prompt = _system_prompt_for_render_mode(render_mode)
     try:
         if resolved_config.image_provider == "openai":
             image_result = _generate_image_with_openai(
@@ -546,7 +651,11 @@ def render_snapshot_image(
                     normalized_layout_reference if layout_reference_used else None
                 ),
                 reference_image_data_urls=reference_images,
+                locked_geometry_references=normalized_locked_geometry_references,
+                locked_geometry_atlases=normalized_locked_geometry_atlases,
                 edit_operations=normalized_operations,
+                render_mode=render_mode,
+                locked_items=locked_items,
                 openai_api_key=resolved_config.openai_api_key,
                 openai_image_size=resolved_config.openai_image_size,
                 openai_image_quality=resolved_config.openai_image_quality,
@@ -577,7 +686,15 @@ def render_snapshot_image(
                     normalized_layout_reference if layout_reference_used else None
                 ),
                 reference_image_data_urls=reference_images,
+                locked_geometry_references=normalized_locked_geometry_references,
+                locked_geometry_atlases=normalized_locked_geometry_atlases,
             )
+            image_result["validation"] = {
+                "status": "skipped",
+                "reason": "validation_only_runs_for_openai_provider",
+                "locked_item_count": len(locked_items),
+                "visibility_diagnostics": visibility_diagnostics,
+            }
     except Exception as exc:
         log_image_flow_event(
             "snapshot_image.render_error",
@@ -590,6 +707,13 @@ def render_snapshot_image(
             },
         )
         raise
+
+    validation_payload = image_result.get("validation")
+    if isinstance(validation_payload, Mapping):
+        image_result["validation"] = {
+            **dict(validation_payload),
+            "visibility_diagnostics": visibility_diagnostics,
+        }
 
     log_image_flow_event(
         "snapshot_image.render_output",
@@ -658,6 +782,31 @@ def render_snapshot_image(
                 _serialize_edit_operation(operation)
                 for operation in normalized_operations
             ],
+            "layout_lock_mode": layout_lock_mode,
+            "visibility_diagnostics": visibility_diagnostics,
+            "object_memory_used": [
+                {
+                    "object_id": operation.object_id,
+                    "object_name": operation.object_name,
+                }
+                for operation in normalized_operations
+                if operation.replacement_image_data_url is not None
+                and operation.bbox_norm is None
+            ],
+            "locked_items": locked_items,
+            "locked_geometry_references": [
+                _serialize_locked_geometry_reference(reference)
+                for reference in normalized_locked_geometry_references
+            ],
+            "locked_geometry_atlases": [
+                _serialize_locked_geometry_atlas(atlas)
+                for atlas in normalized_locked_geometry_atlases
+            ],
+            **_geometry_lock_metadata(
+                locked_items=locked_items,
+                atlases=normalized_locked_geometry_atlases,
+                references=normalized_locked_geometry_references,
+            ),
         },
         "image": image_result,
         "models": {
@@ -674,6 +823,31 @@ def render_snapshot_image(
                 _serialize_edit_operation(operation)
                 for operation in normalized_operations
             ],
+            "layout_lock_mode": layout_lock_mode,
+            "visibility_diagnostics": visibility_diagnostics,
+            "object_memory_used": [
+                {
+                    "object_id": operation.object_id,
+                    "object_name": operation.object_name,
+                }
+                for operation in normalized_operations
+                if operation.replacement_image_data_url is not None
+                and operation.bbox_norm is None
+            ],
+            "locked_items": locked_items,
+            "locked_geometry_references": [
+                _serialize_locked_geometry_reference(reference)
+                for reference in normalized_locked_geometry_references
+            ],
+            "locked_geometry_atlases": [
+                _serialize_locked_geometry_atlas(atlas)
+                for atlas in normalized_locked_geometry_atlases
+            ],
+            **_geometry_lock_metadata(
+                locked_items=locked_items,
+                atlases=normalized_locked_geometry_atlases,
+                references=normalized_locked_geometry_references,
+            ),
             "validation": image_result.get("validation"),
         },
     }
@@ -694,6 +868,8 @@ def render_snapshot_image_from_path(
     render_mode: RenderMode = "generate",
     preset_selection: Mapping[str, object] | None = None,
     edit_operations: list[SnapshotEditOperation] | None = None,
+    locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
     edit_source_image_data_url: str | None = None,
     config: SnapshotImageRenderConfig | None = None,
     trace_id: str | None = None,
@@ -729,6 +905,8 @@ def render_snapshot_image_from_path(
         render_mode=render_mode,
         preset_selection=preset_selection,
         edit_operations=edit_operations,
+        locked_geometry_references=locked_geometry_references,
+        locked_geometry_atlases=locked_geometry_atlases,
         edit_source_image_data_url=edit_source_image_data_url,
         config=config,
         trace_id=trace_id,
@@ -896,7 +1074,11 @@ def _generate_image_with_openai(
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
     reference_image_data_urls: list[str],
+    locked_geometry_references: list[SnapshotLockedGeometryReference],
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
     edit_operations: list[SnapshotEditOperation],
+    render_mode: RenderMode,
+    locked_items: list[dict[str, object]],
     openai_api_key: str | None,
     openai_image_size: str,
     openai_image_quality: str,
@@ -994,6 +1176,22 @@ def _generate_image_with_openai(
             data_url=annotated_reference_image_data_url,
             filename_stem="edit_guide",
         )
+    for atlas in locked_geometry_atlases:
+        if atlas.image_data_url is None:
+            continue
+        append_image_slot(
+            role=f"object_geometry_atlas_{atlas.atlas_index}",
+            data_url=atlas.image_data_url,
+            filename_stem=f"geometry_atlas_{atlas.atlas_index}",
+        )
+    for i, reference in enumerate(locked_geometry_references):
+        if reference.image_data_url is None:
+            continue
+        append_image_slot(
+            role=f"object_geometry_lock_reference_{i + 1}",
+            data_url=reference.image_data_url,
+            filename_stem=f"geometry_lock_{i + 1}",
+        )
     for i, ref_url in enumerate(reference_image_data_urls):
         append_image_slot(
             role=f"object_appearance_reference_{i + 1}",
@@ -1032,7 +1230,18 @@ def _generate_image_with_openai(
         generated_image_data_url=str(image_result["data_url"]),
         edge_map_image_data_url=edge_map_image_data_url,
         expected_aspect_ratio=aspect_ratio,
+        locked_items=locked_items,
+        locked_geometry_references=locked_geometry_references,
+        locked_geometry_atlases=locked_geometry_atlases,
     )
+    edit_scope_validation = _validate_edit_change_scope(
+        source_image_data_url=source_image_data_url,
+        generated_image_data_url=str(image_result["data_url"]),
+        edit_operations=edit_operations,
+        render_mode=render_mode,
+    )
+    if edit_scope_validation is not None:
+        validation = {**validation, "edit_scope": edit_scope_validation}
     image_result["validation"] = validation
     image_result["retry_count"] = 0
     image_result["request_strategy"] = (
@@ -1070,6 +1279,9 @@ def _generate_image_with_openai(
             generated_image_data_url=str(retry_result["data_url"]),
             edge_map_image_data_url=edge_map_image_data_url,
             expected_aspect_ratio=aspect_ratio,
+            locked_items=locked_items,
+            locked_geometry_references=locked_geometry_references,
+            locked_geometry_atlases=locked_geometry_atlases,
         )
         if retry_validation.get("status") == "failed":
             retry_validation = {
@@ -1194,26 +1406,31 @@ def _validate_generated_geometry_against_reference(
     generated_image_data_url: str,
     edge_map_image_data_url: str | None,
     expected_aspect_ratio: str,
+    locked_items: list[dict[str, object]] | None = None,
+    locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
 ) -> dict[str, object]:
     if edge_map_image_data_url is None:
         return {
             "status": "skipped",
             "reason": "edge_map_reference_missing",
+            "locked_item_count": len(locked_items or []),
         }
 
     try:
         generated_image = Image.open(
             BytesIO(_data_url_to_bytes(generated_image_data_url))
         ).convert("RGB")
-        edge_map = Image.open(BytesIO(_data_url_to_bytes(edge_map_image_data_url))).convert(
-            "L"
-        )
+        edge_map = Image.open(
+            BytesIO(_data_url_to_bytes(edge_map_image_data_url))
+        ).convert("L")
     except (binascii.Error, OSError, UnidentifiedImageError) as exc:
         return {
             "status": "skipped",
             "reason": "geometry_validation_image_decode_failed",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "locked_item_count": len(locked_items or []),
         }
 
     generated_width, generated_height = generated_image.size
@@ -1222,6 +1439,7 @@ def _validate_generated_geometry_against_reference(
             "status": "skipped",
             "reason": "generated_image_too_small_for_geometry_validation",
             "generated_size": [generated_width, generated_height],
+            "locked_item_count": len(locked_items or []),
         }
 
     if edge_map.size != generated_image.size:
@@ -1236,6 +1454,7 @@ def _validate_generated_geometry_against_reference(
             "status": "skipped",
             "reason": "edge_map_reference_too_sparse",
             "reference_edge_coverage": round(reference_coverage, 6),
+            "locked_item_count": len(locked_items or []),
         }
 
     generated_edge_image = generated_image.convert("L").filter(ImageFilter.FIND_EDGES)
@@ -1264,6 +1483,20 @@ def _validate_generated_geometry_against_reference(
         if status == "failed"
         else "geometry_reference_alignment_acceptable"
     )
+    locked_item_visibility = _validate_locked_item_visibility(
+        generated_image,
+        locked_items or [],
+    )
+    locked_item_shape = _validate_locked_item_shape(
+        generated_image=generated_image,
+        locked_items=locked_items or [],
+        locked_geometry_references=locked_geometry_references or [],
+        locked_geometry_atlases=locked_geometry_atlases or [],
+    )
+    if locked_item_shape.get("status") == "failed":
+        status = "failed"
+        reason = "locked_item_shape_drift"
+
     return {
         "status": status,
         "reason": reason,
@@ -1274,6 +1507,9 @@ def _validate_generated_geometry_against_reference(
         "expected_aspect_ratio": expected_aspect_ratio,
         "generated_aspect_ratio": round(generated_aspect, 4),
         "aspect_delta": round(aspect_delta, 4),
+        "locked_item_count": len(locked_items or []),
+        "locked_item_visibility": locked_item_visibility,
+        "locked_item_shape": locked_item_shape,
     }
 
 
@@ -1286,8 +1522,7 @@ def _build_geometry_retry_prompt(
     validation: Mapping[str, object],
 ) -> str:
     return (
-        combined_prompt
-        + "\n\nGeometry retry instruction:\n"
+        combined_prompt + "\n\nGeometry retry instruction:\n"
         "The previous output drifted away from the supplied geometry references. "
         "Regenerate the same scene with stronger adherence to the clean 3D source, "
         "depth map, edge map, segmentation map, and structural guide. Keep wall "
@@ -1299,6 +1534,328 @@ def _build_geometry_retry_prompt(
         "Validation reason: "
         + _string(validation.get("reason"), fallback="geometry_alignment_failed")
     )
+
+
+def _validate_locked_item_visibility(
+    generated_image: Image.Image,
+    locked_items: list[dict[str, object]],
+) -> dict[str, object]:
+    checked: list[dict[str, object]] = []
+    width, height = generated_image.size
+    if width <= 0 or height <= 0:
+        return {"status": "skipped", "reason": "invalid_generated_size"}
+
+    for item in locked_items[:60]:
+        bbox = item.get("screen_bbox_px")
+        if not isinstance(bbox, Mapping):
+            continue
+        source_width = max(1.0, _float(item.get("canvas_width_px"), width))
+        source_height = max(1.0, _float(item.get("canvas_height_px"), height))
+        left = int(max(0.0, _float(bbox.get("minX"), 0.0)) / source_width * width)
+        top = int(max(0.0, _float(bbox.get("minY"), 0.0)) / source_height * height)
+        right = int(max(left + 1, _float(bbox.get("maxX"), 0.0) / source_width * width))
+        bottom = int(
+            max(top + 1, _float(bbox.get("maxY"), 0.0) / source_height * height)
+        )
+        left = max(0, min(width - 1, left))
+        top = max(0, min(height - 1, top))
+        right = max(left + 1, min(width, right))
+        bottom = max(top + 1, min(height, bottom))
+        crop = generated_image.crop((left, top, right, bottom)).convert("L")
+        edge_density = _edge_density(crop)
+        checked.append(
+            {
+                "id": item.get("id"),
+                "kind": item.get("kind"),
+                "type": item.get("type"),
+                "edge_density": round(edge_density, 5),
+                "status": "weak" if edge_density < 0.002 else "present",
+            }
+        )
+
+    weak_items = [item for item in checked if item.get("status") == "weak"]
+    return {
+        "status": "warning" if weak_items else "passed",
+        "checked_count": len(checked),
+        "weak_count": len(weak_items),
+        "weak_items": weak_items[:12],
+    }
+
+
+def _validate_locked_item_shape(
+    *,
+    generated_image: Image.Image,
+    locked_items: list[dict[str, object]],
+    locked_geometry_references: list[SnapshotLockedGeometryReference],
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
+) -> dict[str, object]:
+    reference_images = _locked_geometry_reference_images_by_object(
+        locked_geometry_references=locked_geometry_references,
+        locked_geometry_atlases=locked_geometry_atlases,
+    )
+    if not reference_images:
+        return {"status": "skipped", "reason": "no_locked_geometry_references"}
+    locked_by_id = {
+        _string(item.get("id")): item
+        for item in locked_items
+        if _string(item.get("id"))
+    }
+    checked: list[dict[str, object]] = []
+    for object_id, reference_image in list(reference_images.items())[:40]:
+        locked_item = locked_by_id.get(object_id)
+        if locked_item is None:
+            continue
+        bbox = locked_item.get("screen_bbox_px")
+        if not isinstance(bbox, Mapping):
+            continue
+        generated_crop = _crop_generated_image_by_source_bbox(
+            generated_image,
+            bbox=bbox,
+            source_width=_float(
+                locked_item.get("canvas_width_px"),
+                generated_image.width,
+            ),
+            source_height=_float(
+                locked_item.get("canvas_height_px"),
+                generated_image.height,
+            ),
+        )
+        if generated_crop is None:
+            continue
+        shape_score = _edge_shape_alignment_score(
+            reference_image,
+            generated_crop.convert("L"),
+        )
+        object_type = _string(locked_item.get("type"))
+        threshold = 0.075
+        checked.append(
+            {
+                "id": object_id,
+                "type": object_type,
+                "shape_alignment_score": round(shape_score, 4),
+                "shape_alignment_threshold": threshold,
+                "status": "failed" if shape_score < threshold else "passed",
+            }
+        )
+
+    failed_items = [item for item in checked if item.get("status") == "failed"]
+    if not checked:
+        return {
+            "status": "skipped",
+            "reason": "no_locked_geometry_reference_with_bbox",
+            "checked_count": 0,
+        }
+    return {
+        "status": "failed" if failed_items else "passed",
+        "checked_count": len(checked),
+        "failed_count": len(failed_items),
+        "failed_items": failed_items[:12],
+    }
+
+
+def _locked_geometry_reference_images_by_object(
+    *,
+    locked_geometry_references: list[SnapshotLockedGeometryReference],
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
+) -> dict[str, Image.Image]:
+    images: dict[str, Image.Image] = {}
+    for atlas in locked_geometry_atlases:
+        if atlas.image_data_url is None:
+            continue
+        try:
+            atlas_image = Image.open(
+                BytesIO(_data_url_to_bytes(atlas.image_data_url))
+            ).convert("L")
+        except (binascii.Error, OSError, UnidentifiedImageError):
+            continue
+        for item in atlas.objects or []:
+            object_id = _string(item.object_id)
+            if not object_id or object_id in images:
+                continue
+            crop = _crop_image_by_norm_bbox(
+                atlas_image,
+                _mapping(item.cell_bbox_norm),
+            )
+            if crop is not None:
+                images[object_id] = crop
+
+    for reference in locked_geometry_references:
+        object_id = _string(reference.object_id)
+        if not object_id or object_id in images or reference.image_data_url is None:
+            continue
+        try:
+            images[object_id] = Image.open(
+                BytesIO(_data_url_to_bytes(reference.image_data_url))
+            ).convert("L")
+        except (binascii.Error, OSError, UnidentifiedImageError):
+            continue
+    return images
+
+
+def _crop_image_by_norm_bbox(
+    image: Image.Image,
+    bbox_norm: Mapping[str, object],
+) -> Image.Image | None:
+    if not bbox_norm:
+        return None
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return None
+    x = max(0.0, min(1.0, _float(bbox_norm.get("x"), 0.0)))
+    y = max(0.0, min(1.0, _float(bbox_norm.get("y"), 0.0)))
+    box_width = max(0.0, min(1.0 - x, _float(bbox_norm.get("width"), 0.0)))
+    box_height = max(0.0, min(1.0 - y, _float(bbox_norm.get("height"), 0.0)))
+    if box_width <= 0 or box_height <= 0:
+        return None
+    left = int(x * width)
+    top = int(y * height)
+    right = int(max(left + 1, (x + box_width) * width))
+    bottom = int(max(top + 1, (y + box_height) * height))
+    return image.crop((left, top, min(width, right), min(height, bottom)))
+
+
+def _crop_generated_image_by_source_bbox(
+    image: Image.Image,
+    *,
+    bbox: Mapping[str, object],
+    source_width: float,
+    source_height: float,
+) -> Image.Image | None:
+    width, height = image.size
+    if width <= 0 or height <= 0 or source_width <= 0 or source_height <= 0:
+        return None
+    left = int(max(0.0, _float(bbox.get("minX"), 0.0)) / source_width * width)
+    top = int(max(0.0, _float(bbox.get("minY"), 0.0)) / source_height * height)
+    right = int(max(left + 1, _float(bbox.get("maxX"), 0.0) / source_width * width))
+    bottom = int(max(top + 1, _float(bbox.get("maxY"), 0.0) / source_height * height))
+    left = max(0, min(width - 1, left))
+    top = max(0, min(height - 1, top))
+    right = max(left + 1, min(width, right))
+    bottom = max(top + 1, min(height, bottom))
+    return image.crop((left, top, right, bottom))
+
+
+def _edge_shape_alignment_score(
+    reference_image: Image.Image,
+    generated_crop: Image.Image,
+) -> float:
+    if reference_image.width <= 2 or reference_image.height <= 2:
+        return 0.0
+    if generated_crop.width <= 2 or generated_crop.height <= 2:
+        return 0.0
+    reference = reference_image.resize(
+        generated_crop.size,
+        Image.Resampling.BILINEAR,
+    )
+    reference_mask = _threshold_edge_image(reference.filter(ImageFilter.FIND_EDGES))
+    generated_mask = _threshold_edge_image(
+        generated_crop.filter(ImageFilter.FIND_EDGES)
+    ).filter(ImageFilter.MaxFilter(5))
+    reference_values = list(reference_mask.getdata())
+    generated_values = list(generated_mask.getdata())
+    reference_count = sum(1 for value in reference_values if value > 0)
+    if reference_count <= 0:
+        return 0.0
+    matched_count = sum(
+        1
+        for reference_value, generated_value in zip(
+            reference_values,
+            generated_values,
+            strict=False,
+        )
+        if reference_value > 0 and generated_value > 0
+    )
+    return matched_count / max(1, reference_count)
+
+
+def _edge_density(image: Image.Image) -> float:
+    if image.width <= 2 or image.height <= 2:
+        return 0.0
+    edge_image = image.filter(ImageFilter.FIND_EDGES)
+    thresholded = _threshold_edge_image(edge_image)
+    values = list(thresholded.getdata())
+    return sum(1 for value in values if value > 0) / max(1, len(values))
+
+
+def _validate_edit_change_scope(
+    *,
+    source_image_data_url: str,
+    generated_image_data_url: str,
+    edit_operations: list[SnapshotEditOperation],
+    render_mode: RenderMode,
+) -> dict[str, object] | None:
+    if render_mode != "edit":
+        return None
+    region_operations = [
+        operation for operation in edit_operations if operation.bbox_norm is not None
+    ]
+    if not region_operations:
+        return None
+    try:
+        source = Image.open(BytesIO(_data_url_to_bytes(source_image_data_url))).convert(
+            "RGB"
+        )
+        generated = Image.open(
+            BytesIO(_data_url_to_bytes(generated_image_data_url))
+        ).convert("RGB")
+    except (binascii.Error, OSError, UnidentifiedImageError) as exc:
+        return {
+            "status": "skipped",
+            "reason": "edit_scope_image_decode_failed",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        }
+    if generated.size != source.size:
+        generated = generated.resize(source.size, Image.Resampling.BILINEAR)
+    width, height = source.size
+    editable_mask = Image.new("L", (width, height), 0)
+    for operation in region_operations:
+        bbox = operation.bbox_norm
+        if bbox is None:
+            continue
+        left = int(max(0.0, min(1.0, _float(bbox.get("x"), 0.0))) * width)
+        top = int(max(0.0, min(1.0, _float(bbox.get("y"), 0.0))) * height)
+        right = int(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    _float(bbox.get("x"), 0.0) + _float(bbox.get("width"), 0.0),
+                ),
+            )
+            * width
+        )
+        bottom = int(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    _float(bbox.get("y"), 0.0) + _float(bbox.get("height"), 0.0),
+                ),
+            )
+            * height
+        )
+        editable_mask.paste(
+            255, box=(left, top, max(left + 1, right), max(top + 1, bottom))
+        )
+
+    diff = ImageChops.difference(source, generated).convert("L")
+    diff_mask = diff.point(lambda value: 255 if value >= 22 else 0)
+    editable_values = list(editable_mask.getdata())
+    diff_values = list(diff_mask.getdata())
+    changed_outside = sum(
+        1
+        for editable, changed in zip(editable_values, diff_values, strict=False)
+        if editable == 0 and changed > 0
+    )
+    outside_total = sum(1 for editable in editable_values if editable == 0)
+    outside_change_ratio = changed_outside / max(1, outside_total)
+    return {
+        "status": "warning" if outside_change_ratio > 0.08 else "passed",
+        "outside_change_ratio": round(outside_change_ratio, 5),
+        "outside_change_threshold": 0.08,
+        "region_count": len(region_operations),
+    }
 
 
 def _reference_edge_mask(edge_map: Image.Image) -> list[bool]:
@@ -1360,6 +1917,8 @@ def _generate_image_with_gemini(
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
     reference_image_data_urls: list[str],
+    locked_geometry_references: list[SnapshotLockedGeometryReference],
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
 ) -> dict[str, object]:
     if not gemini_api_key:
         raise ValueError(
@@ -1387,6 +1946,8 @@ def _generate_image_with_gemini(
         scene_reference_image_data_url=scene_reference_image_data_url,
         layout_reference_image_data_url=layout_reference_image_data_url,
         reference_image_data_urls=reference_image_data_urls,
+        locked_geometry_references=locked_geometry_references,
+        locked_geometry_atlases=locked_geometry_atlases,
     )
     last_response: Mapping[str, object] | None = None
     with httpx.Client(timeout=600.0) as client:
@@ -1490,6 +2051,8 @@ def _build_gemini_request_attempts(
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
     reference_image_data_urls: list[str],
+    locked_geometry_references: list[SnapshotLockedGeometryReference],
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
 ) -> list[_GeminiRequestAttempt]:
     resolved_user_prompt = user_prompt
     include_system_instruction = not _model_inlines_system_prompt(model_name)
@@ -1571,22 +2134,47 @@ def _build_gemini_request_attempts(
         )
         for data_url in reference_image_data_urls
     ]
+    normalized_locked_geometry_reference_urls = [
+        _normalize_gemini_input_image_data_url(
+            reference.image_data_url,
+            model_name=model_name,
+            image_size=image_size,
+            aspect_ratio=aspect_ratio,
+        )
+        for reference in locked_geometry_references
+        if reference.image_data_url is not None
+    ]
+    normalized_locked_geometry_atlas_urls = [
+        _normalize_gemini_input_image_data_url(
+            atlas.image_data_url,
+            model_name=model_name,
+            image_size=image_size,
+            aspect_ratio=aspect_ratio,
+        )
+        for atlas in locked_geometry_atlases
+        if atlas.image_data_url is not None
+    ]
 
     content: list[dict[str, object]] = [
         {"text": resolved_user_prompt},
         _data_url_to_inline_part(normalized_source_image_data_url),
     ]
-    has_supplemental_images = any(
-        data_url is not None
-        for data_url in (
-            normalized_scene_reference_image_data_url,
-            normalized_depth_map_image_data_url,
-            normalized_edge_map_image_data_url,
-            normalized_segmentation_map_image_data_url,
-            normalized_annotated_reference_image_data_url,
-            normalized_layout_reference_image_data_url,
+    has_supplemental_images = (
+        any(
+            data_url is not None
+            for data_url in (
+                normalized_scene_reference_image_data_url,
+                normalized_depth_map_image_data_url,
+                normalized_edge_map_image_data_url,
+                normalized_segmentation_map_image_data_url,
+                normalized_annotated_reference_image_data_url,
+                normalized_layout_reference_image_data_url,
+            )
         )
-    ) or bool(normalized_reference_image_data_urls)
+        or bool(normalized_reference_image_data_urls)
+        or bool(normalized_locked_geometry_reference_urls)
+        or bool(normalized_locked_geometry_atlas_urls)
+    )
     if normalized_depth_map_image_data_url is not None:
         content.append(_data_url_to_inline_part(normalized_depth_map_image_data_url))
     if normalized_edge_map_image_data_url is not None:
@@ -1607,6 +2195,14 @@ def _build_gemini_request_attempts(
         content.append(
             _data_url_to_inline_part(normalized_annotated_reference_image_data_url)
         )
+    content.extend(
+        _data_url_to_inline_part(data_url)
+        for data_url in normalized_locked_geometry_atlas_urls
+    )
+    content.extend(
+        _data_url_to_inline_part(data_url)
+        for data_url in normalized_locked_geometry_reference_urls
+    )
     content.extend(
         _data_url_to_inline_part(data_url)
         for data_url in normalized_reference_image_data_urls
@@ -2056,26 +2652,50 @@ def _build_final_user_prompt(
     edge_map_used: bool = False,
     segmentation_map_used: bool = False,
     scene_reference_mode: SceneReferenceMode = "none",
+    locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
 ) -> str:
     raw_user_prompt = _string(user_prompt)
-    if render_mode == "generate":
+    if render_mode in {"generate", "camera_rerender"}:
+        geometry_reference_list = locked_geometry_references or []
+        geometry_atlas_list = locked_geometry_atlases or []
         prompt_parts: list[str] = []
         image_role_prompt = _build_generate_image_role_prompt(
+            render_mode=render_mode,
             scene_reference_mode=scene_reference_mode,
             layout_reference_used=layout_reference_used,
             annotated_reference_used=annotated_reference_used,
             depth_map_used=depth_map_used,
             edge_map_used=edge_map_used,
             segmentation_map_used=segmentation_map_used,
+            locked_geometry_atlas_count=len(geometry_atlas_list),
+            locked_geometry_reference_count=len(geometry_reference_list),
+            appearance_reference_count=sum(
+                1
+                for operation in edit_operations
+                if operation.replacement_image_data_url is not None
+            ),
         )
         if image_role_prompt:
             prompt_parts.append(image_role_prompt)
         if layout_lock_prompt:
             prompt_parts.append(layout_lock_prompt)
-        prompt_parts.append(
-            "Material, lighting, and scenery goal, secondary to the exact input view and locked palette: "
-            + (raw_user_prompt or _DEFAULT_USER_PROMPT)
+        if render_mode == "camera_rerender":
+            prompt_parts.append(
+                "Appearance and continuity goal, always secondary to the new 3D target geometry: "
+                + (raw_user_prompt or _DEFAULT_USER_PROMPT)
+            )
+        else:
+            prompt_parts.append(
+                "Material, lighting, and scenery goal, secondary to the exact input view and locked palette: "
+                + (raw_user_prompt or _DEFAULT_USER_PROMPT)
+            )
+        locked_geometry_prompt = _build_locked_geometry_reference_prompt(
+            geometry_reference_list,
+            locked_geometry_atlases=geometry_atlas_list,
         )
+        if locked_geometry_prompt:
+            prompt_parts.append(locked_geometry_prompt)
         appearance_memory_prompt = _build_object_appearance_memory_prompt(
             edit_operations
         )
@@ -2087,34 +2707,28 @@ def _build_final_user_prompt(
                 "lighting/illumination, and exterior scenery visible through existing "
                 "openings only. They must not change architecture, openings, "
                 "built-ins, object colors, object shape, object count, object size, "
-                "camera, depth order, occlusion, or object placement:\n"
-                + preset_prompt
+                "camera, depth order, occlusion, or object placement:\n" + preset_prompt
             )
         return "\n\n".join(prompt_parts)
 
-    if (
-        not raw_user_prompt
-        and not preset_prompt
-        and not edit_operations
-        and not layout_reference_used
-    ):
+    if not raw_user_prompt and not preset_prompt and not edit_operations:
         raise ValueError(
-            "Provide at least one edit operation, preset change, prompt change, or target-view reference."
+            "Provide at least one edit operation, preset change, or prompt change."
         )
 
     prompt_parts: list[str] = []
     prompt_parts.append("Edit the first image.")
     if layout_reference_used:
         prompt_parts.append(
-            "Image 1 is the current photorealistic render. Image 2 is the current 3D layout snapshot reference. If no explicit object operation is provided, perform only the camera/layout transfer from Image 2 while preserving object identity and realistic finishes from Image 1."
-        )
-        prompt_parts.append(
-            "Use Image 2 as the labeled 3D target-view reference. Match that reference's camera angle, framing, room layout, openings, main object placement, main object size, and occlusion. Do not render any label, guide, box, outline, number, or UI mark from the reference. Small decor and material styling may change, but the target structure and main layout must stay locked."
+            "Image 2 is an optional same-camera structural guide for identifying existing objects only. Do not transfer camera, layout, or geometry from it, and do not reproduce any guide graphics."
         )
     else:
         prompt_parts.append(
-            "Preserve the current camera, room layout, architecture, and all unselected objects."
+            "Preserve the current camera, room layout, architecture, openings, object count, and all unselected objects."
         )
+    prompt_parts.append(
+        "Immutable edit rule: pixels and objects outside the selected object or drawn edit boxes must remain unchanged in shape, position, scale, perspective, material identity, lighting relationship, and visibility."
+    )
     if annotated_reference_used:
         bbox_image_number = 3 if layout_reference_used else 2
         prompt_parts.append(
@@ -2290,16 +2904,89 @@ def _build_object_appearance_memory_prompt(
     return "\n".join(prompt_parts)
 
 
+def _build_locked_geometry_reference_prompt(
+    references: list[SnapshotLockedGeometryReference],
+    *,
+    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
+) -> str:
+    usable_references = [
+        reference for reference in references if reference.image_data_url is not None
+    ]
+    usable_atlases = [
+        atlas
+        for atlas in locked_geometry_atlases
+        if atlas.image_data_url is not None and atlas.objects
+    ]
+    if not usable_references and not usable_atlases:
+        return ""
+
+    prompt_parts = ["Object geometry lock references:"]
+    if usable_atlases:
+        prompt_parts.append(
+            "Each object geometry atlas is a contact sheet of exact object crops "
+            "from the clean 3D source. Use atlas cells only for exact shape, "
+            "silhouette, opening/shelf relationships, and proportions from the 3D "
+            "layout. Do not use atlas labels, atlas borders, material, lighting, "
+            "scenery, camera, or style in the final render."
+        )
+        for atlas in usable_atlases:
+            atlas_index = atlas.atlas_index
+            prompt_parts.append(f"Geometry atlas {atlas_index}:")
+            for item in atlas.objects or []:
+                object_name = item.object_name or "object"
+                bbox_text = ""
+                if isinstance(item.screen_bbox_px, Mapping):
+                    bbox_text = " screen_bbox_px=" + json.dumps(
+                        dict(item.screen_bbox_px),
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                    )
+                cell_label = item.cell_label or f"cell {item.cell_index}"
+                prompt_parts.append(
+                    f"- {cell_label}: object id {item.object_id} ({object_name}). "
+                    "Preserve this object's exact 3D layout silhouette, "
+                    f"height/width/depth proportions, and visible internal details.{bbox_text}"
+                )
+
+    if usable_references:
+        prompt_parts.append(
+            "Legacy per-object geometry crops are also provided below. They are "
+            "secondary to atlas and 3D layout geometry."
+        )
+    for index, reference in enumerate(usable_references, start=1):
+        object_name = reference.object_name or "object"
+        bbox = reference.screen_bbox_px
+        bbox_text = ""
+        if isinstance(bbox, Mapping):
+            bbox_text = " screen_bbox_px=" + json.dumps(
+                dict(bbox), ensure_ascii=True, separators=(",", ":")
+            )
+        prompt_parts.append(
+            f"Geometry lock reference {index}: object id {reference.object_id} "
+            f"({object_name}). Preserve this object's exact 3D layout silhouette, "
+            f"height/width/depth proportions, and internal shelf/cabinet openings.{bbox_text}"
+        )
+    return "\n".join(prompt_parts)
+
+
 def _build_generate_image_role_prompt(
     *,
+    render_mode: RenderMode,
     scene_reference_mode: SceneReferenceMode,
     layout_reference_used: bool,
     annotated_reference_used: bool,
     depth_map_used: bool,
     edge_map_used: bool,
     segmentation_map_used: bool,
+    locked_geometry_atlas_count: int = 0,
+    locked_geometry_reference_count: int = 0,
+    appearance_reference_count: int = 0,
 ) -> str:
-    if scene_reference_mode == "scene_reference_camera_transfer":
+    if render_mode == "camera_rerender":
+        prompt_parts: list[str] = [
+            "Image 1 is the clean 3D target render from the newly selected camera. It is the primary source of truth for camera, framing, room shell, object positions, object sizes, visible colors, occlusion, and depth order."
+        ]
+    elif scene_reference_mode == "scene_reference_camera_transfer":
         prompt_parts: list[str] = [
             "Image 1 is a previously rendered source reference. Transfer it to "
             "the newly selected target camera only where it does not conflict "
@@ -2353,6 +3040,24 @@ def _build_generate_image_role_prompt(
         prompt_parts.append(
             f"Image {next_image_number} is a same-camera labeled structural guide. Do not render the guide lines, labels, outlines, or UI marks in the final image."
         )
+        next_image_number += 1
+    if locked_geometry_atlas_count > 0:
+        end_image_number = next_image_number + locked_geometry_atlas_count - 1
+        prompt_parts.append(
+            f"Images {next_image_number}-{end_image_number} are object geometry atlas contact sheets from the clean 3D source. Each atlas cell maps to an object id in the prompt. Use them only to preserve listed object silhouettes, proportions, and visible structural details."
+        )
+        next_image_number = end_image_number + 1
+    if locked_geometry_reference_count > 0:
+        end_image_number = next_image_number + locked_geometry_reference_count - 1
+        prompt_parts.append(
+            f"Images {next_image_number}-{end_image_number} are legacy exact object-level geometry lock crops from the clean 3D source. Use them only to preserve listed object silhouettes, proportions, and structural relationships."
+        )
+        next_image_number = end_image_number + 1
+    if appearance_reference_count > 0:
+        end_image_number = next_image_number + appearance_reference_count - 1
+        prompt_parts.append(
+            f"Images {next_image_number}-{end_image_number} are object appearance memory references. They are secondary to the 3D layout geometry and object geometry lock crops."
+        )
 
     return "\n".join(prompt_parts)
 
@@ -2363,9 +3068,14 @@ def _resolve_scene_reference_mode(
     render_mode: RenderMode,
     scene_reference_image_data_url: str | None,
 ) -> SceneReferenceMode:
-    if render_mode != "generate" or scene_reference_image_data_url is None:
+    if (
+        render_mode not in {"generate", "camera_rerender"}
+        or scene_reference_image_data_url is None
+    ):
         return "none"
     if scene_reference_mode == "target_layout_with_scene_reference":
+        return "target_layout_with_scene_reference"
+    if render_mode == "camera_rerender":
         return "target_layout_with_scene_reference"
     if scene_reference_mode == "scene_reference_camera_transfer":
         return "scene_reference_camera_transfer"
@@ -2390,6 +3100,9 @@ def _build_generate_layout_lock_prompt(
     compiled_layout_prompt = _build_compiled_layout_lock_prompt(snapshot_payload)
     if compiled_layout_prompt:
         prompt_parts.append(compiled_layout_prompt)
+    locked_item_prompt = _build_locked_item_prompt(snapshot_payload)
+    if locked_item_prompt:
+        prompt_parts.append(locked_item_prompt)
     if scene_reference_mode == "target_layout_with_scene_reference":
         prompt_parts.append(
             "Use the previous render only for continuity of realistic finish and object identity. Do not copy its camera, layout, room shape, or color palette if they conflict with the 3D layout."
@@ -2417,7 +3130,10 @@ def _build_compiled_layout_lock_prompt(
     snapshot_payload: Mapping[str, object],
 ) -> str:
     try:
-        compilation = compile_snapshot_prompt(snapshot_payload)
+        compilation = compile_snapshot_prompt(
+            snapshot_payload,
+            config=SnapshotPromptCompilerConfig(include_minor_decor=True),
+        )
     except (KeyError, TypeError, ValueError) as exc:
         logger.warning("Snapshot prompt compilation skipped: %s", exc)
         return ""
@@ -2471,9 +3187,7 @@ def _build_exact_palette_lock_prompt(
         color = _string(payload.get("colorHex"))
         if not _is_hex_color(color):
             continue
-        object_lines.append(
-            f"{object_id} ({_visible_object_name(payload)}) {color}"
-        )
+        object_lines.append(f"{object_id} ({_visible_object_name(payload)}) {color}")
 
     if not surface_lines and not object_lines:
         return ""
@@ -2484,10 +3198,142 @@ def _build_exact_palette_lock_prompt(
     if surface_lines:
         prompt_parts.append("Room surfaces: " + "; ".join(surface_lines) + ".")
     if object_lines:
-        prompt_parts.append(
-            "Visible objects: " + "; ".join(object_lines[:18]) + "."
-        )
+        prompt_parts.append("Visible objects: " + "; ".join(object_lines[:18]) + ".")
     return "\n".join(prompt_parts)
+
+
+def _build_locked_item_prompt(snapshot_payload: Mapping[str, object]) -> str:
+    locked_items = _build_locked_items(snapshot_payload)
+    if not locked_items:
+        return ""
+
+    lines = [
+        "Locked visible object and opening map. Every listed item must remain present, recognizable, and aligned with its screen-space position, scale, silhouette, depth order, and color from the 3D source:"
+    ]
+    for item in locked_items[:40]:
+        item_id = _string(item.get("id"), fallback="unknown")
+        kind = _string(item.get("kind"), fallback="object")
+        item_type = _string(item.get("type"), fallback="unknown")
+        bbox = item.get("screen_bbox_px")
+        bbox_text = ""
+        if isinstance(bbox, Mapping):
+            bbox_text = " screen_bbox_px=" + json.dumps(
+                dict(bbox), ensure_ascii=True, separators=(",", ":")
+            )
+        dimensions = item.get("dimensions_mm")
+        dimensions_text = ""
+        if isinstance(dimensions, Mapping):
+            dimensions_text = " dimensions_mm=" + json.dumps(
+                dict(dimensions),
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
+        color = _string(item.get("color_hex"))
+        color_text = f" color={color}" if color else ""
+        lines.append(
+            f"- {kind} {item_id} ({item_type}){bbox_text}{dimensions_text}{color_text}"
+        )
+    if len(locked_items) > 40:
+        lines.append(f"- plus {len(locked_items) - 40} additional locked item(s).")
+    lines.append(
+        "Do not omit or blur away supporting shelves, bookcases, TV/media consoles, wardrobes, cabinets, beds, doors, or windows when they are listed here."
+    )
+    return "\n".join(lines)
+
+
+def _build_locked_items(
+    snapshot_payload: Mapping[str, object],
+) -> list[dict[str, object]]:
+    locked_items: list[dict[str, object]] = []
+    canvas = _mapping(snapshot_payload.get("canvas"))
+    canvas_width_px = max(1.0, _float(canvas.get("widthPx"), 1.0))
+    canvas_height_px = max(1.0, _float(canvas.get("heightPx"), 1.0))
+    for object_id, payload in _extract_visible_objects(snapshot_payload).items():
+        dimensions = _mapping(payload.get("dimensionsMm"))
+        item: dict[str, object] = {
+            "kind": "object",
+            "id": object_id,
+            "type": _string(payload.get("type"), fallback="object"),
+            "label": _visible_object_name(payload),
+            "color_hex": _string(payload.get("colorHex")) or None,
+            "screen_bbox_px": _normalized_screen_bbox(payload.get("screenBboxPx")),
+            "canvas_width_px": round(canvas_width_px, 2),
+            "canvas_height_px": round(canvas_height_px, 2),
+            "dimensions_mm": {
+                "width": round(_float(dimensions.get("width"), 0.0), 2),
+                "depth": round(_float(dimensions.get("depth"), 0.0), 2),
+                "height": round(_float(dimensions.get("height"), 0.0), 2),
+            },
+            "distance_to_camera_m": round(
+                _float(payload.get("distanceToCameraM"), 0.0),
+                3,
+            ),
+        }
+        locked_items.append(item)
+
+    room = _mapping(snapshot_payload.get("room"))
+    openings = _mapping(room.get("openings"))
+    for opening_kind in ("doors", "windows"):
+        raw_openings = _sequence(openings.get(opening_kind))
+        for index, opening in enumerate(raw_openings, start=1):
+            if not isinstance(opening, Mapping):
+                continue
+            opening_id = _string(
+                opening.get("id"),
+                fallback=f"{opening_kind[:-1]}_{index}",
+            )
+            locked_items.append(
+                {
+                    "kind": "opening",
+                    "id": f"{opening_kind[:-1]}:{opening_id}",
+                    "type": opening_kind[:-1],
+                    "screen_bbox_px": _normalized_screen_bbox(
+                        opening.get("screenBboxPx")
+                    ),
+                    "screen_center_px": _normalized_point(
+                        opening.get("screenCenterPx")
+                    ),
+                    "canvas_width_px": round(canvas_width_px, 2),
+                    "canvas_height_px": round(canvas_height_px, 2),
+                    "segment_mm": opening.get("segmentMm"),
+                }
+            )
+    return locked_items
+
+
+def _normalized_screen_bbox(value: object) -> dict[str, float] | None:
+    bbox = _mapping(value)
+    if not bbox:
+        return None
+    min_x = _float(bbox.get("minX"), math.nan)
+    min_y = _float(bbox.get("minY"), math.nan)
+    max_x = _float(bbox.get("maxX"), math.nan)
+    max_y = _float(bbox.get("maxY"), math.nan)
+    width = _float(bbox.get("width"), max_x - min_x)
+    height = _float(bbox.get("height"), max_y - min_y)
+    if not all(math.isfinite(item) for item in (min_x, min_y, max_x, max_y)):
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return {
+        "minX": round(min_x, 2),
+        "minY": round(min_y, 2),
+        "maxX": round(max_x, 2),
+        "maxY": round(max_y, 2),
+        "width": round(width, 2),
+        "height": round(height, 2),
+    }
+
+
+def _normalized_point(value: object) -> dict[str, float] | None:
+    point = _mapping(value)
+    if not point:
+        return None
+    x = _float(point.get("x"), math.nan)
+    y = _float(point.get("y"), math.nan)
+    if not math.isfinite(x) or not math.isfinite(y):
+        return None
+    return {"x": round(x, 2), "y": round(y, 2)}
 
 
 def _normalize_edit_operations(
@@ -2578,6 +3424,275 @@ def _normalize_bbox_norm(
         "y": round(y, 4),
         "width": round(width, 4),
         "height": round(height, 4),
+    }
+
+
+def _build_visibility_diagnostics(
+    snapshot_payload: Mapping[str, object],
+) -> dict[str, object]:
+    raw_visible = _sequence(snapshot_payload.get("visibleObjects"))
+    raw_all = _sequence(snapshot_payload.get("allObjects"))
+    visible_objects = [
+        item
+        for item in raw_visible
+        if isinstance(item, Mapping) and _string(item.get("id"))
+    ]
+    all_objects = [
+        item
+        for item in raw_all
+        if isinstance(item, Mapping) and _string(item.get("id"))
+    ]
+    fallback_objects = _fallback_visible_objects_from_all_objects(
+        snapshot_payload,
+        visible_objects=visible_objects,
+    )
+    opening_ids_missing_bbox = _opening_ids_missing_screen_bbox(snapshot_payload)
+    reasons: list[str] = []
+    if not visible_objects and all_objects:
+        reasons.append("visible_objects_empty_with_all_objects_present")
+    if fallback_objects:
+        reasons.append("all_objects_fallback_locked")
+    if opening_ids_missing_bbox:
+        reasons.append("opening_screen_bbox_missing")
+    declared_visible_count = _float(
+        snapshot_payload.get("visibleObjectCount"), math.nan
+    )
+    if math.isfinite(declared_visible_count) and int(declared_visible_count) != len(
+        visible_objects
+    ):
+        reasons.append("visible_object_count_mismatch")
+
+    return {
+        "status": "degraded" if reasons else "ok",
+        "declared_visible_object_count": (
+            int(declared_visible_count)
+            if math.isfinite(declared_visible_count)
+            else None
+        ),
+        "visible_object_count": len(visible_objects),
+        "all_object_count": len(all_objects),
+        "fallback_visible_object_count": len(fallback_objects),
+        "fallback_visible_object_ids": [
+            _string(item.get("id")) for item in fallback_objects
+        ],
+        "opening_bbox_missing_count": len(opening_ids_missing_bbox),
+        "opening_ids_missing_bbox": opening_ids_missing_bbox,
+        "reasons": reasons,
+    }
+
+
+def _snapshot_payload_with_effective_visible_objects(
+    snapshot_payload: Mapping[str, object],
+    *,
+    visibility_diagnostics: Mapping[str, object],
+) -> Mapping[str, object]:
+    visible_objects = [
+        item
+        for item in _sequence(snapshot_payload.get("visibleObjects"))
+        if isinstance(item, Mapping) and _string(item.get("id"))
+    ]
+    fallback_objects = _fallback_visible_objects_from_all_objects(
+        snapshot_payload,
+        visible_objects=visible_objects,
+    )
+    if not fallback_objects:
+        return snapshot_payload
+
+    effective_visible = [dict(item) for item in visible_objects]
+    seen_ids = {_string(item.get("id")) for item in effective_visible}
+    for item in fallback_objects:
+        object_id = _string(item.get("id"))
+        if object_id in seen_ids:
+            continue
+        effective_visible.append(dict(item))
+        seen_ids.add(object_id)
+
+    effective_payload = dict(snapshot_payload)
+    effective_payload["visibleObjects"] = effective_visible
+    effective_payload["visibleObjectCount"] = len(effective_visible)
+    effective_payload["visibilityDiagnostics"] = dict(visibility_diagnostics)
+    return effective_payload
+
+
+def _fallback_visible_objects_from_all_objects(
+    snapshot_payload: Mapping[str, object],
+    *,
+    visible_objects: list[Mapping[str, object]],
+) -> list[Mapping[str, object]]:
+    visible_ids = {_string(item.get("id")) for item in visible_objects}
+    all_objects = [
+        item
+        for item in _sequence(snapshot_payload.get("allObjects"))
+        if isinstance(item, Mapping) and _string(item.get("id"))
+    ]
+    if visible_objects:
+        return [
+            item
+            for item in all_objects
+            if _string(item.get("id")) not in visible_ids
+            and _normalized_screen_bbox(item.get("screenBboxPx")) is not None
+        ]
+    return all_objects[:40]
+
+
+def _opening_ids_missing_screen_bbox(
+    snapshot_payload: Mapping[str, object],
+) -> list[str]:
+    missing: list[str] = []
+    room = _mapping(snapshot_payload.get("room"))
+    openings = _mapping(room.get("openings"))
+    for opening_kind in ("doors", "windows"):
+        for index, opening in enumerate(_sequence(openings.get(opening_kind)), start=1):
+            if not isinstance(opening, Mapping):
+                continue
+            if _normalized_screen_bbox(opening.get("screenBboxPx")) is not None:
+                continue
+            opening_id = _string(
+                opening.get("id"),
+                fallback=f"{opening_kind[:-1]}_{index}",
+            )
+            missing.append(f"{opening_kind[:-1]}:{opening_id}")
+    return missing
+
+
+def _normalize_locked_geometry_references(
+    references: list[SnapshotLockedGeometryReference],
+) -> list[SnapshotLockedGeometryReference]:
+    normalized: list[SnapshotLockedGeometryReference] = []
+    for reference in references:
+        object_id = _string(reference.object_id)
+        if not object_id or reference.image_data_url is None:
+            continue
+        image_data_url = _normalize_image_data_url(reference.image_data_url)
+        normalized.append(
+            SnapshotLockedGeometryReference(
+                object_id=object_id,
+                object_name=_string(reference.object_name) or None,
+                image_data_url=image_data_url,
+                source=_string(reference.source) or None,
+                screen_bbox_px=_normalized_screen_bbox(reference.screen_bbox_px),
+            )
+        )
+    return normalized
+
+
+def _normalize_locked_geometry_atlases(
+    atlases: list[SnapshotLockedGeometryAtlas],
+) -> list[SnapshotLockedGeometryAtlas]:
+    normalized: list[SnapshotLockedGeometryAtlas] = []
+    for atlas_index, atlas in enumerate(atlases, start=1):
+        if atlas.image_data_url is None:
+            continue
+        image_data_url = _normalize_image_data_url(atlas.image_data_url)
+        normalized_objects: list[SnapshotLockedGeometryAtlasObject] = []
+        for item in atlas.objects or []:
+            object_id = _string(item.object_id)
+            if not object_id:
+                continue
+            normalized_objects.append(
+                SnapshotLockedGeometryAtlasObject(
+                    object_id=object_id,
+                    object_name=_string(item.object_name) or None,
+                    screen_bbox_px=_normalized_screen_bbox(item.screen_bbox_px),
+                    atlas_index=int(
+                        item.atlas_index or atlas.atlas_index or atlas_index
+                    ),
+                    cell_index=int(item.cell_index or len(normalized_objects) + 1),
+                    cell_label=_string(item.cell_label) or None,
+                    cell_bbox_norm=_normalize_bbox_norm(item.cell_bbox_norm),
+                )
+            )
+        if not normalized_objects:
+            continue
+        normalized.append(
+            SnapshotLockedGeometryAtlas(
+                atlas_index=int(atlas.atlas_index or atlas_index),
+                image_data_url=image_data_url,
+                source=_string(atlas.source) or None,
+                objects=normalized_objects,
+            )
+        )
+    return normalized
+
+
+def _serialize_locked_geometry_reference(
+    reference: SnapshotLockedGeometryReference,
+) -> dict[str, object]:
+    return {
+        "object_id": reference.object_id,
+        "object_name": reference.object_name,
+        "source": reference.source,
+        "screen_bbox_px": (
+            dict(reference.screen_bbox_px)
+            if isinstance(reference.screen_bbox_px, Mapping)
+            else None
+        ),
+        "image_provided": reference.image_data_url is not None,
+    }
+
+
+def _serialize_locked_geometry_atlas(
+    atlas: SnapshotLockedGeometryAtlas,
+) -> dict[str, object]:
+    return {
+        "atlas_index": atlas.atlas_index,
+        "source": atlas.source,
+        "image_provided": atlas.image_data_url is not None,
+        "object_count": len(atlas.objects or []),
+        "objects": [
+            {
+                "object_id": item.object_id,
+                "object_name": item.object_name,
+                "screen_bbox_px": (
+                    dict(item.screen_bbox_px)
+                    if isinstance(item.screen_bbox_px, Mapping)
+                    else None
+                ),
+                "atlas_index": item.atlas_index,
+                "cell_index": item.cell_index,
+                "cell_label": item.cell_label,
+                "cell_bbox_norm": (
+                    dict(item.cell_bbox_norm)
+                    if isinstance(item.cell_bbox_norm, Mapping)
+                    else None
+                ),
+            }
+            for item in atlas.objects or []
+        ],
+    }
+
+
+def _geometry_lock_metadata(
+    *,
+    locked_items: list[dict[str, object]],
+    atlases: list[SnapshotLockedGeometryAtlas],
+    references: list[SnapshotLockedGeometryReference],
+) -> dict[str, object]:
+    atlas_object_ids = {
+        item.object_id
+        for atlas in atlases
+        for item in (atlas.objects or [])
+        if item.object_id
+    }
+    legacy_object_ids = {reference.object_id for reference in references}
+    locked_object_ids = {
+        _string(item.get("id"))
+        for item in locked_items
+        if item.get("kind") == "object" and _string(item.get("id"))
+    }
+    omitted_ids = sorted(locked_object_ids - atlas_object_ids)
+    if atlases:
+        policy = "all_visible_objects_atlas"
+    elif references:
+        policy = "legacy_per_object_references"
+    else:
+        policy = "metadata_only"
+    return {
+        "locked_geometry_atlas_count": len(atlases),
+        "locked_geometry_object_count": len(atlas_object_ids),
+        "geometry_atlas_omitted_object_ids": omitted_ids,
+        "legacy_locked_geometry_object_count": len(legacy_object_ids),
+        "geometry_lock_policy": policy,
     }
 
 
@@ -2897,6 +4012,16 @@ def _positive_float(value: object, *, fallback: float) -> float:
     except (TypeError, ValueError):
         return fallback
     if numeric <= 0:
+        return fallback
+    return numeric
+
+
+def _float(value: object, fallback: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(numeric):
         return fallback
     return numeric
 

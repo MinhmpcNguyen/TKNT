@@ -1,0 +1,1430 @@
+[
+  {
+    "case_id": "simple_simple_living_01_4m0x5m0",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 5000
+        },
+        {
+          "x": 0,
+          "y": 5000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 5000
+              },
+              {
+                "x": 2800,
+                "y": 5000
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 4.0m x 5.0m. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.2m to 2.8m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 5000
+          },
+          {
+            "x": 0,
+            "y": 5000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 5000
+            },
+            {
+              "x": 2800,
+              "y": 5000
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_02_3m4x4m2",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 0
+        },
+        {
+          "x": 3400,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 510,
+                "y": 0
+              },
+              {
+                "x": 1410,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1100,
+                "y": 4200
+              },
+              {
+                "x": 2300,
+                "y": 4200
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 3.4m x 4.2m. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.1m to 2.3m.",
+        "room_type": "living_room",
+        "floor_area_m2": 14.28,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 0
+          },
+          {
+            "x": 3400,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 510,
+              "y": 0
+            },
+            {
+              "x": 1410,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1100,
+              "y": 4200
+            },
+            {
+              "x": 2300,
+              "y": 4200
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 7,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_03_4m5x4m5",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 0
+        },
+        {
+          "x": 4500,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1450,
+                "y": 4500
+              },
+              {
+                "x": 3050,
+                "y": 4500
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 4.5m x 4.5m. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.4m to 3.0m.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.25,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 0
+          },
+          {
+            "x": 4500,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1450,
+              "y": 4500
+            },
+            {
+              "x": 3050,
+              "y": 4500
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_04_5m2x3m8",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 0
+        },
+        {
+          "x": 5200,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1800,
+                "y": 3800
+              },
+              {
+                "x": 3400,
+                "y": 3800
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 5.2m x 3.8m. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.8m to 3.4m.",
+        "room_type": "living_room",
+        "floor_area_m2": 19.76,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 0
+          },
+          {
+            "x": 5200,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1800,
+              "y": 3800
+            },
+            {
+              "x": 3400,
+              "y": 3800
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 1,
+          "max": 2
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_living_05_3m0x3m6",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 450,
+                "y": 0
+              },
+              {
+                "x": 1350,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 900,
+                "y": 3600
+              },
+              {
+                "x": 2100,
+                "y": 3600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Living room, 3.0m x 3.6m. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 0.9m to 2.1m.",
+        "room_type": "living_room",
+        "floor_area_m2": 10.8,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 450,
+              "y": 0
+            },
+            {
+              "x": 1350,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 900,
+              "y": 3600
+            },
+            {
+              "x": 2100,
+              "y": 3600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 3,
+      "valid_blocking_count_max": 5,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        },
+        "armchair": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_01_3m0x4m0",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 0
+        },
+        {
+          "x": 3000,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 450,
+                "y": 0
+              },
+              {
+                "x": 1350,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 900,
+                "y": 4000
+              },
+              {
+                "x": 2100,
+                "y": 4000
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.0m x 4.0m. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 0.9m to 2.1m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 12,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 0
+          },
+          {
+            "x": 3000,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 450,
+              "y": 0
+            },
+            {
+              "x": 1350,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 900,
+              "y": 4000
+            },
+            {
+              "x": 2100,
+              "y": 4000
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_02_4m0x4m5",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 0
+        },
+        {
+          "x": 4000,
+          "y": 4500
+        },
+        {
+          "x": 0,
+          "y": 4500
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 4500
+              },
+              {
+                "x": 2800,
+                "y": 4500
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 4.0m x 4.5m. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.2m to 2.8m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 18,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 0
+          },
+          {
+            "x": 4000,
+            "y": 4500
+          },
+          {
+            "x": 0,
+            "y": 4500
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 4500
+            },
+            {
+              "x": 2800,
+              "y": 4500
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 10,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_03_3m2x3m6",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 0
+        },
+        {
+          "x": 3200,
+          "y": 3600
+        },
+        {
+          "x": 0,
+          "y": 3600
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 480,
+                "y": 0
+              },
+              {
+                "x": 1380,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1000,
+                "y": 3600
+              },
+              {
+                "x": 2200,
+                "y": 3600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.2m x 3.6m. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.0m to 2.2m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 11.52,
+        "height": 2500,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 3600
+          },
+          {
+            "x": 0,
+            "y": 3600
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 480,
+              "y": 0
+            },
+            {
+              "x": 1380,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1000,
+              "y": 3600
+            },
+            {
+              "x": 2200,
+              "y": 3600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        },
+        "chair": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_04_3m6x3m8",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 3800
+        },
+        {
+          "x": 0,
+          "y": 3800
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 540,
+                "y": 0
+              },
+              {
+                "x": 1440,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1200,
+                "y": 3800
+              },
+              {
+                "x": 2400,
+                "y": 3800
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 3.6m x 3.8m. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.2m to 2.4m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 13.68,
+        "height": 2600,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 3800
+          },
+          {
+            "x": 0,
+            "y": 3800
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 540,
+              "y": 0
+            },
+            {
+              "x": 1440,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1200,
+              "y": 3800
+            },
+            {
+              "x": 2400,
+              "y": 3800
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "simple_simple_bedroom_05_4m6x4m2",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 4200
+        },
+        {
+          "x": 0,
+          "y": 4200
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1500,
+                "y": 4200
+              },
+              {
+                "x": 3100,
+                "y": 4200
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Bedroom, 4.6m x 4.2m. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.5m to 3.1m.",
+        "room_type": "bedroom",
+        "floor_area_m2": 19.32,
+        "height": 2800,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 4200
+          },
+          {
+            "x": 0,
+            "y": 4200
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1500,
+              "y": 4200
+            },
+            {
+              "x": 3100,
+              "y": 4200
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 11,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "nightstand": {
+          "min": 1,
+          "max": 2
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 2
+        },
+        "armchair": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  }
+]

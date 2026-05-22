@@ -1,4 +1,7 @@
 export function normalizePlanRotationDeg(rotationDeg: number): number {
+  if (!Number.isFinite(rotationDeg)) {
+    return 0;
+  }
   return ((rotationDeg % 360) + 360) % 360;
 }
 
@@ -69,7 +72,8 @@ export function rotateVecCcw(
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
     return null;
   }
-  switch (normalizePlanRotationDeg(rotationDeg)) {
+  const normalized = normalizePlanRotationDeg(rotationDeg);
+  switch (normalized) {
     case 0:
       return { dx, dy };
     case 90:
@@ -79,8 +83,16 @@ export function rotateVecCcw(
     case 270:
       return { dx: dy, dy: -dx };
     default:
-      return null;
+      break;
   }
+
+  const radians = (normalized * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    dx: dx * cos - dy * sin,
+    dy: dx * sin + dy * cos,
+  };
 }
 
 export function frontWorldToLocalSide(
@@ -93,6 +105,10 @@ export function frontWorldToLocalSide(
 
 export function planRotationToYawRad(rotationDeg: number): number {
   return (normalizePlanRotationDeg(rotationDeg) * Math.PI) / 180;
+}
+
+export function planRotationToCanvasDeg(rotationDeg: number): number {
+  return -normalizePlanRotationDeg(rotationDeg);
 }
 
 export function planFrontWorldToYawRad(

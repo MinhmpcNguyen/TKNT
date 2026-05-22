@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import types
 import unittest
@@ -25,18 +26,23 @@ sys.modules.setdefault("ortools.sat.python", fake_python)
 sys.modules.setdefault("ortools.sat.python.cp_model", fake_cp_model)
 
 from agent.solver.solver import (  # noqa: E402
+    _anchor_pair_solution_score,
     _anchor_forbidden_overlap_exceeds_limit,
     _build_object_solver_world,
     _collect_cluster_forbidden_regions,
     _droppable_object_ids,
+    _front_matches_any_required_direction,
     _generate_anchor_pose_candidates,
     _materialize_object_row,
+    _near_wall_inward_front_options,
     _normalized_support_side_options,
     _object_level_face_pair_issues,
     _object_level_orientation_issues,
     _object_level_required_face_pairs,
+    _place_support_objects_for_solution,
     _repair_object_level_solution_geometry,
     _rect_inside_polygon,
+    _rect_inside_room_footprint,
     _search_anchor_solutions,
     _support_slot_relaxation_penalty,
     _support_slot_candidates,
@@ -44,6 +50,7 @@ from agent.solver.solver import (  # noqa: E402
     _wall_flush_origin_candidates,
     solve_object_level_layout,
 )
+from agent.seed_concept_generator import solver_plan_from_concept  # noqa: E402
 
 
 def _room_model() -> dict[str, object]:
@@ -126,6 +133,86 @@ def _object_program_cluster(
 
 
 class ObjectLevelSolverOrientationTest(unittest.TestCase):
+    def _support_slot_world(
+        self,
+        *,
+        side_options: list[str],
+        droppable_support: bool,
+        protected_support: bool,
+    ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+        cluster = _object_program_cluster(
+            cluster_id="main_seating",
+            object_id="sofa",
+            category="sofa",
+            dims={"L": 1000, "W": 600, "H": 800},
+            support_edges=[
+                {
+                    "object_id": "floor_lamp",
+                    "relative_to": "sofa",
+                    "side_options": side_options,
+                    "gap_min": 100,
+                    "gap_max": 100,
+                    "orientation": "same_direction",
+                }
+            ],
+        )
+        object_program = cluster["object_program"]
+        object_program["droppable_ids"] = ["floor_lamp"] if droppable_support else []
+        if protected_support:
+            object_program["protected_ids"] = ["sofa", "floor_lamp"]
+
+        room_model = _room_model()
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=None,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+        anchor_solution = {
+            "anchor_solution": {
+                "main_seating": {
+                    "cluster_id": "main_seating",
+                    "object_id": "sofa",
+                    "x": 2000,
+                    "y": 1500,
+                    "rot": 0,
+                    "rect": (2000, 1500, 3000, 2100),
+                    "candidate_score": 0.0,
+                }
+            },
+            "anchor_score": 0.0,
+            "dropped_inventory_by_cluster": {},
+        }
+        return room_model, world, anchor_solution
+
+    def _solve_case_first_concept(self, case_root: Path) -> dict[str, object]:
+        room_model = json.loads((case_root / "01_room_interpreter.json").read_text())
+        merged_clusters = json.loads((case_root / "04_cluster_merged.json").read_text())
+        cluster_constraints = json.loads(
+            (case_root / "02_cluster_forge.json").read_text()
+        )
+        concept_bundle = json.loads(
+            (case_root / "05c_seed_relation_plans.json").read_text()
+        )
+        concept = concept_bundle["concepts"][0]
+        room = (
+            room_model.get("room") if isinstance(room_model.get("room"), dict) else {}
+        )
+        relation_plan = solver_plan_from_concept(
+            concept=concept,
+            room_model_json=room_model,
+            room_type=str(room.get("room_type") or room_model.get("room_type") or ""),
+        )
+        return solve_object_level_layout(
+            room_model=room_model,
+            merged_clusters=merged_clusters,
+            relation_plan=relation_plan,
+            cluster_constraints=cluster_constraints,
+            grid_mm=50,
+            max_rounds=3,
+        )
+
     def test_rect_inside_polygon_accepts_interior_points_with_slanted_wall(
         self,
     ) -> None:
@@ -134,6 +221,46 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertTrue(_rect_inside_polygon((0, 0, 2060, 960), polygon))
         self.assertTrue(_rect_inside_polygon((1500, 1050, 2000, 1950), polygon))
         self.assertFalse(_rect_inside_polygon((5060, 1000, 5100, 2000), polygon))
+
+    def test_rectangular_room_footprint_uses_bbox_fast_path(self) -> None:
+        world = _build_object_solver_world(
+            room_model=_room_model(),
+            merged_clusters={"clusters": []},
+            relation_plan=None,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        self.assertTrue(world["room_polygon_is_axis_aligned_rectangle"])
+        self.assertTrue(_rect_inside_room_footprint((100, 100, 1200, 1000), world))
+        self.assertFalse(_rect_inside_room_footprint((-50, 100, 1200, 1000), world))
+
+    def test_non_rectangular_room_footprint_keeps_polygon_check(self) -> None:
+        l_room_model = {
+            "room": {
+                "room_id": "room_l",
+                "room_type": "living_room",
+                "polygon_ccw": [
+                    {"x": 0, "y": 0},
+                    {"x": 6000, "y": 0},
+                    {"x": 6000, "y": 4000},
+                    {"x": 3000, "y": 4000},
+                    {"x": 3000, "y": 2000},
+                    {"x": 0, "y": 2000},
+                ],
+            }
+        }
+        world = _build_object_solver_world(
+            room_model=l_room_model,
+            merged_clusters={"clusters": []},
+            relation_plan=None,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        self.assertFalse(world["room_polygon_is_axis_aligned_rectangle"])
+        self.assertTrue(_rect_inside_room_footprint((3500, 2500, 4500, 3500), world))
+        self.assertFalse(_rect_inside_room_footprint((500, 2500, 1500, 3500), world))
 
     def test_anchor_search_preserves_optional_trial_skip_branch(self) -> None:
         world = {
@@ -248,6 +375,153 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertEqual(bookshelf["rotation_ccw"], 180)
         self.assertTrue(result["hard_valid"])
 
+    def test_near_wall_front_access_anchor_candidates_face_inward(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "anchor_layout_hints_by_cluster": {
+                "storage": {
+                    "zone_assignment": "top_storage",
+                    "preferred_region_ids": ["top_storage"],
+                    "placement_behavior": {
+                        "wall_backing": "preferred",
+                        "front_space": "optional",
+                    },
+                }
+            },
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ],
+        }
+        world = _build_object_solver_world(
+            room_model=_room_model(),
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        candidates = _generate_anchor_pose_candidates(
+            cluster_program=world["clusters_by_id"]["storage"],
+            room_model=_room_model(),
+            relation_plan=relation_plan,
+            world=world,
+            grid_mm=50,
+        )
+
+        near_wall_candidates = [
+            candidate
+            for candidate in candidates
+            if world["room_bbox"][3] - candidate["rect"][3] <= 150
+        ]
+        self.assertTrue(near_wall_candidates)
+        for candidate in near_wall_candidates:
+            expected_fronts = _near_wall_inward_front_options(
+                rect=candidate["rect"],
+                room_bbox=world["room_bbox"],
+            )
+            front_world = candidate["front_world"]
+            self.assertTrue(expected_fronts)
+            self.assertTrue(
+                _front_matches_any_required_direction(
+                    front_world=(front_world["dx"], front_world["dy"]),
+                    desired_fronts=expected_fronts,
+                )
+            )
+
+    def test_near_wall_front_access_anchor_blocks_wall_facing_pose(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ]
+        }
+        wardrobe = _materialize_object_row(cluster, "wardrobe", 2800, 3450, 0)
+        world = {
+            "room_bbox": (0, 0, 6000, 4000),
+            "clusters_by_id": {"storage": cluster},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe]},
+            world=world,
+            room_model={},
+            relation_plan=relation_plan,
+        )
+
+        self.assertFalse(verify["hard_valid"])
+        self.assertFalse(verify["gallery_eligible"])
+        self.assertEqual(
+            verify["blocking_orientation_issues"][0]["reason"],
+            "near_wall_inward",
+        )
+        self.assertIn("front_inward_contract_failed", verify["quality_gate_reasons"])
+
+    def test_wall_contact_corner_accepts_any_inward_front(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ]
+        }
+        wardrobe = _materialize_object_row(cluster, "wardrobe", 4250, 3490, 180)
+        world = {
+            "room_bbox": (0, 0, 6000, 4000),
+            "clusters_by_id": {"storage": cluster},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe]},
+            world=world,
+            room_model={},
+            relation_plan=relation_plan,
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertEqual(verify["blocking_orientation_issues"], [])
+
     def test_lounge_support_seat_faces_base(self) -> None:
         merged_clusters = {
             "clusters": [
@@ -297,6 +571,116 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         dot = front["dx"] * dx + front["dy"] * dy
         self.assertGreater(dot, 0)
         self.assertTrue(result["hard_valid"])
+
+    def test_support_placement_prefers_front_access_safe_slots(self) -> None:
+        room_model, world, anchor_solution = self._support_slot_world(
+            side_options=["head", "left"],
+            droppable_support=False,
+            protected_support=False,
+        )
+
+        results = _place_support_objects_for_solution(
+            solution=anchor_solution,
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+            grid_mm=50,
+            max_solutions=4,
+        )
+
+        self.assertTrue(results)
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": results[0]["placed_objects"]},
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+        )
+        self.assertTrue(verify["front_access_ok"])
+
+    def test_droppable_support_drops_dirty_slots_before_repair(self) -> None:
+        room_model, world, anchor_solution = self._support_slot_world(
+            side_options=["head"],
+            droppable_support=True,
+            protected_support=False,
+        )
+
+        results = _place_support_objects_for_solution(
+            solution=anchor_solution,
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+            grid_mm=50,
+            max_solutions=4,
+        )
+
+        self.assertTrue(results)
+        placed_ids = {
+            str(row.get("object_id") or "")
+            for row in results[0]["placed_objects"]
+            if isinstance(row, dict)
+        }
+        self.assertNotIn("floor_lamp", placed_ids)
+        self.assertEqual(
+            results[0]["dropped_inventory_by_cluster"],
+            {
+                "main_seating": [
+                    {"object_id": "floor_lamp", "reason": "support_slot_failed"}
+                ]
+            },
+        )
+
+    def test_protected_support_keeps_repairable_dirty_slots(self) -> None:
+        room_model, world, anchor_solution = self._support_slot_world(
+            side_options=["head"],
+            droppable_support=True,
+            protected_support=True,
+        )
+
+        results = _place_support_objects_for_solution(
+            solution=anchor_solution,
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+            grid_mm=50,
+            max_solutions=4,
+        )
+
+        self.assertTrue(results)
+        placed_ids = {
+            str(row.get("object_id") or "")
+            for row in results[0]["placed_objects"]
+            if isinstance(row, dict)
+        }
+        self.assertIn("floor_lamp", placed_ids)
+        self.assertEqual(results[0]["dropped_inventory_by_cluster"], {})
+
+    def test_living_room_case_keeps_hard_valid_gallery_gate(self) -> None:
+        case_root = REPO_ROOT / "cases" / "user_f1a4e69d3672aab8_20260521T142836Z"
+        if not case_root.exists():
+            self.skipTest("local case artifact is unavailable")
+
+        result = self._solve_case_first_concept(case_root)
+
+        self.assertEqual(result["status"], "OK")
+        self.assertTrue(result["geometry_valid"])
+        self.assertTrue(result["hard_valid"])
+        self.assertTrue(result["gallery_eligible"])
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["coverage_ratio"], 1.0)
+
+    def test_bedroom_case_keeps_partial_geometry_complete_gate(self) -> None:
+        case_root = REPO_ROOT / "cases" / "user_f1a4e69d3672aab8_20260521T140710Z"
+        if not case_root.exists():
+            self.skipTest("local case artifact is unavailable")
+
+        result = self._solve_case_first_concept(case_root)
+
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertTrue(result["geometry_valid"])
+        self.assertFalse(result["hard_valid"])
+        self.assertFalse(result["gallery_eligible"])
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["coverage_ratio"], 1.0)
 
     def test_protected_center_overlap_is_ranked_fallback_not_unsat(self) -> None:
         merged_clusters = {
@@ -451,6 +835,111 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["reason"], "required_face_each_other_failed")
+
+    def test_object_viewing_pair_verifies_exact_requested_objects(self) -> None:
+        relation_plan = {
+            "object_viewing_pairs": [
+                {
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "relation": "face_each_other",
+                    "required": True,
+                }
+            ]
+        }
+
+        issues = _object_level_face_pair_issues(
+            placed_objects=[
+                {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "priority": "anchor",
+                    "rect": (0, 1050, 1690, 2960),
+                    "front_world": {"dx": 1, "dy": 0},
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "object_id": "tv_console",
+                    "priority": "anchor",
+                    "rect": (2500, 3500, 3760, 3880),
+                    "front_world": {"dx": 0, "dy": -1},
+                },
+                {
+                    "cluster_id": "storage_core",
+                    "object_id": "wardrobe",
+                    "priority": "anchor",
+                    "rect": (3900, 1150, 4410, 2900),
+                    "front_world": {"dx": -1, "dy": 0},
+                },
+            ],
+            relation_plan=relation_plan,
+        )
+
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["viewer_object_id"], "bed")
+        self.assertEqual(issues[0]["target_object_id"], "tv_console")
+        self.assertEqual(issues[0]["reason"], "required_face_each_other_failed")
+
+    def test_object_viewing_pair_score_prefers_tv_over_storage_decoy(self) -> None:
+        relation_plan = {
+            "object_viewing_pairs": [
+                {
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "relation": "face_each_other",
+                    "required": True,
+                }
+            ]
+        }
+        weak_solution = {
+            "sleep_core": {
+                "cluster_id": "sleep_core",
+                "object_id": "bed",
+                "rect": (0, 1050, 1690, 2960),
+                "front_world": {"dx": 1, "dy": 0},
+                "anchor_kind": "left_wall",
+            },
+            "media_optional": {
+                "cluster_id": "media_optional",
+                "object_id": "tv_console",
+                "rect": (2500, 3500, 3760, 3880),
+                "front_world": {"dx": 0, "dy": -1},
+                "anchor_kind": "top_wall",
+            },
+            "storage_core": {
+                "cluster_id": "storage_core",
+                "object_id": "wardrobe",
+                "rect": (3900, 1150, 4410, 2900),
+                "front_world": {"dx": -1, "dy": 0},
+                "anchor_kind": "right_wall",
+            },
+        }
+        strong_solution = {
+            "sleep_core": weak_solution["sleep_core"],
+            "media_optional": {
+                "cluster_id": "media_optional",
+                "object_id": "tv_console",
+                "rect": (3150, 1700, 4410, 2080),
+                "front_world": {"dx": -1, "dy": 0},
+                "anchor_kind": "right_wall",
+            },
+            "storage_core": {
+                "cluster_id": "storage_core",
+                "object_id": "wardrobe",
+                "rect": (2500, 3500, 3010, 4000),
+                "front_world": {"dx": 0, "dy": -1},
+                "anchor_kind": "top_wall",
+            },
+        }
+
+        self.assertGreater(
+            _anchor_pair_solution_score(strong_solution, relation_plan),
+            _anchor_pair_solution_score(weak_solution, relation_plan),
+        )
 
     def test_face_each_other_with_directional_alternative_is_not_required(self) -> None:
         relation_plan = {
@@ -1037,6 +1526,204 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             rows_by_cluster["sleep_core"]["zone_type"], "daylight_clearance_soft"
         )
         self.assertEqual(rows_by_cluster["storage_core"]["enforcement"], "hard")
+
+    def test_visual_storage_support_gets_object_specific_window_blocking(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="media",
+            object_id="tv_console",
+            category="tv_console",
+            dims={"L": 1640, "W": 400, "H": 350},
+            support_edges=[
+                {
+                    "object_id": "media_shelf",
+                    "relative_to": "tv_console",
+                    "side_options": ["left", "right"],
+                    "gap_min": 0,
+                    "gap_max": 200,
+                    "support_role": "wall_support",
+                    "band_intent": "wall_band",
+                    "orientation": "same_direction",
+                }
+            ],
+        )
+        object_program = cluster["object_program"]
+        object_program["zone_claims"] = {"avoid_regions": ["window_1_daylight"]}
+        object_program["object_specs_by_id"]["media_shelf"]["rep_dims_mm"] = {
+            "L": 870,
+            "W": 300,
+            "H": 1360,
+        }
+
+        rows = _collect_cluster_forbidden_regions(
+            clusters_by_id={"media": cluster},
+            room_model=_room_model(),
+            relation_plan={},
+            region_index={
+                "window_1_clearance": (1100, 3850, 3100, 4000),
+                "window_1_daylight": (900, 2600, 3300, 4000),
+            },
+        )
+
+        shelf_rows = [
+            row for row in rows if str(row.get("object_id") or "") == "media_shelf"
+        ]
+        self.assertEqual(
+            {str(row["region_id"]) for row in shelf_rows},
+            {"window_1_clearance", "window_1_daylight"},
+        )
+        self.assertTrue(all(str(row["enforcement"]) == "hard" for row in shelf_rows))
+        self.assertFalse(
+            any(str(row.get("object_id") or "") == "tv_console" for row in rows)
+        )
+        cluster_daylight = next(
+            row
+            for row in rows
+            if str(row["region_id"]) == "window_1_daylight"
+            and not str(row.get("object_id") or "")
+        )
+        self.assertEqual(cluster_daylight["enforcement"], "soft")
+
+    def test_object_specific_window_blocking_does_not_apply_to_low_console(
+        self,
+    ) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="media",
+            object_id="tv_console",
+            category="tv_console",
+            dims={"L": 1640, "W": 400, "H": 350},
+            support_edges=[
+                {
+                    "object_id": "media_shelf",
+                    "relative_to": "tv_console",
+                    "side_options": ["left"],
+                    "gap_min": 0,
+                    "gap_max": 0,
+                    "support_role": "wall_support",
+                    "band_intent": "wall_band",
+                    "orientation": "same_direction",
+                }
+            ],
+        )
+        cluster["object_program"]["object_specs_by_id"]["media_shelf"][
+            "rep_dims_mm"
+        ] = {"L": 870, "W": 300, "H": 1360}
+        world = _build_object_solver_world(
+            room_model={
+                "room": _room_model()["room"],
+                "regions": [
+                    {
+                        "id": "window_1_clearance",
+                        "bbox": {
+                            "min_x": 1100,
+                            "min_y": 3850,
+                            "max_x": 3100,
+                            "max_y": 4000,
+                        },
+                    }
+                ],
+            },
+            merged_clusters={"clusters": [cluster]},
+            relation_plan={},
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+        tv_console = _materialize_object_row(cluster, "tv_console", 1400, 3600, 180)
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [tv_console]},
+            world=world,
+            room_model={},
+            relation_plan={},
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertEqual(verify["blocking_forbidden_region_issues"], [])
+
+    def test_droppable_visual_storage_support_drops_window_blocking_slot(
+        self,
+    ) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="media",
+            object_id="tv_console",
+            category="tv_console",
+            dims={"L": 1000, "W": 300, "H": 350},
+            support_edges=[
+                {
+                    "object_id": "media_shelf",
+                    "relative_to": "tv_console",
+                    "side_options": ["left"],
+                    "gap_min": 0,
+                    "gap_max": 0,
+                    "support_role": "wall_support",
+                    "band_intent": "wall_band",
+                    "orientation": "same_direction",
+                }
+            ],
+        )
+        object_program = cluster["object_program"]
+        object_program["droppable_ids"] = ["media_shelf"]
+        object_program["object_specs_by_id"]["media_shelf"]["rep_dims_mm"] = {
+            "L": 870,
+            "W": 300,
+            "H": 1360,
+        }
+        room_model = {
+            "room": _room_model()["room"],
+            "regions": [
+                {
+                    "id": "window_1_clearance",
+                    "bbox": {
+                        "min_x": 1100,
+                        "min_y": 3400,
+                        "max_x": 2100,
+                        "max_y": 4000,
+                    },
+                }
+            ],
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan={},
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+        anchor_solution = {
+            "anchor_solution": {
+                "media": {
+                    "cluster_id": "media",
+                    "object_id": "tv_console",
+                    "x": 2000,
+                    "y": 3600,
+                    "rot": 180,
+                    "rect": (2000, 3600, 3000, 3900),
+                    "candidate_score": 0.0,
+                }
+            },
+            "anchor_score": 0.0,
+            "dropped_inventory_by_cluster": {},
+        }
+
+        results = _place_support_objects_for_solution(
+            solution=anchor_solution,
+            world=world,
+            room_model=room_model,
+            relation_plan={},
+            grid_mm=50,
+            max_solutions=4,
+        )
+
+        self.assertTrue(results)
+        placed_ids = {
+            str(row.get("object_id") or "")
+            for row in results[0]["placed_objects"]
+            if isinstance(row, dict)
+        }
+        self.assertNotIn("media_shelf", placed_ids)
+        self.assertEqual(
+            results[0]["dropped_inventory_by_cluster"],
+            {"media": [{"object_id": "media_shelf", "reason": "support_slot_failed"}]},
+        )
 
     def test_tall_clusters_auto_avoid_window_clearance(self) -> None:
         low_cluster = _object_program_cluster(

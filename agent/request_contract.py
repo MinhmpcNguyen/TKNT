@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -9,6 +10,8 @@ from layout.room_profiles.registry import (
     all_profile_non_functional_contract_types,
     all_profile_object_aliases,
 )
+
+_REQUEST_CONTRACT_LLM_ENV = "TKNT_REQUEST_CONTRACT_LLM"
 
 _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
@@ -185,19 +188,37 @@ def sanitize_request_contract(
             brief_text=brief_text,
             available_object_types=available_object_types,
         )
+    objects, backfilled_non_functional_types = (
+        _append_missing_non_functional_contract_objects(
+            objects=objects,
+            text=text,
+            available_object_types=available,
+        )
+    )
+    objects = sorted(
+        objects,
+        key=lambda row: (
+            _intent_rank(str(row.get("intent") or "")),
+            str(row.get("object_type") or ""),
+        ),
+    )
 
     source = str(contract.get("source") or "llm_request_contract").strip()
+    notes = [
+        *_coerce_note_strings(contract.get("notes")),
+        "Request contract was normalized before tier-count enforcement.",
+    ]
+    if backfilled_non_functional_types:
+        notes.append(
+            "Requested non-functional objects were restored for downstream placement: "
+            + ", ".join(backfilled_non_functional_types)
+        )
     return {
         "version": 1,
         "source": source,
         "objects": objects,
         "groups": _sanitize_contract_groups(contract.get("groups"), objects),
-        "notes": _dedupe_strings(
-            [
-                *_coerce_note_strings(contract.get("notes")),
-                "Request contract was normalized before tier-count enforcement.",
-            ]
-        ),
+        "notes": _dedupe_strings(notes),
     }
 
 
@@ -209,13 +230,27 @@ def attach_request_contract_to_semantic_program(
     out = deepcopy(dict(semantic_program))
     available_object_types = _semantic_program_object_types(out)
     existing_contract = out.get("request_contract")
+    request_contract_llm_enabled = _request_contract_llm_enabled()
     if isinstance(existing_contract, Mapping):
         contract = sanitize_request_contract(
             existing_contract,
             brief_text=brief_text,
             available_object_types=available_object_types,
-            fallback_to_heuristic=True,
+            fallback_to_heuristic=not request_contract_llm_enabled,
         )
+    elif request_contract_llm_enabled:
+        contract = {
+            "version": 1,
+            "source": "llm_request_contract_missing",
+            "objects": [],
+            "groups": [],
+            "notes": [
+                (
+                    "Request contract LLM mode was enabled, but no LLM request "
+                    "contract was attached; heuristic fallback was skipped."
+                )
+            ],
+        }
     else:
         contract = build_request_contract(
             brief_text=brief_text,
@@ -524,32 +559,32 @@ def _sanitize_contract_object(
 
     intent = _normalize_contract_intent(item.get("intent"))
     low, high = _count_hint(_normalize_text(evidence))
+    min_keep = max(0, _int_value(item.get("min_keep"), default=0))
+    default_target = max(1, high or low or min_keep or 1)
     target_count = _positive_int(
         item.get("target_count", item.get("preferred_count")),
-        default=high or low or 1,
+        default=default_target,
     )
     raw_max_keep = item.get("max_keep")
     max_keep = (
         max(0, _int_value(raw_max_keep, default=target_count))
         if raw_max_keep is not None
-        else high or target_count
+        else max(target_count, high or 0, min_keep)
     )
-    min_keep = max(0, _int_value(item.get("min_keep"), default=0))
 
     if intent == "max0":
         min_keep = 0
         target_count = 0
         max_keep = 0
     elif intent in _HARD_CONTRACT_INTENTS:
-        min_keep = max(1, min_keep or low)
+        min_keep = max(1, min_keep)
         target_count = max(target_count, min_keep)
+        max_keep = max(max_keep, target_count)
     elif intent in _SOFT_CONTRACT_INTENTS:
-        min_keep = 0
-        target_count = max(1, target_count)
+        target_count = max(1, target_count, min_keep)
+        max_keep = max(max_keep, target_count)
 
-    if max_keep is not None:
-        target_count = min(target_count, max_keep)
-        min_keep = min(min_keep, max_keep)
+    max_keep = max(max_keep, target_count, min_keep)
 
     return {
         "object_type": object_type,
@@ -563,6 +598,39 @@ def _sanitize_contract_object(
         "available_in_program": object_type in available_object_types,
         "confidence": _confidence_value(item.get("confidence")),
     }
+
+
+def _append_missing_non_functional_contract_objects(
+    *,
+    objects: Sequence[dict[str, Any]],
+    text: str,
+    available_object_types: set[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    existing_types = {
+        canonical_object_type(str(item.get("object_type") or ""))
+        for item in objects
+        if isinstance(item, Mapping)
+    }
+    heuristic_contract = build_request_contract(
+        brief_text=text,
+        available_object_types=available_object_types,
+    )
+    out = [dict(item) for item in objects]
+    restored_types: list[str] = []
+    for item in _contract_objects(heuristic_contract):
+        object_type = canonical_object_type(str(item.get("object_type") or ""))
+        if (
+            not object_type
+            or object_type in existing_types
+            or object_type not in _NON_FUNCTIONAL_CONTRACT_TYPES
+        ):
+            continue
+        restored = dict(item)
+        restored["available_in_program"] = object_type in available_object_types
+        out.append(restored)
+        existing_types.add(object_type)
+        restored_types.append(object_type)
+    return out, restored_types
 
 
 def _sanitize_evidence(
@@ -679,6 +747,15 @@ def _reason_for_intent(intent: str) -> str:
 
 def _normalize_text(text: str) -> str:
     return " ".join(str(text or "").lower().replace("-", " ").split())
+
+
+def _request_contract_llm_enabled() -> bool:
+    return os.getenv(_REQUEST_CONTRACT_LLM_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _alias_matches(normalized: str, alias: str) -> bool:

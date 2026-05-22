@@ -48,7 +48,7 @@ export const AuthScreen: React.FC = () => {
           <div>
             <h1>TKNT Floorplan Editor</h1>
             <p>
-              Sign in to save layouts, keep your Gemini renders, and add custom 3D
+              Sign in to save layouts, keep your image renders, and add custom 3D
               objects beside the shared inventory.
             </p>
           </div>

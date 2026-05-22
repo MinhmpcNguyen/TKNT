@@ -1,0 +1,778 @@
+{
+  "case_id": "simple_living_03_family_media__tknt_full",
+  "stage": "done",
+  "updated_at_utc": "2026-05-21T03:23:51.402713+00:00",
+  "message": "5/5 final layout options ready.",
+  "progress_current": 5,
+  "progress_total": 5,
+  "actions": [
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-20T09:42:18.278749+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "stylist_style_policy",
+      "message": "stylist_style_policy",
+      "updated_at_utc": "2026-05-20T09:42:18.280799+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-05-20T09:42:19.605862+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-05-20T09:42:42.422056+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_output_merger",
+      "message": "cluster_output_merger",
+      "updated_at_utc": "2026-05-20T09:42:42.562399+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-05-20T09:42:42.567510+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T09:42:42.578496+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T09:43:09.185471+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T09:43:09.185894+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T09:43:41.810620+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T09:43:41.811154+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T09:43:50.595960+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T09:43:50.596684+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T09:44:22.491176+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T09:44:22.492061+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T09:44:42.459396+00:00",
+      "progress_current": 120,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 0/5",
+      "updated_at_utc": "2026-05-20T09:44:42.972706+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 1/5",
+      "updated_at_utc": "2026-05-20T09:44:46.801524+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 2/5",
+      "updated_at_utc": "2026-05-20T09:44:51.146681+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 3/5",
+      "updated_at_utc": "2026-05-20T09:44:54.086608+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 4/5",
+      "updated_at_utc": "2026-05-20T09:44:58.505612+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 5/5",
+      "updated_at_utc": "2026-05-20T09:45:01.734650+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "layout_variants",
+      "message": "Assembling final gallery 0/1",
+      "updated_at_utc": "2026-05-20T09:45:01.735008+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "5/5 final layout options ready.",
+      "updated_at_utc": "2026-05-20T09:45:01.799913+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-20T15:18:59.400860+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "stylist_style_policy",
+      "message": "stylist_style_policy",
+      "updated_at_utc": "2026-05-20T15:18:59.404281+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-05-20T15:19:01.261570+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-05-20T15:19:27.070406+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_output_merger",
+      "message": "cluster_output_merger",
+      "updated_at_utc": "2026-05-20T15:19:27.306470+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-05-20T15:19:27.313987+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T15:19:27.332766+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T15:20:18.532606+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T15:20:18.533510+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T15:21:13.805323+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T15:21:13.806426+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T15:21:39.591632+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T15:21:39.592755+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T15:22:24.764016+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T15:22:24.764920+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T15:23:00.324394+00:00",
+      "progress_current": 120,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 0/5",
+      "updated_at_utc": "2026-05-20T15:23:01.141124+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 1/5",
+      "updated_at_utc": "2026-05-20T15:23:04.648380+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 2/5",
+      "updated_at_utc": "2026-05-20T15:23:08.340892+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 3/5",
+      "updated_at_utc": "2026-05-20T15:23:12.349576+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 4/5",
+      "updated_at_utc": "2026-05-20T15:23:15.944208+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 5/5",
+      "updated_at_utc": "2026-05-20T15:23:19.787643+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "layout_variants",
+      "message": "Assembling final gallery 0/1",
+      "updated_at_utc": "2026-05-20T15:23:19.788184+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "5/5 final layout options ready.",
+      "updated_at_utc": "2026-05-20T15:23:19.941037+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-20T16:16:33.616287+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "stylist_style_policy",
+      "message": "stylist_style_policy",
+      "updated_at_utc": "2026-05-20T16:16:33.619959+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-05-20T16:16:35.906740+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-05-20T16:16:59.285596+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_output_merger",
+      "message": "cluster_output_merger",
+      "updated_at_utc": "2026-05-20T16:16:59.703745+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-05-20T16:16:59.711647+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T16:16:59.728838+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:06.457328+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T16:17:06.458317+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:11.426989+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T16:17:11.427988+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:14.585836+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T16:17:14.586881+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:19.462932+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-20T16:17:19.463945+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:26.464819+00:00",
+      "progress_current": 120,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 0/5",
+      "updated_at_utc": "2026-05-20T16:17:27.247875+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 1/5",
+      "updated_at_utc": "2026-05-20T16:17:31.056674+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 2/5",
+      "updated_at_utc": "2026-05-20T16:17:34.293990+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 3/5",
+      "updated_at_utc": "2026-05-20T16:17:37.834858+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 4/5",
+      "updated_at_utc": "2026-05-20T16:17:41.099572+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 5/5",
+      "updated_at_utc": "2026-05-20T16:17:44.220693+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "layout_variants",
+      "message": "Assembling final gallery 0/1",
+      "updated_at_utc": "2026-05-20T16:17:44.221295+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "5/5 final layout options ready.",
+      "updated_at_utc": "2026-05-20T16:17:44.314447+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "room_interpreter",
+      "message": "room_interpreter",
+      "updated_at_utc": "2026-05-21T03:22:34.608343+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "stylist_style_policy",
+      "message": "stylist_style_policy",
+      "updated_at_utc": "2026-05-21T03:22:34.613578+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_forge",
+      "message": "cluster_forge",
+      "updated_at_utc": "2026-05-21T03:22:36.404833+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "tier_count",
+      "message": "tier_count",
+      "updated_at_utc": "2026-05-21T03:22:58.631448+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_output_merger",
+      "message": "cluster_output_merger",
+      "updated_at_utc": "2026-05-21T03:22:58.825891+00:00",
+      "progress_current": null,
+      "progress_total": null,
+      "error": null
+    },
+    {
+      "stage": "cluster_relation_planner",
+      "message": "Planning layout concepts 0/5",
+      "updated_at_utc": "2026-05-21T03:22:58.833428+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 1/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-21T03:22:58.854437+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:01.923952+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 2/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-21T03:23:01.925087+00:00",
+      "progress_current": 24,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:06.794205+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 3/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-21T03:23:06.795600+00:00",
+      "progress_current": 48,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:09.910355+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 4/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-21T03:23:09.911488+00:00",
+      "progress_current": 72,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:25.290671+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Concept 5/5: solving object-level anchor-first layout.",
+      "updated_at_utc": "2026-05-21T03:23:25.293805+00:00",
+      "progress_current": 96,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "solver",
+      "message": "Solving layout concepts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:31.220491+00:00",
+      "progress_current": 120,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 0/5",
+      "updated_at_utc": "2026-05-21T03:23:32.096734+00:00",
+      "progress_current": 0,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 1/5",
+      "updated_at_utc": "2026-05-21T03:23:35.636909+00:00",
+      "progress_current": 1,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 2/5",
+      "updated_at_utc": "2026-05-21T03:23:38.996708+00:00",
+      "progress_current": 2,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 3/5",
+      "updated_at_utc": "2026-05-21T03:23:42.484461+00:00",
+      "progress_current": 3,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 4/5",
+      "updated_at_utc": "2026-05-21T03:23:47.443942+00:00",
+      "progress_current": 4,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "stylist",
+      "message": "Styling final layouts 5/5",
+      "updated_at_utc": "2026-05-21T03:23:51.302012+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    },
+    {
+      "stage": "layout_variants",
+      "message": "Assembling final gallery 0/1",
+      "updated_at_utc": "2026-05-21T03:23:51.302780+00:00",
+      "progress_current": 0,
+      "progress_total": 1,
+      "error": null
+    },
+    {
+      "stage": "done",
+      "message": "5/5 final layout options ready.",
+      "updated_at_utc": "2026-05-21T03:23:51.402713+00:00",
+      "progress_current": 5,
+      "progress_total": 5,
+      "error": null
+    }
+  ]
+}

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
+
+_REQUEST_CONTRACT_LLM_ENV = "TKNT_REQUEST_CONTRACT_LLM"
 
 _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
@@ -202,13 +205,27 @@ def attach_request_contract_to_semantic_program(
     out = deepcopy(dict(semantic_program))
     available_object_types = _semantic_program_object_types(out)
     existing_contract = out.get("request_contract")
+    request_contract_llm_enabled = _request_contract_llm_enabled()
     if isinstance(existing_contract, Mapping):
         contract = sanitize_request_contract(
             existing_contract,
             brief_text=brief_text,
             available_object_types=available_object_types,
-            fallback_to_heuristic=True,
+            fallback_to_heuristic=not request_contract_llm_enabled,
         )
+    elif request_contract_llm_enabled:
+        contract = {
+            "version": 1,
+            "source": "llm_request_contract_missing",
+            "objects": [],
+            "groups": [],
+            "notes": [
+                (
+                    "Request contract LLM mode was enabled, but no LLM request "
+                    "contract was attached; heuristic fallback was skipped."
+                )
+            ],
+        }
     else:
         contract = build_request_contract(
             brief_text=brief_text,
@@ -635,6 +652,15 @@ def _reason_for_intent(intent: str) -> str:
 
 def _normalize_text(text: str) -> str:
     return " ".join(str(text or "").lower().replace("-", " ").split())
+
+
+def _request_contract_llm_enabled() -> bool:
+    return os.getenv(_REQUEST_CONTRACT_LLM_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _alias_matches(normalized: str, alias: str) -> bool:

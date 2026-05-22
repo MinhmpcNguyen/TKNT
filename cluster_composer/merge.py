@@ -73,10 +73,7 @@ def merge_cluster_outputs(
             members = []
 
         member_ids = [
-            member
-            for member in members
-            if isinstance(member, str)
-            and member.strip()
+            member for member in members if isinstance(member, str) and member.strip()
         ]
         kept_members = [
             member
@@ -319,9 +316,9 @@ def _decision_has_valid_rep_dims(decision: dict[str, Any]) -> bool:
         else {}
     )
     try:
-        return float(rep_dims.get("L") or 0.0) > 0 and float(
-            rep_dims.get("W") or 0.0
-        ) > 0
+        return (
+            float(rep_dims.get("L") or 0.0) > 0 and float(rep_dims.get("W") or 0.0) > 0
+        )
     except (TypeError, ValueError):
         return False
 
@@ -460,7 +457,7 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
                 and not bool(decision.get("droppable"))
                 and quantity_index == 1
             )
-            droppable = bool(decision.get("droppable")) or not required
+            droppable = not required
             expanded_ids_by_base.setdefault(base_object_id, []).append(object_id)
             facing_row = facing.get(object_id) or facing.get(base_object_id) or {}
             if not isinstance(facing_row, dict):
@@ -481,7 +478,7 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
                     "H": height_mm,
                 },
                 "source_id": str(rep_dims.get("source_id") or ""),
-                "protected": bool(decision.get("protected")) and required,
+                "protected": required,
                 "droppable": droppable,
                 "budget_trial": bool(decision.get("budget_trial")),
                 "solver_trial": bool(decision.get("solver_trial")),
@@ -571,6 +568,30 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
         expanded_ids_by_base,
         primary_only=True,
     )
+    expanded_policy_protected_ids = _expand_id_list(protected_ids, expanded_ids_by_base)
+    expanded_policy_droppable_ids = _expand_id_list(droppable_ids, expanded_ids_by_base)
+    final_protected_ids = _stable_unique(
+        [
+            item
+            for item in [*expanded_policy_protected_ids, *required_ids]
+            if item in member_set
+            and bool(object_specs_by_id.get(item, {"protected": True}).get("protected"))
+        ]
+    )
+    final_protected_id_set = set(final_protected_ids)
+    final_droppable_ids = _stable_unique(
+        [
+            item
+            for item in expanded_policy_droppable_ids
+            if item in member_set
+            and item not in final_protected_id_set
+            and bool(object_specs_by_id.get(item, {"droppable": True}).get("droppable"))
+        ]
+    )
+    final_droppable_id_set = set(final_droppable_ids)
+    for object_id, spec in object_specs_by_id.items():
+        spec["protected"] = object_id in final_protected_id_set
+        spec["droppable"] = object_id in final_droppable_id_set
 
     return {
         "cluster_id": cluster_id,
@@ -584,16 +605,8 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
         ),
         "placement_order": [item for item in placement_order if item in member_set],
         "support_edges": support_edges,
-        "protected_ids": [
-            item
-            for item in _expand_id_list(protected_ids, expanded_ids_by_base)
-            if item in member_set
-        ],
-        "droppable_ids": [
-            item
-            for item in _expand_id_list(droppable_ids, expanded_ids_by_base)
-            if item in member_set
-        ],
+        "protected_ids": final_protected_ids,
+        "droppable_ids": final_droppable_ids,
         "degradation_ladder": _expand_degradation_ladder(
             _string_list(rules.get("degradation_ladder")),
             expanded_ids_by_base,

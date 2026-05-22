@@ -1,0 +1,55 @@
+{
+  "status": "UNCHANGED",
+  "module": "controlled_accessory_refill",
+  "refill_applied": false,
+  "total_dropped_items": 2,
+  "eligible_accessory_count": 0,
+  "rejected_count": 2,
+  "refill_count": 0,
+  "inserted_count": 0,
+  "remaining_count": 0,
+  "safe_zone_count": 8,
+  "refill_objects_by_cluster": {},
+  "remaining_refill_objects_by_cluster": {},
+  "rejected_refill_objects_by_cluster": {
+    "main_seating": [
+      {
+        "object_id": "armchair_2",
+        "reason": "support_slot_failed",
+        "refill_rejected_reason": "not_accessory_or_decor"
+      }
+    ],
+    "media": [
+      {
+        "object_id": "media_shelf",
+        "reason": "support_slot_failed",
+        "refill_rejected_reason": "not_accessory_or_decor"
+      }
+    ]
+  },
+  "quality_before": {
+    "functionality": 1.0,
+    "naturalness": 0.92,
+    "semantic": 0.92,
+    "spatial": 1.0,
+    "total": 0.964
+  },
+  "quality_after": {
+    "functionality": 1.0,
+    "naturalness": 0.92,
+    "semantic": 0.92,
+    "spatial": 1.0,
+    "total": 0.964
+  },
+  "hard_valid": true,
+  "notes": [],
+  "settings": {
+    "max_refills_total": 2,
+    "max_candidates_per_object": 6,
+    "max_safe_zones": 8,
+    "grid_mm": 25,
+    "max_refill_iterations": 1,
+    "max_accessory_footprint_ratio": 0.015,
+    "min_quality_gain_to_accept": 0.002
+  }
+}

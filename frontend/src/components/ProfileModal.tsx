@@ -11,19 +11,27 @@ type ProfileModalProps = {
   onClose: () => void;
 };
 
-type RenderMode = 'generate' | 'edit' | 'unknown';
+type RenderMode = 'generate' | 'edit' | 'camera_rerender' | 'unknown';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function getSavedRenderMode(render: GeneratedRenderRecord): RenderMode {
-  if (render.meta.render_mode === 'generate' || render.meta.render_mode === 'edit') {
+  if (
+    render.meta.render_mode === 'generate' ||
+    render.meta.render_mode === 'edit' ||
+    render.meta.render_mode === 'camera_rerender'
+  ) {
     return render.meta.render_mode;
   }
   if (isRecord(render.meta.request)) {
     const requestMode = render.meta.request.render_mode;
-    if (requestMode === 'generate' || requestMode === 'edit') {
+    if (
+      requestMode === 'generate' ||
+      requestMode === 'edit' ||
+      requestMode === 'camera_rerender'
+    ) {
       return requestMode;
     }
   }

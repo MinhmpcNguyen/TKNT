@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from agent.request_contract import build_request_contract, sanitize_request_contract
+from agent.request_contract import sanitize_request_contract
 from agent_schema.semantic_layout_planner_schema import SemanticLayoutProgram
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
@@ -144,8 +144,11 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
         task_prompt=(
             "Read the brief and produce a request contract for downstream deterministic tier-count. "
             "Classify each explicitly requested object as hard required, viable target, optional surplus, or forbidden. "
-            "Use `must_keep` only when the user directly asks to include/need/use the object without fit-dependent wording. "
-            "Use `target_if_viable` for wording such as if possible, if it fits, one or two where possible, or balanced composition goals. "
+            "Include explicitly requested decor, floor, mounted, or lighting objects such as rugs and ceiling lamps even when they are not functional furniture anchors. "
+            "Use `must_keep` when the user directly asks to include/need/use an object as a non-negotiable item. "
+            "Use `target_if_viable` when the user gives a desired target that may be partially reduced after the hard floor is met. "
+            "For bounded ranges such as one or two nightstands, encode the lower bound as `min_keep` and the preferred upper count as `target_count`. "
+            "For fit-dependent wording such as if possible, if it fits, only if there is enough space, or where possible, decide whether the phrase makes the object entirely optional by setting `min_keep=0`. "
             "Use `optional_if_surplus` for only-if-space/surplus wording. "
             "Use `max0` for explicit no/avoid/without wording. "
             "Prefer no group over a weak group; include groups only when the brief describes a composition or functional pairing."
@@ -155,9 +158,10 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "Each object must contain `object_type`, `intent`, `min_keep`, `target_count`, `max_keep`, `evidence`, `reason`, and `confidence`. "
             "`intent` must be one of `must_keep`, `target_if_viable`, `optional_if_surplus`, or `max0`. "
             "`evidence` must be a short exact phrase from the brief. "
-            "`min_keep` is a hard floor; set it to 0 for `target_if_viable` and `optional_if_surplus`. "
+            "`min_keep` is a hard floor chosen from the brief; it may be greater than 0 for `target_if_viable` when the brief provides a mandatory lower bound. "
             "`target_count` is the desired count when spatially viable. "
             "`max_keep` is the upper bound implied by the brief, or equal to `target_count` when no range is implied. "
+            "Maintain `0 <= min_keep <= target_count <= max_keep`; for `max0`, all three counts must be 0. "
             "Use only object types from `program_object_types` or `inventory_object_types`, unless the brief explicitly names a common synonym. "
             "Groups are optional and each group must contain `group_id`, `members`, `intent`, `priority`, and `drop_policy`."
         ),
@@ -799,7 +803,7 @@ class SemanticLayoutPlanner:
                 response,
                 brief_text=brief_text,
                 available_object_types=program_object_types,
-                fallback_to_heuristic=True,
+                fallback_to_heuristic=False,
             )
             contract["source"] = "llm_request_contract"
             notes = _merge_notes(
@@ -808,18 +812,30 @@ class SemanticLayoutPlanner:
             )
         except Exception as exc:
             logger.warning(
-                "Adaptive request contract failed; using heuristic fallback: %s",
+                "Adaptive request contract failed; skipping heuristic fallback: %s",
                 exc,
             )
-            contract = build_request_contract(
+            contract = sanitize_request_contract(
+                {
+                    "source": "llm_request_contract_failed",
+                    "objects": [],
+                    "groups": [],
+                    "notes": [
+                        (
+                            "Request contract LLM failed; heuristic fallback was "
+                            "skipped because TKNT_REQUEST_CONTRACT_LLM is enabled."
+                        )
+                    ],
+                },
                 brief_text=brief_text,
                 available_object_types=program_object_types,
+                fallback_to_heuristic=False,
             )
             notes = _merge_notes(
                 [
                     (
                         "Request contract LLM failed; heuristic request contract "
-                        "fallback was used."
+                        "fallback was skipped."
                     )
                 ],
                 out.get("notes"),

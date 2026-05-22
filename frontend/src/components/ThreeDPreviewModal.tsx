@@ -31,6 +31,7 @@ type RenderObject = {
   frontSideWorld?: unknown;
   frontSideLocal?: unknown;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
+  placementFootprintMm?: { w: number; d: number } | null;
   placeOn?: { method: string; targetId?: string | null } | null;
   reintroduced?: boolean;
 };
@@ -194,6 +195,7 @@ export const ThreeDPreviewModal: React.FC = () => {
           frontSideWorld,
           frontSideLocal,
           bbox,
+          placementFootprintMm: placement?.footprint_mm ?? null,
           placeOn: obj.place_on
             ? {
               method: String(obj.place_on.method ?? 'floor'),
@@ -222,6 +224,7 @@ export const ThreeDPreviewModal: React.FC = () => {
           frontSideWorld: placement.front_side_world ?? null,
           frontSideLocal: placement.front_side_local ?? null,
           bbox: getWorldBboxFromPlacement(placement),
+          placementFootprintMm: placement.footprint_mm ?? null,
           placeOn: { method: 'floor', targetId: 'floor' },
           reintroduced:
             isReintroducedIdentifier(placement.asset_id) ||
@@ -246,6 +249,7 @@ export const ThreeDPreviewModal: React.FC = () => {
         frontSideWorld: placement.front_side_world ?? null,
         frontSideLocal: placement.front_side_local ?? null,
         bbox: getWorldBboxFromPlacement(placement),
+        placementFootprintMm: placement.footprint_mm ?? null,
         placeOn: { method: 'floor', targetId: 'floor' },
         reintroduced:
           isReintroducedIdentifier(placement.asset_id) ||
@@ -258,8 +262,14 @@ export const ThreeDPreviewModal: React.FC = () => {
   const resolvedObjects: ResolvedRenderObject[] = useMemo(
     () =>
       objects.map((obj) => {
-        const targetWidthMm = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
-        const targetDepthMm = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
+        const targetWidthMm = Math.max(
+          1,
+          Number(obj.placementFootprintMm?.w ?? obj.bbox.maxX - obj.bbox.minX),
+        );
+        const targetDepthMm = Math.max(
+          1,
+          Number(obj.placementFootprintMm?.d ?? obj.bbox.maxY - obj.bbox.minY),
+        );
         const inventoryResolution = resolveInventoryItemForPreview({
           inventory,
           assetId: obj.assetId ?? obj.rawAssetId ?? null,
@@ -878,22 +888,29 @@ export const ThreeDPreviewModal: React.FC = () => {
               typeKey.includes('track_light'));
           const rotCcwDeg = ((Number(obj.rotationCcw ?? 0) % 360) + 360) % 360;
 
-          // Our 2D outputs store a world-axis-aligned bbox for the already-rotated footprint.
-          // If we rotate the proxy mesh by rotCcw again, we must use the *unrotated* footprint dims
-          // (i.e., de-rotate bbox dims) so the world footprint stays correct.
           const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
           const isWallHung = method === 'hang_on' && !isCeiling;
-          let wMm = wMmPlan;
-          let dMm = dMmPlan;
-          if (!isWallHung && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
+          const placementFootprintMm = obj.placementFootprintMm;
+          const hasPlacementFootprint =
+            !isWallHung &&
+            Number.isFinite(Number(placementFootprintMm?.w)) &&
+            Number.isFinite(Number(placementFootprintMm?.d)) &&
+            Number(placementFootprintMm?.w) > 0 &&
+            Number(placementFootprintMm?.d) > 0;
+          let wMm = hasPlacementFootprint
+            ? Math.max(1, Number(placementFootprintMm?.w))
+            : wMmPlan;
+          let dMm = hasPlacementFootprint
+            ? Math.max(1, Number(placementFootprintMm?.d))
+            : dMmPlan;
+          if (!isWallHung && !hasPlacementFootprint && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
             const tmp = wMm;
             wMm = dMm;
             dMm = tmp;
           }
 
-          // Keep GLB and proxy visuals aligned to the styled-layout footprint so 3D
-          // stays visually consistent with the 2D plan. Inventory dimensions are still
-          // useful for height defaults and wall-hung thickness.
+          // Keep placement-backed visuals on their local footprint; bbox remains the
+          // world-space envelope after rotation.
           const hMmDefault = heightById.get(obj.id) ?? defaultHeightMm(obj.type);
           let wM = wMm * MM_TO_M;
           let dM = dMm * MM_TO_M;

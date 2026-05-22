@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from agent.request_contract import build_request_contract, sanitize_request_contract
+from agent.request_contract import sanitize_request_contract
 from agent_schema.semantic_layout_planner_schema import SemanticLayoutProgram
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
@@ -799,7 +799,7 @@ class SemanticLayoutPlanner:
                 response,
                 brief_text=brief_text,
                 available_object_types=program_object_types,
-                fallback_to_heuristic=True,
+                fallback_to_heuristic=False,
             )
             contract["source"] = "llm_request_contract"
             notes = _merge_notes(
@@ -808,18 +808,30 @@ class SemanticLayoutPlanner:
             )
         except Exception as exc:
             logger.warning(
-                "Adaptive request contract failed; using heuristic fallback: %s",
+                "Adaptive request contract failed; skipping heuristic fallback: %s",
                 exc,
             )
-            contract = build_request_contract(
+            contract = sanitize_request_contract(
+                {
+                    "source": "llm_request_contract_failed",
+                    "objects": [],
+                    "groups": [],
+                    "notes": [
+                        (
+                            "Request contract LLM failed; heuristic fallback was "
+                            "skipped because TKNT_REQUEST_CONTRACT_LLM is enabled."
+                        )
+                    ],
+                },
                 brief_text=brief_text,
                 available_object_types=program_object_types,
+                fallback_to_heuristic=False,
             )
             notes = _merge_notes(
                 [
                     (
                         "Request contract LLM failed; heuristic request contract "
-                        "fallback was used."
+                        "fallback was skipped."
                     )
                 ],
                 out.get("notes"),

@@ -3326,8 +3326,9 @@ def build_curation_handler(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Batch-retrieve grouped Objaverse candidates and save the selected "
-            "GLB plus manual orientation metadata to the inventory DB."
+            "Review stored inventory GLBs and save manual orientation metadata "
+            "directly to the inventory DB. Use --curate-objaverse only when "
+            "batch-retrieving new Objaverse candidates."
         )
     )
     parser.add_argument("--tenant-id", default="demo_tenant")
@@ -3343,7 +3344,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--review-existing",
         action="store_true",
-        help="Use the older mode that only reviews orientation for already stored GLBs.",
+        help="Deprecated no-op; stored DB GLB review is now the default mode.",
+    )
+    parser.add_argument(
+        "--curate-objaverse",
+        action="store_true",
+        help=(
+            "Batch-retrieve grouped Objaverse candidates before saving selected "
+            "models/orientation metadata to the DB. Requires objaverse, torch, "
+            "transformers, and huggingface-hub."
+        ),
     )
     parser.add_argument(
         "--semantic-program-path",
@@ -3415,14 +3425,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep temporary staged candidate files when the server stops.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if bool(args.review_existing) and bool(args.curate_objaverse):
+        parser.error("--review-existing cannot be combined with --curate-objaverse.")
+    return args
 
 
 def main() -> None:
     load_dotenv()
     args = parse_args()
     curator: ObjaverseCandidateCurator | None = None
-    if args.review_existing:
+    if not bool(args.curate_objaverse):
         inspector = InventoryGlbOrientationInspector(
             tenant_id=str(args.tenant_id),
             models_public_dir=(ROOT_DIR / args.models_public_dir).resolve(),

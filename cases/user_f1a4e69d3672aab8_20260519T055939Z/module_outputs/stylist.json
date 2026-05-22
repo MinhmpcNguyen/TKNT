@@ -1,0 +1,690 @@
+{
+  "status": "OK",
+  "room": {
+    "room_id": "room_1",
+    "room_type": "bedroom",
+    "polygon_ccw": [
+      {
+        "x": 0,
+        "y": 50
+      },
+      {
+        "x": 4550,
+        "y": 0
+      },
+      {
+        "x": 4500,
+        "y": 4050
+      },
+      {
+        "x": 0,
+        "y": 4050
+      }
+    ],
+    "obstacles": [],
+    "openings": {
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 2905,
+              "y": 18
+            },
+            {
+              "x": 3905,
+              "y": 7
+            }
+          ]
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 2592,
+              "y": 4050
+            },
+            {
+              "x": 592,
+              "y": 4050
+            }
+          ]
+        }
+      ]
+    },
+    "surfaces": {
+      "wall_color_hex": "#E8E1D8",
+      "floor_color_hex": "#B88A63",
+      "ceiling_color_hex": "#F6F2EC"
+    },
+    "opening_colors": {
+      "doors": [
+        {
+          "id": "door_1",
+          "color_hex": "#A97B5A"
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "color_hex": "#D9E3E8"
+        }
+      ]
+    }
+  },
+  "objects": [
+    {
+      "instance_id": "bed",
+      "object_type": "bed",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 450,
+          "y": 2350
+        },
+        {
+          "x": 2360,
+          "y": 2350
+        },
+        {
+          "x": 2360,
+          "y": 4040
+        },
+        {
+          "x": 450,
+          "y": 4040
+        }
+      ],
+      "bbox": {
+        "min_x": 450,
+        "min_y": 2350,
+        "max_x": 2360,
+        "max_y": 4040
+      },
+      "color_hex": "#D8CFC4",
+      "material": "upholstered_fabric",
+      "place_on": null
+    },
+    {
+      "instance_id": "tv_console",
+      "object_type": "tv_console",
+      "source": "existing",
+      "cluster_id": "media_optional",
+      "polygon_ccw": [
+        {
+          "x": 200,
+          "y": 50
+        },
+        {
+          "x": 1460,
+          "y": 50
+        },
+        {
+          "x": 1460,
+          "y": 430
+        },
+        {
+          "x": 200,
+          "y": 430
+        }
+      ],
+      "bbox": {
+        "min_x": 200,
+        "min_y": 50,
+        "max_x": 1460,
+        "max_y": 430
+      },
+      "color_hex": "#8A6A4E",
+      "material": "wood_veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "wardrobe",
+      "object_type": "wardrobe",
+      "source": "existing",
+      "cluster_id": "storage_core",
+      "polygon_ccw": [
+        {
+          "x": 4000,
+          "y": 1150
+        },
+        {
+          "x": 4510,
+          "y": 1150
+        },
+        {
+          "x": 4510,
+          "y": 2900
+        },
+        {
+          "x": 4000,
+          "y": 2900
+        }
+      ],
+      "bbox": {
+        "min_x": 4000,
+        "min_y": 1150,
+        "max_x": 4510,
+        "max_y": 2900
+      },
+      "color_hex": "#B79A7A",
+      "material": "matte_laminate",
+      "place_on": null
+    },
+    {
+      "instance_id": "desk",
+      "object_type": "desk",
+      "source": "existing",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 3050,
+          "y": 3500
+        },
+        {
+          "x": 4030,
+          "y": 3500
+        },
+        {
+          "x": 4030,
+          "y": 4010
+        },
+        {
+          "x": 3050,
+          "y": 4010
+        }
+      ],
+      "bbox": {
+        "min_x": 3050,
+        "min_y": 3500,
+        "max_x": 4030,
+        "max_y": 4010
+      },
+      "color_hex": "#C9B39A",
+      "material": "wood_veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "nightstand_2",
+      "object_type": "nightstand_2",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 2400,
+          "y": 3000
+        },
+        {
+          "x": 2830,
+          "y": 3000
+        },
+        {
+          "x": 2830,
+          "y": 3350
+        },
+        {
+          "x": 2400,
+          "y": 3350
+        }
+      ],
+      "bbox": {
+        "min_x": 2400,
+        "min_y": 3000,
+        "max_x": 2830,
+        "max_y": 3350
+      },
+      "color_hex": "#C7B7A6",
+      "material": "wood_veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "bookshelf",
+      "object_type": "bookshelf",
+      "source": "existing",
+      "cluster_id": "storage_core",
+      "polygon_ccw": [
+        {
+          "x": 4150,
+          "y": 50
+        },
+        {
+          "x": 4400,
+          "y": 50
+        },
+        {
+          "x": 4400,
+          "y": 680
+        },
+        {
+          "x": 4150,
+          "y": 680
+        }
+      ],
+      "bbox": {
+        "min_x": 4150,
+        "min_y": 50,
+        "max_x": 4400,
+        "max_y": 680
+      },
+      "color_hex": "#A98B6A",
+      "material": "wood_veneer",
+      "place_on": null
+    },
+    {
+      "instance_id": "chair",
+      "object_type": "chair",
+      "source": "existing",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 2550,
+          "y": 3350
+        },
+        {
+          "x": 3000,
+          "y": 3350
+        },
+        {
+          "x": 3000,
+          "y": 3800
+        },
+        {
+          "x": 2550,
+          "y": 3800
+        }
+      ],
+      "bbox": {
+        "min_x": 2550,
+        "min_y": 3350,
+        "max_x": 3000,
+        "max_y": 3800
+      },
+      "color_hex": "#8F7A68",
+      "material": "fabric",
+      "place_on": null
+    },
+    {
+      "instance_id": "ceiling_light_001",
+      "object_type": "ceiling_light",
+      "source": "existing",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 2050,
+          "y": 1800
+        },
+        {
+          "x": 2500,
+          "y": 1800
+        },
+        {
+          "x": 2500,
+          "y": 2250
+        },
+        {
+          "x": 2050,
+          "y": 2250
+        }
+      ],
+      "bbox": {
+        "min_x": 2050,
+        "min_y": 1800,
+        "max_x": 2500,
+        "max_y": 2250
+      },
+      "color_hex": "#F2E9DD",
+      "material": "matte_metal",
+      "place_on": {
+        "target_instance_id": "ceiling",
+        "method": "hang_on"
+      }
+    },
+    {
+      "instance_id": "rug_001",
+      "object_type": "rug",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 300,
+          "y": 1530
+        },
+        {
+          "x": 2510,
+          "y": 1530
+        },
+        {
+          "x": 2510,
+          "y": 4050
+        },
+        {
+          "x": 300,
+          "y": 4050
+        }
+      ],
+      "bbox": {
+        "min_x": 300,
+        "min_y": 1530,
+        "max_x": 2510,
+        "max_y": 4050
+      },
+      "color_hex": "#D6C2A8",
+      "material": "woven_textile",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "floor"
+      }
+    },
+    {
+      "instance_id": "cushion_001",
+      "object_type": "cushion",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 490,
+          "y": 3830
+        },
+        {
+          "x": 1030,
+          "y": 3830
+        },
+        {
+          "x": 1030,
+          "y": 4000
+        },
+        {
+          "x": 490,
+          "y": 4000
+        }
+      ],
+      "bbox": {
+        "min_x": 490,
+        "min_y": 3830,
+        "max_x": 1030,
+        "max_y": 4000
+      },
+      "color_hex": "#B66A4A",
+      "material": "textile",
+      "place_on": {
+        "target_instance_id": "bed",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "desk_lamp_001",
+      "object_type": "desk_lamp",
+      "source": "inventory",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 3770,
+          "y": 3810
+        },
+        {
+          "x": 3990,
+          "y": 3810
+        },
+        {
+          "x": 3990,
+          "y": 3970
+        },
+        {
+          "x": 3770,
+          "y": 3970
+        }
+      ],
+      "bbox": {
+        "min_x": 3770,
+        "min_y": 3810,
+        "max_x": 3990,
+        "max_y": 3970
+      },
+      "color_hex": "#D8D2C8",
+      "material": "matte_metal",
+      "place_on": {
+        "target_instance_id": "desk",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "laptop_001",
+      "object_type": "laptop",
+      "source": "inventory",
+      "cluster_id": "work_study",
+      "polygon_ccw": [
+        {
+          "x": 3330,
+          "y": 3960
+        },
+        {
+          "x": 3720,
+          "y": 3960
+        },
+        {
+          "x": 3720,
+          "y": 3970
+        },
+        {
+          "x": 3330,
+          "y": 3970
+        }
+      ],
+      "bbox": {
+        "min_x": 3330,
+        "min_y": 3960,
+        "max_x": 3720,
+        "max_y": 3970
+      },
+      "color_hex": "#C9CDD1",
+      "material": "metal",
+      "place_on": {
+        "target_instance_id": "desk",
+        "method": "on_top"
+      }
+    },
+    {
+      "instance_id": "wall_art_001",
+      "object_type": "wall_art",
+      "source": "inventory",
+      "cluster_id": "sleep_core",
+      "polygon_ccw": [
+        {
+          "x": 1195,
+          "y": 3590
+        },
+        {
+          "x": 1615,
+          "y": 3590
+        },
+        {
+          "x": 1615,
+          "y": 4030
+        },
+        {
+          "x": 1195,
+          "y": 4030
+        }
+      ],
+      "bbox": {
+        "min_x": 1195,
+        "min_y": 3590,
+        "max_x": 1615,
+        "max_y": 4030
+      },
+      "color_hex": "#C8B39A",
+      "material": "paper_print",
+      "place_on": {
+        "target_instance_id": "wall",
+        "method": "hang_on"
+      }
+    }
+  ],
+  "final_style_plan": {
+    "style_name": "balanced",
+    "layout_policy_trace": {
+      "style_name": "balanced",
+      "style_tags": [
+        "cozy"
+      ],
+      "layout_policy": {
+        "target_density": "medium",
+        "center_openness_bias": "balanced_to_medium",
+        "wall_loading_bias": "focal_balanced",
+        "symmetry_bias": "balanced",
+        "cluster_spacing_bias": "soft",
+        "clutter_tolerance": "medium",
+        "decor_tolerance": "low_to_balanced",
+        "daylight_bias": "balanced_to_medium",
+        "floating_cluster_tolerance": "low_to_balanced",
+        "material_weight_bias": "balanced",
+        "visual_balance_bias": "calm"
+      },
+      "cluster_policy_overrides": {
+        "lounge_reading": {
+          "allow_only_if_space_surplus": true
+        }
+      },
+      "policy_weights": {
+        "density_multiplier": 1.06,
+        "optional_utility_bias": 0.0,
+        "decor_utility_bias": -0.9,
+        "openness_weight": 1.0,
+        "symmetry_weight": 1.0,
+        "naturalness_weight": 1.12,
+        "semantic_coherence_weight": 1.06,
+        "spatial_quality_weight": 1.0
+      },
+      "search_settings": {
+        "style_policy_variants": 1,
+        "final_palette_candidates": 3,
+        "decor_plan_candidates": 3,
+        "max_decor_items_per_room": 1,
+        "max_decor_items_per_cluster": 1
+      },
+      "controller": {
+        "phase_early": "style_policy_compiler",
+        "phase_late": "final_stylist_decorator",
+        "llm_seed_used": true,
+        "validation": "deterministic_policy_normalization"
+      },
+      "notes": [
+        "Bedroom correction raised restfulness and clutter control."
+      ]
+    },
+    "palette": {
+      "walls": "warm_off_white",
+      "floor": "light_oak",
+      "primary_wood": "natural_oak",
+      "metal": "matte_black_soft",
+      "textiles": "beige_sand_gray",
+      "walls_hex": "#E8E1D8",
+      "floor_hex": "#B88A63",
+      "ceiling_hex": "#F6F2EC"
+    },
+    "surface_plan": {
+      "walls": {
+        "finish": "paint",
+        "color_hex": "#E8E1D8"
+      },
+      "floor": {
+        "finish": "floor_finish",
+        "color_hex": "#B88A63"
+      },
+      "ceiling": {
+        "finish": "ceiling_paint",
+        "color_hex": "#F6F2EC"
+      }
+    },
+    "object_finish_plan": [
+      {
+        "instance_id": "bed",
+        "material": "upholstered_fabric",
+        "color_hex": "#D8CFC4"
+      },
+      {
+        "instance_id": "tv_console",
+        "material": "wood_veneer",
+        "color_hex": "#8A6A4E"
+      },
+      {
+        "instance_id": "wardrobe",
+        "material": "matte_laminate",
+        "color_hex": "#B79A7A"
+      },
+      {
+        "instance_id": "desk",
+        "material": "wood_veneer",
+        "color_hex": "#C9B39A"
+      },
+      {
+        "instance_id": "nightstand_2",
+        "material": "wood_veneer",
+        "color_hex": "#C7B7A6"
+      },
+      {
+        "instance_id": "bookshelf",
+        "material": "wood_veneer",
+        "color_hex": "#A98B6A"
+      },
+      {
+        "instance_id": "chair",
+        "material": "fabric",
+        "color_hex": "#8F7A68"
+      },
+      {
+        "instance_id": "ceiling_light_001",
+        "material": "matte_metal",
+        "color_hex": "#F2E9DD"
+      },
+      {
+        "instance_id": "rug_001",
+        "material": "woven_textile",
+        "color_hex": "#D6C2A8"
+      },
+      {
+        "instance_id": "cushion_001",
+        "material": "textile",
+        "color_hex": "#B66A4A"
+      },
+      {
+        "instance_id": "desk_lamp_001",
+        "material": "matte_metal",
+        "color_hex": "#D8D2C8"
+      },
+      {
+        "instance_id": "laptop_001",
+        "material": "metal",
+        "color_hex": "#C9CDD1"
+      },
+      {
+        "instance_id": "wall_art_001",
+        "material": "paper_print",
+        "color_hex": "#C8B39A"
+      }
+    ],
+    "decor_plan": [
+      {
+        "type": "rug",
+        "placement_zone": "sleep_core",
+        "style_role": "quiet_minimal_accent"
+      }
+    ],
+    "lighting_mood": "layered_warm_calm",
+    "rules": {
+      "layout_locked": true,
+      "max_decor_items_per_room": 1,
+      "max_decor_items_per_cluster": 1
+    }
+  },
+  "notes": [
+    "Accessory placement used deterministic support rules and fixed 50 mm spacing.",
+    "warm_modern_balanced",
+    "low_contrast_cozy_palette",
+    "accent_used_sparingly"
+  ],
+  "missing": []
+}

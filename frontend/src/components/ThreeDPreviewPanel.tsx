@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal, flushSync } from 'react-dom';
 import {
   fetchRenderPresets,
   getGeneratedRenderDetail,
   renderSnapshotImage,
   updateGeneratedRenderMeta,
   type SnapshotImageEditOperation,
+  type SnapshotImageLockedGeometryAtlas,
   type SnapshotImagePresetOption,
   type SnapshotImagePresetSelection,
   type SnapshotImagePresets,
@@ -75,6 +76,7 @@ type RenderObject = {
   frontSideWorld?: unknown;
   frontSideLocal?: unknown;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
+  placementFootprintMm?: { w: number; d: number } | null;
   placeOn?: { method: string; targetId?: string | null } | null;
   draggable?: boolean;
   reintroduced?: boolean;
@@ -107,6 +109,7 @@ type ObjectVisualDiagnostic = {
 
 type RenderPresetGroupName = 'styles' | 'lights' | 'sceneries';
 type CameraPresetGroupName = 'mid' | 'ceiling';
+type ImageRenderAction = 'generate' | 'edit' | 'camera_rerender';
 type RoomPointMm = {
   x: number;
   y: number;
@@ -1500,6 +1503,163 @@ async function cropObjectAppearanceReference(params: {
   return canvas.toDataURL('image/jpeg', 0.86);
 }
 
+async function buildLockedGeometryAtlases(params: {
+  imageDataUrl: string;
+  snapshot: ThreeSnapshotArtifact;
+}): Promise<SnapshotImageLockedGeometryAtlas[]> {
+  if (typeof document === 'undefined') {
+    return [];
+  }
+  const image = await loadDataUrlImage(params.imageDataUrl);
+  const imageWidth = Math.max(1, image.naturalWidth || image.width);
+  const imageHeight = Math.max(1, image.naturalHeight || image.height);
+  const scaleX = imageWidth / Math.max(1, params.snapshot.canvas.widthPx);
+  const scaleY = imageHeight / Math.max(1, params.snapshot.canvas.heightPx);
+
+  const candidates = params.snapshot.visibleObjects
+    .filter((object) => {
+      const box = object.screenBboxPx;
+      return !!box && box.width >= 8 && box.height >= 8;
+    })
+    .map((object) => {
+      const box = object.screenBboxPx;
+      const screenArea = box ? Math.max(0, box.width * box.height) : 0;
+      const distance = Number.isFinite(object.distanceToCameraM)
+        ? object.distanceToCameraM
+        : Number.POSITIVE_INFINITY;
+      return { object, screenArea, distance };
+    })
+    .sort((left, right) => right.screenArea - left.screenArea || left.distance - right.distance)
+    .slice(0, GEOMETRY_ATLAS_MAX_OBJECTS);
+
+  const atlases: SnapshotImageLockedGeometryAtlas[] = [];
+  for (
+    let atlasStart = 0;
+    atlasStart < candidates.length;
+    atlasStart += GEOMETRY_ATLAS_OBJECTS_PER_IMAGE
+  ) {
+    const atlasIndex = atlases.length + 1;
+    const chunk = candidates.slice(
+      atlasStart,
+      atlasStart + GEOMETRY_ATLAS_OBJECTS_PER_IMAGE
+    );
+    if (!chunk.length) {
+      continue;
+    }
+    const rows = Math.ceil(chunk.length / GEOMETRY_ATLAS_COLUMNS);
+    const atlasWidth = GEOMETRY_ATLAS_COLUMNS * GEOMETRY_ATLAS_CELL_SIZE_PX;
+    const atlasHeight = rows * GEOMETRY_ATLAS_CELL_SIZE_PX;
+    const canvas = document.createElement('canvas');
+    canvas.width = atlasWidth;
+    canvas.height = atlasHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      continue;
+    }
+
+    context.fillStyle = '#f7f7f5';
+    context.fillRect(0, 0, atlasWidth, atlasHeight);
+    const objects: SnapshotImageLockedGeometryAtlas['objects'] = [];
+
+    chunk.forEach(({ object }, chunkIndex) => {
+      const box = object.screenBboxPx;
+      if (!box) {
+        return;
+      }
+      const cellIndex = atlasStart + chunkIndex + 1;
+      const localCellIndex = chunkIndex;
+      const column = localCellIndex % GEOMETRY_ATLAS_COLUMNS;
+      const row = Math.floor(localCellIndex / GEOMETRY_ATLAS_COLUMNS);
+      const cellX = column * GEOMETRY_ATLAS_CELL_SIZE_PX;
+      const cellY = row * GEOMETRY_ATLAS_CELL_SIZE_PX;
+      const label = `G${cellIndex}`;
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(
+        cellX + 1,
+        cellY + 1,
+        GEOMETRY_ATLAS_CELL_SIZE_PX - 2,
+        GEOMETRY_ATLAS_CELL_SIZE_PX - 2
+      );
+      context.strokeStyle = '#222222';
+      context.lineWidth = 1;
+      context.strokeRect(
+        cellX + 0.5,
+        cellY + 0.5,
+        GEOMETRY_ATLAS_CELL_SIZE_PX - 1,
+        GEOMETRY_ATLAS_CELL_SIZE_PX - 1
+      );
+      context.fillStyle = '#111111';
+      context.font = 'bold 18px sans-serif';
+      context.textBaseline = 'middle';
+      context.fillText(label, cellX + 10, cellY + GEOMETRY_ATLAS_CELL_LABEL_HEIGHT_PX / 2);
+
+      const rawX = box.minX * scaleX;
+      const rawY = box.minY * scaleY;
+      const rawWidth = box.width * scaleX;
+      const rawHeight = box.height * scaleY;
+      const padding = Math.max(12, Math.max(rawWidth, rawHeight) * 0.16);
+      const cropX = clamp(Math.floor(rawX - padding), 0, imageWidth - 1);
+      const cropY = clamp(Math.floor(rawY - padding), 0, imageHeight - 1);
+      const cropRight = clamp(Math.ceil(rawX + rawWidth + padding), cropX + 1, imageWidth);
+      const cropBottom = clamp(Math.ceil(rawY + rawHeight + padding), cropY + 1, imageHeight);
+      const cropWidth = cropRight - cropX;
+      const cropHeight = cropBottom - cropY;
+      if (cropWidth < 8 || cropHeight < 8) {
+        return;
+      }
+
+      const contentX = cellX + 10;
+      const contentY = cellY + GEOMETRY_ATLAS_CELL_LABEL_HEIGHT_PX + 8;
+      const contentWidth = GEOMETRY_ATLAS_CELL_SIZE_PX - 20;
+      const contentHeight =
+        GEOMETRY_ATLAS_CELL_SIZE_PX - GEOMETRY_ATLAS_CELL_LABEL_HEIGHT_PX - 18;
+      const drawScale = Math.min(contentWidth / cropWidth, contentHeight / cropHeight);
+      const drawWidth = Math.max(1, Math.round(cropWidth * drawScale));
+      const drawHeight = Math.max(1, Math.round(cropHeight * drawScale));
+      const drawX = Math.round(contentX + (contentWidth - drawWidth) / 2);
+      const drawY = Math.round(contentY + (contentHeight - drawHeight) / 2);
+      context.drawImage(
+        image,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        drawX,
+        drawY,
+        drawWidth,
+        drawHeight
+      );
+
+      objects.push({
+        object_id: object.id,
+        object_name: visibleObjectName(object),
+        screen_bbox_px: object.screenBboxPx,
+        atlas_index: atlasIndex,
+        cell_index: cellIndex,
+        cell_label: label,
+        cell_bbox_norm: {
+          x: Number((drawX / atlasWidth).toFixed(4)),
+          y: Number((drawY / atlasHeight).toFixed(4)),
+          width: Number((drawWidth / atlasWidth).toFixed(4)),
+          height: Number((drawHeight / atlasHeight).toFixed(4)),
+        },
+      });
+    });
+
+    if (!objects.length) {
+      continue;
+    }
+    atlases.push({
+      atlas_index: atlasIndex,
+      image_data_url: canvas.toDataURL('image/jpeg', 0.9),
+      source: 'clean_3d_visible_object_atlas',
+      objects,
+    });
+  }
+  return atlases;
+}
+
 function normalizeRootLayoutId(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -1562,6 +1722,27 @@ function readObjectAppearanceReferencesFromRender(
       savedAtMs,
       rootLayoutId: normalizeRootLayoutId(item.root_layout_id) ?? rootLayoutId,
       sourceRenderId: normalizeRootLayoutId(item.source_render_id),
+      prompt:
+        typeof item.prompt === 'string'
+          ? item.prompt
+          : typeof item.edit_prompt === 'string'
+            ? item.edit_prompt
+            : null,
+      operationType:
+        item.operation_type === 'add' ||
+        item.operation_type === 'replace' ||
+        item.operation_type === 'recolor' ||
+        item.operation_type === 'prompt'
+          ? item.operation_type
+          : null,
+      bboxNorm: isRecord(item.bbox_norm)
+        ? {
+            x: Number(item.bbox_norm.x ?? 0),
+            y: Number(item.bbox_norm.y ?? 0),
+            width: Number(item.bbox_norm.width ?? 0),
+            height: Number(item.bbox_norm.height ?? 0),
+          }
+        : null,
     };
   }
   return references;
@@ -1585,6 +1766,9 @@ function buildObjectAppearanceReferencesMeta(params: {
       saved_at_ms: reference.savedAtMs,
       root_layout_id: reference.rootLayoutId,
       source_render_id: reference.sourceRenderId,
+      prompt: reference.prompt ?? null,
+      operation_type: reference.operationType ?? null,
+      bbox_norm: reference.bboxNorm ?? null,
     })),
   };
 }
@@ -1629,6 +1813,17 @@ function notifyRenderFocus(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('tknt:render-focus'));
   }
+}
+
+function waitForNextPaint(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0);
+    });
+  });
 }
 
 function buildSavedRenderSnapshotArtifact(
@@ -1725,7 +1920,10 @@ function buildSavedRenderPreviewResult(
   const aspectRatio =
     typeof render.meta.aspect_ratio === 'string' ? render.meta.aspect_ratio : '4:3';
   const editOperations = readSavedRenderEditOperations(render);
-  const renderMode = render.meta.render_mode === 'edit' ? 'edit' : 'generate';
+  const renderMode =
+    render.meta.render_mode === 'edit' || render.meta.render_mode === 'camera_rerender'
+      ? render.meta.render_mode
+      : 'generate';
   const rawUserPrompt =
     typeof render.meta.raw_user_prompt === 'string'
       ? render.meta.raw_user_prompt
@@ -1786,8 +1984,22 @@ function buildSavedRenderPreviewResult(
 function resolveRootLayoutIdFromRender(
   render: GeneratedRenderRecord
 ): string | null {
-  const rawValue = render.meta.root_layout_id;
-  return typeof rawValue === 'string' && rawValue.trim() ? rawValue.trim() : null;
+  return readRenderContextText(render, 'root_layout_id');
+}
+
+function readRenderContextText(
+  render: GeneratedRenderRecord,
+  key: 'root_layout_id' | 'case_id' | 'option_id'
+): string | null {
+  const topLevelValue = render[key];
+  if (typeof topLevelValue === 'string' && topLevelValue.trim()) {
+    return topLevelValue.trim();
+  }
+  const metaValue = render.meta[key];
+  if (typeof metaValue === 'string' && metaValue.trim()) {
+    return metaValue.trim();
+  }
+  return null;
 }
 
 function resolveSavedLayoutForRender(params: {
@@ -1796,6 +2008,16 @@ function resolveSavedLayoutForRender(params: {
   activeRootLayoutId: string | null;
 }): SavedLayoutRecord | null {
   const { render, savedLayouts, activeRootLayoutId } = params;
+  const caseId = readRenderContextText(render, 'case_id');
+  const optionId = readRenderContextText(render, 'option_id');
+  if (caseId && optionId) {
+    const layoutOption = savedLayouts.find(
+      (layout) => layout.case_id === caseId && layout.option_id === optionId
+    );
+    if (layoutOption) {
+      return layoutOption;
+    }
+  }
   const explicitRootLayoutId = resolveRootLayoutIdFromRender(render);
   if (explicitRootLayoutId) {
     return savedLayouts.find((layout) => layout.id === explicitRootLayoutId) ?? null;
@@ -1918,6 +2140,9 @@ type EditBoxDraft = {
 type ObjectAppearanceReference = ObjectReplacementReference & {
   rootLayoutId: string | null;
   sourceRenderId: string | null;
+  prompt?: string | null;
+  operationType?: EditBoxMode | null;
+  bboxNorm?: EditBoxRect | null;
 };
 
 type PendingBillingPayment = {
@@ -1931,6 +2156,11 @@ const OBJECT_APPEARANCE_REFERENCES_META_KEY = 'object_appearance_references';
 const OBJECT_APPEARANCE_REFERENCES_VERSION = 1;
 const RENDER_STATE_META_KEY = 'render_state';
 const EDIT_DELTA_META_KEY = 'edit_delta';
+const GEOMETRY_ATLAS_MAX_OBJECTS = 24;
+const GEOMETRY_ATLAS_OBJECTS_PER_IMAGE = 12;
+const GEOMETRY_ATLAS_COLUMNS = 4;
+const GEOMETRY_ATLAS_CELL_SIZE_PX = 256;
+const GEOMETRY_ATLAS_CELL_LABEL_HEIGHT_PX = 28;
 
 function buildReferencePresetDropdownOptions(
   group: Record<string, SnapshotImagePresetOption>
@@ -1952,6 +2182,10 @@ type ReferencePresetDropdownProps = {
   emptyLabel?: string;
 };
 
+type ReferenceDropdownPanelStyle = React.CSSProperties & {
+  '--reference-dropdown-panel-max-height'?: string;
+};
+
 function ReferencePresetDropdown({
   label,
   options,
@@ -1962,7 +2196,11 @@ function ReferencePresetDropdown({
   emptyLabel = 'No change',
 }: ReferencePresetDropdownProps): React.ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<ReferenceDropdownPanelStyle>({
+    visibility: 'hidden',
+  });
   const normalizedValue = value ?? null;
   const resolvedOptions = allowEmpty
     ? [
@@ -1984,13 +2222,69 @@ function ReferencePresetDropdown({
       return;
     }
     const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         setOpen(false);
       }
     };
     document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || typeof window === 'undefined') {
+      return;
+    }
+
+    const updatePanelPosition = (): void => {
+      const trigger = rootRef.current;
+      if (!trigger) {
+        return;
+      }
+      const triggerRect = trigger.getBoundingClientRect();
+      const viewportPadding = 18;
+      const panelWidth = Math.min(680, Math.max(300, window.innerWidth - viewportPadding * 2));
+      const maxPanelHeight = Math.max(
+        180,
+        Math.min(420, window.innerHeight - viewportPadding * 2 - 18)
+      );
+      const estimatedPanelHeight = maxPanelHeight + 18;
+      const belowTop = triggerRect.bottom + 6;
+      const aboveTop = triggerRect.top - estimatedPanelHeight - 6;
+      const shouldOpenUp =
+        belowTop + estimatedPanelHeight > window.innerHeight - viewportPadding &&
+        triggerRect.top > window.innerHeight - triggerRect.bottom;
+      const top = shouldOpenUp
+        ? Math.max(viewportPadding, aboveTop)
+        : Math.min(belowTop, window.innerHeight - viewportPadding - estimatedPanelHeight);
+      const left = Math.min(
+        Math.max(viewportPadding, triggerRect.left),
+        window.innerWidth - viewportPadding - panelWidth
+      );
+      setPanelStyle({
+        left,
+        top: Math.max(viewportPadding, top),
+        width: panelWidth,
+        visibility: 'visible',
+        '--reference-dropdown-panel-max-height': `${maxPanelHeight}px`,
+      });
+    };
+
+    updatePanelPosition();
+    window.addEventListener('resize', updatePanelPosition);
+    window.addEventListener('scroll', updatePanelPosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePanelPosition);
+      window.removeEventListener('scroll', updatePanelPosition, true);
     };
   }, [open]);
 
@@ -1999,6 +2293,49 @@ function ReferencePresetDropdown({
       setOpen(false);
     }
   }, [disabled, open]);
+
+  const dropdownPanel = open ? (
+    <div
+      className="reference-dropdown-panel"
+      ref={panelRef}
+      role="listbox"
+      aria-label={label}
+      style={panelStyle}
+    >
+      <div className="reference-dropdown-grid">
+        {resolvedOptions.map((option) => {
+          const isSelected = option.value === normalizedValue;
+          return (
+            <button
+              key={option.value ?? '__empty__'}
+              type="button"
+              className={isSelected ? 'reference-preset-card selected' : 'reference-preset-card'}
+              aria-selected={isSelected}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.referenceImage ? (
+                <img
+                  className="reference-preset-image"
+                  src={option.referenceImage}
+                  alt={`${option.label} reference`}
+                  loading="lazy"
+                  draggable={false}
+                />
+              ) : (
+                <span className="reference-preset-image is-empty">
+                  <span>{option.label}</span>
+                </span>
+              )}
+              <span className="reference-preset-label">{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="three-dropdown-field reference-dropdown" ref={rootRef}>
@@ -2034,48 +2371,16 @@ function ReferencePresetDropdown({
         </span>
         <span className="reference-dropdown-caret">{open ? '▲' : '▼'}</span>
       </button>
-      {open ? (
-        <div className="reference-dropdown-panel" role="listbox" aria-label={label}>
-          <div className="reference-dropdown-grid">
-            {resolvedOptions.map((option) => {
-              const isSelected = option.value === normalizedValue;
-              return (
-                <button
-                  key={option.value ?? '__empty__'}
-                  type="button"
-                  className={isSelected ? 'reference-preset-card selected' : 'reference-preset-card'}
-                  aria-selected={isSelected}
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                >
-                  {option.referenceImage ? (
-                    <img
-                      className="reference-preset-image"
-                      src={option.referenceImage}
-                      alt={`${option.label} reference`}
-                      loading="lazy"
-                      draggable={false}
-                    />
-                  ) : (
-                    <span className="reference-preset-image is-empty">
-                      <span>{option.label}</span>
-                    </span>
-                  )}
-                  <span className="reference-preset-label">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      {dropdownPanel && typeof document !== 'undefined'
+        ? createPortal(dropdownPanel, document.body)
+        : dropdownPanel}
     </div>
   );
 }
 
 type CameraPresetSelectProps = {
   value: string | null;
+  stepAnchorValue: string | null;
   disabled: boolean;
   midHeightOptions: CameraPreset[];
   ceilingOptions: CameraPreset[];
@@ -2084,6 +2389,7 @@ type CameraPresetSelectProps = {
 
 function CameraPresetStepper({
   value,
+  stepAnchorValue,
   disabled,
   midHeightOptions,
   ceilingOptions,
@@ -2091,12 +2397,14 @@ function CameraPresetStepper({
 }: CameraPresetSelectProps): React.ReactElement {
   const options = [...midHeightOptions, ...ceilingOptions];
   const activeIndex = options.findIndex((preset) => preset.id === value);
+  const stepAnchorIndex =
+    activeIndex >= 0 ? activeIndex : options.findIndex((preset) => preset.id === stepAnchorValue);
   const activePreset = activeIndex >= 0 ? options[activeIndex] : null;
   const handleStep = (delta: number): void => {
     if (options.length === 0) {
       return;
     }
-    const startIndex = activeIndex >= 0 ? activeIndex : delta > 0 ? -1 : 0;
+    const startIndex = stepAnchorIndex >= 0 ? stepAnchorIndex : delta > 0 ? -1 : 0;
     const nextIndex = (startIndex + delta + options.length) % options.length;
     onChange(options[nextIndex].id);
   };
@@ -2172,6 +2480,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
     floorplan,
     design,
     styledResult,
+    layoutVariants,
     inventory,
     userInput,
     selectedVariantId,
@@ -2179,10 +2488,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
     savedLayouts,
     savedRenders,
     activeRootLayoutId,
+    activeLayoutCaseId,
     selectedSavedRenderId,
     selectWall,
     selectPlacement,
     setActiveRootLayoutId,
+    setActiveLayoutCaseId,
     selectSavedRender,
     updatePlacement,
     removePlacement,
@@ -2218,7 +2529,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
     tone: 'neutral' | 'success' | 'error';
     text: string;
   } | null>(null);
-  const [isRenderingImage, setIsRenderingImage] = useState(false);
+  const [activeImageRenderAction, setActiveImageRenderAction] =
+    useState<ImageRenderAction | null>(null);
+  const isRenderingImage = activeImageRenderAction !== null;
   const [pendingBillingPayment, setPendingBillingPayment] =
     useState<PendingBillingPayment | null>(null);
   const [billingCountdownSeconds, setBillingCountdownSeconds] = useState(0);
@@ -2260,7 +2573,27 @@ export const ThreeDPreviewPanel: React.FC = () => {
   >({});
   const [cameraPresets, setCameraPresets] = useState<CameraPreset[]>([]);
   const [activeCameraPresetId, setActiveCameraPresetId] = useState<string | null>(null);
+  const lastAppliedCameraPresetIdRef = useRef<string | null>(null);
   const applyingCameraPresetRef = useRef(false);
+  const userCameraInteractionRef = useRef(false);
+  const activeLayoutVariant = useMemo(
+    () =>
+      layoutVariants.find((variant) => variant.variant_id === selectedVariantId) ??
+      null,
+    [layoutVariants, selectedVariantId]
+  );
+  const renderLayoutContext = useMemo(
+    () => {
+      const caseId = activeLayoutVariant?.saved_layout_case_id ?? activeLayoutCaseId;
+      return {
+        rootLayoutId:
+          activeRootLayoutId ?? activeLayoutVariant?.saved_layout_id ?? null,
+        caseId,
+        optionId: caseId ? selectedVariantId : null,
+      };
+    },
+    [activeLayoutCaseId, activeLayoutVariant, activeRootLayoutId, selectedVariantId]
+  );
 
   const finishPendingBillingPayment = useCallback((completed: boolean): void => {
     const resolver = pendingBillingResolverRef.current;
@@ -2467,6 +2800,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           frontSideWorld,
           frontSideLocal,
           bbox: { minX, minY, maxX, maxY },
+          placementFootprintMm: placement?.footprint_mm ?? null,
           placeOn,
           draggable:
             placementsById.has(id) &&
@@ -2494,6 +2828,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           frontSideWorld: p.front_side_world ?? null,
           frontSideLocal: p.front_side_local ?? null,
           bbox,
+          placementFootprintMm: p.footprint_mm ?? null,
           placeOn: { method: 'floor', targetId: 'floor' },
           draggable: p.constraint_mode !== 'locked',
           reintroduced:
@@ -2521,6 +2856,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         frontSideWorld: placement.front_side_world ?? null,
         frontSideLocal: placement.front_side_local ?? null,
         bbox: getWorldBboxFromPlacement(placement),
+        placementFootprintMm: placement.footprint_mm ?? null,
         placeOn: { method: 'floor', targetId: 'floor' },
         draggable: placement.constraint_mode !== 'locked',
         reintroduced:
@@ -2534,8 +2870,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const resolvedObjects: ResolvedRenderObject[] = useMemo(
     () =>
       objects.map((obj) => {
-        const targetWidthMm = Math.max(1, obj.bbox.maxX - obj.bbox.minX);
-        const targetDepthMm = Math.max(1, obj.bbox.maxY - obj.bbox.minY);
+        const targetWidthMm = Math.max(
+          1,
+          Number(obj.placementFootprintMm?.w ?? obj.bbox.maxX - obj.bbox.minX),
+        );
+        const targetDepthMm = Math.max(
+          1,
+          Number(obj.placementFootprintMm?.d ?? obj.bbox.maxY - obj.bbox.minY),
+        );
         const inventoryResolution = resolveInventoryItemForPreview({
           inventory,
           assetId: obj.assetId ?? obj.rawAssetId ?? null,
@@ -2618,10 +2960,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
       Object.values(objectAppearanceReferences)
         .filter(
           (reference) =>
-            (reference.rootLayoutId ?? null) === (activeRootLayoutId ?? null)
+            (reference.rootLayoutId ?? null) ===
+            (renderLayoutContext.rootLayoutId ?? null)
         )
         .sort((left, right) => right.savedAtMs - left.savedAtMs),
-    [activeRootLayoutId, objectAppearanceReferences]
+    [objectAppearanceReferences, renderLayoutContext.rootLayoutId]
   );
   const selectedObjectIsEditable = Boolean(
     selectedId && visibleObjectById.has(selectedId)
@@ -2764,7 +3107,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
         if (!reference) {
           return null;
         }
-        if ((reference.rootLayoutId ?? null) !== (activeRootLayoutId ?? null)) {
+        if (
+          (reference.rootLayoutId ?? null) !==
+          (renderLayoutContext.rootLayoutId ?? null)
+        ) {
           return null;
         }
         const box = object.screenBboxPx;
@@ -2801,6 +3147,66 @@ export const ThreeDPreviewPanel: React.FC = () => {
       replacement_image_data_url: box.imageDataUrl,
       target_color: box.mode === 'recolor' ? box.targetColor : null,
     }));
+  }
+
+  function resolveEditedObjectsForMemory(
+    boxes: RenderEditBox[],
+    snapshot: ThreeSnapshotArtifact | null
+  ): Array<{ object: VisibleSnapshotObject; box: RenderEditBox }> {
+    if (!snapshot || boxes.length === 0) {
+      return [];
+    }
+    const canvasWidth = Math.max(1, snapshot.canvas.widthPx);
+    const canvasHeight = Math.max(1, snapshot.canvas.heightPx);
+    const matches = new Map<string, { object: VisibleSnapshotObject; box: RenderEditBox; score: number }>();
+
+    boxes.forEach((box) => {
+      snapshot.visibleObjects.forEach((object) => {
+        const objectBox = object.screenBboxPx;
+        if (!objectBox) {
+          return;
+        }
+        const objectRect = {
+          x: objectBox.minX / canvasWidth,
+          y: objectBox.minY / canvasHeight,
+          width: objectBox.width / canvasWidth,
+          height: objectBox.height / canvasHeight,
+        };
+        const intersectionScore = editBoxObjectOverlapScore(box.rect, objectRect);
+        const centerX = objectRect.x + objectRect.width / 2;
+        const centerY = objectRect.y + objectRect.height / 2;
+        const centerInside =
+          centerX >= box.rect.x &&
+          centerX <= box.rect.x + box.rect.width &&
+          centerY >= box.rect.y &&
+          centerY <= box.rect.y + box.rect.height;
+        const score = centerInside ? Math.max(intersectionScore, 0.55) : intersectionScore;
+        if (score < 0.18) {
+          return;
+        }
+        const existing = matches.get(object.id);
+        if (!existing || score > existing.score) {
+          matches.set(object.id, { object, box, score });
+        }
+      });
+    });
+
+    return Array.from(matches.values())
+      .sort((left, right) => right.score - left.score)
+      .map(({ object, box }) => ({ object, box }));
+  }
+
+  function editBoxObjectOverlapScore(
+    editRect: EditBoxRect,
+    objectRect: EditBoxRect
+  ): number {
+    const left = Math.max(editRect.x, objectRect.x);
+    const top = Math.max(editRect.y, objectRect.y);
+    const right = Math.min(editRect.x + editRect.width, objectRect.x + objectRect.width);
+    const bottom = Math.min(editRect.y + editRect.height, objectRect.y + objectRect.height);
+    const intersectionArea = Math.max(0, right - left) * Math.max(0, bottom - top);
+    const objectArea = Math.max(0.0001, objectRect.width * objectRect.height);
+    return intersectionArea / objectArea;
   }
 
   function updateEditBox(
@@ -2893,10 +3299,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
     references: Record<string, ObjectAppearanceReference>,
     metaPatch: Record<string, unknown> = {}
   ): Promise<GeneratedRenderRecord> {
-    const memoryMeta = buildObjectAppearanceReferencesMeta({
-      references,
-      rootLayoutId: activeRootLayoutId,
-    });
+      const memoryMeta = buildObjectAppearanceReferencesMeta({
+        references,
+        rootLayoutId: renderLayoutContext.rootLayoutId,
+      });
     const rawReferences = memoryMeta.references;
     const referenceCount = Array.isArray(rawReferences) ? rawReferences.length : 0;
     return updateGeneratedRenderMeta(render.id, {
@@ -2954,8 +3360,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
     }
 
     applyingCameraPresetRef.current = true;
+    userCameraInteractionRef.current = false;
     applyOrbitCameraPose(camera, controls, preset);
     renderer?.render?.(scene, camera);
+    lastAppliedCameraPresetIdRef.current = preset.id;
     setActiveCameraPresetId(preset.id);
     window.requestAnimationFrame(() => {
       applyingCameraPresetRef.current = false;
@@ -3139,8 +3547,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
       return;
     }
 
-    setIsRenderingImage(true);
+    flushSync(() => {
+      setActiveImageRenderAction('generate');
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Starting image generation...',
+      });
+    });
     try {
+      await waitForNextPaint();
       const billingApproved = await ensureImageBilling('generate');
       if (!billingApproved) {
         return;
@@ -3159,6 +3574,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
       } =
         await captureCurrentAiSnapshot();
       const appearanceMemoryOperations = buildAppearanceMemoryOperations(snapshotArtifact);
+      const lockedGeometryAtlases = await buildLockedGeometryAtlases({
+        imageDataUrl: cleanSnapshotImageDataUrl,
+        snapshot: snapshotArtifact,
+      });
       const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
           snapshotPayload: snapshotArtifact as Record<string, unknown>,
@@ -3173,8 +3592,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
           userPrompt: '',
           renderMode: 'generate',
           presetSelection,
-          rootLayoutId: activeRootLayoutId,
+          rootLayoutId: renderLayoutContext.rootLayoutId,
+          caseId: renderLayoutContext.caseId,
+          optionId: renderLayoutContext.optionId,
           editOperations: appearanceMemoryOperations,
+          lockedGeometryAtlases,
         }
       );
       setRenderedSnapshotImage(renderResult.render);
@@ -3197,7 +3619,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
         selectSavedRender(null);
       }
       const successMessage =
-        appearanceMemoryOperations.length > 0
+        lockedGeometryAtlases.length > 0
+          ? `Generated image with ${lockedGeometryAtlases.length} geometry atlas reference(s).`
+          : appearanceMemoryOperations.length > 0
           ? `Generated image with ${appearanceMemoryOperations.length} object memory reference(s).`
           : `Generated image with ${renderResult.render.models.image_model_name}.`;
       setRenderStatus({
@@ -3213,7 +3637,119 @@ export const ThreeDPreviewPanel: React.FC = () => {
             : 'Failed to generate an image from the current snapshot.',
       });
     } finally {
-      setIsRenderingImage(false);
+      setActiveImageRenderAction(null);
+    }
+  }
+
+  async function handleCameraRerenderSnapshotImage(): Promise<void> {
+    if (!renderedSnapshotImage) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'Generate an image before re-rendering from a new camera.',
+      });
+      return;
+    }
+
+    flushSync(() => {
+      setActiveImageRenderAction('camera_rerender');
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Starting camera re-render...',
+      });
+    });
+    try {
+      await waitForNextPaint();
+      const billingApproved = await ensureImageBilling('generate');
+      if (!billingApproved) {
+        return;
+      }
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Capturing new 3D camera view, depth, edge, segmentation, and structural guide...',
+      });
+      const {
+        snapshotArtifact,
+        snapshotImageDataUrl,
+        cleanSnapshotImageDataUrl,
+        depthMapImageDataUrl,
+        edgeMapImageDataUrl,
+        segmentationMapImageDataUrl,
+      } = await captureCurrentAiSnapshot();
+      const appearanceMemoryOperations = buildAppearanceMemoryOperations(snapshotArtifact);
+      const lockedGeometryAtlases = await buildLockedGeometryAtlases({
+        imageDataUrl: cleanSnapshotImageDataUrl,
+        snapshot: snapshotArtifact,
+      });
+      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
+        {
+          snapshotPayload: snapshotArtifact as Record<string, unknown>,
+          snapshotImageDataUrl: cleanSnapshotImageDataUrl,
+          depthMapImageDataUrl,
+          edgeMapImageDataUrl,
+          segmentationMapImageDataUrl,
+          layoutReferenceImageDataUrl: null,
+          annotatedReferenceImageDataUrl: snapshotImageDataUrl,
+          sceneReferenceImageDataUrl: renderedSnapshotImage.image.data_url,
+          sceneReferenceMode: 'target_layout_with_scene_reference',
+          userPrompt: renderedSnapshotImage.request.raw_user_prompt ?? '',
+          renderMode: 'camera_rerender',
+          presetSelection:
+            renderedSnapshotImage.request.preset_selection ?? presetSelection,
+          rootLayoutId: renderLayoutContext.rootLayoutId,
+          caseId: renderLayoutContext.caseId,
+          optionId: renderLayoutContext.optionId,
+          editOperations: appearanceMemoryOperations,
+          lockedGeometryAtlases,
+        }
+      );
+      setRenderedSnapshotImage(renderResult.render);
+      notifyRenderFocus();
+      setLastRenderedSnapshot(snapshotArtifact);
+      setLastRenderedSnapshotImageDataUrl(cleanSnapshotImageDataUrl);
+      setEditBoxes([]);
+      setActiveEditBoxId(null);
+      setEditBoxDraft(null);
+      if (renderResult.saved_render) {
+        const savedWithMemory = await persistObjectAppearanceReferencesForRender(
+          renderResult.saved_render,
+          objectAppearanceReferences,
+          {
+            [RENDER_STATE_META_KEY]: {
+              version: 1,
+              preset_selection:
+                renderedSnapshotImage.request.preset_selection ?? presetSelection,
+              raw_user_prompt: renderedSnapshotImage.request.raw_user_prompt ?? null,
+              root_layout_id: renderLayoutContext.rootLayoutId,
+              source_render_id: savedRenderId,
+            },
+          }
+        );
+        upsertSavedRender(savedWithMemory);
+        setSavedRenderId(savedWithMemory.id);
+        selectSavedRender(savedWithMemory.id);
+      } else {
+        setSavedRenderId(null);
+        selectSavedRender(null);
+      }
+      setRenderStatus({
+        tone: 'success',
+        text:
+          lockedGeometryAtlases.length > 0
+            ? `Re-rendered camera with ${lockedGeometryAtlases.length} geometry atlas reference(s).`
+            : appearanceMemoryOperations.length > 0
+            ? `Re-rendered camera with ${appearanceMemoryOperations.length} object memory reference(s).`
+            : `Re-rendered camera with ${renderResult.render.models.image_model_name}.`,
+      });
+    } catch (renderError) {
+      setRenderStatus({
+        tone: 'error',
+        text:
+          renderError instanceof Error
+            ? renderError.message
+            : 'Failed to re-render the image from the current camera.',
+      });
+    } finally {
+      setActiveImageRenderAction(null);
     }
   }
 
@@ -3225,8 +3761,22 @@ export const ThreeDPreviewPanel: React.FC = () => {
       });
       return;
     }
-    setIsRenderingImage(true);
+    if (configuredEditBoxes.length === 0 && !editPresetActive) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'Draw an edit box or choose an edit preset before applying edits.',
+      });
+      return;
+    }
+    flushSync(() => {
+      setActiveImageRenderAction('edit');
+      setRenderStatus({
+        tone: 'neutral',
+        text: 'Starting image edit...',
+      });
+    });
     try {
+      await waitForNextPaint();
       const billingApproved = await ensureImageBilling('edit');
       if (!billingApproved) {
         return;
@@ -3237,8 +3787,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
       });
       const {
         snapshotArtifact: targetSnapshotArtifact,
-        snapshotImageDataUrl: targetSnapshotImageDataUrl,
+        cleanSnapshotImageDataUrl: targetCleanSnapshotImageDataUrl,
       } = await captureCurrentAiSnapshot();
+      const sourceSnapshotArtifact = lastRenderedSnapshot ?? targetSnapshotArtifact;
       const editOperations = buildEditBoxOperations(configuredEditBoxes);
       const editBoxGuideImageDataUrl = await buildEditBoxGuideImageDataUrl({
         sourceImageDataUrl: renderedSnapshotImage.image.data_url,
@@ -3253,38 +3804,50 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
       const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
-          snapshotPayload: targetSnapshotArtifact as unknown as Record<string, unknown>,
-          snapshotImageDataUrl: targetSnapshotImageDataUrl,
-          layoutReferenceImageDataUrl: targetSnapshotImageDataUrl,
+          snapshotPayload: sourceSnapshotArtifact as unknown as Record<string, unknown>,
+          snapshotImageDataUrl: targetCleanSnapshotImageDataUrl,
+          layoutReferenceImageDataUrl: null,
           annotatedReferenceImageDataUrl: editBoxGuideImageDataUrl,
           editSourceImageDataUrl: renderedSnapshotImage.image.data_url,
           userPrompt: '',
           renderMode: 'edit',
           presetSelection: editPresetSelection,
-          rootLayoutId: activeRootLayoutId,
+          rootLayoutId: renderLayoutContext.rootLayoutId,
+          caseId: renderLayoutContext.caseId,
+          optionId: renderLayoutContext.optionId,
           editOperations,
         }
       );
       const savedAtMs = Date.now();
-      const editedObjectsForMemory: VisibleSnapshotObject[] = [];
+      const memorySnapshot = sourceSnapshotArtifact;
+      const editedObjectsForMemory = resolveEditedObjectsForMemory(
+        configuredEditBoxes,
+        memorySnapshot
+      );
       const memoryEntries = (
         await Promise.all(
-          editedObjectsForMemory.map(async (object) => {
-            const imageDataUrl = await cropObjectAppearanceReference({
-              imageDataUrl: renderResult.render.image.data_url,
-              object,
-              snapshot: targetSnapshotArtifact,
-            });
+          editedObjectsForMemory.map(async ({ object, box }) => {
+            const imageDataUrl =
+              box.imageDataUrl && (box.mode === 'replace' || box.mode === 'add')
+                ? box.imageDataUrl
+                : await cropObjectAppearanceReference({
+                    imageDataUrl: renderResult.render.image.data_url,
+                    object,
+                    snapshot: memorySnapshot,
+                  });
             if (!imageDataUrl) {
               return null;
             }
             return {
               objectId: object.id,
               imageDataUrl,
-              fileName: `edited-${object.id}.jpg`,
+              fileName: box.fileName ?? `edited-${object.id}.jpg`,
               savedAtMs,
-              rootLayoutId: activeRootLayoutId,
+              rootLayoutId: renderLayoutContext.rootLayoutId,
               sourceRenderId: renderResult.saved_render?.id ?? savedRenderId,
+              prompt: box.prompt.trim() || null,
+              operationType: box.mode,
+              bboxNorm: box.rect,
             } satisfies ObjectAppearanceReference;
           })
         )
@@ -3304,8 +3867,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
       );
       setRenderedSnapshotImage(renderWithEffectiveState);
       notifyRenderFocus();
-      setLastRenderedSnapshot(targetSnapshotArtifact);
-      setLastRenderedSnapshotImageDataUrl(targetSnapshotImageDataUrl);
+      setLastRenderedSnapshot(memorySnapshot);
+      setLastRenderedSnapshotImageDataUrl(targetCleanSnapshotImageDataUrl);
       setObjectAppearanceReferences(mergedObjectAppearanceReferences);
       setEditBoxes([]);
       setActiveEditBoxId(null);
@@ -3327,14 +3890,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
               version: 1,
               preset_selection: effectivePresetSelection,
               raw_user_prompt: effectiveRawUserPrompt,
-              root_layout_id: activeRootLayoutId,
+              root_layout_id: renderLayoutContext.rootLayoutId,
               source_render_id: savedRenderId,
             },
             [EDIT_DELTA_META_KEY]: {
               user_prompt: null,
               preset_selection: editPresetSelection,
               edit_operations: editOperations,
-              layout_reference_used: true,
+              layout_reference_used: false,
             },
           }
         );
@@ -3361,7 +3924,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             : 'Failed to edit the generated image.',
       });
     } finally {
-      setIsRenderingImage(false);
+      setActiveImageRenderAction(null);
     }
   }
 
@@ -3417,6 +3980,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           setStyledResult(inferredRootLayout.styled_result_json ?? null);
           clearLayoutVariants();
           setActiveRootLayoutId(inferredRootLayout.id);
+          setActiveLayoutCaseId(inferredRootLayout.case_id ?? null);
         }
         const imageDataUrl = renderDetail.image_data_url;
         setRenderedSnapshotImage(
@@ -3474,6 +4038,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
     savedRenderId,
     savedLayouts,
     savedRenders,
+    setActiveLayoutCaseId,
     setActiveRootLayoutId,
     setFloorplan,
     setStyledResult,
@@ -3701,18 +4266,25 @@ export const ThreeDPreviewPanel: React.FC = () => {
         if (!disposed) {
           setCameraPresets(nextCameraPresets);
         }
+        const lastAppliedCameraPresetId = lastAppliedCameraPresetIdRef.current;
         const preferredCameraPreset =
-          nextCameraPresets.find((preset) => preset.id === activeCameraPresetId) ??
+          nextCameraPresets.find((preset) => preset.id === lastAppliedCameraPresetId) ??
           nextCameraPresets.find((preset) => preset.group === 'mid') ??
           nextCameraPresets[0] ??
           null;
         if (preferredCameraPreset) {
           applyingCameraPresetRef.current = true;
+          userCameraInteractionRef.current = false;
           applyOrbitCameraPose(camera, controls, preferredCameraPreset);
+          lastAppliedCameraPresetIdRef.current = preferredCameraPreset.id;
           setActiveCameraPresetId(preferredCameraPreset.id);
           window.requestAnimationFrame(() => {
             applyingCameraPresetRef.current = false;
           });
+        } else {
+          userCameraInteractionRef.current = false;
+          lastAppliedCameraPresetIdRef.current = null;
+          setActiveCameraPresetId(null);
         }
         if (floorPts.length >= 3) {
           const shapePts = floorPts.map(
@@ -4293,21 +4865,29 @@ export const ThreeDPreviewPanel: React.FC = () => {
               typeKey.includes('track_light'));
           const rotCcwDeg = ((Number(obj.rotationCcw ?? 0) % 360) + 360) % 360;
 
-          // Our 2D outputs store a world-axis-aligned bbox for the already-rotated footprint.
-          // If we rotate the proxy mesh by rotCcw again, we must use the *unrotated* footprint dims
-          // (i.e., de-rotate bbox dims) so the world footprint stays correct.
           const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
           const isWallHung = method === 'hang_on' && !isCeiling;
-          let wMm = wMmPlan;
-          let dMm = dMmPlan;
-          if (!isWallHung && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
+          const placementFootprintMm = obj.placementFootprintMm;
+          const hasPlacementFootprint =
+            !isWallHung &&
+            Number.isFinite(Number(placementFootprintMm?.w)) &&
+            Number.isFinite(Number(placementFootprintMm?.d)) &&
+            Number(placementFootprintMm?.w) > 0 &&
+            Number(placementFootprintMm?.d) > 0;
+          let wMm = hasPlacementFootprint
+            ? Math.max(1, Number(placementFootprintMm?.w))
+            : wMmPlan;
+          let dMm = hasPlacementFootprint
+            ? Math.max(1, Number(placementFootprintMm?.d))
+            : dMmPlan;
+          if (!isWallHung && !hasPlacementFootprint && (rotCcwDeg === 90 || rotCcwDeg === 270)) {
             const tmp = wMm;
             wMm = dMm;
             dMm = tmp;
           }
 
-          // Keep the target box anchored to the styled-layout footprint, but let GLBs
-          // preserve their native proportions inside that box via uniform scaling.
+          // Keep placement-backed visuals on their local footprint; bbox remains the
+          // world-space envelope after rotation.
           const hMmDefault = heightById.get(obj.id) ?? defaultHeightMm(obj.type);
           let wM = wMm * MM_TO_M;
           let dM = dMm * MM_TO_M;
@@ -4577,6 +5157,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           controls,
           objectGroup,
           wallGroup,
+          openingsGroup,
           proxyById,
           objectMetadataById,
           roomBoundsMm: {
@@ -4643,13 +5224,23 @@ export const ThreeDPreviewPanel: React.FC = () => {
           | null = null;
         let orbitClickStart: { x: number; y: number } | null = null;
         let orbitMoved = false;
+        const handleControlsStart = () => {
+          if (!applyingCameraPresetRef.current) {
+            userCameraInteractionRef.current = true;
+          }
+        };
         const handleControlsChange = () => {
-          if (applyingCameraPresetRef.current) {
+          if (applyingCameraPresetRef.current || !userCameraInteractionRef.current) {
             return;
           }
           setActiveCameraPresetId((current) => (current === null ? current : null));
         };
+        const handleControlsEnd = () => {
+          userCameraInteractionRef.current = false;
+        };
+        controls.addEventListener?.('start', handleControlsStart);
         controls.addEventListener?.('change', handleControlsChange);
+        controls.addEventListener?.('end', handleControlsEnd);
 
         const getPointer = (evt: PointerEvent) => {
           const rect = renderer.domElement.getBoundingClientRect();
@@ -4887,7 +5478,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
         return () => {
           window.removeEventListener('resize', handleResize);
+          controls.removeEventListener?.('start', handleControlsStart);
           controls.removeEventListener?.('change', handleControlsChange);
+          controls.removeEventListener?.('end', handleControlsEnd);
+          userCameraInteractionRef.current = false;
           renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
           renderer.domElement.removeEventListener('pointermove', handlePointerMove);
           renderer.domElement.removeEventListener('pointerup', handlePointerUp);
@@ -5012,13 +5606,22 @@ export const ThreeDPreviewPanel: React.FC = () => {
             {isCapturing ? 'Capturing...' : 'Capture'}
           </button>
           <button
-            className="ghost"
+            className={`ghost three-image-action-button${
+              activeImageRenderAction === 'generate' ? ' loading' : ''
+            }`}
             disabled={isRenderingImage}
             onClick={() => {
               void handleRenderSnapshotImage();
             }}
           >
-            {isRenderingImage ? 'Generating...' : 'Generate Image'}
+            {activeImageRenderAction === 'generate' ? (
+              <>
+                <span className="toolbar-spinner" aria-hidden="true" />
+                <span>Generating...</span>
+              </>
+            ) : (
+              'Generate Image'
+            )}
           </button>
           <button
             className="ghost"
@@ -5046,14 +5649,46 @@ export const ThreeDPreviewPanel: React.FC = () => {
           >
             Delete
           </button>
-          <button
-            className={editMode === 'edit' ? 'active' : ''}
-            disabled={!selectedId || editMode !== 'idle'}
-            onClick={() => setEditMode('edit')}
-          >
-            Edit
-          </button>
-          {editMode === 'edit' ? <button onClick={() => setEditMode('idle')}>Done</button> : null}
+          {renderedSnapshotImage ? (
+            <button
+              className={`ghost three-image-action-button${
+                activeImageRenderAction === 'camera_rerender' ? ' loading' : ''
+              }`}
+              disabled={isRenderingImage}
+              onClick={() => {
+                void handleCameraRerenderSnapshotImage();
+              }}
+            >
+              {activeImageRenderAction === 'camera_rerender' ? (
+                <>
+                  <span className="toolbar-spinner" aria-hidden="true" />
+                  <span>Re-rendering...</span>
+                </>
+              ) : (
+                'Rerender Camera'
+              )}
+            </button>
+          ) : null}
+          {renderedSnapshotImage ? (
+            <button
+              className={`ghost three-image-action-button three-apply-edit-action${
+                activeImageRenderAction === 'edit' ? ' loading' : ''
+              }`}
+              disabled={isRenderingImage}
+              onClick={() => {
+                void handleEditSnapshotImage();
+              }}
+            >
+              {activeImageRenderAction === 'edit' ? (
+                <>
+                  <span className="toolbar-spinner" aria-hidden="true" />
+                  <span>Editing...</span>
+                </>
+              ) : (
+                'Apply Edit'
+              )}
+            </button>
+          ) : null}
           {selectedId ? <div className="three-panel-hint">Selected object: {selectedId}</div> : null}
           {!selectedId && selectedWallId ? (
             <div className="three-panel-hint">Selected wall: {selectedWallId}</div>
@@ -5079,6 +5714,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
               {midHeightCameraPresets.length > 0 || ceilingCameraPresets.length > 0 ? (
                 <CameraPresetStepper
                   value={activeCameraPresetId}
+                  stepAnchorValue={lastAppliedCameraPresetIdRef.current}
                   disabled={isRenderingImage}
                   midHeightOptions={midHeightCameraPresets}
                   ceilingOptions={ceilingCameraPresets}
@@ -5388,17 +6024,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
                     }
                   />
                 </div>
-                <div className="three-edit-row">
-                  <button
-                    className="ghost"
-                    disabled={isRenderingImage || !renderedSnapshotImage}
-                    onClick={() => {
-                      void handleEditSnapshotImage();
-                    }}
-                  >
-                    {isRenderingImage ? 'Editing...' : 'Apply Edit'}
-                  </button>
-                </div>
                 {selectedId && !selectedObjectIsEditable ? (
                   <div className="three-panel-prompt-note">
                     Selected 3D object is not visible in this generated image.
@@ -5406,7 +6031,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 ) : null}
                 {configuredEditBoxes.length === 0 && !editPresetActive ? (
                   <div className="three-panel-prompt-note">
-                    Current labeled 3D view will be used as the target camera and layout reference.
+                    Draw an edit box or choose an edit preset before applying edits.
                   </div>
                 ) : null}
               </div>
@@ -5525,7 +6150,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
             <div className="three-render-chip-row">
               <span className="three-render-chip">{renderedSnapshotImage.models.image_model_name}</span>
               <span className="three-render-chip fallback">
-                {renderedSnapshotImage.request.render_mode === 'edit' ? 'Edit' : 'Generate'}
+                {renderedSnapshotImage.request.render_mode === 'edit'
+                  ? 'Edit'
+                  : renderedSnapshotImage.request.render_mode === 'camera_rerender'
+                    ? 'Camera'
+                    : 'Generate'}
               </span>
               {savedRenderId ? (
                 <span className="three-render-chip fallback">

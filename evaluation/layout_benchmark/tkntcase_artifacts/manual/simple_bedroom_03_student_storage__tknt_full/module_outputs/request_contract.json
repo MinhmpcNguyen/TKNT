@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a single bed",
+      "reason": "Directly requested as a required sleeping anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "bookshelf",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a bookshelf",
+      "reason": "Directly requested storage/support item.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "ceiling_light",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a ceiling lamp",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false,
+      "confidence": null
+    },
+    {
+      "object_type": "chair",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "with a chair",
+      "reason": "Directly requested with the desk for studying.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "desk",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a compact desk with a chair",
+      "reason": "Directly requested study/work anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a wardrobe",
+      "reason": "Directly requested storage item.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "one nightstand only if it fits",
+      "reason": "Explicit fit-dependent wording makes it optional if space allows.",
+      "available_in_program": true,
+      "confidence": 0.97
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sleep_core_bundle",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "keep_bed; drop_or_reduce_nightstand first if space constrained"
+    },
+    {
+      "group_id": "work_study_bundle",
+      "members": [
+        "desk",
+        "chair"
+      ],
+      "intent": "functional_pairing",
+      "priority": "support",
+      "drop_policy": "keep desk; chair may be reduced only if necessary"
+    }
+  ],
+  "notes": [
+    "Ceiling lamp is explicitly requested but not included because it is not present in the provided object type inventories.",
+    "Room is a bedroom with a compact student program; preserve open center and daylight-oriented work zone when feasible.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Requested non-functional objects were restored for downstream placement: ceiling_light"
+  ]
+}

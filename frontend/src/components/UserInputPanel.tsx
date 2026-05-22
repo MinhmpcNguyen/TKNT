@@ -1,4 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  ROOM_TYPE_OPTIONS,
+  STYLE_OPTIONS,
+  normalizeRoomType,
+  normalizeStyle,
+} from '../options';
 import { useEditorStore } from '../store';
 
 export const UserInputPanel: React.FC = () => {
@@ -16,8 +22,20 @@ export const UserInputPanel: React.FC = () => {
 
   const wall = floorplan?.walls.find((w) => w.wall_id === selectedWallId) ?? null;
   const hasLayout = Boolean(styledResult || (design?.placements.length ?? 0) > 0);
+  const roomTypeValue = normalizeRoomType(userInput.room_type);
+  const styleValue = normalizeStyle(userInput.style);
+  const roomTypeLabel =
+    ROOM_TYPE_OPTIONS.find((option) => option.value === roomTypeValue)?.label ?? roomTypeValue;
+  const styleLabel =
+    STYLE_OPTIONS.find((option) => option.value === styleValue)?.label ?? styleValue;
   const [isOpen, setIsOpen] = useState(!hasLayout);
   const hadLayoutRef = useRef(hasLayout);
+
+  useEffect(() => {
+    if (roomTypeValue !== userInput.room_type || styleValue !== userInput.style) {
+      updateUserInput({ room_type: roomTypeValue, style: styleValue });
+    }
+  }, [roomTypeValue, styleValue, updateUserInput, userInput.room_type, userInput.style]);
 
   useEffect(() => {
     if (!hadLayoutRef.current && hasLayout) {
@@ -40,13 +58,21 @@ export const UserInputPanel: React.FC = () => {
         <span>
           <span className="panel-collapse-title">User Input</span>
           <span className="panel-collapse-subtitle">
-            {userInput.room_type} · {userInput.style || 'No style'}
+            {userInput.case_name.trim() || `${roomTypeLabel} · ${styleLabel}`}
           </span>
         </span>
         <span className="panel-collapse-caret">{isOpen ? 'Hide' : 'Edit'}</span>
       </button>
       {isOpen ? (
         <div className="panel-collapse-body">
+          <div className="inspector-row">
+            <label>Case Name</label>
+            <input
+              value={userInput.case_name}
+              onChange={(evt) => updateUserInput({ case_name: evt.target.value })}
+              placeholder="Living room movie night"
+            />
+          </div>
           <div className="inspector-row">
             <label>Description</label>
             <textarea
@@ -57,36 +83,28 @@ export const UserInputPanel: React.FC = () => {
           <div className="inspector-row">
             <label>Room Type</label>
             <select
-              value={userInput.room_type}
+              value={roomTypeValue}
               onChange={(evt) => updateUserInput({ room_type: evt.target.value })}
             >
-              <option value="office">Office</option>
-              <option value="bedroom">Bedroom</option>
-              <option value="living_room">Living Room</option>
-              <option value="studio">Studio</option>
-              <option value="kitchen">Kitchen</option>
+              {ROOM_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="inspector-row">
             <label>Style</label>
-            <input
-              value={userInput.style}
+            <select
+              value={styleValue}
               onChange={(evt) => updateUserInput({ style: evt.target.value })}
-            />
-          </div>
-          <div className="inspector-row">
-            <label>Special Notes</label>
-            <textarea
-              value={userInput.special_description}
-              onChange={(evt) => updateUserInput({ special_description: evt.target.value })}
-            />
-          </div>
-          <div className="inspector-row">
-            <label>Feng Shui</label>
-            <textarea
-              value={userInput.feng_shui}
-              onChange={(evt) => updateUserInput({ feng_shui: evt.target.value })}
-            />
+            >
+              {STYLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="inspector-row">
             <label>Floor Area (m²)</label>
@@ -105,34 +123,11 @@ export const UserInputPanel: React.FC = () => {
             />
           </div>
           <div className="inspector-row">
-            <label>Location Floor</label>
-            <input
-              type="number"
-              value={userInput.location_floor}
-              onChange={(evt) => updateUserInput({ location_floor: Number(evt.target.value) })}
-            />
-          </div>
-          <div className="inspector-row">
-            <label>Bathrooms</label>
-            <input
-              type="number"
-              value={userInput.bathrooms}
-              onChange={(evt) => updateUserInput({ bathrooms: Number(evt.target.value) })}
-            />
-          </div>
-          <div className="inspector-row">
             <label>Windows</label>
             <input
               type="number"
               value={userInput.windows}
               onChange={(evt) => updateUserInput({ windows: Number(evt.target.value) })}
-            />
-          </div>
-          <div className="inspector-row">
-            <label>Window Direction</label>
-            <input
-              value={userInput.window_direction}
-              onChange={(evt) => updateUserInput({ window_direction: evt.target.value })}
             />
           </div>
           <div className="inspector-row">

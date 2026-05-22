@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "ceiling_light",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "and a ceiling lamp",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false,
+      "confidence": null
+    },
+    {
+      "object_type": "coffee_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a small coffee table",
+      "reason": "Directly requested as part of the core living room composition.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a rug",
+      "reason": "explicitly requested in the brief",
+      "available_in_program": false,
+      "confidence": null
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a slim TV console",
+      "reason": "Directly requested as part of the compact media area.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a ceiling lamp",
+      "reason": "The brief explicitly requests ceiling lighting, but the available inventory only includes floor lamp; treat as a lighting target if viable via available equivalent support.",
+      "available_in_program": true,
+      "confidence": 0.54
+    },
+    {
+      "object_type": "sofa",
+      "intent": "target_if_viable",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "Use a loveseat or small sofa",
+      "reason": "A compact sofa is explicitly requested as the main seating anchor; one is sufficient for the room size.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "armchair",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "comfortable for one or two people",
+      "reason": "Supported by the active seating bundle, but not directly required in the brief and can be dropped if space is tight.",
+      "available_in_program": true,
+      "confidence": 0.72
+    },
+    {
+      "object_type": "console_table",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "tidy central zone",
+      "reason": "Not directly requested; only a possible support/storage piece if the layout has surplus capacity.",
+      "available_in_program": true,
+      "confidence": 0.42
+    },
+    {
+      "object_type": "media_shelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "compact media area",
+      "reason": "A media shelf can support the media zone, but it is not explicitly required and should remain optional.",
+      "available_in_program": true,
+      "confidence": 0.58
+    },
+    {
+      "object_type": "side_table",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "keeping the object count modest",
+      "reason": "Not explicitly requested, but available as a small support piece if surplus space remains.",
+      "available_in_program": true,
+      "confidence": 0.63
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "main_seating_bundle",
+      "members": [
+        "sofa",
+        "coffee_table",
+        "armchair",
+        "side_table",
+        "floor_lamp"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "preserve sofa and coffee_table first; drop armchair, then side_table, then floor_lamp if space is constrained"
+    },
+    {
+      "group_id": "media_bundle",
+      "members": [
+        "tv_console",
+        "media_shelf"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "preserve tv_console; drop media_shelf first if space is constrained"
+    }
+  ],
+  "notes": [
+    "The brief asks for a ceiling lamp, but the provided inventory/program types do not include ceiling lamp; only floor_lamp is available.",
+    "No rug object type is available in the provided program or inventory lists, so it is not encoded.",
+    "The room should stay modest and open, so optional support pieces are kept low-priority.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Requested non-functional objects were restored for downstream placement: ceiling_light, rug"
+  ]
+}

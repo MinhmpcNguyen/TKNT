@@ -9,6 +9,8 @@ from db.models import (
     GeneratedRender,
     GeneratedRenderId,
     SavedLayout,
+    SavedLayoutCase,
+    SavedLayoutCaseId,
     SavedLayoutId,
     SessionId,
     TenantId,
@@ -20,6 +22,7 @@ from db.pg_utils import (
     RowMapping,
     to_json_dict,
     to_optional_bytes,
+    to_optional_int,
     to_optional_str,
     to_str,
 )
@@ -143,6 +146,64 @@ class PostgresUserContentRepository:
             with conn.cursor() as cur:
                 cur.execute(query, {"session_id": session_id})
 
+    def upsert_saved_layout_case(self, layout_case: SavedLayoutCase) -> SavedLayoutCase:
+        query = """
+            INSERT INTO saved_layout_cases (
+                id,
+                user_id,
+                name,
+                source_pipeline_case_id,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(name)s,
+                %(source_pipeline_case_id)s,
+                %(meta)s
+            )
+            ON CONFLICT (id)
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                source_pipeline_case_id = EXCLUDED.source_pipeline_case_id,
+                meta = EXCLUDED.meta,
+                updated_at = NOW()
+            WHERE saved_layout_cases.user_id = EXCLUDED.user_id
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout_case.id,
+                        "user_id": layout_case.user_id,
+                        "name": layout_case.name,
+                        "source_pipeline_case_id": layout_case.source_pipeline_case_id,
+                        "meta": Jsonb(layout_case.meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            raise PermissionError("Saved layout case already belongs to another user.")
+        return _row_to_saved_layout_case(row)
+
+    def get_saved_layout_case(
+        self, case_id: SavedLayoutCaseId, user_id: UserId
+    ) -> SavedLayoutCase | None:
+        query = """
+            SELECT *
+            FROM saved_layout_cases
+            WHERE id = %(case_id)s AND user_id = %(user_id)s
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"case_id": case_id, "user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_saved_layout_case(row)
+
     def create_saved_layout(self, layout: SavedLayout) -> None:
         query = """
             INSERT INTO saved_layouts (
@@ -152,6 +213,9 @@ class PostgresUserContentRepository:
                 floorplan_json,
                 design_json,
                 styled_result_json,
+                case_id,
+                option_id,
+                option_index,
                 meta
             )
             VALUES (
@@ -161,8 +225,111 @@ class PostgresUserContentRepository:
                 %(floorplan_json)s,
                 %(design_json)s,
                 %(styled_result_json)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
                 %(meta)s
             )
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout.id,
+                        "user_id": layout.user_id,
+                        "name": layout.name,
+                        "floorplan_json": Jsonb(layout.floorplan_json),
+                        "design_json": Jsonb(layout.design_json)
+                        if layout.design_json is not None
+                        else None,
+                        "styled_result_json": Jsonb(layout.styled_result_json)
+                        if layout.styled_result_json is not None
+                        else None,
+                        "case_id": layout.case_id,
+                        "option_id": layout.option_id,
+                        "option_index": layout.option_index,
+                        "meta": Jsonb(layout.meta),
+                    },
+                )
+
+    def upsert_saved_layout_option(self, layout: SavedLayout) -> SavedLayout:
+        query = """
+            INSERT INTO saved_layouts (
+                id,
+                user_id,
+                name,
+                floorplan_json,
+                design_json,
+                styled_result_json,
+                case_id,
+                option_id,
+                option_index,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(name)s,
+                %(floorplan_json)s,
+                %(design_json)s,
+                %(styled_result_json)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
+                %(meta)s
+            )
+            ON CONFLICT (user_id, case_id, option_id)
+            WHERE case_id IS NOT NULL AND option_id IS NOT NULL
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                floorplan_json = EXCLUDED.floorplan_json,
+                design_json = EXCLUDED.design_json,
+                styled_result_json = EXCLUDED.styled_result_json,
+                option_index = EXCLUDED.option_index,
+                meta = EXCLUDED.meta,
+                updated_at = NOW()
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout.id,
+                        "user_id": layout.user_id,
+                        "name": layout.name,
+                        "floorplan_json": Jsonb(layout.floorplan_json),
+                        "design_json": Jsonb(layout.design_json)
+                        if layout.design_json is not None
+                        else None,
+                        "styled_result_json": Jsonb(layout.styled_result_json)
+                        if layout.styled_result_json is not None
+                        else None,
+                        "case_id": layout.case_id,
+                        "option_id": layout.option_id,
+                        "option_index": layout.option_index,
+                        "meta": Jsonb(layout.meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return layout
+        stored = self.get_saved_layout(SavedLayoutId(to_str(row.get("id"))), layout.user_id)
+        return stored or _row_to_saved_layout(row)
+
+    def update_saved_layout(self, layout: SavedLayout) -> SavedLayout | None:
+        query = """
+            UPDATE saved_layouts
+            SET
+                name = %(name)s,
+                floorplan_json = %(floorplan_json)s,
+                design_json = %(design_json)s,
+                styled_result_json = %(styled_result_json)s,
+                meta = %(meta)s,
+                updated_at = NOW()
+            WHERE id = %(id)s AND user_id = %(user_id)s
+            RETURNING *
         """
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
@@ -182,17 +349,41 @@ class PostgresUserContentRepository:
                         "meta": Jsonb(layout.meta),
                     },
                 )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        stored = self.get_saved_layout(layout.id, layout.user_id)
+        return stored or _row_to_saved_layout(row)
 
-    def list_saved_layouts(self, user_id: UserId) -> Sequence[SavedLayout]:
+    def list_saved_layouts(
+        self, user_id: UserId, case_id: SavedLayoutCaseId | None = None
+    ) -> Sequence[SavedLayout]:
+        case_filter = (
+            "AND l.case_id = %(case_id)s"
+            if case_id is not None
+            else ""
+        )
         query = """
-            SELECT *
-            FROM saved_layouts
-            WHERE user_id = %(user_id)s
-            ORDER BY updated_at DESC, created_at DESC
+            SELECT l.*, c.name AS case_name
+            FROM saved_layouts AS l
+            LEFT JOIN saved_layout_cases AS c
+              ON c.id = l.case_id AND c.user_id = l.user_id
+            WHERE l.user_id = %(user_id)s
+            {case_filter}
+            ORDER BY
+              COALESCE(c.updated_at, l.updated_at, l.created_at) DESC,
+              l.case_id NULLS FIRST,
+              l.option_index NULLS LAST,
+              l.updated_at DESC,
+              l.created_at DESC
         """
+        query = query.format(case_filter=case_filter)
+        params: dict[str, object] = {"user_id": user_id}
+        if case_id is not None:
+            params["case_id"] = case_id
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, {"user_id": user_id})
+                cur.execute(query, params)
                 rows = cur.fetchall()
         return [_row_to_saved_layout(row) for row in rows]
 
@@ -200,9 +391,11 @@ class PostgresUserContentRepository:
         self, layout_id: SavedLayoutId, user_id: UserId
     ) -> SavedLayout | None:
         query = """
-            SELECT *
-            FROM saved_layouts
-            WHERE id = %(layout_id)s AND user_id = %(user_id)s
+            SELECT l.*, c.name AS case_name
+            FROM saved_layouts AS l
+            LEFT JOIN saved_layout_cases AS c
+              ON c.id = l.case_id AND c.user_id = l.user_id
+            WHERE l.id = %(layout_id)s AND l.user_id = %(user_id)s
         """
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
@@ -222,6 +415,10 @@ class PostgresUserContentRepository:
                 prompt,
                 negative_prompt,
                 storage_path,
+                root_layout_id,
+                case_id,
+                option_id,
+                option_index,
                 image_bytes,
                 mime_type,
                 meta
@@ -234,6 +431,10 @@ class PostgresUserContentRepository:
                 %(prompt)s,
                 %(negative_prompt)s,
                 %(storage_path)s,
+                %(root_layout_id)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
                 %(image_bytes)s,
                 %(mime_type)s,
                 %(meta)s
@@ -251,6 +452,10 @@ class PostgresUserContentRepository:
                         "prompt": render.prompt,
                         "negative_prompt": render.negative_prompt,
                         "storage_path": render.storage_path,
+                        "root_layout_id": render.root_layout_id,
+                        "case_id": render.case_id,
+                        "option_id": render.option_id,
+                        "option_index": render.option_index,
                         "image_bytes": render.image_bytes,
                         "mime_type": render.mime_type,
                         "meta": Jsonb(render.meta),
@@ -346,7 +551,21 @@ def _row_to_session(row: RowMapping) -> AuthSession:
     )
 
 
+def _row_to_saved_layout_case(row: RowMapping) -> SavedLayoutCase:
+    return SavedLayoutCase(
+        id=SavedLayoutCaseId(to_str(row.get("id"))),
+        user_id=UserId(to_str(row.get("user_id"))),
+        name=to_str(row.get("name")),
+        source_pipeline_case_id=to_optional_str(row.get("source_pipeline_case_id")),
+        meta=to_json_dict(row.get("meta")),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+
+
 def _row_to_saved_layout(row: RowMapping) -> SavedLayout:
+    raw_case_id = to_optional_str(row.get("case_id"))
+    raw_option_index = row.get("option_index")
     return SavedLayout(
         id=SavedLayoutId(to_str(row.get("id"))),
         user_id=UserId(to_str(row.get("user_id"))),
@@ -358,6 +577,10 @@ def _row_to_saved_layout(row: RowMapping) -> SavedLayout:
         styled_result_json=to_json_dict(row.get("styled_result_json"))
         if row.get("styled_result_json") is not None
         else None,
+        case_id=SavedLayoutCaseId(raw_case_id) if raw_case_id is not None else None,
+        option_id=to_optional_str(row.get("option_id")),
+        option_index=int(raw_option_index) if raw_option_index is not None else None,
+        case_name=to_optional_str(row.get("case_name")),
         meta=to_json_dict(row.get("meta")),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
@@ -372,6 +595,8 @@ def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
         "object_image_upload",
     }:
         raise ValueError(f"Unsupported render source: {source}")
+    raw_root_layout_id = to_optional_str(row.get("root_layout_id"))
+    raw_case_id = to_optional_str(row.get("case_id"))
     return GeneratedRender(
         id=GeneratedRenderId(to_str(row.get("id"))),
         user_id=UserId(to_str(row.get("user_id"))),
@@ -380,6 +605,12 @@ def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
         prompt=to_str(row.get("prompt")),
         negative_prompt=to_optional_str(row.get("negative_prompt")),
         storage_path=to_optional_str(row.get("storage_path")),
+        root_layout_id=SavedLayoutId(raw_root_layout_id)
+        if raw_root_layout_id is not None
+        else None,
+        case_id=SavedLayoutCaseId(raw_case_id) if raw_case_id is not None else None,
+        option_id=to_optional_str(row.get("option_id")),
+        option_index=to_optional_int(row.get("option_index")),
         image_bytes=to_optional_bytes(row.get("image_bytes")),
         mime_type=to_str(row.get("mime_type")),
         meta=to_json_dict(row.get("meta")),

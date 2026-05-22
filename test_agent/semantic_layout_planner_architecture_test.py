@@ -7,6 +7,38 @@ from agent import semantic_layout_planner
 
 
 class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
+    def test_request_contract_llm_failure_skips_heuristic_fallback(self) -> None:
+        class FailingPlanner(semantic_layout_planner.SemanticLayoutPlanner):
+            def _call_adaptive_stage(
+                self,
+                *args: object,
+                **kwargs: object,
+            ) -> dict[str, object]:
+                raise RuntimeError("boom")
+
+        with (
+            patch.dict("os.environ", {"TKNT_REQUEST_CONTRACT_LLM": "1"}),
+            self.assertLogs(semantic_layout_planner.logger, level="WARNING") as logs,
+        ):
+            result = FailingPlanner()._attach_llm_request_contract_if_enabled(
+                deterministic_program={
+                    "active_clusters": [{"cluster_id": "work", "members": ["desk"]}]
+                },
+                room_type="bedroom",
+                brief_text="Include a desk.",
+                room_model_json={},
+                inventory_catalog={},
+                temperature=0.2,
+                top_p=0.9,
+                max_tokens=256,
+            )
+
+        contract = result["request_contract"]
+        self.assertEqual(contract["source"], "llm_request_contract_failed")
+        self.assertEqual(contract["objects"], [])
+        self.assertIn("skipping heuristic fallback", "\n".join(logs.output))
+        self.assertIn("fallback was skipped", " ".join(result["notes"]))
+
     def test_adaptive_request_contract_has_response_schema(self) -> None:
         schema = semantic_layout_planner._adaptive_stage_response_schema(
             "adaptive_request_contract"

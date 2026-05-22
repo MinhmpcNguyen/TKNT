@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "coffee_table",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a coffee table",
+      "reason": "Explicitly requested core living room support piece.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "rug",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "a rug",
+      "reason": "Explicitly requested floor anchor; no fit-dependent wording.",
+      "available_in_program": false,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "sofa",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "Include a sofa facing a TV console",
+      "reason": "Directly requested as a required seating anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "facing a TV console",
+      "reason": "Directly requested as the media anchor for the seating arrangement.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "armchair",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "one or two armchairs if they fit",
+      "reason": "Requested conditionally based on fit, with a range of one to two.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "ample lighting for different activities",
+      "reason": "Lighting is requested functionally; floor lamp is a viable support object from inventory/program, but not explicitly named.",
+      "available_in_program": true,
+      "confidence": 0.62
+    },
+    {
+      "object_type": "console_table",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "modern",
+      "reason": "Potential support/display piece only if surplus space remains; not explicitly requested.",
+      "available_in_program": true,
+      "confidence": 0.2
+    },
+    {
+      "object_type": "media_shelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "designated movie area",
+      "reason": "Could support the media zone if space allows, but not directly requested.",
+      "available_in_program": true,
+      "confidence": 0.55
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "main_seating_and_media",
+      "members": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "armchair"
+      ],
+      "intent": "functional_pairing",
+      "priority": "core",
+      "drop_policy": "preserve sofa and tv_console first; reduce armchairs before coffee_table"
+    }
+  ],
+  "notes": [
+    "Soft usage hint indicates media wall should be prioritized.",
+    "Keep circulation easy through the room.",
+    "Do not infer a sectional sofa because the brief explicitly asks for a sofa facing a TV console.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

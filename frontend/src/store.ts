@@ -6,6 +6,7 @@ import {
   saveBillingSettings,
   type BillingSettings,
 } from './billing';
+import { DEFAULT_ROOM_TYPE, normalizeRoomType, normalizeStyle } from './options';
 import {
   AuthUser,
   DesignPlanV1,
@@ -23,7 +24,19 @@ import {
   Window,
 } from './types';
 import { normalizePoints } from './utils/geometry';
-import { getWorldBboxFromPlacement } from './utils/styledLayout';
+import {
+  frontWorldToLocalSide,
+  normalizeCardinalSide,
+  normalizeDirectionVector,
+  normalizePlanRotationDeg,
+  rotateVecCcw,
+  sideToVec,
+  vecToSide,
+} from './utils/planOrientation';
+import {
+  getPlacementPolygon,
+  getWorldBboxFromPlacement,
+} from './utils/styledLayout';
 
 const DEFAULT_SHARED_TENANT_ID = 'demo_tenant';
 const DEMO_INVENTORY_TENANT_ID = 'demo_inventory_test';
@@ -42,6 +55,7 @@ const DEFAULT_TENANT_ID = isDemoInventoryEnabled()
   : DEFAULT_SHARED_TENANT_ID;
 
 export type UserInput = {
+  case_name: string;
   description: string;
   room_type: string;
   style: string;
@@ -93,6 +107,8 @@ export type EditorState = {
   savedLayouts: SavedLayoutRecord[];
   savedRenders: GeneratedRenderRecord[];
   activeRootLayoutId: string | null;
+  activeLayoutCaseId: string | null;
+  activeSavedLayoutId: string | null;
   selectedSavedRenderId: string | null;
   billingSettings: BillingSettings;
   setTenantId: (tenantId: string) => void;
@@ -148,12 +164,22 @@ export type EditorState = {
   setSavedRenders: (renders: GeneratedRenderRecord[]) => void;
   upsertSavedRender: (render: GeneratedRenderRecord) => void;
   setActiveRootLayoutId: (layoutId: string | null) => void;
+  setActiveLayoutCaseId: (caseId: string | null) => void;
+  setActiveSavedLayoutId: (layoutId: string | null) => void;
   selectSavedRender: (renderId: string | null) => void;
   setBillingSettings: (settings: BillingSettings) => void;
   updateBillingSettings: (patch: Partial<BillingSettings>) => void;
   consumeMonthlyImageCredit: () => boolean;
   recordPaidImageUse: () => void;
 };
+
+function normalizeUserInputOptions(userInput: UserInput): UserInput {
+  return {
+    ...userInput,
+    room_type: normalizeRoomType(userInput.room_type),
+    style: normalizeStyle(userInput.style),
+  };
+}
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   tenantId: DEFAULT_TENANT_ID,
@@ -180,8 +206,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selectedOpeningId: null,
   selectedOpeningType: null,
   userInput: {
+    case_name: '',
     description: 'Auto-generated layout',
-    room_type: 'office',
+    room_type: DEFAULT_ROOM_TYPE,
     style: 'japandi',
     special_description: '',
     feng_shui: '',
@@ -205,6 +232,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   savedLayouts: [],
   savedRenders: [],
   activeRootLayoutId: null,
+  activeLayoutCaseId: null,
+  activeSavedLayoutId: null,
   selectedSavedRenderId: null,
   billingSettings: loadBillingSettings(),
   setTenantId: (tenantId) => set({ tenantId }),
@@ -224,6 +253,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       savedLayouts: [],
       savedRenders: [],
       activeRootLayoutId: null,
+      activeLayoutCaseId: null,
+      activeSavedLayoutId: null,
       selectedSavedRenderId: null,
       inventory: [],
     }),
@@ -459,7 +490,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const design = state.design;
     if (!design) return;
     const floorplan = state.floorplan ?? design.floorplan_geometry ?? null;
-    const next = floorplan ? clampPlacementToFloorplan(placement, floorplan) : placement;
+    const previous =
+      design.placements.find((p) => p.placement_id === placement.placement_id) ?? null;
+    const normalizedPlacement = normalizeEditablePlacement(placement, previous);
+    const next = floorplan
+      ? clampPlacementToFloorplan(normalizedPlacement, floorplan)
+      : normalizedPlacement;
     const placements = design.placements.map((p) => (p.placement_id === next.placement_id ? next : p));
     set({
       design: { ...design, placements },
@@ -481,32 +517,42 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
   removeOpening: (type, id) => {
-    const floorplan = get().floorplan;
+    const state = get();
+    const floorplan = state.floorplan ?? state.design?.floorplan_geometry ?? null;
     if (!floorplan) return;
-    if (type === 'door') {
-      set({
-        floorplan: {
-          ...floorplan,
-          openings: { ...floorplan.openings, doors: floorplan.openings.doors.filter((d) => d.door_id !== id) },
-        },
-        selectedOpeningId: null,
-        selectedOpeningType: null,
-      });
-      return;
-    }
+    const nextFloorplan: FloorplanGeometry = {
+      ...floorplan,
+      openings: {
+        doors:
+          type === 'door'
+            ? floorplan.openings.doors.filter((door) => door.door_id !== id)
+            : floorplan.openings.doors,
+        windows:
+          type === 'window'
+            ? floorplan.openings.windows.filter((window) => window.window_id !== id)
+            : floorplan.openings.windows,
+      },
+    };
     set({
-      floorplan: {
-        ...floorplan,
-        openings: { ...floorplan.openings, windows: floorplan.openings.windows.filter((w) => w.window_id !== id) },
+      floorplan: state.floorplan ? nextFloorplan : state.floorplan,
+      design: state.design
+        ? {
+            ...state.design,
+            floorplan_geometry: nextFloorplan,
+          }
+        : state.design,
+      userInput: {
+        ...state.userInput,
+        windows: nextFloorplan.openings.windows.length,
       },
       selectedOpeningId: null,
       selectedOpeningType: null,
     });
   },
-  setUserInput: (next) => set({ userInput: next }),
+  setUserInput: (next) => set({ userInput: normalizeUserInputOptions(next) }),
   updateUserInput: (patch) => {
     const current = get().userInput;
-    set({ userInput: { ...current, ...patch } });
+    set({ userInput: normalizeUserInputOptions({ ...current, ...patch }) });
   },
   setRoomEditMode: (next) => set({ roomEditMode: next }),
   setDrawWallMode: (next) => set({ drawWallMode: next }),
@@ -533,6 +579,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return { savedRenders: next };
     }),
   setActiveRootLayoutId: (activeRootLayoutId) => set({ activeRootLayoutId }),
+  setActiveLayoutCaseId: (activeLayoutCaseId) => set({ activeLayoutCaseId }),
+  setActiveSavedLayoutId: (activeSavedLayoutId) => set({ activeSavedLayoutId }),
   selectSavedRender: (selectedSavedRenderId) => set({ selectedSavedRenderId }),
   setBillingSettings: (settings) => {
     const next = ensureCurrentBillingPeriod(settings);
@@ -577,6 +625,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 }));
 
+function normalizeEditablePlacement(
+  placement: Placement,
+  previousPlacement: Placement | null,
+): Placement {
+  const rotationDeg = normalizePlanRotationDeg(Number(placement.rotation_deg ?? 0));
+  const previousRotationDeg = previousPlacement
+    ? normalizePlanRotationDeg(Number(previousPlacement.rotation_deg ?? 0))
+    : rotationDeg;
+  const rotationChanged = Math.abs(rotationDeg - previousRotationDeg) > 0.0001;
+  const currentFrontWorld = normalizeDirectionVector(placement.front_world);
+  const currentFrontSideWorld = normalizeCardinalSide(placement.front_side_world);
+  const currentFrontSideLocal = normalizeCardinalSide(placement.front_side_local);
+  const previousFrontWorld =
+    normalizeDirectionVector(previousPlacement?.front_world) ??
+    sideToVec(normalizeCardinalSide(previousPlacement?.front_side_world));
+  const inferredPreviousLocalSide = previousPlacement
+    ? normalizeCardinalSide(previousPlacement.front_side_local) ??
+      frontWorldToLocalSide(previousFrontWorld, previousRotationDeg)
+    : null;
+  const inferredCurrentLocalSide =
+    currentFrontSideLocal ??
+    inferredPreviousLocalSide ??
+    frontWorldToLocalSide(currentFrontWorld ?? sideToVec(currentFrontSideWorld), rotationDeg);
+  let frontWorld = currentFrontWorld;
+  let frontSideWorld = currentFrontSideWorld;
+  const frontSideLocal = inferredCurrentLocalSide;
+
+  if (frontSideLocal && (rotationChanged || !frontWorld)) {
+    frontWorld = rotateVecCcw(sideToVec(frontSideLocal), rotationDeg);
+    frontSideWorld = vecToSide(frontWorld);
+  }
+
+  return {
+    ...placement,
+    rotation_deg: rotationDeg,
+    front_world: frontWorld,
+    front_side_world: frontSideWorld,
+    front_side_local: frontSideLocal,
+  };
+}
+
 function syncStyledResultPlacement(
   styledResult: unknown,
   placement: Placement
@@ -593,6 +682,11 @@ function syncStyledResultPlacement(
     ...(styledResult as Record<string, unknown>),
   };
   const worldBbox = getWorldBboxFromPlacement(placement);
+  const polygon = getPlacementPolygon(placement).map((point) => ({
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+  }));
+  const rotationDeg = normalizePlanRotationDeg(Number(placement.rotation_deg ?? 0));
   nextStyledResult.objects = (styledResult as { objects: unknown[] }).objects.map((item) => {
     if (!item || typeof item !== 'object') {
       return item;
@@ -615,10 +709,11 @@ function syncStyledResultPlacement(
       ...objectRow,
       object_type: placement.category,
       color_hex: placement.color_hex,
-      rotation_ccw: ((placement.rotation_deg % 360) + 360) % 360,
+      rotation_ccw: rotationDeg,
       front_world: placement.front_world ?? null,
       front_side_world: placement.front_side_world ?? null,
       front_side_local: placement.front_side_local ?? null,
+      polygon_ccw: polygon,
       bbox: {
         min_x: worldBbox.minX,
         min_y: worldBbox.minY,
@@ -628,6 +723,7 @@ function syncStyledResultPlacement(
       manual_input: {
         ...existingManualInput,
         ...placement,
+        rotation_deg: rotationDeg,
       },
     };
   });

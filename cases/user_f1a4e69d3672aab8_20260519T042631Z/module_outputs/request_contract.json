@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "source": "llm_request_contract",
+  "objects": [
+    {
+      "object_type": "bed",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "include a bed",
+      "reason": "Explicitly requested as a required bedroom anchor.",
+      "available_in_program": true,
+      "confidence": 0.99
+    },
+    {
+      "object_type": "ceiling_light",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "ceiling light",
+      "reason": "Explicitly requested lighting fixture.",
+      "available_in_program": false,
+      "confidence": 0.97
+    },
+    {
+      "object_type": "curtains",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "curtains",
+      "reason": "Explicitly requested window treatment.",
+      "available_in_program": false,
+      "confidence": 0.97
+    },
+    {
+      "object_type": "tv_console",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "A tv should face the bed",
+      "reason": "TV support is required to satisfy the facing relationship.",
+      "available_in_program": true,
+      "confidence": 0.93
+    },
+    {
+      "object_type": "wardrobe",
+      "intent": "must_keep",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "wardrobe on a solid wall",
+      "reason": "Explicitly requested storage element with placement constraint.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "target_if_viable",
+      "min_keep": 0,
+      "target_count": 2,
+      "preferred_count": 2,
+      "max_keep": 2,
+      "evidence": "two nightstands if they fit",
+      "reason": "Requested conditionally based on fit; target two when viable.",
+      "available_in_program": true,
+      "confidence": 0.98
+    },
+    {
+      "object_type": "armchair",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "japandi",
+      "reason": "Style alone does not justify adding seating not mentioned in the brief.",
+      "available_in_program": false,
+      "confidence": 0.65
+    },
+    {
+      "object_type": "bookshelf",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "wardrobe on a solid wall",
+      "reason": "No bookshelf is explicitly requested.",
+      "available_in_program": true,
+      "confidence": 0.88
+    },
+    {
+      "object_type": "chair",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "prefer_daylit_work_zone",
+      "reason": "Only relevant if a desk/work zone is included; not explicitly requested.",
+      "available_in_program": true,
+      "confidence": 0.7
+    },
+    {
+      "object_type": "desk",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "prefer_daylit_work_zone",
+      "reason": "Work zone is only a soft hint and no desk is explicitly requested; avoid inventing extra furniture.",
+      "available_in_program": true,
+      "confidence": 0.72
+    },
+    {
+      "object_type": "dresser",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "wardrobe on a solid wall",
+      "reason": "Storage is already specified as wardrobe; do not add extra storage without request.",
+      "available_in_program": false,
+      "confidence": 0.8
+    },
+    {
+      "object_type": "floor_lamp",
+      "intent": "max0",
+      "min_keep": 0,
+      "target_count": 0,
+      "preferred_count": 0,
+      "max_keep": 0,
+      "evidence": "ceiling light",
+      "reason": "Lighting is explicitly satisfied by ceiling light; no floor lamp requested.",
+      "available_in_program": false,
+      "confidence": 0.84
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sleep_core",
+      "members": [
+        "bed",
+        "nightstand"
+      ],
+      "intent": "functional pairing",
+      "priority": "core",
+      "drop_policy": "keep bed; reduce nightstands first if space is tight"
+    },
+    {
+      "group_id": "media_pair",
+      "members": [
+        "bed",
+        "tv_console"
+      ],
+      "intent": "composition",
+      "priority": "core",
+      "drop_policy": "tv must remain oriented to bed; keep bed as anchor"
+    }
+  ],
+  "notes": [
+    "Room type is bedroom; style is japandi.",
+    "Maintain comfortable circulation around the bed and keep the bed away from the entry door.",
+    "Wardrobe should stay on a solid wall.",
+    "No explicit request for a desk/work setup beyond soft hints, so it is not included as required.",
+    "Request contract was normalized before tier-count enforcement."
+  ]
+}

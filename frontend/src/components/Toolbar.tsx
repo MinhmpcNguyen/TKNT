@@ -4,10 +4,13 @@ import {
   getPipelineArtifact,
   getPipelineResult,
   getPipelineStatus,
+  listSavedLayouts,
   runPipeline,
+  updateSavedLayout,
 } from '../api';
+import { ROOM_TYPE_OPTIONS, normalizeRoomType, normalizeStyle } from '../options';
 import { useEditorStore } from '../store';
-import { LayoutVariant, Placement, Point } from '../types';
+import { LayoutVariant, Placement, Point, SavedLayoutRecord } from '../types';
 import { preparePipelineResultLayouts } from '../utils/pipelineLayouts';
 
 const DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS = 3600;
@@ -53,6 +56,10 @@ export const Toolbar: React.FC = () => {
     savedLayouts,
     setSavedLayouts,
     setActiveRootLayoutId,
+    setActiveLayoutCaseId,
+    setActiveSavedLayoutId,
+    activeLayoutCaseId,
+    activeSavedLayoutId,
     selectSavedRender,
     setLayoutVariants,
     selectLayoutVariant,
@@ -71,9 +78,15 @@ export const Toolbar: React.FC = () => {
   const [savingLayout, setSavingLayout] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const galleryOpen = variantPickerOpen && layoutVariants.length > 0;
+  const roomTypeValue = normalizeRoomType(userInput.room_type);
+  const styleValue = normalizeStyle(userInput.style);
 
   type LoadFinalResult = {
     variantCount: number;
+  };
+
+  type LoadPipelineLayoutsOptions = {
+    finalize: boolean;
   };
 
   const applyVariant = (variant: LayoutVariant) => {
@@ -83,12 +96,30 @@ export const Toolbar: React.FC = () => {
     }
     setStyledResult(variant.styled_result);
     selectLayoutVariant(variant.variant_id);
+    setActiveLayoutCaseId(variant.saved_layout_case_id ?? null);
+    setActiveSavedLayoutId(variant.saved_layout_id ?? null);
+    setActiveRootLayoutId(variant.saved_layout_id ?? null);
+    selectSavedRender(null);
     setViewMode('2d');
     setVariantPickerOpen(false);
   };
 
   const handleGenerate = async () => {
     if (!floorplan) return;
+    const normalizedUserInput = {
+      ...userInput,
+      room_type: roomTypeValue,
+      style: styleValue,
+    };
+    if (
+      normalizedUserInput.room_type !== userInput.room_type ||
+      normalizedUserInput.style !== userInput.style
+    ) {
+      updateUserInput({
+        room_type: normalizedUserInput.room_type,
+        style: normalizedUserInput.style,
+      });
+    }
     const manualPlacements = collectManualPlacements(design?.placements ?? []);
     setLoading(true);
     setError(null);
@@ -99,6 +130,10 @@ export const Toolbar: React.FC = () => {
     setAdditionRequests([]);
     setRunStatus('Queued pipeline build', null);
     clearLayoutVariants();
+    setActiveLayoutCaseId(null);
+    setActiveSavedLayoutId(null);
+    setActiveRootLayoutId(null);
+    selectSavedRender(null);
     setStyledResult(null);
     setDesign({ floorplan_geometry: floorplan, placements: [] });
     setViolations([]);
@@ -110,24 +145,25 @@ export const Toolbar: React.FC = () => {
         user_id: currentUser?.id || tenantId || 'demo_user',
         input_payload: {
           tenant_id: tenantId,
-          user_input: userInput,
+          user_input: normalizedUserInput,
           floorplan_geometry: floorplan,
           constraints: {
-            description: userInput.description,
-            room_type: userInput.room_type,
-            floor_area_m2: userInput.floor_area_m2,
-            height: userInput.height,
-            shape_points: userInput.shape_points,
-            location_floor: userInput.location_floor,
-            bathrooms: userInput.bathrooms,
-            windows: userInput.windows,
-            window_direction: userInput.window_direction,
+            description: normalizedUserInput.description,
+            room_type: normalizedUserInput.room_type,
+            floor_area_m2: normalizedUserInput.floor_area_m2,
+            height: normalizedUserInput.height,
+            shape_points: normalizedUserInput.shape_points,
+            location_floor: normalizedUserInput.location_floor,
+            bathrooms: normalizedUserInput.bathrooms,
+            windows: normalizedUserInput.windows,
+            window_direction: normalizedUserInput.window_direction,
           },
           manual_placements: manualPlacements,
           max_iterations: 12,
         },
-        description: userInput.description,
-        special_notes: userInput.special_description,
+        case_name: normalizedUserInput.case_name.trim() || null,
+        description: normalizedUserInput.description,
+        special_notes: normalizedUserInput.special_description,
       });
       appendRunLog(`Case started: ${caseResp.case_id}`);
       if (manualPlacements.length > 0) {
@@ -141,7 +177,10 @@ export const Toolbar: React.FC = () => {
       let lastProgressLine = '';
       let lastLoadedVariantCount = 0;
       let lastActionIndex = 0;
-      const loadFinal = async (caseId: string): Promise<LoadFinalResult> => {
+      const loadPipelineLayouts = async (
+        caseId: string,
+        options: LoadPipelineLayoutsOptions
+      ): Promise<LoadFinalResult> => {
         let roomPayload: any = null;
         try {
           const roomArtifact = await getPipelineArtifact(caseId, 'room_interpreter');
@@ -171,23 +210,38 @@ export const Toolbar: React.FC = () => {
           setDesign(prepared.design);
         }
         if (prepared.variants.length > 0) {
+          const linkedVariants = options.finalize
+            ? await refreshSavedLayoutsForCase(
+                caseId,
+                prepared.variants,
+                setSavedLayouts,
+                appendRunLog
+              )
+            : prepared.variants;
           const primaryVariant =
-            prepared.variants.find(
+            linkedVariants.find(
               (variant) => variant.variant_id === prepared.selectedVariantId
-            ) ?? prepared.variants[0];
-          setLayoutVariants(prepared.variants, primaryVariant.variant_id);
-          applyVariant(primaryVariant);
-          setProgressPercent(100);
+            ) ?? linkedVariants[0];
+          setLayoutVariants(linkedVariants, primaryVariant.variant_id);
+          if (options.finalize || lastLoadedVariantCount === 0) {
+            applyVariant(primaryVariant);
+          }
+          if (options.finalize) {
+            setProgressPercent(100);
+          }
           setProgressLabel(
             `Option 1/${prepared.variants.length} loaded`
           );
           setReadyNotice(formatReadyOptionNotice(prepared.variants.length));
         } else {
-          clearLayoutVariants();
-          setVariantPickerOpen(false);
-          setProgressPercent(100);
-          setProgressLabel('Layout ready');
-          setReadyNotice(null);
+          if (options.finalize) {
+            void refreshSavedLayoutsForCase(caseId, [], setSavedLayouts, appendRunLog);
+            clearLayoutVariants();
+            setVariantPickerOpen(false);
+            setProgressPercent(100);
+            setProgressLabel('Layout ready');
+            setReadyNotice(null);
+          }
         }
         setViolations([]);
         setLastDesignMeta({ iteration: null, attempt: null });
@@ -238,14 +292,34 @@ export const Toolbar: React.FC = () => {
           done = true;
           break;
         }
+        const readyVariantCount = getReadyVariantCount(status);
+        if (readyVariantCount > lastLoadedVariantCount) {
+          try {
+            const partialState = await loadPipelineLayouts(caseId, { finalize: false });
+            if (partialState.variantCount > lastLoadedVariantCount) {
+              appendRunLog(
+                lastLoadedVariantCount === 0
+                  ? 'Loaded the first generated layout option onto the canvas.'
+                  : `Loaded ${partialState.variantCount} available layout options.`
+              );
+              lastLoadedVariantCount = partialState.variantCount;
+            }
+          } catch {
+            // The partial artifact can appear a moment after status changes.
+            // The final load still handles errors.
+          }
+        }
         if (status.stage === 'done') {
-          const finalState = await loadFinal(caseId);
+          const finalState = await loadPipelineLayouts(caseId, { finalize: true });
           if (finalState.variantCount > lastLoadedVariantCount) {
             appendRunLog(
               `Loaded ${finalState.variantCount} final design option${finalState.variantCount === 1 ? '' : 's'}.`
             );
-            lastLoadedVariantCount = finalState.variantCount;
           }
+          lastLoadedVariantCount = Math.max(
+            lastLoadedVariantCount,
+            finalState.variantCount
+          );
           done = true;
           break;
         }
@@ -274,7 +348,7 @@ export const Toolbar: React.FC = () => {
             }
             lastActionIndex = statusActions.length;
           }
-          const finalState = await loadFinal(caseId);
+          const finalState = await loadPipelineLayouts(caseId, { finalize: true });
           appendRunLog(
             `Loaded ${finalState.variantCount} final design option${finalState.variantCount === 1 ? '' : 's'}.`
           );
@@ -300,21 +374,52 @@ export const Toolbar: React.FC = () => {
     setSavingLayout(true);
     setLayoutError(null);
     try {
-      const saved = await createSavedLayout({
-        name: layoutName.trim() || `Layout ${new Date().toLocaleString()}`,
+      const existingSavedLayout = activeSavedLayoutId
+        ? savedLayouts.find((item) => item.id === activeSavedLayoutId) ?? null
+        : null;
+      const layoutPayload = {
+        name:
+          layoutName.trim() ||
+          existingSavedLayout?.name ||
+          `Layout ${new Date().toLocaleString()}`,
         floorplan_json: floorplan as unknown as Record<string, unknown>,
         design_json: (design ?? null) as unknown as Record<string, unknown> | null,
         styled_result_json:
           (styledResult ?? null) as Record<string, unknown> | null,
         meta: {
           saved_by_user_id: currentUser?.id ?? 'user',
+          saved_from_ui: true,
         },
-      });
+      };
+      const saved = activeSavedLayoutId
+        ? await updateSavedLayout(activeSavedLayoutId, layoutPayload)
+        : await createSavedLayout(layoutPayload);
       setSavedLayouts([saved, ...savedLayouts.filter((item) => item.id !== saved.id)]);
       setActiveRootLayoutId(saved.id);
+      setActiveLayoutCaseId(saved.case_id ?? activeLayoutCaseId ?? null);
+      setActiveSavedLayoutId(saved.case_id ? saved.id : null);
+      if (saved.option_id && layoutVariants.length > 0) {
+        setLayoutVariants(
+          layoutVariants.map((variant) =>
+            variant.variant_id === saved.option_id
+              ? {
+                  ...variant,
+                  label: saved.name,
+                  saved_layout_id: saved.id,
+                  saved_layout_case_id: saved.case_id ?? null,
+                }
+              : variant
+          ),
+          saved.option_id
+        );
+      }
       selectSavedRender(null);
       setLayoutName('');
-      appendRunLog(`Saved layout "${saved.name}" to the current account.`);
+      appendRunLog(
+        activeSavedLayoutId
+          ? `Updated layout option "${saved.name}".`
+          : `Saved layout "${saved.name}" to the current account.`
+      );
     } catch (saveError) {
       setLayoutError(saveError instanceof Error ? saveError.message : 'Failed to save layout.');
     } finally {
@@ -325,14 +430,14 @@ export const Toolbar: React.FC = () => {
   return (
     <div className="toolbar">
       <select
-        value={userInput.room_type}
+        value={roomTypeValue}
         onChange={(evt) => updateUserInput({ room_type: evt.target.value })}
       >
-        <option value="office">Office</option>
-        <option value="bedroom">Bedroom</option>
-        <option value="living_room">Living Room</option>
-        <option value="studio">Studio</option>
-        <option value="kitchen">Kitchen</option>
+        {ROOM_TYPE_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
       </select>
       <button onClick={handleGenerate} disabled={loading}>
         {loading ? 'Working…' : 'Generate'}
@@ -456,6 +561,72 @@ export const Toolbar: React.FC = () => {
   );
 };
 
+async function refreshSavedLayoutsForCase(
+  caseId: string,
+  variants: LayoutVariant[],
+  setSavedLayouts: (layouts: SavedLayoutRecord[]) => void,
+  appendRunLog: (line: string) => void
+): Promise<LayoutVariant[]> {
+  const expectedOptions = Math.max(1, variants.length);
+  let allLayouts: SavedLayoutRecord[] = [];
+  let caseLayouts: SavedLayoutRecord[] = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      allLayouts = await listSavedLayouts();
+      caseLayouts = allLayouts.filter((layout) => layout.case_id === caseId);
+      if (caseLayouts.length >= expectedOptions || attempt === 5) {
+        break;
+      }
+      await delay(500);
+    } catch (error) {
+      appendRunLog(
+        error instanceof Error
+          ? `Saved layout refresh failed: ${error.message}`
+          : 'Saved layout refresh failed.'
+      );
+      return variants;
+    }
+  }
+  setSavedLayouts(allLayouts);
+  if (caseLayouts.length > 0) {
+    appendRunLog(
+      `Linked ${caseLayouts.length} saved layout option${
+        caseLayouts.length === 1 ? '' : 's'
+      } to this case.`
+    );
+  }
+  return attachSavedLayoutsToVariants(variants, caseLayouts);
+}
+
+function attachSavedLayoutsToVariants(
+  variants: LayoutVariant[],
+  layouts: SavedLayoutRecord[]
+): LayoutVariant[] {
+  if (variants.length === 0 || layouts.length === 0) {
+    return variants;
+  }
+  const byOptionId = new Map(
+    layouts
+      .filter((layout) => layout.option_id)
+      .map((layout) => [layout.option_id, layout])
+  );
+  return variants.map((variant) => {
+    const saved = byOptionId.get(variant.variant_id) ?? null;
+    if (!saved) {
+      return variant;
+    }
+    return {
+      ...variant,
+      saved_layout_id: saved.id,
+      saved_layout_case_id: saved.case_id ?? null,
+    };
+  });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function collectManualPlacements(placements: Placement[]): Placement[] {
   return placements
     .filter((placement) => placement.source === 'manual')
@@ -559,6 +730,24 @@ function computePipelineProgressPercent(status: {
   return range.start + (range.end - range.start) * ratio;
 }
 
+function getReadyVariantCount(status: {
+  stage?: string | null;
+  progress_current?: number | null;
+}): number {
+  if (
+    status.stage !== 'stylist' &&
+    status.stage !== 'layout_variants' &&
+    status.stage !== 'done'
+  ) {
+    return 0;
+  }
+  const current =
+    typeof status.progress_current === 'number' && Number.isFinite(status.progress_current)
+      ? status.progress_current
+      : 0;
+  return Math.max(0, Math.floor(current));
+}
+
 function formatStatusReadyOptionNotice(status: {
   stage?: string | null;
   progress_current?: number | null;
@@ -575,12 +764,15 @@ function formatStatusReadyOptionNotice(status: {
     typeof status.progress_total === 'number' && Number.isFinite(status.progress_total)
       ? status.progress_total
       : null;
-  if (current === null || total === null || total <= 1 || current <= 1) {
+  if (current === null || total === null || total <= 0 || current < 1) {
     return null;
   }
   return `Option ${Math.min(current, total)}/${total} ready`;
 }
 
 function formatReadyOptionNotice(variantCount: number): string | null {
-  return variantCount > 1 ? `Option 2/${variantCount} ready` : null;
+  if (variantCount <= 0) {
+    return null;
+  }
+  return `${variantCount} layout option${variantCount === 1 ? '' : 's'} ready`;
 }

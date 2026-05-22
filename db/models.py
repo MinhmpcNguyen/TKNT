@@ -14,6 +14,7 @@ DesignKnowledgeId = NewType("DesignKnowledgeId", str)
 TenantId = NewType("TenantId", str)
 UserId = NewType("UserId", str)
 SessionId = NewType("SessionId", str)
+SavedLayoutCaseId = NewType("SavedLayoutCaseId", str)
 SavedLayoutId = NewType("SavedLayoutId", str)
 GeneratedRenderId = NewType("GeneratedRenderId", str)
 
@@ -156,6 +157,16 @@ class AuthSession(BaseModel):
     revoked_at: datetime | None = None
 
 
+class SavedLayoutCase(BaseModel):
+    id: SavedLayoutCaseId
+    user_id: UserId
+    name: str
+    source_pipeline_case_id: str | None = None
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class SavedLayout(BaseModel):
     id: SavedLayoutId
     user_id: UserId
@@ -163,6 +174,10 @@ class SavedLayout(BaseModel):
     floorplan_json: dict[str, JsonValue]
     design_json: dict[str, JsonValue] | None = None
     styled_result_json: dict[str, JsonValue] | None = None
+    case_id: SavedLayoutCaseId | None = None
+    option_id: str | None = None
+    option_index: int | None = None
+    case_name: str | None = None
     meta: dict[str, JsonValue] = Field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -176,6 +191,10 @@ class GeneratedRender(BaseModel):
     prompt: str
     negative_prompt: str | None = None
     storage_path: str | None = None
+    root_layout_id: SavedLayoutId | None = None
+    case_id: SavedLayoutCaseId | None = None
+    option_id: str | None = None
+    option_index: int | None = None
     image_bytes: bytes | None = None
     mime_type: str
     meta: dict[str, JsonValue] = Field(default_factory=dict)

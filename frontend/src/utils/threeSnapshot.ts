@@ -56,11 +56,17 @@ export type VisibleSnapshotObject = SnapshotObjectRecord & {
   screenBboxPx: SnapshotScreenBboxPx | null;
   visibleSampleCount: number;
   visibleSampleFraction: number;
+  visibilitySource?: 'raycast' | 'projected_visibility';
 };
 
 export type SnapshotOpeningRecord = {
   id: string;
   segmentMm: [SnapshotPointMm, SnapshotPointMm];
+  screenCenterPx?: {
+    x: number;
+    y: number;
+  } | null;
+  screenBboxPx?: SnapshotScreenBboxPx | null;
 };
 
 export type ThreeSnapshotRenderState = {
@@ -70,6 +76,7 @@ export type ThreeSnapshotRenderState = {
   controls: any | null;
   objectGroup: any;
   wallGroup: any | null;
+  openingsGroup: any | null;
   proxyById: Map<string, any>;
   objectMetadataById: Map<string, SnapshotObjectRecord>;
   roomBoundsMm: SnapshotBoundsMm;
@@ -133,6 +140,16 @@ export type ThreeSnapshotArtifact = {
   visibleObjectCount: number;
   hiddenObjectCount: number;
   visibilityMethod: string;
+  visibilityDiagnostics: {
+    status: 'ok' | 'degraded';
+    allObjectCount: number;
+    visibleObjectCount: number;
+    raycastVisibleObjectCount: number;
+    projectedFallbackObjectCount: number;
+    openingBboxMissingCount: number;
+    openingIdsMissingBbox: string[];
+    reasons: string[];
+  };
   wallOcclusionOpacityThreshold: number;
   allObjects: SnapshotObjectRecord[];
   visibleObjects: VisibleSnapshotObject[];
@@ -151,10 +168,17 @@ export function buildThreeSnapshotArtifact(
     controls,
     objectGroup,
     wallGroup,
+    openingsGroup,
     proxyById,
     objectMetadataById,
-  } =
+} =
     state;
+  objectGroup.updateMatrixWorld?.(true);
+  wallGroup?.updateMatrixWorld?.(true);
+  openingsGroup?.updateMatrixWorld?.(true);
+  camera.updateMatrixWorld?.(true);
+  camera.updateProjectionMatrix?.();
+
   const projectionMatrix = new THREE.Matrix4().multiplyMatrices(
     camera.projectionMatrix,
     camera.matrixWorldInverse
@@ -176,6 +200,9 @@ export function buildThreeSnapshotArtifact(
     Math.round(renderer.domElement.height || canvasRect.height || 1)
   );
 
+  const visibleCandidates: VisibleSnapshotObject[] = [];
+  let raycastVisibleObjectCount = 0;
+
   for (const [objectId, proxy] of proxyById.entries()) {
     const metadata = materializeSnapshotObjectRecord(
       objectMetadataById.get(objectId) ?? null,
@@ -191,6 +218,20 @@ export function buildThreeSnapshotArtifact(
     }
 
     const samplePoints = getVisibilitySamplePoints(THREE, box);
+    const boxCenter = box.getCenter(new THREE.Vector3());
+    const screenCenterPx = projectWorldPointToCanvasPx(
+      boxCenter,
+      camera,
+      canvasWidth,
+      canvasHeight
+    );
+    const screenBboxPx = computeScreenBboxPx({
+      THREE,
+      box,
+      camera,
+      canvasWidth,
+      canvasHeight,
+    });
     let visibleSampleCount = 0;
 
     for (const point of samplePoints) {
@@ -210,31 +251,30 @@ export function buildThreeSnapshotArtifact(
       }
     }
 
-    if (visibleSampleCount <= 0) {
+    if (!screenBboxPx || screenBboxPx.width <= 0 || screenBboxPx.height <= 0) {
       continue;
     }
 
-    const boxCenter = box.getCenter(new THREE.Vector3());
-    const screenCenterPx = projectWorldPointToCanvasPx(
-      boxCenter,
-      camera,
-      canvasWidth,
-      canvasHeight
-    );
-    visibleObjects.push({
+    const visibleObject: VisibleSnapshotObject = {
       ...cloneSnapshotObjectRecord(metadata),
       distanceToCameraM: roundTo(cameraWorldPosition.distanceTo(boxCenter), 3),
       screenCenterPx,
-      screenBboxPx: computeScreenBboxPx({
-        THREE,
-        box,
-        camera,
-        canvasWidth,
-        canvasHeight,
-      }),
+      screenBboxPx,
       visibleSampleCount,
       visibleSampleFraction: roundTo(visibleSampleCount / samplePoints.length, 3),
-    });
+      visibilitySource: visibleSampleCount > 0 ? 'raycast' : 'projected_visibility',
+    };
+    visibleCandidates.push(visibleObject);
+    if (visibleSampleCount > 0) {
+      raycastVisibleObjectCount += 1;
+      visibleObjects.push(visibleObject);
+    }
+  }
+
+  let projectedFallbackObjectCount = 0;
+  if (visibleObjects.length === 0 && visibleCandidates.length > 0) {
+    visibleObjects.push(...visibleCandidates);
+    projectedFallbackObjectCount = visibleCandidates.length;
   }
 
   visibleObjects.sort((left, right) => left.distanceToCameraM - right.distanceToCameraM);
@@ -249,6 +289,41 @@ export function buildThreeSnapshotArtifact(
       )
     )
     .filter((item): item is SnapshotObjectRecord => item !== null);
+  const openingScreenLocks = buildOpeningScreenLocks({
+    THREE,
+    openingsGroup,
+    camera,
+    canvasWidth,
+    canvasHeight,
+  });
+  const openingIdsMissingBbox: string[] = [];
+  for (const item of state.roomOpenings.doors) {
+    if (!openingScreenLocks.has(`door:${item.id}`)) {
+      openingIdsMissingBbox.push(`door:${item.id}`);
+    }
+  }
+  for (const item of state.roomOpenings.windows) {
+    if (!openingScreenLocks.has(`window:${item.id}`)) {
+      openingIdsMissingBbox.push(`window:${item.id}`);
+    }
+  }
+  const visibilityReasons: string[] = [];
+  if (projectedFallbackObjectCount > 0) {
+    visibilityReasons.push('raycast_occlusion_returned_no_visible_objects');
+  }
+  if (openingIdsMissingBbox.length > 0) {
+    visibilityReasons.push('opening_screen_bbox_missing');
+  }
+  const visibilityDiagnostics = {
+    status: visibilityReasons.length > 0 ? 'degraded' as const : 'ok' as const,
+    allObjectCount: allObjects.length,
+    visibleObjectCount: visibleObjects.length,
+    raycastVisibleObjectCount,
+    projectedFallbackObjectCount,
+    openingBboxMissingCount: openingIdsMissingBbox.length,
+    openingIdsMissingBbox,
+    reasons: visibilityReasons,
+  };
 
   return {
     capturedAt: new Date().toISOString(),
@@ -273,6 +348,8 @@ export function buildThreeSnapshotArtifact(
             SnapshotPointMm,
             SnapshotPointMm,
           ],
+          screenCenterPx: openingScreenLocks.get(`door:${item.id}`)?.center ?? null,
+          screenBboxPx: openingScreenLocks.get(`door:${item.id}`)?.bbox ?? null,
         })),
         windows: state.roomOpenings.windows.map((item) => ({
           id: item.id,
@@ -280,6 +357,8 @@ export function buildThreeSnapshotArtifact(
             SnapshotPointMm,
             SnapshotPointMm,
           ],
+          screenCenterPx: openingScreenLocks.get(`window:${item.id}`)?.center ?? null,
+          screenBboxPx: openingScreenLocks.get(`window:${item.id}`)?.bbox ?? null,
         })),
       },
     },
@@ -308,10 +387,58 @@ export function buildThreeSnapshotArtifact(
     hiddenObjectCount: Math.max(0, allObjects.length - visibleObjects.length),
     visibilityMethod:
       'frustum intersection plus center/corner occlusion sampling against current object meshes and walls above the opacity threshold',
+    visibilityDiagnostics,
     wallOcclusionOpacityThreshold: state.wallOcclusionOpacityThreshold,
     allObjects,
     visibleObjects,
   };
+}
+
+function buildOpeningScreenLocks(params: {
+  THREE: any;
+  openingsGroup: any | null;
+  camera: any;
+  canvasWidth: number;
+  canvasHeight: number;
+}): Map<string, { bbox: SnapshotScreenBboxPx; center: { x: number; y: number } | null }> {
+  const { THREE, openingsGroup, camera, canvasWidth, canvasHeight } = params;
+  const locks = new Map<
+    string,
+    { bbox: SnapshotScreenBboxPx; center: { x: number; y: number } | null }
+  >();
+  if (!openingsGroup) {
+    return locks;
+  }
+
+  openingsGroup.children?.forEach?.((openingRoot: any) => {
+    const openingId = String(openingRoot?.userData?.openingId ?? '').trim();
+    const openingType = String(openingRoot?.userData?.openingType ?? '').trim();
+    if (!openingId || !openingType) {
+      return;
+    }
+    const box = new THREE.Box3().setFromObject(openingRoot);
+    if (box.isEmpty()) {
+      return;
+    }
+    const bbox = computeScreenBboxPx({
+      THREE,
+      box,
+      camera,
+      canvasWidth,
+      canvasHeight,
+    });
+    if (!bbox) {
+      return;
+    }
+    const center = projectWorldPointToCanvasPx(
+      box.getCenter(new THREE.Vector3()),
+      camera,
+      canvasWidth,
+      canvasHeight
+    );
+    locks.set(`${openingType}:${openingId}`, { bbox, center });
+  });
+  return locks;
 }
 
 function cloneSnapshotObjectRecord(item: SnapshotObjectRecord): SnapshotObjectRecord {
@@ -343,8 +470,11 @@ function materializeSnapshotObjectRecord(
   const heightMm = Math.max(0, Number(cloned.dimensionsMm.height ?? 0));
   const sceneYawDeg = normalizeDegrees((Number(proxy.rotation?.y ?? 0) * 180) / Math.PI);
   const planRotationDeg = sceneYawDeg;
-  const worldWidthMm = usesSwappedFootprint(planRotationDeg) ? depthMm : widthMm;
-  const worldDepthMm = usesSwappedFootprint(planRotationDeg) ? widthMm : depthMm;
+  const rotationRad = (planRotationDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rotationRad));
+  const sin = Math.abs(Math.sin(rotationRad));
+  const worldWidthMm = widthMm * cos + depthMm * sin;
+  const worldDepthMm = widthMm * sin + depthMm * cos;
   const positionRoomMm = sceneVectorToRoomMm(proxy.position, centerXmm, centerYmm);
 
   cloned.planPositionMm = {
@@ -561,11 +691,6 @@ function sceneVectorToRoomMm(
     y: roundTo(centerYmm - vector.z * MM_PER_M, 1),
     z: roundTo(vector.y * MM_PER_M, 1),
   };
-}
-
-function usesSwappedFootprint(rotationDeg: number): boolean {
-  const normalized = normalizeDegrees(rotationDeg);
-  return Math.abs(normalized - 90) < 0.5 || Math.abs(normalized - 270) < 0.5;
 }
 
 function normalizeDegrees(value: number): number {

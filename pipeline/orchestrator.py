@@ -1198,6 +1198,11 @@ def run_case(
         if finalized_bundle is None:
             continue
         final_candidates.append(finalized_bundle)
+        _write_partial_layout_variants_artifact(
+            paths=paths,
+            final_candidates=final_candidates,
+            target_final_count=target_final_count,
+        )
         _update_status(
             paths,
             "stylist",
@@ -3012,6 +3017,39 @@ def _build_layout_variants_payload_from_final_candidates(
         else None,
         "variants": payload_variants,
     }
+
+
+def _write_partial_layout_variants_artifact(
+    *,
+    paths: CasePaths,
+    final_candidates: list[dict[str, Any]],
+    target_final_count: int,
+) -> None:
+    if not final_candidates:
+        return
+
+    selected = select_distinct_final_gallery_candidates(
+        candidates=final_candidates,
+        max_variants=target_final_count,
+    )
+    layout_variants = _build_layout_variants_payload_from_final_candidates(
+        selected,
+        status="IN_PROGRESS",
+    )
+    layout_variants["is_partial"] = True
+    layout_variants["ready_count"] = len(layout_variants.get("variants") or [])
+    layout_variants["target_count"] = target_final_count
+    layout_variants["selection_summary"] = build_final_gallery_selection_summary(
+        candidates=final_candidates,
+        selected=selected,
+        requested_count=target_final_count,
+    )
+    _write_module_json(
+        paths,
+        "layout_variants",
+        layout_variants,
+        legacy_path=paths.layout_variants,
+    )
 
 
 def _select_final_styling_candidates(

@@ -5,7 +5,7 @@ import binascii
 import mimetypes
 import shutil
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -22,9 +22,12 @@ from db.models import (
     GeneratedRenderId,
     JsonValue,
     SavedLayout,
+    SavedLayoutCase,
+    SavedLayoutCaseId,
     SavedLayoutId,
     TenantId,
     UserAccount,
+    UserId,
 )
 from db.pg_assets import PostgresAssetRepository
 from db.pg_user_content import PostgresUserContentRepository
@@ -64,6 +67,25 @@ class PersistedUserAsset:
     scope: UserAssetScope
 
 
+@dataclass(frozen=True)
+class LayoutOptionPersistenceRequest:
+    option_id: str
+    option_index: int
+    name: str
+    floorplan_json: dict[str, JsonValue]
+    design_json: dict[str, JsonValue] | None = None
+    styled_result_json: dict[str, JsonValue] | None = None
+    meta: dict[str, JsonValue] | None = None
+
+
+@dataclass(frozen=True)
+class RenderLayoutContext:
+    root_layout_id: str | None
+    case_id: str | None
+    option_id: str | None
+    option_index: int | None
+
+
 class UserContentService:
     def __init__(
         self,
@@ -76,6 +98,9 @@ class UserContentService:
         self._asset_repository = asset_repository or PostgresAssetRepository()
         self._user_repository = user_repository or PostgresUserContentRepository()
         self._content_root = content_root.expanduser().resolve()
+
+    def get_user_by_id(self, user_id: str) -> UserAccount | None:
+        return self._user_repository.get_user_by_id(UserId(user_id))
 
     def list_inventory_assets_for_user(
         self,
@@ -278,6 +303,9 @@ class UserContentService:
         floorplan_json: dict[str, JsonValue],
         design_json: dict[str, JsonValue] | None = None,
         styled_result_json: dict[str, JsonValue] | None = None,
+        case_id: str | None = None,
+        option_id: str | None = None,
+        option_index: int | None = None,
         meta: dict[str, JsonValue] | None = None,
     ) -> SavedLayout:
         layout = SavedLayout(
@@ -287,17 +315,149 @@ class UserContentService:
             floorplan_json=floorplan_json,
             design_json=design_json,
             styled_result_json=styled_result_json,
+            case_id=SavedLayoutCaseId(case_id) if case_id else None,
+            option_id=option_id,
+            option_index=option_index,
             meta=meta or {},
         )
         self._user_repository.create_saved_layout(layout)
         stored = self._user_repository.get_saved_layout(layout.id, user.id)
         return stored or layout
 
-    def list_layouts(self, *, user: UserAccount) -> list[SavedLayout]:
-        return list(self._user_repository.list_saved_layouts(user.id))
+    def upsert_layout_case_options(
+        self,
+        *,
+        user: UserAccount,
+        case_id: str,
+        case_name: str,
+        options: Sequence[LayoutOptionPersistenceRequest],
+        meta: dict[str, JsonValue] | None = None,
+    ) -> list[SavedLayout]:
+        layout_case = SavedLayoutCase(
+            id=SavedLayoutCaseId(case_id),
+            user_id=user.id,
+            name=case_name,
+            source_pipeline_case_id=case_id,
+            meta=meta or {},
+        )
+        stored_case = self._user_repository.upsert_saved_layout_case(layout_case)
+        saved_layouts: list[SavedLayout] = []
+        for option in options:
+            option_meta = {
+                **(option.meta or {}),
+                "case_id": str(stored_case.id),
+                "case_name": stored_case.name,
+                "option_id": option.option_id,
+                "option_index": option.option_index,
+            }
+            layout = SavedLayout(
+                id=SavedLayoutId(f"layout_{uuid.uuid4().hex}"),
+                user_id=user.id,
+                name=option.name,
+                floorplan_json=option.floorplan_json,
+                design_json=option.design_json,
+                styled_result_json=option.styled_result_json,
+                case_id=stored_case.id,
+                option_id=option.option_id,
+                option_index=option.option_index,
+                meta=option_meta,
+            )
+            saved_layouts.append(self._user_repository.upsert_saved_layout_option(layout))
+        return saved_layouts
+
+    def update_layout_case_name(
+        self,
+        *,
+        user: UserAccount,
+        case_id: str,
+        name: str,
+    ) -> SavedLayoutCase | None:
+        existing = self._user_repository.get_saved_layout_case(
+            SavedLayoutCaseId(case_id), user.id
+        )
+        if existing is None:
+            return None
+        layout_case = SavedLayoutCase(
+            id=existing.id,
+            user_id=user.id,
+            name=name,
+            source_pipeline_case_id=existing.source_pipeline_case_id,
+            meta=dict(existing.meta or {}),
+        )
+        return self._user_repository.upsert_saved_layout_case(layout_case)
+
+    def update_layout(
+        self,
+        *,
+        user: UserAccount,
+        layout_id: str,
+        name: str,
+        floorplan_json: dict[str, JsonValue],
+        design_json: dict[str, JsonValue] | None = None,
+        styled_result_json: dict[str, JsonValue] | None = None,
+        meta: dict[str, JsonValue] | None = None,
+    ) -> SavedLayout | None:
+        existing = self.get_layout(user=user, layout_id=layout_id)
+        if existing is None:
+            return None
+        layout = SavedLayout(
+            id=existing.id,
+            user_id=user.id,
+            name=name,
+            floorplan_json=floorplan_json,
+            design_json=design_json,
+            styled_result_json=styled_result_json,
+            case_id=existing.case_id,
+            option_id=existing.option_id,
+            option_index=existing.option_index,
+            meta={**dict(existing.meta or {}), **(meta or {})},
+        )
+        return self._user_repository.update_saved_layout(layout)
+
+    def list_layouts(
+        self, *, user: UserAccount, case_id: str | None = None
+    ) -> list[SavedLayout]:
+        return list(
+            self._user_repository.list_saved_layouts(
+                user.id,
+                SavedLayoutCaseId(case_id) if case_id else None,
+            )
+        )
 
     def get_layout(self, *, user: UserAccount, layout_id: str) -> SavedLayout | None:
         return self._user_repository.get_saved_layout(SavedLayoutId(layout_id), user.id)
+
+    def resolve_render_layout_context(
+        self,
+        *,
+        user: UserAccount,
+        root_layout_id: str | None = None,
+        case_id: str | None = None,
+        option_id: str | None = None,
+    ) -> RenderLayoutContext | None:
+        normalized_root_layout_id = _clean_optional_text(root_layout_id)
+        normalized_case_id = _clean_optional_text(case_id)
+        normalized_option_id = _clean_optional_text(option_id)
+        if normalized_case_id and normalized_option_id:
+            layout = self._find_saved_layout_option(
+                user=user,
+                case_id=normalized_case_id,
+                option_id=normalized_option_id,
+            )
+            if layout is None:
+                return None
+            return _render_layout_context_from_layout(layout)
+        if normalized_root_layout_id:
+            layout = self.get_layout(user=user, layout_id=normalized_root_layout_id)
+            if layout is None:
+                return None
+            return _render_layout_context_from_layout(layout)
+        return RenderLayoutContext(
+            root_layout_id=None,
+            case_id=None,
+            option_id=None,
+            option_index=None,
+        )
 
     def list_generated_renders(self, *, user: UserAccount) -> list[GeneratedRender]:
         return list(self._user_repository.list_generated_renders(user.id))
@@ -339,9 +499,23 @@ class UserContentService:
         prompt: str,
         negative_prompt: str | None = None,
         meta: dict[str, JsonValue] | None = None,
+        root_layout_id: str | None = None,
+        case_id: str | None = None,
+        option_id: str | None = None,
+        option_index: int | None = None,
     ) -> GeneratedRender:
         mime_type, raw_bytes = _decode_data_url(image_data_url)
         render_id = GeneratedRenderId(f"render_{uuid.uuid4().hex}")
+        normalized_root_layout_id = _clean_optional_text(root_layout_id)
+        normalized_case_id = _clean_optional_text(case_id)
+        normalized_option_id = _clean_optional_text(option_id)
+        render_meta = _merge_render_layout_context_meta(
+            meta or {},
+            root_layout_id=normalized_root_layout_id,
+            case_id=normalized_case_id,
+            option_id=normalized_option_id,
+            option_index=option_index,
+        )
 
         render = GeneratedRender(
             id=render_id,
@@ -351,9 +525,17 @@ class UserContentService:
             prompt=prompt,
             negative_prompt=negative_prompt,
             storage_path=None,
+            root_layout_id=SavedLayoutId(normalized_root_layout_id)
+            if normalized_root_layout_id
+            else None,
+            case_id=SavedLayoutCaseId(normalized_case_id)
+            if normalized_case_id
+            else None,
+            option_id=normalized_option_id,
+            option_index=option_index,
             image_bytes=raw_bytes,
             mime_type=mime_type,
-            meta=meta or {},
+            meta=render_meta,
         )
         self._user_repository.create_generated_render(render)
         stored = self._user_repository.get_generated_render(render.id, user.id)
@@ -419,6 +601,10 @@ class UserContentService:
             "floorplan_json": layout.floorplan_json,
             "design_json": layout.design_json,
             "styled_result_json": layout.styled_result_json,
+            "case_id": str(layout.case_id) if layout.case_id else None,
+            "option_id": layout.option_id,
+            "option_index": layout.option_index,
+            "case_name": layout.case_name,
             "meta": dict(layout.meta or {}),
             "created_at": layout.created_at.isoformat() if layout.created_at else None,
             "updated_at": layout.updated_at.isoformat() if layout.updated_at else None,
@@ -437,6 +623,10 @@ class UserContentService:
             "prompt": render.prompt,
             "negative_prompt": render.negative_prompt,
             "storage_path": render.storage_path,
+            "root_layout_id": _serialized_render_root_layout_id(render),
+            "case_id": _serialized_render_case_id(render),
+            "option_id": _serialized_render_option_id(render),
+            "option_index": _serialized_render_option_index(render),
             "mime_type": render.mime_type,
             "meta": dict(render.meta or {}),
             "created_at": render.created_at.isoformat() if render.created_at else None,
@@ -495,6 +685,96 @@ class UserContentService:
         if not isinstance(created_by_user_id, str) or not created_by_user_id.strip():
             return False
         return created_by_user_id == str(user.id)
+
+    def _find_saved_layout_option(
+        self,
+        *,
+        user: UserAccount,
+        case_id: str,
+        option_id: str,
+    ) -> SavedLayout | None:
+        return next(
+            (
+                layout
+                for layout in self.list_layouts(user=user, case_id=case_id)
+                if layout.option_id == option_id
+            ),
+            None,
+        )
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _render_layout_context_from_layout(layout: SavedLayout) -> RenderLayoutContext:
+    return RenderLayoutContext(
+        root_layout_id=str(layout.id),
+        case_id=str(layout.case_id) if layout.case_id else None,
+        option_id=layout.option_id,
+        option_index=layout.option_index,
+    )
+
+
+def _merge_render_layout_context_meta(
+    meta: dict[str, JsonValue],
+    *,
+    root_layout_id: str | None,
+    case_id: str | None,
+    option_id: str | None,
+    option_index: int | None,
+) -> dict[str, JsonValue]:
+    context_meta: dict[str, JsonValue] = {
+        "root_layout_id": root_layout_id,
+        "case_id": case_id,
+        "option_id": option_id,
+        "option_index": option_index,
+    }
+    return {**meta, **context_meta}
+
+
+def _serialized_render_root_layout_id(render: GeneratedRender) -> str | None:
+    if render.root_layout_id is not None:
+        return str(render.root_layout_id)
+    return _meta_optional_text(render.meta, "root_layout_id")
+
+
+def _serialized_render_case_id(render: GeneratedRender) -> str | None:
+    if render.case_id is not None:
+        return str(render.case_id)
+    return _meta_optional_text(render.meta, "case_id")
+
+
+def _serialized_render_option_id(render: GeneratedRender) -> str | None:
+    if render.option_id is not None:
+        return render.option_id
+    return _meta_optional_text(render.meta, "option_id")
+
+
+def _serialized_render_option_index(render: GeneratedRender) -> int | None:
+    if render.option_index is not None:
+        return render.option_index
+    raw_value = render.meta.get("option_index")
+    if isinstance(raw_value, int):
+        return raw_value
+    if isinstance(raw_value, float):
+        return int(raw_value)
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            return int(raw_value)
+        except ValueError:
+            return None
+    return None
+
+
+def _meta_optional_text(meta: dict[str, JsonValue], key: str) -> str | None:
+    raw_value = meta.get(key)
+    if isinstance(raw_value, str) and raw_value.strip():
+        return raw_value.strip()
+    return None
 
 
 def _decode_data_url(data_url: str) -> tuple[str, bytes]:

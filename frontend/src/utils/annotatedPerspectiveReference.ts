@@ -1,4 +1,5 @@
 import {
+  type SnapshotOpeningRecord,
   type ThreeSnapshotArtifact,
   type VisibleSnapshotObject,
 } from './threeSnapshot';
@@ -114,9 +115,21 @@ export async function buildStructuralPerspectiveReferenceImageDataUrl(params: {
       canvasHeight: sourceHeight,
     });
   });
+  const openingItems = snapshotOpenings(params.snapshot);
+  openingItems.forEach((opening, index) => {
+    drawOpeningStructuralOutline(context, {
+      opening,
+      index: params.snapshot.visibleObjects.length + index,
+      scaleX,
+      scaleY,
+      canvasWidth: sourceWidth,
+      canvasHeight: sourceHeight,
+    });
+  });
 
   drawObjectIdentityCallouts(context, {
     objects: params.snapshot.visibleObjects,
+    openings: openingItems,
     scaleX,
     scaleY,
     canvasWidth: sourceWidth,
@@ -364,34 +377,88 @@ function drawObjectStructuralOutline(
   context.restore();
 }
 
-function drawObjectIdentityCallouts(
+function drawOpeningStructuralOutline(
   context: CanvasRenderingContext2D,
   params: {
-    objects: VisibleSnapshotObject[];
+    opening: SnapshotOpeningRecord;
+    index: number;
     scaleX: number;
     scaleY: number;
     canvasWidth: number;
     canvasHeight: number;
   }
 ): void {
-  const { objects, scaleX, scaleY, canvasWidth, canvasHeight } = params;
-  if (objects.length === 0) {
+  const { opening, index, scaleX, scaleY, canvasWidth, canvasHeight } = params;
+  const box = scaledOpeningRect(opening, scaleX, scaleY, canvasWidth, canvasHeight);
+  if (!box) {
+    return;
+  }
+
+  const color = GUIDE_COLORS[index % GUIDE_COLORS.length];
+  const lineWidth = Math.max(2, Math.min(canvasWidth, canvasHeight) * 0.0035);
+
+  context.save();
+  context.fillStyle = withAlpha(color, 0.12);
+  context.fillRect(box.x, box.y, box.width, box.height);
+  context.strokeStyle = 'rgba(2, 6, 23, 0.86)';
+  context.lineWidth = Math.max(2, lineWidth * 1.6);
+  context.strokeRect(box.x, box.y, box.width, box.height);
+  context.strokeStyle = withAlpha(color, 0.92);
+  context.lineWidth = lineWidth;
+  context.setLineDash([lineWidth * 3, lineWidth * 1.5]);
+  context.strokeRect(box.x, box.y, box.width, box.height);
+  context.setLineDash([]);
+  context.restore();
+}
+
+function drawObjectIdentityCallouts(
+  context: CanvasRenderingContext2D,
+  params: {
+    objects: VisibleSnapshotObject[];
+    openings?: SnapshotOpeningRecord[];
+    scaleX: number;
+    scaleY: number;
+    canvasWidth: number;
+    canvasHeight: number;
+  }
+): void {
+  const { objects, openings = [], scaleX, scaleY, canvasWidth, canvasHeight } = params;
+  if (objects.length === 0 && openings.length === 0) {
     return;
   }
 
   context.save();
-  const objectBoxes = objects
-    .map((object) => scaledObjectRect(object, scaleX, scaleY, canvasWidth, canvasHeight))
+  const objectBoxes = [
+    ...objects.map((object) =>
+      scaledObjectRect(object, scaleX, scaleY, canvasWidth, canvasHeight)
+    ),
+    ...openings.map((opening) =>
+      scaledOpeningRect(opening, scaleX, scaleY, canvasWidth, canvasHeight)
+    ),
+  ]
     .filter((box): box is Rect => box !== null);
   const placements: LabelPlacement[] = [];
 
-  objects.forEach((object, index) => {
-    const objectBox = scaledObjectRect(object, scaleX, scaleY, canvasWidth, canvasHeight);
+  const lockItems = [
+    ...objects.map((object, index) => ({
+      box: scaledObjectRect(object, scaleX, scaleY, canvasWidth, canvasHeight),
+      color: GUIDE_COLORS[index % GUIDE_COLORS.length],
+      label: `${String(index + 1).padStart(2, '0')} ${formatObjectLabel(object)}`,
+    })),
+    ...openings.map((opening, index) => ({
+      box: scaledOpeningRect(opening, scaleX, scaleY, canvasWidth, canvasHeight),
+      color: GUIDE_COLORS[(objects.length + index) % GUIDE_COLORS.length],
+      label: `${String(objects.length + index + 1).padStart(2, '0')} ${formatOpeningLabel(opening)}`,
+    })),
+  ];
+
+  lockItems.forEach((item) => {
+    const objectBox = item.box;
     if (!objectBox) {
       return;
     }
-    const color = GUIDE_COLORS[index % GUIDE_COLORS.length];
-    const label = `${String(index + 1).padStart(2, '0')} ${formatObjectLabel(object)}`;
+    const color = item.color;
+    const label = item.label;
     const labelBox = measureCalloutLabel(context, {
       label,
       canvasWidth,
@@ -419,6 +486,13 @@ function drawObjectIdentityCallouts(
   context.restore();
 }
 
+function snapshotOpenings(snapshot: ThreeSnapshotArtifact): SnapshotOpeningRecord[] {
+  return [
+    ...snapshot.room.openings.doors,
+    ...snapshot.room.openings.windows,
+  ].filter((opening) => Boolean(opening.screenBboxPx));
+}
+
 function scaledObjectRect(
   object: VisibleSnapshotObject,
   scaleX: number,
@@ -427,6 +501,24 @@ function scaledObjectRect(
   canvasHeight: number
 ): Rect | null {
   const box = object.screenBboxPx;
+  if (!box) {
+    return null;
+  }
+  const x = clamp(box.minX * scaleX, 0, canvasWidth);
+  const y = clamp(box.minY * scaleY, 0, canvasHeight);
+  const width = clamp(box.width * scaleX, 8, canvasWidth - x);
+  const height = clamp(box.height * scaleY, 8, canvasHeight - y);
+  return { x, y, width, height };
+}
+
+function scaledOpeningRect(
+  opening: SnapshotOpeningRecord,
+  scaleX: number,
+  scaleY: number,
+  canvasWidth: number,
+  canvasHeight: number
+): Rect | null {
+  const box = opening.screenBboxPx;
   if (!box) {
     return null;
   }
@@ -817,6 +909,17 @@ function drawGuideHeader(
 function formatObjectLabel(object: VisibleSnapshotObject): string {
   const rawLabel = object.assetId || object.rawAssetId || object.type || 'object';
   return rawLabel.replace(/[_-]+/g, ' ').trim() || 'object';
+}
+
+function formatOpeningLabel(opening: SnapshotOpeningRecord): string {
+  const normalizedId = opening.id.replace(/[_-]+/g, ' ').trim();
+  if (/window/i.test(opening.id)) {
+    return normalizedId || 'window';
+  }
+  if (/door/i.test(opening.id)) {
+    return normalizedId || 'door';
+  }
+  return normalizedId || 'opening';
 }
 
 function withAlpha(hexColor: string, alpha: number): string {

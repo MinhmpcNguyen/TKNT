@@ -54,7 +54,7 @@ export type Object3DStatusResponse = {
 
 export type SnapshotImageRenderResult = {
   request: {
-    render_mode: 'generate' | 'edit';
+    render_mode: 'generate' | 'edit' | 'camera_rerender';
     system_prompt: string;
     user_prompt: string;
     raw_user_prompt?: string | null;
@@ -84,6 +84,16 @@ export type SnapshotImageRenderResult = {
     scene_reference_image_mime_type?: string | null;
     reference_image_count?: number;
     edit_operations?: SnapshotImageEditOperationSummary[];
+    layout_lock_mode?: string;
+    object_memory_used?: Array<Record<string, unknown>>;
+    locked_items?: Array<Record<string, unknown>>;
+    visibility_diagnostics?: Record<string, unknown>;
+    locked_geometry_references?: Array<Record<string, unknown>>;
+    locked_geometry_atlases?: Array<Record<string, unknown>>;
+    locked_geometry_atlas_count?: number;
+    locked_geometry_object_count?: number;
+    geometry_atlas_omitted_object_ids?: string[];
+    geometry_lock_policy?: string;
   };
   image: {
     mime_type: string;
@@ -103,9 +113,19 @@ export type SnapshotImageRenderResult = {
     camera?: Record<string, unknown> | null;
     visible_objects?: Array<Record<string, unknown>>;
     visible_object_ids?: string[];
-    render_mode?: 'generate' | 'edit';
+    render_mode?: 'generate' | 'edit' | 'camera_rerender';
     preset_selection?: SnapshotImagePresetSelection;
     edit_operations?: SnapshotImageEditOperationSummary[];
+    layout_lock_mode?: string;
+    object_memory_used?: Array<Record<string, unknown>>;
+    locked_items?: Array<Record<string, unknown>>;
+    visibility_diagnostics?: Record<string, unknown>;
+    locked_geometry_references?: Array<Record<string, unknown>>;
+    locked_geometry_atlases?: Array<Record<string, unknown>>;
+    locked_geometry_atlas_count?: number;
+    locked_geometry_object_count?: number;
+    geometry_atlas_omitted_object_ids?: string[];
+    geometry_lock_policy?: string;
     validation?: Record<string, unknown>;
   };
 };
@@ -151,6 +171,31 @@ export type SnapshotImageEditOperation = {
   } | null;
   replacement_image_data_url?: string | null;
   target_color?: string | null;
+};
+
+export type SnapshotImageLockedGeometryReference = {
+  object_id: string;
+  object_name?: string | null;
+  image_data_url: string;
+  source?: string | null;
+  screen_bbox_px?: Record<string, number> | null;
+};
+
+export type SnapshotImageLockedGeometryAtlasObject = {
+  object_id: string;
+  object_name?: string | null;
+  screen_bbox_px?: Record<string, number> | null;
+  atlas_index: number;
+  cell_index: number;
+  cell_label?: string | null;
+  cell_bbox_norm?: Record<string, number> | null;
+};
+
+export type SnapshotImageLockedGeometryAtlas = {
+  atlas_index: number;
+  image_data_url: string;
+  source?: string | null;
+  objects: SnapshotImageLockedGeometryAtlasObject[];
 };
 
 export type SnapshotImageEditOperationSummary = {
@@ -600,6 +645,7 @@ export async function runPipeline(
   payload: {
     user_id: string;
     input_payload: Record<string, unknown>;
+    case_name?: string | null;
     description?: string | null;
     special_notes?: string | null;
   },
@@ -683,10 +729,14 @@ export async function renderSnapshotImage(
     sceneReferenceImageDataUrl?: string | null;
     sceneReferenceMode?: SnapshotImageSceneReferenceMode;
     userPrompt: string;
-    renderMode?: 'generate' | 'edit';
+    renderMode?: 'generate' | 'edit' | 'camera_rerender';
     presetSelection?: SnapshotImagePresetSelection;
     rootLayoutId?: string | null;
+    caseId?: string | null;
+    optionId?: string | null;
     editOperations?: SnapshotImageEditOperation[];
+    lockedGeometryReferences?: SnapshotImageLockedGeometryReference[];
+    lockedGeometryAtlases?: SnapshotImageLockedGeometryAtlas[];
     editSourceImageDataUrl?: string | null;
   },
   token?: string | null
@@ -713,7 +763,11 @@ export async function renderSnapshotImage(
         render_mode: request.renderMode ?? 'generate',
         preset_selection: request.presetSelection ?? {},
         root_layout_id: request.rootLayoutId ?? null,
+        case_id: request.caseId ?? null,
+        option_id: request.optionId ?? null,
         edit_operations: request.editOperations ?? [],
+        locked_geometry_references: request.lockedGeometryReferences ?? [],
+        locked_geometry_atlases: request.lockedGeometryAtlases ?? [],
         edit_source_image_data_url: request.editSourceImageDataUrl ?? null,
       }),
     },
@@ -743,11 +797,34 @@ export async function fetchRenderPresets(
   ).then(normalizePresetReferenceImages);
 }
 
-export async function listSavedLayouts(token?: string | null): Promise<SavedLayoutRecord[]> {
+export async function listSavedLayouts(
+  token?: string | null,
+  caseId?: string | null
+): Promise<SavedLayoutRecord[]> {
+  const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : '';
   return requestJson<SavedLayoutRecord[]>(
-    '/account/layouts',
+    `/account/layouts${query}`,
     {},
     { token, fallbackError: 'Failed to load saved layouts' }
+  );
+}
+
+export async function updateSavedLayoutCase(
+  caseId: string,
+  payload: { name: string },
+  token?: string | null
+): Promise<{ id: string; name: string; created_at?: string | null; updated_at?: string | null }> {
+  return requestJson(
+    `/account/layout-cases/${encodeURIComponent(caseId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to update case name',
+    }
   );
 }
 
@@ -812,6 +889,31 @@ export async function createSavedLayout(
       token,
       includeJsonContentType: true,
       fallbackError: 'Failed to save layout',
+    }
+  );
+}
+
+export async function updateSavedLayout(
+  layoutId: string,
+  payload: {
+    name: string;
+    floorplan_json: Record<string, unknown>;
+    design_json?: Record<string, unknown> | null;
+    styled_result_json?: Record<string, unknown> | null;
+    meta?: Record<string, unknown>;
+  },
+  token?: string | null
+): Promise<SavedLayoutRecord> {
+  return requestJson<SavedLayoutRecord>(
+    `/account/layouts/${encodeURIComponent(layoutId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to update layout',
     }
   );
 }
