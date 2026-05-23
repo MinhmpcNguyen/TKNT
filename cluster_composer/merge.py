@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from agent.request_contract import default_solver_participation_for_object
 from layout.semantic_roles import is_seat_like, is_work_surface_like
 
 _HARD_REQUEST_CONTRACT_INTENTS = frozenset(
@@ -40,6 +41,7 @@ def merge_cluster_outputs(
     decision_by_type: dict[str, dict[str, Any]] = {}
     all_decision_by_cluster_and_type: dict[tuple[str, str], dict[str, Any]] = {}
     all_decision_by_type: dict[str, dict[str, Any]] = {}
+    post_solver_accessories: list[dict[str, Any]] = []
     for decision in decisions:
         if not isinstance(decision, dict):
             continue
@@ -47,6 +49,9 @@ def merge_cluster_outputs(
         if obj_type is None:
             continue
         cluster_id = str(decision.get("cluster_id") or "").strip()
+        if _decision_solver_participation(decision) == "post_solver_accessory":
+            post_solver_accessories.append(_post_solver_accessory_row(decision))
+            continue
         if cluster_id:
             all_decision_by_cluster_and_type[(cluster_id, obj_type)] = deepcopy(
                 decision
@@ -169,6 +174,7 @@ def merge_cluster_outputs(
         "clusters": merged_clusters,
         "active_cluster_ids": active_cluster_ids,
         "object_program_by_cluster": object_program_by_cluster,
+        "post_solver_accessories": post_solver_accessories,
         "notes": _merged_notes(cluster_payload, tier_payload),
         "missing": deepcopy(cluster_payload.get("missing", [])),
     }
@@ -483,6 +489,14 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
                 "budget_trial": bool(decision.get("budget_trial")),
                 "solver_trial": bool(decision.get("solver_trial")),
                 "trial_optional": bool(decision.get("trial_optional")),
+                "placement_participation": str(
+                    decision.get("placement_participation") or "floor_blocking"
+                ),
+                "solver_participation": _decision_solver_participation(decision),
+                "blocks_floor_area": bool(decision.get("blocks_floor_area", True)),
+                "can_overlap_floor_objects": bool(
+                    decision.get("can_overlap_floor_objects", False)
+                ),
                 "allowed_rotations": deepcopy(
                     allowed_rotations.get(
                         object_id,
@@ -651,6 +665,42 @@ def _decision_type_id(decision: dict[str, Any]) -> str | None:
         return None
     obj_type = obj_type.strip()
     return obj_type if obj_type else None
+
+
+def _decision_solver_participation(decision: dict[str, Any]) -> str:
+    value = str(decision.get("solver_participation") or "").strip()
+    if value in {
+        "hard_solver_object",
+        "soft_solver_object",
+        "post_solver_accessory",
+        "ignored_unavailable",
+    }:
+        return value
+    object_type = _decision_type_id(decision) or ""
+    return default_solver_participation_for_object(
+        object_type,
+        intent=str(decision.get("request_contract_intent") or "must_keep"),
+        evidence=str(decision.get("request_contract_evidence") or ""),
+    )
+
+
+def _post_solver_accessory_row(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "cluster_id": str(decision.get("cluster_id") or ""),
+        "object_type": _decision_type_id(decision) or "",
+        "quantity": max(1, _decision_quantity(decision)),
+        "placement_participation": str(
+            decision.get("placement_participation") or "decor_only"
+        ),
+        "solver_participation": "post_solver_accessory",
+        "host_object_type": str(decision.get("host_object_type") or ""),
+        "mount_region_type": str(decision.get("mount_region_type") or ""),
+        "request_contract_intent": str(decision.get("request_contract_intent") or ""),
+        "request_contract_evidence": str(
+            decision.get("request_contract_evidence") or ""
+        ),
+        "request_contract_reason": str(decision.get("request_contract_reason") or ""),
+    }
 
 
 def _decision_quantity(decision: dict[str, Any]) -> int:

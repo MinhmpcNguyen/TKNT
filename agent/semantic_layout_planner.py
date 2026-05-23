@@ -87,9 +87,9 @@ from stylist.style_policy import apply_style_policy_to_semantic_program
 logger = logging.getLogger(__name__)
 
 _RESPONSE_MIME_TYPE = "application/json"
-_LLM_TEMPERATURE = 0.2
-_CLUSTER_SEMANTICS_TEMPERATURE_CAP = 0.1
-_LLM_TOP_P = 0.9
+_LLM_TEMPERATURE = 0.0
+_CLUSTER_SEMANTICS_TEMPERATURE_CAP = 0.0
+_LLM_TOP_P = 1.0
 _CLUSTER_CANDIDATE_CAP = 12
 _RELATION_INTENT_CAP_PER_CLUSTER = 6
 _ZONE_CLAIM_CAP_PER_CLUSTER = 4
@@ -145,6 +145,10 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "Read the brief and produce a request contract for downstream deterministic tier-count. "
             "Classify each explicitly requested object as hard required, viable target, optional surplus, or forbidden. "
             "Include explicitly requested decor, floor, mounted, or lighting objects such as rugs and ceiling lamps even when they are not functional furniture anchors. "
+            "Do not decide inventory availability; the backend computes that from catalog and semantic program facts. "
+            "For every object, choose `placement_participation`: `floor_blocking`, `wall_attached`, `textile_overlay`, `host_attached`, `opening_attached`, `ceiling_attached`, or `decor_only`. "
+            "Use `wall_attached` for plain mirrors unless the brief says standing, floor, full length, or leaning mirror. "
+            "Use `textile_overlay` for rugs, `opening_attached` for curtains, `host_attached` for cushions/pillows/blankets, and `ceiling_attached` for ceiling lights. "
             "Use `must_keep` when the user directly asks to include/need/use an object as a non-negotiable item. "
             "Use `target_if_viable` when the user gives a desired target that may be partially reduced after the hard floor is met. "
             "For bounded ranges such as one or two nightstands, encode the lower bound as `min_keep` and the preferred upper count as `target_count`. "
@@ -156,6 +160,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
         output_contract=(
             "Top-level keys: `objects`, `groups`, `notes`. "
             "Each object must contain `object_type`, `intent`, `min_keep`, `target_count`, `max_keep`, `evidence`, `reason`, and `confidence`. "
+            "Each object must also contain `placement_participation`; do not include inventory or availability fields. "
             "`intent` must be one of `must_keep`, `target_if_viable`, `optional_if_surplus`, or `max0`. "
             "`evidence` must be a short exact phrase from the brief. "
             "`min_keep` is a hard floor chosen from the brief; it may be greater than 0 for `target_if_viable` when the brief provides a mandatory lower bound. "
@@ -383,6 +388,18 @@ _ADAPTIVE_REQUEST_CONTRACT_RESPONSE_SCHEMA: dict[str, object] = {
                     "evidence": _STRING_SCHEMA,
                     "reason": _STRING_SCHEMA,
                     "confidence": _NUMBER_SCHEMA,
+                    "placement_participation": {
+                        "type": "STRING",
+                        "enum": [
+                            "floor_blocking",
+                            "wall_attached",
+                            "textile_overlay",
+                            "host_attached",
+                            "opening_attached",
+                            "ceiling_attached",
+                            "decor_only",
+                        ],
+                    },
                 },
                 "required": [
                     "object_type",
@@ -393,6 +410,7 @@ _ADAPTIVE_REQUEST_CONTRACT_RESPONSE_SCHEMA: dict[str, object] = {
                     "evidence",
                     "reason",
                     "confidence",
+                    "placement_participation",
                 ],
             },
         },

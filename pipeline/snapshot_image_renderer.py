@@ -71,6 +71,12 @@ _DEFAULT_USER_PROMPT = (
     "architecture, room shell, openings, object count, object colors, object "
     "shapes, main furniture, and visible layout."
 )
+_TV_CONSOLE_RENDER_IDENTITY_LABEL = "TV console with integrated flat-screen TV"
+_TV_CONSOLE_RENDER_IDENTITY_HINT = (
+    "Preserve the integrated black flat-screen TV/screen panel together with the "
+    "console cabinet; do not simplify this object into a plain cabinet or box "
+    "and do not add a separate duplicate TV."
+)
 _SUPPORTED_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 _SUPPORTED_ASPECT_RATIOS: tuple[tuple[str, float], ...] = (
     ("1:1", 1.0),
@@ -3214,6 +3220,7 @@ def _build_locked_item_prompt(snapshot_payload: Mapping[str, object]) -> str:
         item_id = _string(item.get("id"), fallback="unknown")
         kind = _string(item.get("kind"), fallback="object")
         item_type = _string(item.get("type"), fallback="unknown")
+        item_label = _string(item.get("label"))
         bbox = item.get("screen_bbox_px")
         bbox_text = ""
         if isinstance(bbox, Mapping):
@@ -3230,8 +3237,12 @@ def _build_locked_item_prompt(snapshot_payload: Mapping[str, object]) -> str:
             )
         color = _string(item.get("color_hex"))
         color_text = f" color={color}" if color else ""
+        label_text = f", {item_label}" if item_label and item_label != item_type else ""
+        identity_hint = _string(item.get("render_identity_hint"))
+        identity_text = f" render_identity={identity_hint}" if identity_hint else ""
         lines.append(
-            f"- {kind} {item_id} ({item_type}){bbox_text}{dimensions_text}{color_text}"
+            f"- {kind} {item_id} ({item_type}{label_text})"
+            f"{bbox_text}{dimensions_text}{color_text}{identity_text}"
         )
     if len(locked_items) > 40:
         lines.append(f"- plus {len(locked_items) - 40} additional locked item(s).")
@@ -3255,6 +3266,7 @@ def _build_locked_items(
             "id": object_id,
             "type": _string(payload.get("type"), fallback="object"),
             "label": _visible_object_name(payload),
+            "render_identity_hint": _visible_object_render_identity_hint(payload),
             "color_hex": _string(payload.get("colorHex")) or None,
             "screen_bbox_px": _normalized_screen_bbox(payload.get("screenBboxPx")),
             "canvas_width_px": round(canvas_width_px, 2),
@@ -3714,6 +3726,13 @@ def _extract_visible_objects(
 
 
 def _visible_object_name(payload: Mapping[str, object]) -> str:
+    render_identity_label = _string(
+        payload.get("renderIdentityLabel") or payload.get("render_identity_label")
+    )
+    if render_identity_label:
+        return render_identity_label
+    if _string(payload.get("type")).lower() == "tv_console":
+        return _TV_CONSOLE_RENDER_IDENTITY_LABEL
     for key in (
         "label",
         "assetId",
@@ -3730,6 +3749,18 @@ def _visible_object_name(payload: Mapping[str, object]) -> str:
             return value.replace("_", " ")
     object_id = _string(payload.get("id"))
     return object_id or "object"
+
+
+def _visible_object_render_identity_hint(payload: Mapping[str, object]) -> str | None:
+    hint = _string(
+        payload.get("renderIdentityHint") or payload.get("render_identity_hint")
+    )
+    if hint:
+        return hint
+    object_type = _string(payload.get("type")).lower()
+    if object_type == "tv_console":
+        return _TV_CONSOLE_RENDER_IDENTITY_HINT
+    return None
 
 
 def _serialize_edit_operation(operation: SnapshotEditOperation) -> dict[str, object]:

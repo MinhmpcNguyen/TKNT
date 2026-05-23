@@ -1,5 +1,24 @@
 {
   "status": "OK",
-  "total_dropped_items": 0,
-  "clusters": []
+  "total_dropped_items": 2,
+  "clusters": [
+    {
+      "cluster_id": "main_seating",
+      "items": [
+        {
+          "object_id": "armchair_2",
+          "reason": "support_slot_failed"
+        }
+      ]
+    },
+    {
+      "cluster_id": "media",
+      "items": [
+        {
+          "object_id": "media_shelf",
+          "reason": "support_slot_failed"
+        }
+      ]
+    }
+  ]
 }

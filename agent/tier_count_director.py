@@ -11,6 +11,7 @@ from agent.request_contract import (
     contract_intent,
     contract_item_for_object_type,
     contract_min_keep,
+    contract_solver_participation,
     contract_target_count,
     request_contract_from_payload,
 )
@@ -904,6 +905,31 @@ def _apply_request_contract_to_object(
     out["request_contract_reason"] = str(item.get("reason") or "")
     out["request_contract_evidence"] = str(item.get("evidence") or "")
     out["request_contract_target_count"] = target_count
+    out["placement_participation"] = str(
+        item.get("placement_participation") or "floor_blocking"
+    )
+    out["solver_participation"] = contract_solver_participation(item)
+    out["blocks_floor_area"] = bool(item.get("blocks_floor_area", True))
+    out["can_overlap_floor_objects"] = bool(
+        item.get("can_overlap_floor_objects", False)
+    )
+    if item.get("host_object_type") is not None:
+        out["host_object_type"] = str(item.get("host_object_type") or "")
+    if item.get("mount_region_type") is not None:
+        out["mount_region_type"] = str(item.get("mount_region_type") or "")
+
+    if out["solver_participation"] == "post_solver_accessory":
+        out["min_keep"] = 0
+        out["max_keep"] = 0
+        out["required"] = False
+        out["protected"] = False
+        out["droppable"] = True
+        out["tier_count_explicit"] = True
+        out["keep_if_space_surplus"] = False
+        out["drop_order_bias"] = "drop_first"
+        out["preserve_level"] = "low"
+        out["role"] = "decor_light"
+        return out
 
     if intent == "max0":
         out["min_keep"] = 0
@@ -1998,6 +2024,7 @@ def _select_inventory_decision_program(
                     key: round(float(value), 3) for key, value in score.items()
                 },
             }
+            _copy_participation_trace(obj, decision_object)
             _copy_exclusive_family_trace(obj, decision_object)
             bundle_decision["objects"].append(decision_object)
 
@@ -2051,6 +2078,7 @@ def _select_inventory_decision_program(
                 "rationale": reason,
                 "utility_score": round(float(score["total"]), 3),
             }
+            _copy_participation_trace(obj, decision_row)
             _copy_exclusive_family_trace(obj, decision_row)
             decisions.append(decision_row)
 
@@ -3245,6 +3273,22 @@ def _copy_exclusive_family_trace(
         return
     target["exclusive_family"] = family_id
     target["exclusive_family_winner"] = winner
+
+
+def _copy_participation_trace(
+    source: dict[str, Any],
+    target: dict[str, Any],
+) -> None:
+    for key in (
+        "placement_participation",
+        "solver_participation",
+        "blocks_floor_area",
+        "can_overlap_floor_objects",
+        "host_object_type",
+        "mount_region_type",
+    ):
+        if key in source:
+            target[key] = source[key]
 
 
 def _circulation_pressure(

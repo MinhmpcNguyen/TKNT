@@ -649,14 +649,23 @@ function renderLayoutListItem(
   loadLayout: (layout: SavedLayoutRecord) => void
 ) {
   return (
-    <div key={layout.id} className="account-list-item">
+    <div
+      key={layout.id}
+      className="account-list-item account-list-item-loadable"
+      onDoubleClick={() => loadLayout(layout)}
+      title="Double-click to load"
+    >
       <div>
         <div className="account-list-title">{layout.name}</div>
         <div className="account-list-meta">
           {layout.updated_at || layout.created_at || 'Saved recently'}
         </div>
       </div>
-      <button onClick={() => loadLayout(layout)} type="button">
+      <button
+        onClick={() => loadLayout(layout)}
+        onDoubleClick={(event) => event.stopPropagation()}
+        type="button"
+      >
         Load
       </button>
     </div>

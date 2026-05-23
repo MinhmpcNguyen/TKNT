@@ -4,38 +4,32 @@
     "cozy"
   ],
   "layout_policy": {
-    "target_density": "balanced",
-    "center_openness_bias": "very_high",
-    "wall_loading_bias": "balanced",
+    "target_density": "balanced_to_medium",
+    "center_openness_bias": "medium",
+    "wall_loading_bias": "focal_balanced",
     "symmetry_bias": "balanced",
     "cluster_spacing_bias": "soft",
     "clutter_tolerance": "medium",
     "decor_tolerance": "low_to_balanced",
-    "daylight_bias": "high",
-    "floating_cluster_tolerance": "balanced",
-    "material_weight_bias": "light",
+    "daylight_bias": "medium",
+    "floating_cluster_tolerance": "low_to_medium",
+    "material_weight_bias": "balanced",
     "visual_balance_bias": "calm"
   },
   "cluster_policy_overrides": {
-    "sleep_core": {
-      "prefer_breathing_room": true
-    },
-    "primary_core": {
-      "prefer_breathing_room": true
-    },
     "lounge_reading": {
       "allow_only_if_space_surplus": true
     }
   },
   "policy_weights": {
-    "density_multiplier": 1.0,
+    "density_multiplier": 1.06,
     "optional_utility_bias": 0.0,
     "decor_utility_bias": -0.9,
-    "openness_weight": 1.15,
+    "openness_weight": 1.0,
     "symmetry_weight": 1.0,
     "naturalness_weight": 1.12,
     "semantic_coherence_weight": 1.06,
-    "spatial_quality_weight": 1.15
+    "spatial_quality_weight": 1.0
   },
   "search_settings": {
     "style_policy_variants": 1,

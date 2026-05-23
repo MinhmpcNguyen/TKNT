@@ -1,18 +1,18 @@
 {
-  "style_name": "cozy",
+  "style_name": "balanced",
   "style_tags": [
     "cozy"
   ],
   "layout_policy": {
     "target_density": "low_to_balanced",
-    "center_openness_bias": "very_high",
+    "center_openness_bias": "high",
     "wall_loading_bias": "focal_balanced",
     "symmetry_bias": "medium",
     "cluster_spacing_bias": "soft",
     "clutter_tolerance": "low",
-    "decor_tolerance": "low_to_balanced",
-    "daylight_bias": "high",
-    "floating_cluster_tolerance": "medium",
+    "decor_tolerance": "low_to_medium",
+    "daylight_bias": "low",
+    "floating_cluster_tolerance": "low_to_medium",
     "material_weight_bias": "balanced",
     "visual_balance_bias": "cozy"
   },

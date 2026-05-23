@@ -27,6 +27,8 @@ def _decision(
     droppable: bool = False,
     request_contract_intent: str = "",
     request_contract_target_count: int = 0,
+    solver_participation: str = "",
+    placement_participation: str = "",
 ) -> dict[str, Any]:
     row = {
         "object_type": object_type,
@@ -46,6 +48,10 @@ def _decision(
         row["request_contract_intent"] = request_contract_intent
     if request_contract_target_count > 0:
         row["request_contract_target_count"] = request_contract_target_count
+    if solver_participation:
+        row["solver_participation"] = solver_participation
+    if placement_participation:
+        row["placement_participation"] = placement_participation
     return row
 
 
@@ -129,6 +135,54 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         self.assertEqual(
             object_program["droppable_ids"],
             ["nightstand", "nightstand_2"],
+        )
+
+    def test_merge_routes_post_solver_accessory_out_of_solver_program(self) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "media_wall",
+                    "members": ["tv_console", "mirror"],
+                    "anchors": ["tv_console"],
+                    "cluster_rules": {
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "tv_console",
+                            "placement_order": ["tv_console", "mirror"],
+                            "protected_ids": ["tv_console"],
+                        },
+                    },
+                },
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "tv_console",
+                    cluster_id="media_wall",
+                    role="dominant_anchor",
+                    protected=True,
+                ),
+                _decision(
+                    "mirror",
+                    cluster_id="media_wall",
+                    solver_participation="post_solver_accessory",
+                    placement_participation="wall_attached",
+                    request_contract_intent="must_keep",
+                ),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+
+        self.assertEqual(merged["active_cluster_ids"], ["media_wall"])
+        self.assertEqual(merged["clusters"][0]["members"], ["tv_console"])
+        self.assertEqual(
+            merged["post_solver_accessories"][0]["object_type"],
+            "mirror",
+        )
+        self.assertEqual(
+            merged["post_solver_accessories"][0]["solver_participation"],
+            "post_solver_accessory",
         )
 
     def test_merge_uses_min_keep_not_preserve_level_for_required_copies(self) -> None:

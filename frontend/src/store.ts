@@ -70,6 +70,8 @@ export type UserInput = {
   window_direction: string;
 };
 
+export type FloorplanCaptureCallback = () => string | null;
+
 export type EditorState = {
   tenantId: string;
   authResolved: boolean;
@@ -102,6 +104,7 @@ export type EditorState = {
   runIterations: number | null;
   lastDesignMeta: { iteration: number | null; attempt: number | null; receivedAt: number } | null;
   snapshotEnabled: boolean;
+  floorplanCapture: FloorplanCaptureCallback | null;
   additionRequests: Record<string, unknown>[];
   threeDOpen: boolean;
   savedLayouts: SavedLayoutRecord[];
@@ -158,6 +161,8 @@ export type EditorState = {
   setRunStatus: (status: string | null, iterations?: number | null) => void;
   setLastDesignMeta: (meta: { iteration: number | null; attempt: number | null } | null) => void;
   setSnapshotEnabled: (enabled: boolean) => void;
+  setFloorplanCapture: (capture: FloorplanCaptureCallback | null) => void;
+  captureFloorplanImage: () => string | null;
   setAdditionRequests: (requests: Record<string, unknown>[]) => void;
   setThreeDOpen: (open: boolean) => void;
   setSavedLayouts: (layouts: SavedLayoutRecord[]) => void;
@@ -227,6 +232,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   runIterations: null,
   lastDesignMeta: null,
   snapshotEnabled: true,
+  floorplanCapture: null,
   additionRequests: [],
   threeDOpen: false,
   savedLayouts: [],
@@ -569,6 +575,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         : null,
     }),
   setSnapshotEnabled: (enabled) => set({ snapshotEnabled: enabled }),
+  setFloorplanCapture: (floorplanCapture) => set({ floorplanCapture }),
+  captureFloorplanImage: () => get().floorplanCapture?.() ?? null,
   setAdditionRequests: (requests) => set({ additionRequests: requests }),
   setThreeDOpen: (open) => set({ threeDOpen: open }),
   setSavedLayouts: (savedLayouts) => set({ savedLayouts }),

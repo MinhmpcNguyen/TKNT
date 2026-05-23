@@ -5124,6 +5124,16 @@ def solve_object_level_layout(
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
             "offending_clusters": offending,
+            "solver_degradation_report": _object_level_solver_degradation_report(
+                raw_solution_count=0,
+                eligible_solutions=[],
+                partial_solutions=[],
+                anchor_candidate_counts={
+                    k: len(v) for k, v in anchor_candidates_by_cluster.items()
+                },
+                anchor_order=anchor_order,
+                status="UNSAT",
+            ),
             "notes": [
                 "No anchor pose candidates could be generated for one or more core clusters."
             ],
@@ -5149,6 +5159,16 @@ def solve_object_level_layout(
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
             "offending_clusters": list(anchor_order),
+            "solver_degradation_report": _object_level_solver_degradation_report(
+                raw_solution_count=0,
+                eligible_solutions=[],
+                partial_solutions=[],
+                anchor_candidate_counts={
+                    k: len(v) for k, v in anchor_candidates_by_cluster.items()
+                },
+                anchor_order=anchor_order,
+                status="UNSAT",
+            ),
             "notes": [
                 "Anchor candidates were generated, but no compatible non-overlapping anchor set could be assembled."
             ],
@@ -5184,6 +5204,7 @@ def solve_object_level_layout(
 
     raw_solution_pool.sort(key=_object_pre_repair_rank_key, reverse=True)
     solution_pool: list[dict[str, Any]] = []
+    partial_solution_pool: list[dict[str, Any]] = []
     repair_batch_size = max(
         OBJECT_LEVEL_MAX_OBJECT_SOLUTIONS,
         OBJECT_LEVEL_REPAIR_BATCH_SIZE,
@@ -5216,7 +5237,10 @@ def solve_object_level_layout(
         candidate_solution["signature"] = _object_level_solution_signature(
             candidate_solution
         )
-        solution_pool.append(candidate_solution)
+        if bool(verify.get("hard_valid")) and bool(verify.get("gallery_eligible")):
+            solution_pool.append(candidate_solution)
+        else:
+            partial_solution_pool.append(candidate_solution)
         if (
             repaired_index % repair_batch_size == 0
             and _object_repair_pool_is_sufficient(solution_pool)
@@ -5226,20 +5250,66 @@ def solve_object_level_layout(
     ranked_pool = _rank_object_level_solution_pool(solution_pool)[
         :OBJECT_LEVEL_MAX_OBJECT_SOLUTIONS
     ]
+    partial_ranked_pool = _rank_object_level_solution_pool(partial_solution_pool)[
+        :OBJECT_LEVEL_MAX_OBJECT_SOLUTIONS
+    ]
     best_solution = ranked_pool[0] if ranked_pool else None
     if best_solution is None:
+        partial_solutions = [
+            _build_object_level_solution_payload(
+                solution=item,
+                world=world,
+                room_model=room_model,
+                relation_plan=relation_plan,
+                solution_index=index,
+            )
+            for index, item in enumerate(partial_ranked_pool[:3], start=1)
+        ]
+        best_partial = partial_solutions[0] if partial_solutions else None
+        best_partial_verify = (
+            best_partial.get("verify_summary")
+            if isinstance(best_partial, Mapping)
+            and isinstance(best_partial.get("verify_summary"), Mapping)
+            else {}
+        )
         return {
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
-            "offending_clusters": list(anchor_order),
+            "selected_concept_id": _concept_id_from_relation_plan(relation_plan),
+            "hard_valid": False,
+            "geometry_valid": bool(best_partial_verify.get("geometry_valid")),
+            "acceptable_valid": False,
+            "complete": bool(best_partial_verify.get("complete")),
+            "gallery_eligible": False,
+            "coverage_ratio": float(best_partial_verify.get("coverage_ratio") or 0.0),
+            "offending_clusters": list(
+                best_partial_verify.get("offending_clusters") or anchor_order
+            ),
+            "best_partial": best_partial,
+            "partial_solutions": partial_solutions,
+            "solver_degradation_report": _object_level_solver_degradation_report(
+                raw_solution_count=len(raw_solution_pool),
+                eligible_solutions=ranked_pool,
+                partial_solutions=partial_ranked_pool,
+                anchor_candidate_counts={
+                    k: len(v) for k, v in anchor_candidates_by_cluster.items()
+                },
+                anchor_order=anchor_order,
+                status="UNSAT",
+            ),
             "notes": [
-                "Anchor placement succeeded, but no geometry-valid support-object arrangement could be assembled."
+                "Object-level solver produced no hard-valid/gallery-eligible layouts.",
+                "Geometry-valid partial layouts are stored only under diagnostics and must not enter stylist/gallery.",
             ],
             "solver_debug": {
                 "anchor_candidate_counts": {
                     k: len(v) for k, v in anchor_candidates_by_cluster.items()
                 },
+                "anchor_order": anchor_order,
+                "raw_solution_count": len(raw_solution_pool),
                 "candidate_solution_count": len(solution_pool),
+                "partial_candidate_solution_count": len(partial_solution_pool),
+                "ranked_solution_count": 0,
             },
         }
 
@@ -5260,7 +5330,7 @@ def solve_object_level_layout(
         for index, item in enumerate(ranked_pool, start=1)
     ]
     return {
-        "status": "OK" if best_solution["verify"].get("hard_valid") else "PARTIAL",
+        "status": "OK",
         "solver_kind": "object_level_anchor_first",
         "selected_concept_id": _concept_id_from_relation_plan(relation_plan),
         "absolute_layout": absolute_layout,
@@ -5277,6 +5347,16 @@ def solve_object_level_layout(
         "dropped_inventory_by_cluster": deepcopy(
             best_solution.get("dropped_inventory_by_cluster") or {}
         ),
+        "solver_degradation_report": _object_level_solver_degradation_report(
+            raw_solution_count=len(raw_solution_pool),
+            eligible_solutions=ranked_pool,
+            partial_solutions=partial_ranked_pool,
+            anchor_candidate_counts={
+                k: len(v) for k, v in anchor_candidates_by_cluster.items()
+            },
+            anchor_order=anchor_order,
+            status="OK",
+        ),
         "cluster_transforms": [],
         "selected_variants": [],
         "verify_summary": deepcopy(best_solution["verify"]),
@@ -5287,6 +5367,7 @@ def solve_object_level_layout(
             "anchor_order": anchor_order,
             "object_count": len(best_solution.get("placed_objects") or []),
             "candidate_solution_count": len(solution_pool),
+            "partial_candidate_solution_count": len(partial_solution_pool),
             "ranked_solution_count": len(ranked_solutions),
         },
         "notes": [
@@ -5457,6 +5538,7 @@ def _build_object_solver_world(
         "cluster_forbidden_regions": _collect_cluster_forbidden_regions(
             clusters_by_id, room_model, relation_plan, region_index
         ),
+        "_object_blocking_region_cache": {},
         "_object_forbidden_region_cache": {},
         "_rect_inside_room_footprint_cache": {},
     }
@@ -6736,43 +6818,46 @@ def _generate_anchor_pose_candidates(
                         front_world=front_world,
                         desired_front=desired_front,
                     )
-                    candidates.append(
-                        {
-                            "cluster_id": cluster_id,
-                            "object_id": anchor_id,
-                            "x": x,
-                            "y": y,
-                            "rot": int(rot) % 360,
-                            "w": w_mm,
-                            "h": h_mm,
-                            "rect": rect,
-                            "anchor_kind": anchor_kind,
-                            "front_world": {
-                                "dx": front_world[0],
-                                "dy": front_world[1],
-                            },
-                            "desired_front_world": None
-                            if desired_front is None
-                            else {"dx": desired_front[0], "dy": desired_front[1]},
-                            "orientation_score": orientation_score,
-                            "search_stage": search_stage,
-                            "candidate_score": _anchor_candidate_score(
-                                rect=rect,
-                                room_bbox=world["room_bbox"],
-                                region_bbox=region_bbox,
-                                zone_assignment=zone_assignment,
-                                anchor_kind=anchor_kind,
-                                preferred_wall_side=preferred_wall_side,
-                                anchor_strength=anchor_strength,
-                                placement_behavior=placement_behavior,
-                                forbidden_regions=forbidden_regions,
-                                cluster_id=cluster_id,
-                                relation_plan=relation_plan,
-                            )
-                            + orientation_score
-                            + score_adjustment,
-                        }
+                    candidate = {
+                        "cluster_id": cluster_id,
+                        "object_id": anchor_id,
+                        "x": x,
+                        "y": y,
+                        "rot": int(rot) % 360,
+                        "w": w_mm,
+                        "h": h_mm,
+                        "rect": rect,
+                        "anchor_kind": anchor_kind,
+                        "front_world": {
+                            "dx": front_world[0],
+                            "dy": front_world[1],
+                        },
+                        "desired_front_world": None
+                        if desired_front is None
+                        else {"dx": desired_front[0], "dy": desired_front[1]},
+                        "orientation_score": orientation_score,
+                        "search_stage": search_stage,
+                    }
+                    if not _object_rect_is_usable(rect, (), world, row=candidate):
+                        continue
+                    candidate["candidate_score"] = (
+                        _anchor_candidate_score(
+                            rect=rect,
+                            room_bbox=world["room_bbox"],
+                            region_bbox=region_bbox,
+                            zone_assignment=zone_assignment,
+                            anchor_kind=anchor_kind,
+                            preferred_wall_side=preferred_wall_side,
+                            anchor_strength=anchor_strength,
+                            placement_behavior=placement_behavior,
+                            forbidden_regions=forbidden_regions,
+                            cluster_id=cluster_id,
+                            relation_plan=relation_plan,
+                        )
+                        + orientation_score
+                        + score_adjustment
                     )
+                    candidates.append(candidate)
 
     add_candidates_for_regions(
         region_bboxes,
@@ -8450,31 +8535,45 @@ def _object_rect_is_usable(
         if isinstance(world.get("cluster_forbidden_regions"), Sequence)
         else []
     )
-    if not forbidden_regions:
+    protected_regions = (
+        world.get("protected_regions")
+        if isinstance(world.get("protected_regions"), Sequence)
+        else []
+    )
+    if not forbidden_regions and not protected_regions:
         return True
-    forbidden_cache = (
-        world.get("_object_forbidden_region_cache")
-        if isinstance(world.get("_object_forbidden_region_cache"), dict)
+    blocking_cache = (
+        world.get("_object_blocking_region_cache")
+        if isinstance(world.get("_object_blocking_region_cache"), dict)
         else None
     )
     cache_key = (
         str(row.get("cluster_id") or ""),
         str(row.get("object_id") or ""),
+        str(row.get("anchor_kind") or ""),
         rect,
     )
-    if forbidden_cache is not None and cache_key in forbidden_cache:
-        return not bool(forbidden_cache[cache_key])
+    if blocking_cache is not None and cache_key in blocking_cache:
+        return not bool(blocking_cache[cache_key])
     candidate = dict(row)
     candidate["rect"] = rect
-    blocked = any(
+    protected_blocked = any(
+        _protected_region_issue_is_blocking(issue)
+        for issue in _object_level_protected_region_issues(
+            placed_objects=[candidate],
+            protected_regions=protected_regions,
+        )
+    )
+    forbidden_blocked = any(
         _forbidden_region_issue_blocks_geometry(issue)
         for issue in _object_level_cluster_forbidden_region_issues(
             placed_objects=[candidate],
             forbidden_regions=forbidden_regions,
         )
     )
-    if forbidden_cache is not None:
-        forbidden_cache[cache_key] = blocked
+    blocked = protected_blocked or forbidden_blocked
+    if blocking_cache is not None:
+        blocking_cache[cache_key] = blocked
     return not blocked
 
 
@@ -8503,8 +8602,7 @@ def _rect_blocks_front_access_rows(
 
 
 def _forbidden_region_issue_blocks_geometry(issue: Mapping[str, Any]) -> bool:
-    enforcement = str(issue.get("enforcement") or "").strip().lower()
-    return enforcement == "hard" and _protected_region_issue_is_blocking(issue)
+    return _protected_region_issue_is_blocking(issue)
 
 
 def _object_repair_target_center(
@@ -10240,17 +10338,6 @@ def _object_level_required_face_pairs(
             alternatives = relations_by_pair.get(pair, {"face_each_other"})
             if alternatives <= {"face_each_other"}:
                 required.add(pair)
-        if (
-            focus_mode in {"viewing", "mixed"}
-            and pair is not None
-            and _relation_plan_requires_legible_primary_pair(
-                relation_plan=relation_plan,
-                primary=primary,
-                secondary=secondary,
-            )
-        ):
-            required.add(pair)
-
     requirements = relation_plan.get("concept_readiness_requirements")
     if isinstance(requirements, Mapping):
         required_contracts = _normalized_text_set(
@@ -10444,13 +10531,6 @@ def _object_level_face_pair_issues(
         left = _dominant_row_for_cluster(rows_by_cluster.get(left_cluster_id, []))
         right = _dominant_row_for_cluster(rows_by_cluster.get(right_cluster_id, []))
         if left is None or right is None:
-            issues.append(
-                {
-                    "a": left_cluster_id,
-                    "b": right_cluster_id,
-                    "reason": "required_face_pair_missing_anchor",
-                }
-            )
             continue
         left_rect = left.get("rect")
         right_rect = right.get("rect")
@@ -10505,6 +10585,7 @@ def _object_level_viewing_pair_issues(
         ): row
         for row in placed_objects
     }
+    placed_cluster_ids = {cluster_id for cluster_id, _object_id in rows_by_key}
     issues: list[dict[str, Any]] = []
     for pair in object_viewing_pairs:
         viewer_key = (
@@ -10518,6 +10599,11 @@ def _object_level_viewing_pair_issues(
         viewer = rows_by_key.get(viewer_key)
         target = rows_by_key.get(target_key)
         if viewer is None or target is None:
+            if (
+                viewer_key[0] not in placed_cluster_ids
+                or target_key[0] not in placed_cluster_ids
+            ):
+                continue
             issues.append(
                 {
                     "a": viewer_key[0],
@@ -10775,6 +10861,210 @@ def _object_repair_pool_is_sufficient(
     best = ranked[0] if ranked else {}
     verify = best.get("verify") if isinstance(best.get("verify"), Mapping) else {}
     return bool(verify.get("gallery_eligible"))
+
+
+def _object_level_solver_degradation_report(
+    *,
+    raw_solution_count: int,
+    eligible_solutions: Sequence[Mapping[str, Any]],
+    partial_solutions: Sequence[Mapping[str, Any]],
+    anchor_candidate_counts: Mapping[str, int],
+    anchor_order: Sequence[str],
+    status: str,
+) -> dict[str, Any]:
+    all_solutions = [*eligible_solutions, *partial_solutions]
+    dropped_summary = _object_level_dropped_inventory_summary(all_solutions)
+    hard_valid_count = sum(
+        1
+        for solution in all_solutions
+        if isinstance(solution.get("verify"), Mapping)
+        and bool(solution["verify"].get("hard_valid"))
+    )
+    gallery_eligible_count = sum(
+        1
+        for solution in all_solutions
+        if isinstance(solution.get("verify"), Mapping)
+        and bool(solution["verify"].get("gallery_eligible"))
+    )
+    return {
+        "status": status,
+        "attempts": [
+            {
+                "attempt_id": "full_program",
+                "raw_solution_count": int(raw_solution_count),
+                "geometry_valid_candidate_count": len(all_solutions),
+                "hard_valid_candidate_count": hard_valid_count,
+                "gallery_eligible_candidate_count": gallery_eligible_count,
+                "status": "OK" if gallery_eligible_count else "UNSAT",
+            },
+            {
+                "attempt_id": "drop_solver_trial_optional_clusters",
+                "applied": any(
+                    str(item.get("reason") or "")
+                    == "optional_trial_anchor_cluster_not_placed"
+                    for item in dropped_summary
+                ),
+                "dropped": [
+                    item
+                    for item in dropped_summary
+                    if str(item.get("reason") or "")
+                    == "optional_trial_anchor_cluster_not_placed"
+                ],
+            },
+            {
+                "attempt_id": "drop_non_requested_optional_supports",
+                "applied": any(
+                    str(item.get("reason") or "")
+                    in {"base_missing", "support_slot_failed"}
+                    for item in dropped_summary
+                ),
+                "dropped": [
+                    item
+                    for item in dropped_summary
+                    if str(item.get("reason") or "")
+                    in {"base_missing", "support_slot_failed"}
+                ],
+            },
+            {
+                "attempt_id": "drop_target_if_viable_soft_objects",
+                "applied": False,
+                "reason": "Object-level solver can drop objects only when the merged object program marks them droppable.",
+            },
+            {
+                "attempt_id": "shrink_unspecified_hard_objects",
+                "applied": False,
+                "reason": "Skipped because merged object specs contain selected dimensions, not alternate tier dimensions.",
+            },
+            {
+                "attempt_id": "relax_optional_face_pair_contracts",
+                "applied": True,
+                "reason": "Face-pair checks ignore missing clusters; completeness remains responsible for required hard clusters.",
+            },
+        ],
+        "raw_solution_count": int(raw_solution_count),
+        "geometry_valid_candidate_count": len(all_solutions),
+        "hard_valid_candidate_count": hard_valid_count,
+        "gallery_eligible_candidate_count": gallery_eligible_count,
+        "eligible_candidate_count": len(eligible_solutions),
+        "partial_candidate_count": len(partial_solutions),
+        "top_quality_gate_reasons": _object_level_top_quality_gate_reasons(
+            all_solutions
+        ),
+        "blocking_objects": _object_level_blocking_object_summary(all_solutions),
+        "dropped_inventory": dropped_summary,
+        "anchor_candidate_counts": dict(anchor_candidate_counts),
+        "anchor_order": list(anchor_order),
+    }
+
+
+def _object_level_top_quality_gate_reasons(
+    solutions: Sequence[Mapping[str, Any]],
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for solution in solutions:
+        verify = (
+            solution.get("verify")
+            if isinstance(solution.get("verify"), Mapping)
+            else {}
+        )
+        for reason in verify.get("quality_gate_reasons") or []:
+            token = str(reason or "").strip()
+            if token:
+                counts[token] = counts.get(token, 0) + 1
+    return [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
+    ]
+
+
+def _object_level_blocking_object_summary(
+    solutions: Sequence[Mapping[str, Any]],
+    *,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    counts: dict[tuple[str, str, str, str], int] = {}
+    issue_keys = (
+        "blocking_protected_region_issues",
+        "blocking_forbidden_region_issues",
+        "blocking_orientation_issues",
+        "blocking_functional_geometry_issues",
+    )
+    for solution in solutions:
+        verify = (
+            solution.get("verify")
+            if isinstance(solution.get("verify"), Mapping)
+            else {}
+        )
+        for issue_key in issue_keys:
+            for issue in verify.get(issue_key) or []:
+                if not isinstance(issue, Mapping):
+                    continue
+                reason = str(
+                    issue.get("reason") or issue.get("zone_type") or issue_key
+                ).strip()
+                cluster_id = str(
+                    issue.get("cluster_id") or issue.get("blocked_cluster_id") or ""
+                ).strip()
+                object_id = str(
+                    issue.get("object_id") or issue.get("blocked_object_id") or ""
+                ).strip()
+                region_id = str(issue.get("region_id") or "").strip()
+                key = (cluster_id, object_id, region_id, reason)
+                counts[key] = counts.get(key, 0) + 1
+    return [
+        {
+            "cluster_id": cluster_id,
+            "object_id": object_id,
+            "region_id": region_id,
+            "reason": reason,
+            "count": count,
+        }
+        for (cluster_id, object_id, region_id, reason), count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
+    ]
+
+
+def _object_level_dropped_inventory_summary(
+    solutions: Sequence[Mapping[str, Any]],
+    *,
+    limit: int = 16,
+) -> list[dict[str, Any]]:
+    counts: dict[tuple[str, str, str], int] = {}
+    for solution in solutions:
+        dropped = solution.get("dropped_inventory_by_cluster")
+        if not isinstance(dropped, Mapping):
+            continue
+        for cluster_id, rows in dropped.items():
+            if not isinstance(rows, Sequence) or isinstance(rows, str):
+                continue
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                key = (
+                    str(cluster_id),
+                    str(row.get("object_id") or ""),
+                    str(row.get("reason") or ""),
+                )
+                counts[key] = counts.get(key, 0) + 1
+    return [
+        {
+            "cluster_id": cluster_id,
+            "object_id": object_id,
+            "reason": reason,
+            "count": count,
+        }
+        for (cluster_id, object_id, reason), count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
+    ]
 
 
 def _object_solution_score(

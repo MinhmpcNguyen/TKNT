@@ -10,9 +10,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a coffee table",
-      "reason": "Explicitly included in the brief and required by the seating bundle.",
+      "reason": "Explicitly requested and required by the main seating bundle.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "rug",
@@ -22,9 +30,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a rug",
-      "reason": "explicitly requested in the brief",
+      "reason": "Explicitly requested decor/textile element for the living room.",
+      "confidence": 0.98,
+      "placement_participation": "textile_overlay",
+      "requested": true,
+      "inventory_available": false,
       "available_in_program": false,
-      "confidence": null
+      "solver_participation": "post_solver_accessory",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": true,
+      "host_object_type": null,
+      "mount_region_type": "floor"
     },
     {
       "object_type": "sofa",
@@ -33,10 +49,18 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "Include a sofa",
-      "reason": "Directly requested as part of the core seating arrangement and required by the compiled semantic rule.",
+      "evidence": "Include a sofa facing a TV console",
+      "reason": "Directly requested as a core seating anchor and explicitly required by the seating bundle.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "tv_console",
@@ -45,22 +69,38 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "facing a TV console",
+      "evidence": "a TV console",
       "reason": "Directly requested as the media anchor for the movie area.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "armchair",
       "intent": "target_if_viable",
-      "min_keep": 0,
+      "min_keep": 1,
       "target_count": 2,
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "one or two armchairs if they fit",
-      "reason": "Requested as a fit-dependent addition; keep one to two if space allows while preserving circulation.",
+      "reason": "Requested as a fit-dependent target with a lower bound of one and preferred upper count of two.",
+      "confidence": 0.97,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.97
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "floor_lamp",
@@ -68,23 +108,19 @@
       "min_keep": 0,
       "target_count": 1,
       "preferred_count": 1,
-      "max_keep": 2,
-      "evidence": "ample lighting for different activities",
-      "reason": "Lighting is explicitly requested; floor lamp is the available lighting object type and can be added if viable.",
-      "available_in_program": false,
-      "confidence": 0.74
-    },
-    {
-      "object_type": "media_shelf",
-      "intent": "target_if_viable",
-      "min_keep": 0,
-      "target_count": 1,
-      "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "designated movie area",
-      "reason": "Supports the media wall/movie area but is not explicitly required; viable if space permits.",
+      "evidence": "ample lighting",
+      "reason": "Lighting is explicitly requested; floor lamp is the available lighting object and is viable rather than mandatory.",
+      "confidence": 0.84,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.62
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "bookshelf",
@@ -94,9 +130,37 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "modern functional",
-      "reason": "Not explicitly requested; only a possible surplus support item from inventory, so keep only if extra space remains.",
+      "reason": "Not explicitly requested; only a possible support item if space allows.",
+      "confidence": 0.2,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.18
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
+    },
+    {
+      "object_type": "media_shelf",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "movie area",
+      "reason": "Supports the media zone but is not explicitly named in the brief, so it is only a surplus option.",
+      "confidence": 0.55,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
+      "available_in_program": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     }
   ],
   "groups": [
@@ -107,26 +171,24 @@
         "coffee_table",
         "armchair"
       ],
-      "intent": "must_keep",
+      "intent": "core seating arrangement",
       "priority": "core",
-      "drop_policy": "preserve sofa and coffee table first; reduce armchairs before any core anchor"
+      "drop_policy": "preserve sofa and coffee table first; reduce armchairs before core anchors"
     },
     {
-      "group_id": "media_bundle",
+      "group_id": "media_zone",
       "members": [
         "tv_console",
-        "media_shelf"
+        "sofa"
       ],
-      "intent": "must_keep",
+      "intent": "face seating toward media anchor",
       "priority": "core",
-      "drop_policy": "preserve tv_console; drop media_shelf before tv_console"
+      "drop_policy": "keep tv_console and sofa; other media supports may drop first"
     }
   ],
   "notes": [
-    "The brief emphasizes an open center and easy circulation, so armchairs should be reduced before core anchors if space is tight.",
-    "No explicit rug object type is available in the provided inventory/program lists, so it is not encoded.",
-    "No explicit ceiling lamp object type is available; lighting is represented with floor_lamp as the closest available inventory type.",
-    "Request contract was normalized before tier-count enforcement.",
-    "Requested non-functional objects were restored for downstream placement: rug"
+    "No explicit request for curtains, mirrors, or ceiling lights.",
+    "Surround sound and large screen were mentioned, but no matching object types were provided in the allowed object lists.",
+    "Request contract was normalized before tier-count enforcement."
   ]
 }

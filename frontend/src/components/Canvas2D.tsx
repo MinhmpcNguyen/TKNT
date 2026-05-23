@@ -236,6 +236,7 @@ export const Canvas2D: React.FC = () => {
     lastDesignMeta,
     snapshotEnabled,
     tenantId,
+    setFloorplanCapture,
   } = useEditorStore();
   const [scale, setScale] = useState(0.12);
   const [offset, setOffset] = useState<Point>({ x: 80, y: 80 });
@@ -280,6 +281,19 @@ export const Canvas2D: React.FC = () => {
           top: clamp(selectedCornerCanvasPoint.y + 12, 8, height - 34),
         }
       : null;
+
+  useEffect(() => {
+    setFloorplanCapture(() => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+      try {
+        return stage.toDataURL({ pixelRatio: 1.5 });
+      } catch {
+        return null;
+      }
+    });
+    return () => setFloorplanCapture(null);
+  }, [setFloorplanCapture]);
 
   const deleteRoomCorner = useCallback(
     (index: number) => {

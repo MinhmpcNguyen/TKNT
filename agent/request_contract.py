@@ -16,10 +16,13 @@ _REQUEST_CONTRACT_LLM_ENV = "TKNT_REQUEST_CONTRACT_LLM"
 _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
     "bed": ("bed", "queen bed", "king bed", "single bed", "double bed"),
+    "blanket": ("blanket", "throw blanket", "throw"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
     "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
     "coffee_table": ("coffee table", "tea table", "center table"),
+    "curtain": ("curtain", "curtains", "drape", "drapes"),
+    "cushion": ("cushion", "pillow", "throw pillow"),
     "desk": ("desk", "work desk", "study desk", "vanity"),
     "floor_lamp": ("floor lamp", "standing lamp", "reading lamp"),
     "nightstand": ("nightstand", "night stand", "bedside table"),
@@ -69,9 +72,42 @@ _COUNT_WORDS = {
     "four": 4,
 }
 _NON_FUNCTIONAL_CONTRACT_TYPES = {
+    "blanket",
     "ceiling_light",
+    "curtain",
+    "cushion",
+    "mirror",
     "rug",
+    "wall_art",
 } | all_profile_non_functional_contract_types()
+_PLACEMENT_PARTICIPATIONS = frozenset(
+    {
+        "floor_blocking",
+        "wall_attached",
+        "textile_overlay",
+        "host_attached",
+        "opening_attached",
+        "ceiling_attached",
+        "decor_only",
+    }
+)
+_POST_SOLVER_PLACEMENT_PARTICIPATIONS = frozenset(
+    {
+        "wall_attached",
+        "textile_overlay",
+        "host_attached",
+        "opening_attached",
+        "ceiling_attached",
+        "decor_only",
+    }
+)
+_FLOOR_MIRROR_EVIDENCE_PATTERNS = (
+    "standing mirror",
+    "floor mirror",
+    "full length mirror",
+    "full-length mirror",
+    "leaning mirror",
+)
 _HARD_CONTRACT_INTENTS = {"must_keep", "must_try"}
 _TARGET_CONTRACT_INTENTS = {"target_if_viable", "preferred_if_fit"}
 _SOFT_CONTRACT_INTENTS = {*_TARGET_CONTRACT_INTENTS, "optional_if_surplus"}
@@ -114,7 +150,10 @@ def build_request_contract(
         if not mentions:
             continue
         best = _best_mention_contract(text, object_type, mentions)
-        best["available_in_program"] = object_type in available
+        best = _with_participation_fields(
+            best,
+            available_object_types=available,
+        )
         contract_objects.append(best)
 
     contract_objects.sort(
@@ -317,6 +356,67 @@ def contract_intent(item: Mapping[str, Any] | None) -> str:
     return str(item.get("intent") or "").strip()
 
 
+def contract_solver_participation(item: Mapping[str, Any] | None) -> str:
+    if not isinstance(item, Mapping):
+        return "hard_solver_object"
+    value = str(item.get("solver_participation") or "").strip()
+    if value in {
+        "hard_solver_object",
+        "soft_solver_object",
+        "post_solver_accessory",
+        "ignored_unavailable",
+    }:
+        return value
+    object_type = canonical_object_type(str(item.get("object_type") or ""))
+    placement = _placement_participation_for_object(
+        object_type=object_type,
+        raw_value=item.get("placement_participation"),
+        evidence=str(item.get("evidence") or ""),
+    )
+    return _solver_participation_for(
+        object_type=object_type,
+        intent=contract_intent(item),
+        placement_participation=placement,
+    )
+
+
+def contract_is_solver_object(item: Mapping[str, Any] | None) -> bool:
+    return contract_solver_participation(item) in {
+        "hard_solver_object",
+        "soft_solver_object",
+    }
+
+
+def default_placement_participation_for_object(
+    object_type: str,
+    *,
+    evidence: str = "",
+) -> str:
+    return _placement_participation_for_object(
+        object_type=canonical_object_type(object_type),
+        raw_value=None,
+        evidence=evidence,
+    )
+
+
+def default_solver_participation_for_object(
+    object_type: str,
+    *,
+    intent: str = "must_keep",
+    evidence: str = "",
+) -> str:
+    canonical = canonical_object_type(object_type)
+    placement = default_placement_participation_for_object(
+        canonical,
+        evidence=evidence,
+    )
+    return _solver_participation_for(
+        object_type=canonical,
+        intent=intent,
+        placement_participation=placement,
+    )
+
+
 def missing_functional_contract_types(
     *,
     contract: Mapping[str, Any] | None,
@@ -339,7 +439,7 @@ def missing_functional_contract_types(
     missing: list[str] = []
     for item in _contract_objects(contract):
         object_type = canonical_object_type(str(item.get("object_type") or ""))
-        if not object_type or object_type in _NON_FUNCTIONAL_CONTRACT_TYPES:
+        if not object_type or not contract_is_solver_object(item):
             continue
         if contract_min_keep(item) <= 0:
             continue
@@ -374,7 +474,7 @@ def missing_non_functional_contract_items(
         if (
             not object_type
             or object_type in seen
-            or object_type not in _NON_FUNCTIONAL_CONTRACT_TYPES
+            or contract_is_solver_object(item)
             or object_type in present
             or contract_intent(item) == "max0"
             or contract_target_count(item) <= 0
@@ -595,9 +695,15 @@ def _sanitize_contract_object(
         "max_keep": max_keep,
         "evidence": evidence,
         "reason": str(item.get("reason") or _reason_for_intent(intent)).strip(),
-        "available_in_program": object_type in available_object_types,
         "confidence": _confidence_value(item.get("confidence")),
-    }
+        "placement_participation": item.get("placement_participation"),
+    } | _participation_fields(
+        object_type=object_type,
+        intent=intent,
+        evidence=evidence,
+        raw_placement=item.get("placement_participation"),
+        available_object_types=available_object_types,
+    )
 
 
 def _append_missing_non_functional_contract_objects(
@@ -626,11 +732,129 @@ def _append_missing_non_functional_contract_objects(
         ):
             continue
         restored = dict(item)
-        restored["available_in_program"] = object_type in available_object_types
+        restored = _with_participation_fields(
+            restored,
+            available_object_types=available_object_types,
+        )
         out.append(restored)
         existing_types.add(object_type)
         restored_types.append(object_type)
     return out, restored_types
+
+
+def _with_participation_fields(
+    item: dict[str, Any],
+    *,
+    available_object_types: set[str],
+) -> dict[str, Any]:
+    object_type = canonical_object_type(str(item.get("object_type") or ""))
+    intent = _normalize_contract_intent(item.get("intent"))
+    evidence = str(item.get("evidence") or "")
+    out = dict(item)
+    out.update(
+        _participation_fields(
+            object_type=object_type,
+            intent=intent,
+            evidence=evidence,
+            raw_placement=item.get("placement_participation"),
+            available_object_types=available_object_types,
+        )
+    )
+    return out
+
+
+def _participation_fields(
+    *,
+    object_type: str,
+    intent: str,
+    evidence: str,
+    raw_placement: object,
+    available_object_types: set[str],
+) -> dict[str, Any]:
+    placement = _placement_participation_for_object(
+        object_type=object_type,
+        raw_value=raw_placement,
+        evidence=evidence,
+    )
+    solver_participation = _solver_participation_for(
+        object_type=object_type,
+        intent=intent,
+        placement_participation=placement,
+    )
+    inventory_available = object_type in available_object_types
+    return {
+        "requested": intent != "max0",
+        "inventory_available": inventory_available,
+        "available_in_program": inventory_available,
+        "placement_participation": placement,
+        "solver_participation": solver_participation,
+        "blocks_floor_area": solver_participation
+        in {"hard_solver_object", "soft_solver_object"},
+        "can_overlap_floor_objects": solver_participation == "post_solver_accessory",
+        "host_object_type": _default_host_object_type(object_type, placement),
+        "mount_region_type": _default_mount_region_type(placement),
+    }
+
+
+def _placement_participation_for_object(
+    *,
+    object_type: str,
+    raw_value: object,
+    evidence: str,
+) -> str:
+    raw_text = str(raw_value or "").strip().lower().replace("-", "_")
+    evidence_text = str(evidence or "").strip().lower().replace("-", " ")
+    if object_type == "mirror":
+        if any(pattern in evidence_text for pattern in _FLOOR_MIRROR_EVIDENCE_PATTERNS):
+            return "floor_blocking"
+        return "wall_attached"
+    if raw_text in _PLACEMENT_PARTICIPATIONS:
+        return raw_text
+    if object_type == "rug":
+        return "textile_overlay"
+    if object_type in {"blanket", "cushion"}:
+        return "host_attached"
+    if object_type == "curtain":
+        return "opening_attached"
+    if object_type == "ceiling_light":
+        return "ceiling_attached"
+    if object_type == "wall_art":
+        return "wall_attached"
+    if object_type in _NON_FUNCTIONAL_CONTRACT_TYPES:
+        return "decor_only"
+    return "floor_blocking"
+
+
+def _solver_participation_for(
+    *,
+    object_type: str,
+    intent: str,
+    placement_participation: str,
+) -> str:
+    if intent == "max0":
+        return "ignored_unavailable"
+    if placement_participation in _POST_SOLVER_PLACEMENT_PARTICIPATIONS:
+        return "post_solver_accessory"
+    if intent in _HARD_CONTRACT_INTENTS:
+        return "hard_solver_object"
+    return "soft_solver_object"
+
+
+def _default_host_object_type(object_type: str, placement: str) -> str | None:
+    if placement != "host_attached":
+        return None
+    if object_type in {"blanket", "cushion"}:
+        return "bed"
+    return None
+
+
+def _default_mount_region_type(placement: str) -> str | None:
+    return {
+        "wall_attached": "wall",
+        "opening_attached": "opening",
+        "ceiling_attached": "ceiling",
+        "textile_overlay": "floor",
+    }.get(placement)
 
 
 def _sanitize_evidence(

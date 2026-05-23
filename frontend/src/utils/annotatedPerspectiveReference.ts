@@ -14,6 +14,7 @@ const GUIDE_COLORS = [
   '#ca8a04',
   '#db2777',
 ];
+const TV_CONSOLE_RENDER_IDENTITY_LABEL = 'TV console with integrated flat-screen TV';
 
 type Rect = {
   x: number;
@@ -907,7 +908,14 @@ function drawGuideHeader(
 }
 
 function formatObjectLabel(object: VisibleSnapshotObject): string {
-  const rawLabel = object.assetId || object.rawAssetId || object.type || 'object';
+  if (object.renderIdentityLabel?.trim()) {
+    return object.renderIdentityLabel.trim();
+  }
+  if (object.type.trim().toLowerCase() === 'tv_console') {
+    return TV_CONSOLE_RENDER_IDENTITY_LABEL;
+  }
+  const rawLabel =
+    object.assetId || object.rawAssetId || object.type || 'object';
   return rawLabel.replace(/[_-]+/g, ' ').trim() || 'object';
 }
 

@@ -4,15 +4,15 @@
     "cozy"
   ],
   "layout_policy": {
-    "target_density": "balanced",
-    "center_openness_bias": "very_high",
+    "target_density": "balanced_to_medium",
+    "center_openness_bias": "medium_high",
     "wall_loading_bias": "balanced",
-    "symmetry_bias": "medium",
+    "symmetry_bias": "low_to_balanced",
     "cluster_spacing_bias": "soft",
-    "clutter_tolerance": "medium",
+    "clutter_tolerance": "low_to_medium",
     "decor_tolerance": "low",
-    "daylight_bias": "high",
-    "floating_cluster_tolerance": "low_to_balanced",
+    "daylight_bias": "medium_high",
+    "floating_cluster_tolerance": "low_to_medium",
     "material_weight_bias": "light",
     "visual_balance_bias": "calm"
   },
@@ -23,13 +23,19 @@
     "primary_core": {
       "prefer_breathing_room": true
     },
+    "support_optional": {
+      "allow_only_if_space_surplus": true
+    },
+    "decor": {
+      "max_items_per_cluster": 1
+    },
     "lounge_reading": {
       "allow_only_if_space_surplus": true
     }
   },
   "policy_weights": {
-    "density_multiplier": 1.0,
-    "optional_utility_bias": 0.0,
+    "density_multiplier": 1.06,
+    "optional_utility_bias": -0.45,
     "decor_utility_bias": -0.9,
     "openness_weight": 1.15,
     "symmetry_weight": 1.0,

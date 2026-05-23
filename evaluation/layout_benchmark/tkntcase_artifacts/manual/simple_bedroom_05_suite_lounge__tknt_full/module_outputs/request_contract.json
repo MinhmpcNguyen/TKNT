@@ -11,8 +11,16 @@
       "max_keep": 1,
       "evidence": "a lounge armchair",
       "reason": "Directly requested lounge seating.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "bed",
@@ -23,8 +31,16 @@
       "max_keep": 1,
       "evidence": "a bed",
       "reason": "Directly requested as a core bedroom anchor.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "floor_lamp",
@@ -34,9 +50,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "with a floor lamp",
-      "reason": "Explicitly paired with the armchair and requested as part of the composition.",
+      "reason": "Explicitly paired with the armchair and directly requested.",
+      "confidence": 0.98,
+      "placement_participation": "decor_only",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
+      "solver_participation": "post_solver_accessory",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": true,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "rug",
@@ -46,9 +70,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a soft rug",
-      "reason": "explicitly requested in the brief",
+      "reason": "Explicitly requested decor/textile element.",
+      "confidence": 0.98,
+      "placement_participation": "textile_overlay",
+      "requested": true,
+      "inventory_available": false,
       "available_in_program": false,
-      "confidence": null
+      "solver_participation": "post_solver_accessory",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": true,
+      "host_object_type": null,
+      "mount_region_type": "floor"
     },
     {
       "object_type": "wardrobe",
@@ -59,32 +91,36 @@
       "max_keep": 1,
       "evidence": "a wardrobe",
       "reason": "Directly requested storage element.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "nightstand",
       "intent": "target_if_viable",
-      "min_keep": 1,
+      "min_keep": 0,
       "target_count": 2,
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "two nightstands if they fit",
-      "reason": "Requested as a bounded pair with fit-dependent reduction allowed after the hard floor.",
+      "reason": "Requested as a preferred pair, but explicitly fit-dependent.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
-    },
-    {
-      "object_type": "chair",
-      "intent": "optional_if_surplus",
-      "min_keep": 0,
-      "target_count": 1,
-      "preferred_count": 1,
-      "max_keep": 1,
-      "evidence": "a small desk or vanity",
-      "reason": "Implied seating for the optional desk/vanity work zone, but not explicitly named; kept only as a downstream support possibility.",
-      "available_in_program": true,
-      "confidence": 0.55
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "desk",
@@ -94,81 +130,37 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a small desk or vanity only if there is enough space",
-      "reason": "Fit-dependent and optional if space allows.",
+      "reason": "Fit-dependent and optional; desk is the available program type matching the request.",
+      "confidence": 0.9,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.97
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
-      "object_type": "bookshelf",
+      "object_type": "chair",
       "intent": "max0",
       "min_keep": 0,
       "target_count": 0,
       "preferred_count": 0,
       "max_keep": 0,
-      "evidence": "a wardrobe",
-      "reason": "Not requested in the brief.",
+      "evidence": "or vanity",
+      "reason": "No separate chair is explicitly requested; avoid inventing a vanity chair.",
+      "confidence": 0.62,
+      "placement_participation": "floor_blocking",
+      "requested": false,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.8
-    },
-    {
-      "object_type": "dresser",
-      "intent": "max0",
-      "min_keep": 0,
-      "target_count": 0,
-      "preferred_count": 0,
-      "max_keep": 0,
-      "evidence": "a wardrobe",
-      "reason": "Not requested in the brief.",
-      "available_in_program": false,
-      "confidence": 0.78
-    },
-    {
-      "object_type": "laundry_basket",
-      "intent": "max0",
-      "min_keep": 0,
-      "target_count": 0,
-      "preferred_count": 0,
-      "max_keep": 0,
-      "evidence": "a wardrobe",
-      "reason": "Not requested in the brief.",
-      "available_in_program": false,
-      "confidence": 0.78
-    },
-    {
-      "object_type": "side_table",
-      "intent": "max0",
-      "min_keep": 0,
-      "target_count": 0,
-      "preferred_count": 0,
-      "max_keep": 0,
-      "evidence": "with a floor lamp",
-      "reason": "No side table was requested; avoid inventing extra lounge furniture.",
-      "available_in_program": true,
-      "confidence": 0.72
-    },
-    {
-      "object_type": "storage_cabinet",
-      "intent": "max0",
-      "min_keep": 0,
-      "target_count": 0,
-      "preferred_count": 0,
-      "max_keep": 0,
-      "evidence": "a wardrobe",
-      "reason": "Not requested in the brief.",
-      "available_in_program": false,
-      "confidence": 0.78
-    },
-    {
-      "object_type": "tv_console",
-      "intent": "max0",
-      "min_keep": 0,
-      "target_count": 0,
-      "preferred_count": 0,
-      "max_keep": 0,
-      "evidence": "a wardrobe",
-      "reason": "Not requested in the brief.",
-      "available_in_program": false,
-      "confidence": 0.78
+      "solver_participation": "ignored_unavailable",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     }
   ],
   "groups": [
@@ -178,9 +170,9 @@
         "bed",
         "nightstand"
       ],
-      "intent": "must_keep",
+      "intent": "hard_required_with_optional_support",
       "priority": "core",
-      "drop_policy": "reduce nightstands only after preserving the bed; keep at least one if possible"
+      "drop_policy": "keep bed; reduce nightstands first if space is tight"
     },
     {
       "group_id": "lounge_reading_bundle",
@@ -188,16 +180,14 @@
         "armchair",
         "floor_lamp"
       ],
-      "intent": "must_keep",
+      "intent": "paired_feature",
       "priority": "support",
-      "drop_policy": "drop floor lamp before armchair if space is tight"
+      "drop_policy": "keep both if possible; lamp follows armchair"
     }
   ],
   "notes": [
-    "Soft usage hints favor a private back zone, a daylit work zone, an open center, and a window-view focus.",
-    "The brief explicitly allows reduction of the desk/vanity to fit-dependent optional status.",
-    "No ceiling lamp was explicitly requested.",
-    "Request contract was normalized before tier-count enforcement.",
-    "Requested non-functional objects were restored for downstream placement: rug"
+    "No curtain, mirror, or ceiling light was explicitly requested.",
+    "The brief says 'desk or vanity'; only desk is represented because vanity is not in the provided object types.",
+    "Request contract was normalized before tier-count enforcement."
   ]
 }

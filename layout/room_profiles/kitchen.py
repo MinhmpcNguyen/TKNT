@@ -82,7 +82,7 @@ KITCHEN_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
         "height": 360,
         "collision_layer": "wall_mounted",
         "target_object_types": ["kitchen_base_cabinet", "sink", "stove"],
-        "place_on": {"method": "wall"},
+        "place_on": {"method": "hang_on"},
     },
     "cooktop": {
         "width": 650,

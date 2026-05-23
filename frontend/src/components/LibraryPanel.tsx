@@ -8,6 +8,10 @@ import {
 } from '../options';
 import { useEditorStore } from '../store';
 import { InventoryItem } from '../types';
+import {
+  getInventoryThumbnailDataUrl,
+  hasInventoryThumbnailModel,
+} from '../three/thumbnails';
 
 export const LibraryPanel: React.FC = () => {
   const inventory = useEditorStore((state) => state.inventory);
@@ -153,6 +157,7 @@ const LibrarySection: React.FC<{
 };
 
 const LibraryItem: React.FC<{ item: InventoryItem }> = ({ item }) => {
+  const roomStyle = useEditorStore((state) => state.userInput.style);
   const ownershipScope =
     item.attributes?.ownership_scope === 'owned' ? 'Your asset' : 'Shared asset';
   return (
@@ -167,13 +172,102 @@ const LibraryItem: React.FC<{ item: InventoryItem }> = ({ item }) => {
         event.dataTransfer.setData('text/x-asset-id', item.asset_id);
       }}
     >
-      <div className="library-swatch" style={{ background: item.color_hex ?? '#d6d2c8' }} />
+      <InventoryThumbnail item={item} preferredStyle={roomStyle} />
       <div className="library-item-copy">
         <div className="library-name">{item.name}</div>
         <div className="library-meta">
           {item.category} · {ownershipScope}
         </div>
       </div>
+    </div>
+  );
+};
+
+const InventoryThumbnail: React.FC<{
+  item: InventoryItem;
+  preferredStyle?: string | null;
+}> = ({ item, preferredStyle }) => {
+  const previewRef = React.useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    'idle'
+  );
+  const hasModel = hasInventoryThumbnailModel(item, preferredStyle);
+
+  useEffect(() => {
+    if (isVisible) {
+      return;
+    }
+    const target = previewRef.current;
+    if (!target || typeof window === 'undefined') {
+      return;
+    }
+    if (!('IntersectionObserver' in window)) {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '160px' }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (!hasModel) {
+      setImageDataUrl(null);
+      setStatus('idle');
+      return;
+    }
+    if (!isVisible) {
+      return;
+    }
+    let cancelled = false;
+    setImageDataUrl(null);
+    setStatus('loading');
+    void getInventoryThumbnailDataUrl(item, preferredStyle)
+      .then((nextImageDataUrl) => {
+        if (cancelled) {
+          return;
+        }
+        if (nextImageDataUrl) {
+          setImageDataUrl(nextImageDataUrl);
+          setStatus('ready');
+        } else {
+          setStatus('error');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStatus('error');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasModel, isVisible, item, preferredStyle]);
+
+  return (
+    <div
+      ref={previewRef}
+      className={`library-preview library-preview-${status}`}
+      style={{ backgroundColor: item.color_hex ?? '#d6d2c8' }}
+      aria-label={`${item.name} preview`}
+    >
+      {imageDataUrl ? (
+        <img src={imageDataUrl} alt="" draggable={false} />
+      ) : status === 'loading' ? (
+        <span className="library-preview-spinner" aria-hidden="true" />
+      ) : (
+        <span className="library-preview-fallback" aria-hidden="true" />
+      )}
     </div>
   );
 };

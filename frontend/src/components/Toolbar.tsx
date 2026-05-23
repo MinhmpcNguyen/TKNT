@@ -23,6 +23,39 @@ const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
     )
   )
 );
+const VISUAL_RELATION_IMAGE_MAX_CHARS = 4_500_000;
+type VisualRelationPlannerMode = 'shadow' | 'candidate';
+
+function visualRelationPlannerMode(): VisualRelationPlannerMode | null {
+  const raw = String(
+    (import.meta as any).env?.VITE_TKNT_VISUAL_RELATION_PLANNER_MODE ?? ''
+  )
+    .trim()
+    .toLowerCase();
+  return raw === 'shadow' || raw === 'candidate' ? raw : null;
+}
+
+function buildVisualRelationPlannerRequest(
+  captureFloorplanImage: () => string | null
+): Record<string, unknown> | null {
+  const mode = visualRelationPlannerMode();
+  if (mode === null) {
+    return null;
+  }
+  const floorplanImageDataUrl = captureFloorplanImage();
+  if (
+    !floorplanImageDataUrl ||
+    floorplanImageDataUrl.length > VISUAL_RELATION_IMAGE_MAX_CHARS ||
+    !floorplanImageDataUrl.startsWith('data:image/')
+  ) {
+    return null;
+  }
+  return {
+    enabled: true,
+    mode,
+    floorplan_image_data_url: floorplanImageDataUrl,
+  };
+}
 
 export const Toolbar: React.FC = () => {
   const {
@@ -68,6 +101,7 @@ export const Toolbar: React.FC = () => {
     styledResult,
     viewMode,
     setViewMode,
+    captureFloorplanImage,
   } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +155,7 @@ export const Toolbar: React.FC = () => {
       });
     }
     const manualPlacements = collectManualPlacements(design?.placements ?? []);
+    const visualRelationPlanner = buildVisualRelationPlannerRequest(captureFloorplanImage);
     setLoading(true);
     setError(null);
     setProgressPercent(0);
@@ -159,6 +194,13 @@ export const Toolbar: React.FC = () => {
             window_direction: normalizedUserInput.window_direction,
           },
           manual_placements: manualPlacements,
+          ...(visualRelationPlanner
+            ? {
+                experimental: {
+                  visual_relation_planner: visualRelationPlanner,
+                },
+              }
+            : {}),
           max_iterations: 12,
         },
         case_name: normalizedUserInput.case_name.trim() || null,

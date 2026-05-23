@@ -37,6 +37,8 @@ def _candidate(
     layout: dict[str, object],
     *,
     score: int = 100,
+    hard_valid: bool = True,
+    gallery_eligible: bool = True,
 ) -> dict[str, object]:
     return {
         "absolute_layout": layout,
@@ -44,9 +46,9 @@ def _candidate(
         "source": source,
         "reason": "Object-level layout candidate.",
         "layout_score": score,
-        "hard_valid": True,
+        "hard_valid": hard_valid,
         "complete": True,
-        "gallery_eligible": True,
+        "gallery_eligible": gallery_eligible,
         "coverage_ratio": 1.0,
         "notes": [],
     }
@@ -120,6 +122,49 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
             [row["gallery_selection_mode"] for row in selected],
             ["distinct"],
         )
+
+    def test_selector_rejects_non_gallery_eligible_candidates(self) -> None:
+        selected = layout_variants.select_distinct_final_gallery_candidates(
+            candidates=[
+                _candidate(
+                    "bad",
+                    _layout(0),
+                    hard_valid=False,
+                    gallery_eligible=False,
+                    score=999,
+                ),
+                _candidate("good", _layout(3600), score=100),
+            ],
+            max_variants=2,
+        )
+
+        self.assertEqual([row["source"] for row in selected], ["good"])
+
+    def test_selection_summary_reports_gallery_gate_failures(self) -> None:
+        bad = _candidate(
+            "bad",
+            _layout(0),
+            hard_valid=False,
+            gallery_eligible=False,
+        )
+        bad["verify_summary"] = {
+            "quality_gate_reasons": ["blocking_protected_region_overlap"]
+        }
+
+        summary = layout_variants.build_final_gallery_selection_summary(
+            candidates=[bad],
+            selected=[],
+            requested_count=1,
+        )
+
+        self.assertEqual(summary["eligible_candidate_count"], 0)
+        self.assertEqual(summary["hard_valid_candidate_count"], 0)
+        self.assertEqual(summary["gallery_eligible_candidate_count"], 0)
+        self.assertEqual(
+            summary["top_quality_gate_reasons"],
+            {"blocking_protected_region_overlap": 1},
+        )
+        self.assertIn("failed hard-valid", summary["notes"][0])
 
 
 if __name__ == "__main__":

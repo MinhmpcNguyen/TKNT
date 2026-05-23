@@ -47,154 +47,18 @@
     "ceiling_height_mm": 2600
   },
   "openings": {
-    "doors": [
-      {
-        "id": "door_1",
-        "kind": "door",
-        "segment_mm": [
-          {
-            "x": 510,
-            "y": 0
-          },
-          {
-            "x": 1410,
-            "y": 0
-          }
-        ],
-        "original_segment_mm": [
-          {
-            "x": 510,
-            "y": 0
-          },
-          {
-            "x": 1410,
-            "y": 0
-          }
-        ],
-        "wall_id": "wall_1",
-        "width_mm": 900,
-        "wall_t_start_mm": 510,
-        "wall_t_end_mm": 1410,
-        "snap_distance_mm": 0,
-        "swing_radius_mm": 850,
-        "hinge_hint": "UNKNOWN"
-      }
-    ],
-    "windows": [
-      {
-        "id": "window_1",
-        "kind": "window",
-        "segment_mm": [
-          {
-            "x": 1100,
-            "y": 4200
-          },
-          {
-            "x": 2300,
-            "y": 4200
-          }
-        ],
-        "original_segment_mm": [
-          {
-            "x": 1100,
-            "y": 4200
-          },
-          {
-            "x": 2300,
-            "y": 4200
-          }
-        ],
-        "wall_id": "wall_3",
-        "width_mm": 1200,
-        "wall_t_start_mm": 1100,
-        "wall_t_end_mm": 2300,
-        "snap_distance_mm": 0,
-        "clearance_mm": 450
-      }
-    ]
+    "doors": [],
+    "windows": []
   },
-  "hard_obstacles": [
-    {
-      "id": "door_1_swing",
-      "type": "door_swing",
-      "polygon_ccw": [
-        {
-          "x": 510,
-          "y": 0
-        },
-        {
-          "x": 1410,
-          "y": 0
-        },
-        {
-          "x": 1410,
-          "y": 850
-        },
-        {
-          "x": 510,
-          "y": 850
-        }
-      ],
-      "hard": true,
-      "source_id": "door_1"
-    },
-    {
-      "id": "door_1_entry_clearance",
-      "type": "entry_clearance",
-      "polygon_ccw": [
-        {
-          "x": 410,
-          "y": 0
-        },
-        {
-          "x": 1510,
-          "y": 0
-        },
-        {
-          "x": 1510,
-          "y": 900
-        },
-        {
-          "x": 410,
-          "y": 900
-        }
-      ],
-      "hard": true,
-      "source_id": "door_1"
-    },
-    {
-      "id": "window_1_clearance",
-      "type": "window_clearance",
-      "polygon_ccw": [
-        {
-          "x": 2300,
-          "y": 4200
-        },
-        {
-          "x": 1100,
-          "y": 4200
-        },
-        {
-          "x": 1100,
-          "y": 3750
-        },
-        {
-          "x": 2300,
-          "y": 3750
-        }
-      ],
-      "hard": true,
-      "source_id": "window_1"
-    }
-  ],
+  "hard_obstacles": [],
   "affordance_map": {
     "usable_walls": [
       {
-        "id": "wall_1_usable_1510_3200",
+        "id": "wall_1_usable_200_3200",
         "wall_id": "wall_1",
         "segment_mm": [
           {
-            "x": 1510,
+            "x": 200,
             "y": 0
           },
           {
@@ -202,8 +66,8 @@
             "y": 0
           }
         ],
-        "length_mm": 1690,
-        "wall_t_start_mm": 1510,
+        "length_mm": 3000,
+        "wall_t_start_mm": 200,
         "wall_t_end_mm": 3200,
         "inward_normal": {
           "x": -0.0,
@@ -232,7 +96,7 @@
         }
       },
       {
-        "id": "wall_3_usable_200_950",
+        "id": "wall_3_usable_200_3200",
         "wall_id": "wall_3",
         "segment_mm": [
           {
@@ -240,33 +104,12 @@
             "y": 4200
           },
           {
-            "x": 2450,
-            "y": 4200
-          }
-        ],
-        "length_mm": 750,
-        "wall_t_start_mm": 200,
-        "wall_t_end_mm": 950,
-        "inward_normal": {
-          "x": -0.0,
-          "y": -1.0
-        }
-      },
-      {
-        "id": "wall_3_usable_2450_3200",
-        "wall_id": "wall_3",
-        "segment_mm": [
-          {
-            "x": 950,
-            "y": 4200
-          },
-          {
             "x": 200,
             "y": 4200
           }
         ],
-        "length_mm": 750,
-        "wall_t_start_mm": 2450,
+        "length_mm": 3000,
+        "wall_t_start_mm": 200,
         "wall_t_end_mm": 3200,
         "inward_normal": {
           "x": -0.0,
@@ -296,142 +139,23 @@
       }
     ],
     "blocked_walls": [],
-    "entry_landing_zones": [
-      {
-        "id": "door_1_entry_clearance",
-        "type": "entry_clearance",
-        "polygon_ccw": [
-          {
-            "x": 410,
-            "y": 0
-          },
-          {
-            "x": 1510,
-            "y": 0
-          },
-          {
-            "x": 1510,
-            "y": 900
-          },
-          {
-            "x": 410,
-            "y": 900
-          }
-        ],
-        "hard": true,
-        "source_id": "door_1"
-      }
-    ],
-    "circulation_corridors": [
-      {
-        "id": "corridor_1",
-        "from": "entry",
-        "to": "room_center",
-        "polyline_mm": [
-          {
-            "x": 960,
-            "y": 0
-          },
-          {
-            "x": 1700,
-            "y": 2100
-          }
-        ],
-        "width_mm": 900,
-        "score": 0.557
-      },
-      {
-        "id": "corridor_2",
-        "from": "entry",
-        "to": "deep_room",
-        "polyline_mm": [
-          {
-            "x": 960,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 4000
-          }
-        ],
-        "width_mm": 900,
-        "score": 1.0
-      },
-      {
-        "id": "corridor_3",
-        "from": "entry",
-        "to": "window:window_1",
-        "polyline_mm": [
-          {
-            "x": 960,
-            "y": 0
-          },
-          {
-            "x": 1700,
-            "y": 4200
-          }
-        ],
-        "width_mm": 900,
-        "score": 1.0
-      }
-    ],
-    "daylight_regions": [
-      {
-        "id": "window_1_daylight",
-        "source_window_id": "window_1",
-        "near_polygon_ccw": [
-          {
-            "x": 2450,
-            "y": 4200
-          },
-          {
-            "x": 950,
-            "y": 4200
-          },
-          {
-            "x": 950,
-            "y": 2600
-          },
-          {
-            "x": 2450,
-            "y": 2600
-          }
-        ],
-        "mid_polygon_ccw": [
-          {
-            "x": 2600,
-            "y": 4200
-          },
-          {
-            "x": 800,
-            "y": 4200
-          },
-          {
-            "x": 800,
-            "y": 1200
-          },
-          {
-            "x": 2600,
-            "y": 1200
-          }
-        ],
-        "score": 1.0
-      }
-    ],
+    "entry_landing_zones": [],
+    "circulation_corridors": [],
+    "daylight_regions": [],
     "privacy_regions": [
       {
         "id": "privacy_back_zone",
         "bbox_mm": {
           "min_x": 0,
-          "min_y": 3600,
-          "max_x": 3200,
-          "max_y": 4000
+          "min_y": 0,
+          "max_x": 0,
+          "max_y": 2200
         },
         "centroid_mm": {
-          "x": 2650,
-          "y": 3867
+          "x": 0,
+          "y": 1100
         },
-        "score": 0.917
+        "score": 0.0
       }
     ],
     "focal_surfaces": [
@@ -468,11 +192,11 @@
         "reason": "long usable wall with low opening interruption"
       },
       {
-        "id": "wall_1_usable_1510_3200_focal",
+        "id": "wall_1_usable_200_3200_focal",
         "wall_id": "wall_1",
         "segment_mm": [
           {
-            "x": 1510,
+            "x": 200,
             "y": 0
           },
           {
@@ -480,11 +204,11 @@
             "y": 0
           }
         ],
-        "score": 0.483,
+        "score": 0.857,
         "reason": "long usable wall with low opening interruption"
       },
       {
-        "id": "wall_3_usable_200_950_focal",
+        "id": "wall_3_usable_200_3200_focal",
         "wall_id": "wall_3",
         "segment_mm": [
           {
@@ -492,11 +216,11 @@
             "y": 4200
           },
           {
-            "x": 2450,
+            "x": 200,
             "y": 4200
           }
         ],
-        "score": 0.0,
+        "score": 0.857,
         "reason": "long usable wall with low opening interruption"
       }
     ],
@@ -517,6 +241,40 @@
       }
     ],
     "wall_anchor_candidates": [
+      {
+        "id": "wall_1_usable_200_3200_anchor",
+        "wall_id": "wall_1",
+        "segment_mm": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 0
+          },
+          {
+            "x": 3200,
+            "y": 700
+          },
+          {
+            "x": 200,
+            "y": 700
+          }
+        ],
+        "max_backed_width_mm": 3000,
+        "score": 1.0
+      },
       {
         "id": "wall_2_usable_200_4000_anchor",
         "wall_id": "wall_2",
@@ -552,6 +310,40 @@
         "score": 1.0
       },
       {
+        "id": "wall_3_usable_200_3200_anchor",
+        "wall_id": "wall_3",
+        "segment_mm": [
+          {
+            "x": 3200,
+            "y": 4200
+          },
+          {
+            "x": 200,
+            "y": 4200
+          }
+        ],
+        "anchor_polygon_ccw": [
+          {
+            "x": 3200,
+            "y": 4200
+          },
+          {
+            "x": 200,
+            "y": 4200
+          },
+          {
+            "x": 200,
+            "y": 3500
+          },
+          {
+            "x": 3200,
+            "y": 3500
+          }
+        ],
+        "max_backed_width_mm": 3000,
+        "score": 1.0
+      },
+      {
         "id": "wall_4_usable_200_4000_anchor",
         "wall_id": "wall_4",
         "segment_mm": [
@@ -584,108 +376,6 @@
         ],
         "max_backed_width_mm": 3800,
         "score": 1.0
-      },
-      {
-        "id": "wall_1_usable_1510_3200_anchor",
-        "wall_id": "wall_1",
-        "segment_mm": [
-          {
-            "x": 1510,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 0
-          }
-        ],
-        "anchor_polygon_ccw": [
-          {
-            "x": 1510,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 700
-          },
-          {
-            "x": 1510,
-            "y": 700
-          }
-        ],
-        "max_backed_width_mm": 1690,
-        "score": 0.563
-      },
-      {
-        "id": "wall_3_usable_200_950_anchor",
-        "wall_id": "wall_3",
-        "segment_mm": [
-          {
-            "x": 3200,
-            "y": 4200
-          },
-          {
-            "x": 2450,
-            "y": 4200
-          }
-        ],
-        "anchor_polygon_ccw": [
-          {
-            "x": 3200,
-            "y": 4200
-          },
-          {
-            "x": 2450,
-            "y": 4200
-          },
-          {
-            "x": 2450,
-            "y": 3500
-          },
-          {
-            "x": 3200,
-            "y": 3500
-          }
-        ],
-        "max_backed_width_mm": 750,
-        "score": 0.25
-      },
-      {
-        "id": "wall_3_usable_2450_3200_anchor",
-        "wall_id": "wall_3",
-        "segment_mm": [
-          {
-            "x": 950,
-            "y": 4200
-          },
-          {
-            "x": 200,
-            "y": 4200
-          }
-        ],
-        "anchor_polygon_ccw": [
-          {
-            "x": 950,
-            "y": 4200
-          },
-          {
-            "x": 200,
-            "y": 4200
-          },
-          {
-            "x": 200,
-            "y": 3500
-          },
-          {
-            "x": 950,
-            "y": 3500
-          }
-        ],
-        "max_backed_width_mm": 750,
-        "score": 0.25
       }
     ],
     "floating_zone_candidates": [
@@ -701,14 +391,14 @@
           "max_x": 2000,
           "max_y": 2400
         },
-        "score": 0.636
+        "score": 1.0
       }
     ],
     "soft_usage_hints": {
       "active_entry": false,
       "prefer_private_back_zone": false,
       "prefer_daylit_work_zone": true,
-      "prefer_open_center": true,
+      "prefer_open_center": false,
       "likely_primary_focus": "media_wall"
     }
   },
@@ -803,35 +493,10 @@
         }
       ]
     },
-    "entry_node": {
-      "id": "entry",
-      "type": "entry",
-      "point_mm": {
-        "x": 960,
-        "y": 0
-      }
-    },
-    "window_nodes": [
-      {
-        "id": "window:window_1",
-        "type": "window",
-        "point_mm": {
-          "x": 1700,
-          "y": 4200
-        },
-        "opening_id": "window_1"
-      }
-    ],
+    "entry_node": null,
+    "window_nodes": [],
     "passage_graph": {
       "nodes": [
-        {
-          "id": "entry",
-          "type": "entry",
-          "point_mm": {
-            "x": 960,
-            "y": 0
-          }
-        },
         {
           "id": "room_center",
           "type": "center",
@@ -839,39 +504,41 @@
             "x": 1700,
             "y": 2100
           }
-        },
-        {
-          "id": "window:window_1",
-          "type": "window",
-          "point_mm": {
-            "x": 1700,
-            "y": 4200
-          },
-          "opening_id": "window_1"
         }
       ],
-      "edges": [
-        {
-          "from": "entry",
-          "to": "room_center",
-          "corridor_id": "corridor_1",
-          "width_mm": 900
-        },
-        {
-          "from": "entry",
-          "to": "deep_room",
-          "corridor_id": "corridor_2",
-          "width_mm": 900
-        },
-        {
-          "from": "entry",
-          "to": "window:window_1",
-          "corridor_id": "corridor_3",
-          "width_mm": 900
-        }
-      ]
+      "edges": []
     },
     "room_subzones": [
+      {
+        "id": "zone_front_left",
+        "label": "front_left",
+        "centroid_mm": {
+          "x": 800,
+          "y": 1000
+        },
+        "bbox_mm": {
+          "min_x": 0,
+          "min_y": 0,
+          "max_x": 1600,
+          "max_y": 2000
+        },
+        "sample_count": 99
+      },
+      {
+        "id": "zone_back_left",
+        "label": "back_left",
+        "centroid_mm": {
+          "x": 800,
+          "y": 3100
+        },
+        "bbox_mm": {
+          "min_x": 0,
+          "min_y": 2200,
+          "max_x": 1600,
+          "max_y": 4000
+        },
+        "sample_count": 90
+      },
       {
         "id": "zone_front_right",
         "label": "front_right",
@@ -888,41 +555,11 @@
         "sample_count": 88
       },
       {
-        "id": "zone_back_left",
-        "label": "back_left",
-        "centroid_mm": {
-          "x": 757,
-          "y": 3043
-        },
-        "bbox_mm": {
-          "min_x": 0,
-          "min_y": 2200,
-          "max_x": 1600,
-          "max_y": 4000
-        },
-        "sample_count": 84
-      },
-      {
-        "id": "zone_front_left",
-        "label": "front_left",
-        "centroid_mm": {
-          "x": 732,
-          "y": 1203
-        },
-        "bbox_mm": {
-          "min_x": 0,
-          "min_y": 0,
-          "max_x": 1600,
-          "max_y": 2000
-        },
-        "sample_count": 74
-      },
-      {
         "id": "zone_back_right",
         "label": "back_right",
         "centroid_mm": {
-          "x": 2541,
-          "y": 3035
+          "x": 2500,
+          "y": 3100
         },
         "bbox_mm": {
           "min_x": 1800,
@@ -930,14 +567,14 @@
           "max_x": 3200,
           "max_y": 4000
         },
-        "sample_count": 74
+        "sample_count": 80
       }
     ]
   },
   "quality_meta": {
     "missing": [],
     "conflicts": [],
-    "confidence": 1.0,
+    "confidence": 0.75,
     "notes": [],
     "settings": {
       "grid_mm": 50,
@@ -959,85 +596,12 @@
       "llm_retry_max": 1
     }
   },
-  "obstacles": [
-    {
-      "id": "door_1_swing",
-      "type": "door_swing",
-      "polygon_ccw": [
-        {
-          "x": 510,
-          "y": 0
-        },
-        {
-          "x": 1410,
-          "y": 0
-        },
-        {
-          "x": 1410,
-          "y": 850
-        },
-        {
-          "x": 510,
-          "y": 850
-        }
-      ],
-      "hard": true,
-      "source_id": "door_1"
-    },
-    {
-      "id": "door_1_entry_clearance",
-      "type": "entry_clearance",
-      "polygon_ccw": [
-        {
-          "x": 410,
-          "y": 0
-        },
-        {
-          "x": 1510,
-          "y": 0
-        },
-        {
-          "x": 1510,
-          "y": 900
-        },
-        {
-          "x": 410,
-          "y": 900
-        }
-      ],
-      "hard": true,
-      "source_id": "door_1"
-    },
-    {
-      "id": "window_1_clearance",
-      "type": "window_clearance",
-      "polygon_ccw": [
-        {
-          "x": 2300,
-          "y": 4200
-        },
-        {
-          "x": 1100,
-          "y": 4200
-        },
-        {
-          "x": 1100,
-          "y": 3750
-        },
-        {
-          "x": 2300,
-          "y": 3750
-        }
-      ],
-      "hard": true,
-      "source_id": "window_1"
-    }
-  ],
+  "obstacles": [],
   "meta": {
     "room_type": "living_room",
     "style": "modern functional",
     "height_mm": 2600,
-    "window_direction": "N",
+    "window_direction": "",
     "grid_mm": 50,
     "llm_temperature": 0.1,
     "llm_retry_max": 1
@@ -1045,9 +609,8 @@
   "notes": [
     "Design target room type: living_room.",
     "Requested style: modern functional.",
-    "Could you please design a compact Living Room for me? The room is 3.4m x 4.2m. It should feel calm and practical for reading, casual conversation, and occasional movie nights. Use a small sofa or loveseat, a slim TV console, a small coffee table, a rug, a bookshelf, and a floor lamp, with a layout that avoids overfurnishing the room. Opening positions: the door is on the bottom wall, spanning from 0.5m to 1.4m; the window is on the top wall, spanning from 1.1m to 2.3m.",
+    "Could you please design a compact Living Room for me? The room is 3.4m x 4.2m. It should feel calm and practical for reading, casual conversation, and occasional movie nights. Use a small sofa or loveseat, a slim TV console, a small coffee table, a rug, a bookshelf, and a floor lamp, with a layout that avoids overfurnishing the room.",
     "Soft usage hint: prefer_daylit_work_zone.",
-    "Soft usage hint: prefer_open_center.",
     "Soft usage hint: likely_primary_focus=media_wall."
   ],
   "missing": [],

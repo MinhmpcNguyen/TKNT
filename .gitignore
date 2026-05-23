@@ -32,8 +32,10 @@ node_modules/
 logs/
 outputs*/
 cases/*tenant_*/
+cases/user_*/
 
 # Secrets (do not commit)
+app-config.yaml
 .env
 .env.*
 gemini.env

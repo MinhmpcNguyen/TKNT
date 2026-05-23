@@ -196,7 +196,7 @@ class RequestContractTest(unittest.TestCase):
         self,
     ) -> None:
         contract = build_request_contract(
-            brief_text="Include a bed, a rug, and a ceiling lamp.",
+            brief_text="Include a bed, a rug, a mirror, and a ceiling lamp.",
             available_object_types=["bed"],
         )
 
@@ -207,8 +207,54 @@ class RequestContractTest(unittest.TestCase):
 
         self.assertEqual(
             [row["object_type"] for row in missing],
-            ["ceiling_light", "rug"],
+            ["ceiling_light", "mirror", "rug"],
         )
+        self.assertTrue(
+            all(
+                row["solver_participation"] == "post_solver_accessory"
+                for row in missing
+            )
+        )
+
+    def test_plain_mirror_is_wall_attached_post_solver_accessory(self) -> None:
+        contract = sanitize_request_contract(
+            {
+                "source": "llm_request_contract",
+                "objects": [
+                    {
+                        "object_type": "mirror",
+                        "intent": "must_keep",
+                        "min_keep": 1,
+                        "target_count": 1,
+                        "max_keep": 1,
+                        "evidence": "a mirror",
+                        "reason": "explicitly requested",
+                        "confidence": 0.9,
+                        "placement_participation": "floor_blocking",
+                    }
+                ],
+                "groups": [],
+            },
+            brief_text="Include a mirror.",
+            available_object_types=["mirror"],
+        )
+
+        item = contract["objects"][0]
+        self.assertEqual(item["placement_participation"], "wall_attached")
+        self.assertEqual(item["solver_participation"], "post_solver_accessory")
+        self.assertFalse(item["blocks_floor_area"])
+        self.assertTrue(item["can_overlap_floor_objects"])
+
+    def test_standing_mirror_can_enter_solver(self) -> None:
+        contract = build_request_contract(
+            brief_text="Include a standing mirror.",
+            available_object_types=["mirror"],
+        )
+
+        item = contract["objects"][0]
+        self.assertEqual(item["placement_participation"], "floor_blocking")
+        self.assertEqual(item["solver_participation"], "hard_solver_object")
+        self.assertTrue(item["blocks_floor_area"])
 
     def test_llm_contract_restores_missing_non_functional_requested_objects(
         self,

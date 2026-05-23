@@ -95,9 +95,15 @@ _TYPE_LABELS: dict[str, str] = {
     "sectional_sofa": "sectional sofa",
     "side_table": "side table",
     "storage_cabinet": "storage cabinet",
-    "tv_console": "TV console",
+    "tv_console": "TV console with integrated flat-screen TV",
     "wall_art": "wall art",
 }
+
+_TV_CONSOLE_RENDER_IDENTITY_HINT = (
+    "preserve the integrated black flat-screen TV/screen panel together with the "
+    "console cabinet; do not simplify it into a plain cabinet or box and do not "
+    "add a separate duplicate TV"
+)
 
 
 @dataclass(frozen=True)
@@ -364,7 +370,7 @@ def _build_scene_objects(normalized: Mapping[str, object]) -> list[SnapshotObjec
     for item in visible_payload:
         payload = _mapping(item)
         canonical_type = _canonicalize_object_type(_string(payload.get("type")))
-        label = _type_label(canonical_type)
+        label = _render_identity_label(canonical_type, payload)
         screen_bbox = _bounds_from_payload(payload.get("screenBboxPx"))
         center_payload = _mapping(payload.get("screenCenterPx"))
         screen_center = (
@@ -1023,6 +1029,8 @@ def _object_layout_fact(
     )
     if opening_relation:
         sentence += f", {opening_relation}"
+    if item.canonical_type == "tv_console":
+        sentence += f"; {_TV_CONSOLE_RENDER_IDENTITY_HINT}"
     return sentence + "."
 
 
@@ -1369,6 +1377,18 @@ def _type_label(value: str | None) -> str:
     if not value:
         return "object"
     return _TYPE_LABELS.get(value, value.replace("_", " "))
+
+
+def _render_identity_label(
+    canonical_type: str,
+    payload: Mapping[str, object],
+) -> str:
+    label = _string(
+        payload.get("renderIdentityLabel") or payload.get("render_identity_label")
+    )
+    if label:
+        return label
+    return _type_label(canonical_type)
 
 
 def _canonicalize_object_type(value: str | None) -> str:

@@ -11,8 +11,16 @@
       "max_keep": 1,
       "evidence": "Include one bed as the main focal point",
       "reason": "Directly requested as the main focal point and required by the sleep core bundle.",
+      "confidence": 0.99,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.99
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "ceiling_light",
@@ -23,8 +31,16 @@
       "max_keep": 1,
       "evidence": "and a ceiling lamp",
       "reason": "explicitly requested in the brief",
+      "confidence": null,
+      "placement_participation": "ceiling_attached",
+      "requested": true,
+      "inventory_available": false,
       "available_in_program": false,
-      "confidence": null
+      "solver_participation": "post_solver_accessory",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": true,
+      "host_object_type": null,
+      "mount_region_type": "ceiling"
     },
     {
       "object_type": "chair",
@@ -34,9 +50,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "with a chair",
-      "reason": "Explicitly requested as part of the study setup.",
+      "reason": "Explicitly requested seating paired with the desk.",
+      "confidence": 0.97,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "desk",
@@ -46,21 +70,17 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a compact desk",
-      "reason": "Explicitly requested study furniture and required by the work/study bundle.",
+      "reason": "Explicitly requested work surface for light study.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
-    },
-    {
-      "object_type": "nightstand",
-      "intent": "must_keep",
-      "min_keep": 1,
-      "target_count": 1,
-      "preferred_count": 1,
-      "max_keep": 1,
-      "evidence": "one nightstand",
-      "reason": "Explicitly requested with a fixed count of one.",
-      "available_in_program": true,
-      "confidence": 0.98
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "wardrobe",
@@ -71,8 +91,36 @@
       "max_keep": 1,
       "evidence": "a wardrobe",
       "reason": "Explicitly requested storage anchor for the bedroom.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
       "available_in_program": true,
-      "confidence": 0.98
+      "solver_participation": "hard_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
+    },
+    {
+      "object_type": "nightstand",
+      "intent": "target_if_viable",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "one nightstand",
+      "reason": "Explicitly requested with a fixed count of one.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "requested": true,
+      "inventory_available": true,
+      "available_in_program": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     },
     {
       "object_type": "floor_lamp",
@@ -82,9 +130,17 @@
       "preferred_count": 0,
       "max_keep": 0,
       "evidence": "ceiling lamp",
-      "reason": "The brief requests a ceiling lamp, not a floor lamp; floor lamp is not explicitly requested.",
+      "reason": "The brief requests a ceiling lamp, not a floor lamp.",
+      "confidence": 0.91,
+      "placement_participation": "floor_blocking",
+      "requested": false,
+      "inventory_available": false,
       "available_in_program": false,
-      "confidence": 0.86
+      "solver_participation": "ignored_unavailable",
+      "blocks_floor_area": false,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null
     }
   ],
   "groups": [
@@ -94,9 +150,9 @@
         "bed",
         "nightstand"
       ],
-      "intent": "must_keep",
+      "intent": "required composition",
       "priority": "core",
-      "drop_policy": "keep bed; nightstand may be reduced only if explicitly surplus, but brief fixes one nightstand"
+      "drop_policy": "preserve bed; nightstand may reduce only if space constrained"
     },
     {
       "group_id": "work_study_bundle",
@@ -104,14 +160,13 @@
         "desk",
         "chair"
       ],
-      "intent": "must_keep",
+      "intent": "required composition",
       "priority": "support",
-      "drop_policy": "keep both as the requested study pair"
+      "drop_policy": "preserve desk; chair may reduce only if space constrained"
     }
   ],
   "notes": [
-    "Ceiling lamp is explicitly requested, but no matching object type is available in the provided program/inventory lists, so it is not encoded as an object.",
-    "Soft hints such as prefer_private_back_zone, prefer_daylit_work_zone, prefer_open_center, and likely_primary_focus=window_view were not converted into object requirements.",
+    "Ceiling lamp requested in brief but not represented as an available object type in the provided inventories.",
     "Request contract was normalized before tier-count enforcement.",
     "Requested non-functional objects were restored for downstream placement: ceiling_light"
   ]

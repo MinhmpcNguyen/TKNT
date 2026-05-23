@@ -6,6 +6,7 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -563,32 +564,33 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
                 "cluster_budget_limits_m2": {"work_area": 4.0},
             }
 
-        semantic_program = (
-            _request_contract.attach_request_contract_to_semantic_program(
-                {
-                    "active_clusters": [
-                        {
-                            "cluster_id": "work_area",
-                            "priority": "support",
-                            "required_bundles": [
-                                {
-                                    "bundle_id": "workstation",
-                                    "objects": [
-                                        {"object_type": "desk", "role": "support"},
-                                        {"object_type": "chair", "role": "support"},
-                                        {
-                                            "object_type": "bookshelf",
-                                            "role": "support",
-                                        },
-                                    ],
-                                }
-                            ],
-                        }
-                    ],
-                },
-                brief_text="Include a compact desk with a chair and a bookshelf.",
+        with patch.dict(os.environ, {"TKNT_REQUEST_CONTRACT_LLM": "0"}):
+            semantic_program = (
+                _request_contract.attach_request_contract_to_semantic_program(
+                    {
+                        "active_clusters": [
+                            {
+                                "cluster_id": "work_area",
+                                "priority": "support",
+                                "required_bundles": [
+                                    {
+                                        "bundle_id": "workstation",
+                                        "objects": [
+                                            {"object_type": "desk", "role": "support"},
+                                            {"object_type": "chair", "role": "support"},
+                                            {
+                                                "object_type": "bookshelf",
+                                                "role": "support",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    brief_text="Include a compact desk with a chair and a bookshelf.",
+                )
             )
-        )
         clusters_json = {
             "semantic_layout_program": semantic_program,
             "clusters": [
@@ -653,28 +655,29 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
                 "cluster_budget_limits_m2": {"work_area": 1.0},
             }
 
-        semantic_program = (
-            _request_contract.attach_request_contract_to_semantic_program(
-                {
-                    "active_clusters": [
-                        {
-                            "cluster_id": "work_area",
-                            "priority": "support",
-                            "required_bundles": [
-                                {
-                                    "bundle_id": "workstation",
-                                    "objects": [
-                                        {"object_type": "desk", "role": "support"},
-                                        {"object_type": "chair", "role": "support"},
-                                    ],
-                                }
-                            ],
-                        }
-                    ],
-                },
-                brief_text="Include a compact desk with a chair.",
+        with patch.dict(os.environ, {"TKNT_REQUEST_CONTRACT_LLM": "0"}):
+            semantic_program = (
+                _request_contract.attach_request_contract_to_semantic_program(
+                    {
+                        "active_clusters": [
+                            {
+                                "cluster_id": "work_area",
+                                "priority": "support",
+                                "required_bundles": [
+                                    {
+                                        "bundle_id": "workstation",
+                                        "objects": [
+                                            {"object_type": "desk", "role": "support"},
+                                            {"object_type": "chair", "role": "support"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    brief_text="Include a compact desk with a chair.",
+                )
             )
-        )
         clusters_json = {
             "semantic_layout_program": semantic_program,
             "clusters": [

@@ -39,6 +39,7 @@ from agent.solver.solver import (  # noqa: E402
     _object_level_face_pair_issues,
     _object_level_orientation_issues,
     _object_level_required_face_pairs,
+    _object_rect_is_usable,
     _place_support_objects_for_solution,
     _repair_object_level_solution_geometry,
     _rect_inside_polygon,
@@ -668,21 +669,77 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertTrue(result["complete"])
         self.assertEqual(result["coverage_ratio"], 1.0)
 
-    def test_bedroom_case_keeps_partial_geometry_complete_gate(self) -> None:
+    def test_bedroom_case_returns_hard_valid_gallery_candidate(self) -> None:
         case_root = REPO_ROOT / "cases" / "user_f1a4e69d3672aab8_20260521T140710Z"
         if not case_root.exists():
             self.skipTest("local case artifact is unavailable")
 
         result = self._solve_case_first_concept(case_root)
 
-        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["status"], "OK")
         self.assertTrue(result["geometry_valid"])
-        self.assertFalse(result["hard_valid"])
-        self.assertFalse(result["gallery_eligible"])
+        self.assertTrue(result["hard_valid"])
+        self.assertTrue(result["gallery_eligible"])
         self.assertTrue(result["complete"])
         self.assertEqual(result["coverage_ratio"], 1.0)
 
-    def test_protected_center_overlap_is_ranked_fallback_not_unsat(self) -> None:
+    def test_regression_mixed_media_case_keeps_later_concepts_viable(self) -> None:
+        case_root = REPO_ROOT / "cases" / "user_f1a4e69d3672aab8_20260522T150736Z"
+        if not case_root.exists():
+            self.skipTest("local case artifact is unavailable")
+
+        room_model = json.loads((case_root / "01_room_interpreter.json").read_text())
+        merged_clusters = json.loads((case_root / "04_cluster_merged.json").read_text())
+        cluster_constraints = json.loads(
+            (case_root / "02_cluster_forge.json").read_text()
+        )
+        concept_bundle = json.loads(
+            (case_root / "05c_seed_relation_plans.json").read_text()
+        )
+        room = (
+            room_model.get("room") if isinstance(room_model.get("room"), dict) else {}
+        )
+        room_type = str(room.get("room_type") or room_model.get("room_type") or "")
+
+        status_by_concept: dict[str, str] = {}
+        top_gate_reasons_by_concept: dict[str, list[str]] = {}
+        for concept in concept_bundle["concepts"]:
+            concept_id = str(concept.get("concept_id") or "")
+            relation_plan = solver_plan_from_concept(
+                concept=concept,
+                room_model_json=room_model,
+                room_type=room_type,
+            )
+            result = solve_object_level_layout(
+                room_model=room_model,
+                merged_clusters=merged_clusters,
+                relation_plan=relation_plan,
+                cluster_constraints=cluster_constraints,
+                grid_mm=50,
+                max_rounds=3,
+            )
+            report = result.get("solver_degradation_report")
+            top_reasons = (
+                report.get("top_quality_gate_reasons")
+                if isinstance(report, dict)
+                else []
+            )
+            status_by_concept[concept_id] = str(result.get("status") or "")
+            top_gate_reasons_by_concept[concept_id] = [
+                str(row.get("reason") or "")
+                for row in top_reasons
+                if isinstance(row, dict)
+            ]
+
+        for concept_id in ("concept_03", "concept_04", "concept_05"):
+            with self.subTest(concept_id=concept_id):
+                self.assertEqual(status_by_concept.get(concept_id), "OK")
+                self.assertNotIn(
+                    "required_face_contract_failed",
+                    top_gate_reasons_by_concept.get(concept_id, []),
+                )
+
+    def test_protected_center_overlap_is_prefiltered_before_ranking(self) -> None:
         merged_clusters = {
             "clusters": [
                 _object_program_cluster(
@@ -734,17 +791,113 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             relation_plan=relation_plan,
         )
 
-        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["status"], "OK")
         self.assertTrue(result["geometry_valid"])
         self.assertTrue(result["complete"])
-        self.assertFalse(result["hard_valid"])
+        self.assertTrue(result["hard_valid"])
+        self.assertTrue(result["gallery_eligible"])
         objects = {
             str(row["object_id"]): row for row in result["absolute_layout"]["objects"]
         }
         self.assertIn("coffee_table", objects)
         verify = result["verify_summary"]
-        self.assertIn(
+        self.assertNotIn(
             "blocking_protected_region_overlap", verify["quality_gate_reasons"]
+        )
+
+    def test_fully_blocking_protected_region_returns_unsat_without_layout(self) -> None:
+        room_model = _room_model()
+        regions = room_model["regions"]
+        self.assertIsInstance(regions, list)
+        regions.append(
+            {
+                "id": "whole_room",
+                "bbox": {"min_x": 0, "min_y": 0, "max_x": 6000, "max_y": 4000},
+            }
+        )
+        merged_clusters = {
+            "clusters": [
+                _object_program_cluster(
+                    cluster_id="main_seating",
+                    object_id="sofa",
+                    category="sofa",
+                    dims={"L": 1800, "W": 850, "H": 800},
+                )
+            ]
+        }
+        relation_plan = {
+            "anchor_layout_hints_by_cluster": {
+                "main_seating": {
+                    "zone_assignment": "whole_room",
+                    "preferred_region_ids": ["whole_room"],
+                }
+            },
+            "macro_concept": {
+                "macro_constraints": {
+                    "protected_topology": [
+                        {
+                            "region": "whole_room",
+                            "zone_type": "primary_circulation_corridor",
+                            "priority": "high",
+                            "enforcement": "hard_soft",
+                            "max_overlap_ratio": 0.0,
+                            "applies_to": ["core_clusters"],
+                            "violation_severity": "blocking",
+                        }
+                    ]
+                }
+            },
+        }
+
+        result = solve_object_level_layout(
+            room_model=room_model,
+            merged_clusters=merged_clusters,
+            relation_plan=relation_plan,
+        )
+
+        self.assertEqual(result["status"], "UNSAT")
+        self.assertNotIn("absolute_layout", result)
+        self.assertEqual(
+            result["solver_debug"]["anchor_candidate_counts"]["main_seating"], 0
+        )
+
+    def test_object_rect_is_usable_rejects_blocking_protected_region(self) -> None:
+        relation_plan = {
+            "macro_concept": {
+                "macro_constraints": {
+                    "protected_topology": [
+                        {
+                            "region": "center_lounge",
+                            "zone_type": "center_openness_core",
+                            "priority": "high",
+                            "enforcement": "hard_soft",
+                            "max_overlap_ratio": 0.0,
+                            "applies_to": ["core_clusters"],
+                            "violation_severity": "blocking",
+                        }
+                    ]
+                }
+            }
+        }
+        world = _build_object_solver_world(
+            room_model=_room_model(),
+            merged_clusters={"clusters": []},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=100,
+        )
+
+        self.assertFalse(
+            _object_rect_is_usable(
+                (2000, 1500, 3000, 2300),
+                (),
+                world,
+                row={
+                    "cluster_id": "main_seating",
+                    "object_id": "sofa",
+                    "anchor_kind": "center",
+                },
+            )
         )
 
     def test_wall_contact_requires_front_inward(self) -> None:
@@ -800,6 +953,34 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["reason"], "required_face_each_other_failed")
+
+    def test_face_pair_missing_dropped_cluster_is_ignored(self) -> None:
+        relation_plan = {
+            "cluster_directional_relations": [
+                {
+                    "a": "main_seating",
+                    "b": "lounge_reading",
+                    "relation": "face_each_other",
+                    "priority": "high",
+                    "reason": "optional trial cluster may be dropped",
+                }
+            ]
+        }
+
+        issues = _object_level_face_pair_issues(
+            placed_objects=[
+                {
+                    "cluster_id": "main_seating",
+                    "object_id": "sofa",
+                    "priority": "anchor",
+                    "rect": (1000, 1000, 2800, 1800),
+                    "front_world": {"dx": 1, "dy": 0},
+                }
+            ],
+            relation_plan=relation_plan,
+        )
+
+        self.assertEqual(issues, [])
 
     def test_face_each_other_rejects_weak_diagonal_alignment(self) -> None:
         relation_plan = {
@@ -961,6 +1142,52 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             ]
         }
 
+        self.assertEqual(_object_level_required_face_pairs(relation_plan), set())
+
+    def test_mixed_media_pair_with_inferred_face_cluster_is_not_required(self) -> None:
+        relation_plan = {
+            "layout_intent_profile": {
+                "focus_mode": "mixed",
+                "primary_cluster_id": "sleep_core",
+                "secondary_cluster_id": "media_optional",
+            },
+            "cluster_orientations": [
+                {
+                    "cluster_id": "sleep_core",
+                    "target_cluster_id": "media_optional",
+                    "intents": ["back_to_wall", "face_cluster"],
+                    "priority": "high",
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "target_cluster_id": "sleep_core",
+                    "intents": ["back_to_wall", "face_cluster"],
+                    "priority": "high",
+                },
+            ],
+        }
+
+        issues = _object_level_face_pair_issues(
+            placed_objects=[
+                {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "priority": "anchor",
+                    "rect": (0, 1050, 1690, 2960),
+                    "front_world": {"dx": 1, "dy": 0},
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "object_id": "tv_console",
+                    "priority": "anchor",
+                    "rect": (1900, 3500, 3160, 3880),
+                    "front_world": {"dx": 0, "dy": -1},
+                },
+            ],
+            relation_plan=relation_plan,
+        )
+
+        self.assertEqual(issues, [])
         self.assertEqual(_object_level_required_face_pairs(relation_plan), set())
 
     def test_mixed_media_pair_with_buffered_support_is_required(self) -> None:

@@ -2,9 +2,9 @@
   "status": "UNCHANGED",
   "module": "controlled_accessory_refill",
   "refill_applied": false,
-  "total_dropped_items": 1,
+  "total_dropped_items": 3,
   "eligible_accessory_count": 0,
-  "rejected_count": 1,
+  "rejected_count": 3,
   "refill_count": 0,
   "inserted_count": 0,
   "remaining_count": 0,
@@ -14,7 +14,19 @@
   "rejected_refill_objects_by_cluster": {
     "main_seating": [
       {
-        "object_id": "armchair",
+        "object_id": "armchair_2",
+        "reason": "support_slot_failed",
+        "refill_rejected_reason": "not_accessory_or_decor"
+      },
+      {
+        "object_id": "side_table",
+        "reason": "support_slot_failed",
+        "refill_rejected_reason": "not_accessory_or_decor"
+      }
+    ],
+    "media": [
+      {
+        "object_id": "media_shelf",
         "reason": "support_slot_failed",
         "refill_rejected_reason": "not_accessory_or_decor"
       }

@@ -43,6 +43,8 @@ def select_distinct_final_gallery_candidates(
         candidate = _coerce_candidate(raw)
         if candidate is None:
             continue
+        if not candidate.hard_valid or not candidate.gallery_eligible:
+            continue
         pool.append((candidate, deepcopy(raw)))
 
     pool.sort(key=lambda item: _candidate_rank_tuple(item[0]), reverse=True)
@@ -235,8 +237,7 @@ def _candidate_backfill_rank_tuple(
     )
     anchor_is_new = int(
         bool(
-            candidate.anchor_signature
-            and candidate.anchor_signature not in seen_anchor
+            candidate.anchor_signature and candidate.anchor_signature not in seen_anchor
         )
     )
     visual_family_is_new = int(
@@ -357,6 +358,13 @@ def build_final_gallery_selection_summary(
     selected_macro_signatures = set(selected_macro_counts)
     candidate_visual_family_signatures = set(candidate_visual_family_counts)
     selected_visual_family_signatures = set(selected_visual_family_counts)
+    hard_valid_candidate_count = sum(1 for row in candidate_rows if row.hard_valid)
+    gallery_eligible_candidate_count = sum(
+        1 for row in candidate_rows if row.gallery_eligible
+    )
+    eligible_candidate_count = sum(
+        1 for row in candidate_rows if row.hard_valid and row.gallery_eligible
+    )
     collapsed_macro_layouts = [
         {
             "macro_layout_signature": signature,
@@ -391,7 +399,12 @@ def build_final_gallery_selection_summary(
             "Final gallery backfilled near-distinct options after exhausting "
             "strongly distinct visual families."
         )
-    if len(selected_rows) < requested:
+    if not selected_rows and candidate_rows and eligible_candidate_count == 0:
+        notes.append(
+            "Final gallery returned no options because every candidate failed "
+            "hard-valid/gallery eligibility gates."
+        )
+    elif len(selected_rows) < requested:
         if len(candidate_rows) <= len(selected_rows):
             notes.append(
                 "Final gallery returned fewer options because fewer usable "
@@ -411,6 +424,10 @@ def build_final_gallery_selection_summary(
         "requested_count": requested,
         "candidate_count": len(candidate_rows),
         "returned_count": len(selected_rows),
+        "hard_valid_candidate_count": hard_valid_candidate_count,
+        "gallery_eligible_candidate_count": gallery_eligible_candidate_count,
+        "eligible_candidate_count": eligible_candidate_count,
+        "top_quality_gate_reasons": _top_quality_gate_reasons(candidates),
         "macro_distinct_candidate_count": len(candidate_macro_signatures),
         "macro_distinct_returned_count": len(selected_macro_signatures),
         "visual_family_distinct_candidate_count": len(
@@ -422,6 +439,39 @@ def build_final_gallery_selection_summary(
         "collapsed_visual_families": collapsed_visual_families,
         "notes": notes,
     }
+
+
+def _top_quality_gate_reasons(candidates: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for raw in candidates:
+        for reason in _candidate_quality_gate_reasons(raw):
+            counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _candidate_quality_gate_reasons(raw: dict[str, Any]) -> list[str]:
+    containers: list[dict[str, Any]] = [raw]
+    for key in ("verify_summary", "solver_output"):
+        value = raw.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    absolute_layout = raw.get("absolute_layout")
+    if isinstance(absolute_layout, dict):
+        containers.append(absolute_layout)
+        verify = absolute_layout.get("verify_summary")
+        if isinstance(verify, dict):
+            containers.append(verify)
+
+    reasons: list[str] = []
+    for container in containers:
+        value = container.get("quality_gate_reasons")
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            reason = str(item or "").strip()
+            if reason:
+                reasons.append(reason)
+    return reasons
 
 
 def _macro_signature_counts(
@@ -524,7 +574,7 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
         source=source,
         reason=reason,
         layout_score=int(raw.get("layout_score") or 0),
-        hard_valid=bool(raw.get("hard_valid", True)),
+        hard_valid=bool(raw.get("hard_valid", absolute_layout.get("hard_valid", True))),
         complete=complete,
         gallery_eligible=gallery_eligible,
         coverage_ratio=coverage_ratio,

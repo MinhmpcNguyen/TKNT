@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+from collections import Counter
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -25,6 +26,9 @@ from agent.seed_concept_generator import solver_plan_from_concept
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist, stylist_model_name_for_variant
 from agent.tier_count_director import TierCountDirector
+from agent.visual_relation_bundle_planner import VisualRelationBundlePlanner
+from agent.visual_relation_object_solver import VisualRelationObjectSolver
+from agent.visual_relation_planner import VisualRelationPlanner
 from agent.request_contract import (
     canonical_object_type,
     missing_functional_contract_types,
@@ -77,6 +81,14 @@ logger = logging.getLogger(__name__)
 _PRIMARY_SEED_CACHE_VERSION = "v1"
 _PRIMARY_SEED_LAYOUT_CACHE: dict[str, dict[str, Any]] = {}
 _LAYOUT_SPEED_MODE_ENV = "TKNT_LAYOUT_SPEED_MODE"
+_VISUAL_RELATION_PLANNER_ENV = "TKNT_VISUAL_RELATION_PLANNER"
+_VISUAL_RELATION_SOLVER_ENV = "TKNT_VISUAL_RELATION_SOLVER"
+_VISUAL_RELATION_ALLOWED_MODES = {"shadow", "candidate"}
+_VISUAL_RELATION_ALLOWED_SOLVERS = {"v1", "v2"}
+_VISUAL_RELATION_OFF_VALUES = {"", "0", "false", "no", "off"}
+_VISUAL_RELATION_V1_VALUES = {"1", "true", "yes", "on", "v1"}
+_VISUAL_RELATION_V2_VALUES = {"v2", "macro", "macro_concept", "bundle"}
+_VISUAL_RELATION_V2_ARTIFACT_VERSION = "v2_macro_concept_bundle"
 _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
     "rug": {
         "width_ratio": 0.56,
@@ -93,6 +105,44 @@ _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
         "height": 450,
         "collision_layer": "ceiling",
         "place_on": {"target_instance_id": "ceiling", "method": "hang_on"},
+    },
+    "mirror": {
+        "width": 800,
+        "height": 80,
+        "collision_layer": "wall_mounted",
+        "mount_region_type": "wall",
+        "target_object_types": ["wardrobe", "dresser", "tv_console"],
+        "place_on": {"method": "hang_on"},
+    },
+    "wall_art": {
+        "width": 900,
+        "height": 70,
+        "collision_layer": "wall_mounted",
+        "mount_region_type": "wall",
+        "place_on": {"target_instance_id": "wall", "method": "hang_on"},
+    },
+    "curtain": {
+        "width_ratio": 0.34,
+        "height": 140,
+        "min_w": 900,
+        "max_w": 2200,
+        "collision_layer": "opening_mounted",
+        "mount_region_type": "opening",
+        "place_on": {"target_instance_id": "opening", "method": "hang_on"},
+    },
+    "cushion": {
+        "width": 420,
+        "height": 320,
+        "collision_layer": "host_attached",
+        "target_object_types": ["bed", "sofa", "chair", "armchair"],
+        "place_on": {"method": "on_top"},
+    },
+    "blanket": {
+        "width": 650,
+        "height": 500,
+        "collision_layer": "host_attached",
+        "target_object_types": ["bed", "sofa", "armchair"],
+        "place_on": {"method": "on_top"},
     },
 }
 _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.update(all_profile_non_functional_layout_specs())
@@ -1057,6 +1107,31 @@ def run_case(
     )
 
     target_final_count = target_final_count_for_mode(resolved_ablation_mode, 5)
+    visual_relation_experiment = _run_visual_relation_planner_experiment(
+        paths=paths,
+        input_payload=prepared_input_payload,
+        room_output=room_output,
+        planning_guidance_text=planning_guidance_text,
+        cluster_output=cluster_output,
+        tier_output=tier_output,
+        merged_output=merged_output,
+        solver=solver,
+        manual_placements=manual_placements,
+        ablation_mode=resolved_ablation_mode,
+        target_count=target_final_count,
+    )
+    if _visual_relation_v2_must_stop(visual_relation_experiment):
+        error = str(
+            visual_relation_experiment.get("error")
+            or "Visual Relation Planner V2 was skipped."
+        )
+        _update_status(paths, "error", error=error)
+        return {
+            "case_id": case_id,
+            "case_dir": str(case_root),
+            "final_output": None,
+            "error": error,
+        }
     _update_status(
         paths,
         "cluster_relation_planner",
@@ -1099,6 +1174,11 @@ def run_case(
         }
 
     solved_bundles: list[dict[str, Any]] = []
+    visual_candidate_bundles = _visual_relation_candidate_bundles(
+        visual_relation_experiment
+    )
+    if visual_candidate_bundles:
+        solved_bundles.extend(visual_candidate_bundles)
     for concept_index, concept in enumerate(concepts[:target_final_count], start=1):
         relation_plan = solver_plan_from_concept(
             concept=concept,
@@ -1172,6 +1252,29 @@ def run_case(
         solved_bundles,
         max_variants=target_final_count,
     )
+    if not styling_candidates:
+        layout_variants = _build_layout_variants_payload_from_final_candidates(
+            [], status="UNSAT"
+        )
+        layout_variants["selection_summary"] = build_final_gallery_selection_summary(
+            candidates=solved_bundles,
+            selected=[],
+            requested_count=target_final_count,
+        )
+        _write_module_json(
+            paths,
+            "layout_variants",
+            layout_variants,
+            legacy_path=paths.layout_variants,
+        )
+        error = "object-level solver produced no hard-valid/gallery-eligible layouts"
+        _update_status(paths, "error", error=error)
+        return {
+            "case_id": case_id,
+            "case_dir": str(case_root),
+            "final_output": None,
+            "error": error,
+        }
     styling_target_count = max(1, len(styling_candidates))
 
     _update_status(
@@ -1312,6 +1415,504 @@ def run_case(
     }
 
 
+def _run_visual_relation_planner_experiment(
+    *,
+    paths: CasePaths,
+    input_payload: dict[str, Any],
+    room_output: dict[str, Any],
+    planning_guidance_text: str,
+    cluster_output: dict[str, Any],
+    tier_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver: MacroClusterSolver | VisualRelationObjectSolver,
+    manual_placements: list[dict[str, Any]] | None,
+    ablation_mode: AblationMode,
+    target_count: int,
+) -> dict[str, Any] | None:
+    request_config = _visual_relation_request_config(input_payload)
+    if request_config is None:
+        return None
+
+    mode = request_config["mode"]
+    planner_version = str(request_config.get("planner_version") or "v1")
+    artifact_version = _visual_relation_artifact_version(planner_version)
+    config_error = request_config.get("error")
+    if isinstance(config_error, str) and config_error.strip():
+        artifact = _visual_relation_skip_artifact(
+            mode=mode,
+            reason=config_error,
+            planner_version=artifact_version,
+        )
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+    image_data_url = request_config.get("floorplan_image_data_url")
+    if not isinstance(image_data_url, str) or not image_data_url.strip():
+        artifact = _visual_relation_skip_artifact(
+            mode=mode,
+            reason="Request enabled visual relation planner without a floorplan image.",
+            planner_version=artifact_version,
+        )
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+
+    if planner_version == "v2":
+        return _run_visual_relation_bundle_planner_v2(
+            paths=paths,
+            mode=mode,
+            image_data_url=image_data_url,
+            room_output=room_output,
+            planning_guidance_text=planning_guidance_text,
+            cluster_output=cluster_output,
+            tier_output=tier_output,
+            merged_output=merged_output,
+            solver=solver,
+            manual_placements=manual_placements,
+            ablation_mode=ablation_mode,
+            target_count=target_count,
+        )
+
+    try:
+        result = VisualRelationPlanner().generate(
+            room_model_json=room_output,
+            merged_clusters_json=merged_output,
+            floorplan_image_data_url=image_data_url,
+            description=planning_guidance_text or None,
+        )
+        relation_plan = _strip_raw_text(result.relation_plan)
+        _write_module_json(paths, "visual_relation_plan", relation_plan)
+        visual_solver_mode = _visual_relation_solver_mode()
+        visual_solver = (
+            solver if visual_solver_mode == "v1" else VisualRelationObjectSolver()
+        )
+        visual_bundles = _solve_object_level_variant_bundle(
+            concept=relation_plan.get("macro_concept")
+            if isinstance(relation_plan.get("macro_concept"), dict)
+            else {},
+            relation_plan=relation_plan,
+            room_output=room_output,
+            cluster_output=cluster_output,
+            tier_output=tier_output,
+            merged_output=merged_output,
+            solver=visual_solver,
+            manual_placements=manual_placements,
+            variant_index=0,
+            ablation_mode=ablation_mode,
+        )
+        visual_bundles = _mark_visual_relation_bundles(
+            visual_bundles,
+            mode=mode,
+        )
+        artifact = {
+            "enabled": True,
+            "mode": mode,
+            "status": "OK",
+            "planner_version": artifact_version,
+            "model_name": result.model_name,
+            "image_data_url_chars": len(image_data_url),
+            "semantic_anchor_regions": list(result.semantic_anchor_catalog),
+            "selected_semantic_anchors": relation_plan.get(
+                "semantic_anchor_preferences_by_cluster", {}
+            ),
+            "solver_kind": _visual_relation_solver_kind_from_bundles(
+                visual_bundles,
+                fallback=f"visual_relation_solver:{visual_solver_mode}",
+            ),
+            "planner_output": result.output.model_dump(exclude_none=True),
+            "normalization_notes": list(result.normalization_notes),
+            "relation_plan": relation_plan,
+            "visual_solver_diagnostics": _visual_relation_solver_diagnostics(
+                visual_bundles
+            ),
+            "solver": {
+                "attempted": True,
+                "mode": visual_solver_mode,
+                "candidate_count": len(visual_bundles),
+                "solved_bundle_count": len(visual_bundles),
+                "hard_valid_count": sum(
+                    1 for bundle in visual_bundles if bundle.get("hard_valid")
+                ),
+                "gallery_eligible_count": sum(
+                    1 for bundle in visual_bundles if bundle.get("gallery_eligible")
+                ),
+                "top_failure_reasons": _visual_relation_top_failure_reasons(
+                    visual_bundles
+                ),
+                "candidate_enabled": mode == "candidate",
+            },
+            "notes": [
+                "Visual relation planner ran as an experimental branch.",
+                "Final coordinates remain solver-owned.",
+            ],
+        }
+        if visual_bundles:
+            artifact["solved_preview"] = {
+                "layout_score": visual_bundles[0].get("layout_score"),
+                "hard_valid": visual_bundles[0].get("hard_valid"),
+                "gallery_eligible": visual_bundles[0].get("gallery_eligible"),
+                "source": visual_bundles[0].get("source"),
+            }
+        if mode == "candidate":
+            artifact["candidate_bundles"] = visual_bundles
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+    except Exception as exc:
+        logger.warning("Visual relation planner branch skipped: %s", exc)
+        artifact = _visual_relation_skip_artifact(
+            mode=mode,
+            reason=str(exc),
+            planner_version=artifact_version,
+        )
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+
+
+def _run_visual_relation_bundle_planner_v2(
+    *,
+    paths: CasePaths,
+    mode: str,
+    image_data_url: str,
+    room_output: dict[str, Any],
+    planning_guidance_text: str,
+    cluster_output: dict[str, Any],
+    tier_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver: MacroClusterSolver | VisualRelationObjectSolver,
+    manual_placements: list[dict[str, Any]] | None,
+    ablation_mode: AblationMode,
+    target_count: int,
+) -> dict[str, Any]:
+    try:
+        result = VisualRelationBundlePlanner().generate_bundle(
+            room_model_json=room_output,
+            merged_clusters_json=merged_output,
+            floorplan_image_data_url=image_data_url,
+            target_count=target_count,
+            description=planning_guidance_text or None,
+        )
+        macro_bundle = _strip_raw_text(result.bundle)
+        concepts = [
+            concept
+            for concept in (macro_bundle.get("concepts") or [])
+            if isinstance(concept, dict)
+        ]
+        if not concepts:
+            artifact = _visual_relation_skip_artifact(
+                mode=mode,
+                reason="Visual Relation Planner V2 produced no macro concepts.",
+                planner_version=_VISUAL_RELATION_V2_ARTIFACT_VERSION,
+            )
+            artifact["model_name"] = result.model_name
+            artifact["macro_concept_bundle"] = macro_bundle
+            artifact["raw_output"] = _strip_raw_text(result.raw_output)
+            _write_module_json(paths, "visual_relation_planner", artifact)
+            return artifact
+
+        relation_plan_entries: list[dict[str, Any]] = []
+        visual_bundles: list[dict[str, Any]] = []
+        room_type = _extract_room_type({}, room_output)
+        for concept_index, concept in enumerate(concepts[:target_count], start=1):
+            relation_plan = solver_plan_from_concept(
+                concept=concept,
+                room_model_json=room_output,
+                room_type=room_type,
+            )
+            relation_plan = _strip_raw_text(relation_plan)
+            relation_plan_entries.append(
+                {
+                    "index": concept_index,
+                    "concept_id": concept.get("concept_id"),
+                    "concept_family": concept.get("concept_family"),
+                    "relation_plan": relation_plan,
+                }
+            )
+            concept_bundles = _solve_object_level_variant_bundle(
+                concept=concept,
+                relation_plan=relation_plan,
+                room_output=room_output,
+                cluster_output=cluster_output,
+                tier_output=tier_output,
+                merged_output=merged_output,
+                solver=solver,
+                manual_placements=manual_placements,
+                variant_index=concept_index,
+                ablation_mode=ablation_mode,
+            )
+            visual_bundles.extend(concept_bundles)
+
+        visual_bundles = _mark_visual_relation_bundles(
+            visual_bundles,
+            mode=mode,
+            source_prefix="visual_relation_planner_v2",
+        )
+        relation_plan_debug = {
+            "planner_version": _VISUAL_RELATION_V2_ARTIFACT_VERSION,
+            "relation_plans": relation_plan_entries,
+        }
+        _write_module_json(paths, "visual_relation_plan", relation_plan_debug)
+        artifact = {
+            "enabled": True,
+            "mode": mode,
+            "status": "OK",
+            "planner_version": _VISUAL_RELATION_V2_ARTIFACT_VERSION,
+            "model_name": result.model_name,
+            "image_data_url_chars": len(image_data_url),
+            "raw_output": _strip_raw_text(result.raw_output),
+            "normalized_guidance": _strip_raw_text(result.normalized_guidance),
+            "macro_concept_bundle": macro_bundle,
+            "selected_concepts": [
+                {
+                    "concept_id": concept.get("concept_id"),
+                    "concept_family": concept.get("concept_family"),
+                    "macro_scenario": concept.get("macro_scenario"),
+                    "concept_score_prior": concept.get("concept_score_prior"),
+                }
+                for concept in concepts[:target_count]
+            ],
+            "relation_plans": relation_plan_entries,
+            "visual_solver_diagnostics": _visual_relation_solver_diagnostics(
+                visual_bundles
+            ),
+            "solver": {
+                "attempted": True,
+                "mode": "source_of_truth_object_solver",
+                "candidate_count": len(visual_bundles),
+                "solved_bundle_count": len(visual_bundles),
+                "hard_valid_count": sum(
+                    1 for bundle in visual_bundles if bundle.get("hard_valid")
+                ),
+                "gallery_eligible_count": sum(
+                    1 for bundle in visual_bundles if bundle.get("gallery_eligible")
+                ),
+                "top_failure_reasons": _visual_relation_top_failure_reasons(
+                    visual_bundles
+                ),
+                "candidate_enabled": mode == "candidate",
+            },
+            "notes": [
+                "Visual Relation Planner V2 generated macro concepts from the floorplan screenshot.",
+                "V2 uses the source-of-truth solver plan conversion and object solver.",
+                "Final coordinates remain solver-owned.",
+            ],
+        }
+        if visual_bundles:
+            artifact["solved_preview"] = {
+                "layout_score": visual_bundles[0].get("layout_score"),
+                "hard_valid": visual_bundles[0].get("hard_valid"),
+                "geometry_valid": visual_bundles[0].get("geometry_valid"),
+                "gallery_eligible": visual_bundles[0].get("gallery_eligible"),
+                "source": visual_bundles[0].get("source"),
+            }
+        if mode == "candidate":
+            artifact["candidate_bundles"] = visual_bundles
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+    except Exception as exc:
+        logger.warning("Visual Relation Planner V2 branch skipped: %s", exc)
+        artifact = _visual_relation_skip_artifact(
+            mode=mode,
+            reason=str(exc),
+            planner_version=_VISUAL_RELATION_V2_ARTIFACT_VERSION,
+        )
+        _write_module_json(paths, "visual_relation_planner", artifact)
+        return artifact
+
+
+def _visual_relation_request_config(
+    input_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    planner_version = _visual_relation_planner_version()
+    if planner_version == "off":
+        return None
+    experimental = input_payload.get("experimental")
+    if not isinstance(experimental, dict):
+        return None
+    config = experimental.get("visual_relation_planner")
+    if not isinstance(config, dict):
+        return None
+    if not _truthy(config.get("enabled")):
+        return None
+    mode = str(config.get("mode") or "off").strip().lower()
+    if planner_version == "unsupported":
+        return {
+            "mode": mode if mode in _VISUAL_RELATION_ALLOWED_MODES else "shadow",
+            "planner_version": "unsupported",
+            "floorplan_image_data_url": None,
+            "error": (
+                f"Unsupported {_VISUAL_RELATION_PLANNER_ENV}: "
+                f"{os.getenv(_VISUAL_RELATION_PLANNER_ENV)}"
+            ),
+        }
+    if mode not in _VISUAL_RELATION_ALLOWED_MODES:
+        return {
+            "mode": "shadow",
+            "planner_version": planner_version,
+            "floorplan_image_data_url": None,
+            "error": f"Unsupported visual relation planner mode: {mode}",
+        }
+    return {
+        "mode": mode,
+        "planner_version": planner_version,
+        "floorplan_image_data_url": config.get("floorplan_image_data_url"),
+    }
+
+
+def _visual_relation_env_enabled() -> bool:
+    return _visual_relation_planner_version() != "off"
+
+
+def _visual_relation_planner_version() -> str:
+    value = str(os.getenv(_VISUAL_RELATION_PLANNER_ENV) or "").strip().lower()
+    if value in _VISUAL_RELATION_OFF_VALUES:
+        return "off"
+    if value in _VISUAL_RELATION_V1_VALUES:
+        return "v1"
+    if value in _VISUAL_RELATION_V2_VALUES:
+        return "v2"
+    return "unsupported"
+
+
+def _visual_relation_artifact_version(planner_version: str) -> str:
+    if planner_version == "v2":
+        return _VISUAL_RELATION_V2_ARTIFACT_VERSION
+    if planner_version == "v1":
+        return "v1_object_region"
+    return planner_version
+
+
+def _visual_relation_solver_mode() -> str:
+    mode = str(os.getenv(_VISUAL_RELATION_SOLVER_ENV) or "v2").strip().lower()
+    return mode if mode in _VISUAL_RELATION_ALLOWED_SOLVERS else "v2"
+
+
+def _visual_relation_solver_kind_from_bundles(
+    bundles: list[dict[str, Any]],
+    *,
+    fallback: str,
+) -> str:
+    for bundle in bundles:
+        solver_output = bundle.get("solver_output")
+        if not isinstance(solver_output, dict):
+            continue
+        solver_kind = str(solver_output.get("solver_kind") or "").strip()
+        if solver_kind:
+            return solver_kind
+    return fallback
+
+
+def _visual_relation_solver_diagnostics(
+    bundles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    for bundle in bundles:
+        solver_output = bundle.get("solver_output")
+        if not isinstance(solver_output, dict):
+            continue
+        diagnostics = solver_output.get("visual_solver_diagnostics")
+        if isinstance(diagnostics, dict):
+            return deepcopy(diagnostics)
+        solver_debug = solver_output.get("solver_debug")
+        if isinstance(solver_debug, dict) and isinstance(
+            solver_debug.get("visual_solver_diagnostics"), dict
+        ):
+            return deepcopy(solver_debug["visual_solver_diagnostics"])
+    return {}
+
+
+def _visual_relation_top_failure_reasons(
+    bundles: list[dict[str, Any]],
+) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for bundle in bundles:
+        solver_output = bundle.get("solver_output")
+        if not isinstance(solver_output, dict):
+            continue
+        verify = solver_output.get("verify_summary")
+        if not isinstance(verify, dict):
+            continue
+        for reason in verify.get("quality_gate_reasons") or []:
+            clean = str(reason or "").strip()
+            if clean:
+                counts[clean] += 1
+    return dict(counts.most_common())
+
+
+def _truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _visual_relation_skip_artifact(
+    *,
+    mode: str,
+    reason: str,
+    planner_version: str = "v1",
+) -> dict[str, Any]:
+    artifact = {
+        "enabled": True,
+        "mode": mode,
+        "status": "SKIPPED",
+        "planner_version": planner_version,
+        "error": reason,
+    }
+    if planner_version == _VISUAL_RELATION_V2_ARTIFACT_VERSION:
+        artifact["notes"] = [
+            "Visual Relation Planner V2 was skipped; generation stops before deterministic fallback.",
+        ]
+    else:
+        artifact["notes"] = [
+            "Visual relation planner was discarded; deterministic pipeline continues.",
+        ]
+    return artifact
+
+
+def _visual_relation_v2_must_stop(experiment: dict[str, Any] | None) -> bool:
+    if not isinstance(experiment, dict):
+        return False
+    return (
+        experiment.get("planner_version") == _VISUAL_RELATION_V2_ARTIFACT_VERSION
+        and experiment.get("status") == "SKIPPED"
+    )
+
+
+def _mark_visual_relation_bundles(
+    bundles: list[dict[str, Any]],
+    *,
+    mode: str,
+    source_prefix: str = "visual_relation_planner",
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for index, bundle in enumerate(bundles, start=1):
+        next_bundle = deepcopy(bundle)
+        next_bundle["source"] = f"{source_prefix}:{index}"
+        next_bundle["reason"] = (
+            "Experimental visual relation planner candidate solved from the 2D "
+            "floorplan screenshot and JSON object program."
+        )
+        notes = list(next_bundle.get("notes") or [])
+        notes.append(f"Visual relation planner mode={mode}.")
+        next_bundle["notes"] = _collect_unique_notes(notes)
+        out.append(next_bundle)
+    return out
+
+
+def _visual_relation_candidate_bundles(
+    experiment: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(experiment, dict):
+        return []
+    if experiment.get("mode") != "candidate" or experiment.get("status") != "OK":
+        return []
+    bundles = experiment.get("candidate_bundles")
+    if not isinstance(bundles, list):
+        return []
+    return [
+        bundle
+        for bundle in bundles
+        if isinstance(bundle, dict)
+        and bool(bundle.get("geometry_valid"))
+        and bool(bundle.get("hard_valid"))
+        and bool(bundle.get("gallery_eligible"))
+    ]
+
+
 def _solve_object_level_variant_bundle(
     *,
     concept: dict[str, Any],
@@ -1320,7 +1921,7 @@ def _solve_object_level_variant_bundle(
     cluster_output: dict[str, Any],
     tier_output: dict[str, Any],
     merged_output: dict[str, Any],
-    solver: MacroClusterSolver,
+    solver: MacroClusterSolver | VisualRelationObjectSolver,
     manual_placements: list[dict[str, Any]] | None,
     variant_index: int,
     ablation_mode: AblationMode,
@@ -3057,13 +3658,10 @@ def _select_final_styling_candidates(
     *,
     max_variants: int,
 ) -> list[dict[str, Any]]:
-    selected = select_distinct_final_gallery_candidates(
+    return select_distinct_final_gallery_candidates(
         candidates=candidates,
         max_variants=max_variants,
     )
-    if selected:
-        return selected
-    return list(candidates[: max(0, int(max_variants))])
 
 
 def _bundle_signature(bundle: dict[str, Any]) -> str:

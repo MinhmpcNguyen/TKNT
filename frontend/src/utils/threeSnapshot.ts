@@ -30,6 +30,8 @@ export type SnapshotObjectRecord = {
   assetId?: string | null;
   rawAssetId?: string | null;
   type: string;
+  renderIdentityLabel?: string | null;
+  renderIdentityHint?: string | null;
   colorHex: string;
   material: string | null;
   bboxMm: SnapshotBoundsMm;

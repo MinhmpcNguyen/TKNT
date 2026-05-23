@@ -2057,11 +2057,32 @@ function visibleObjectName(object: VisibleSnapshotObject | null): string {
   if (!object) {
     return 'object';
   }
+  const renderIdentityLabel = object.renderIdentityLabel?.trim();
+  if (renderIdentityLabel) {
+    return renderIdentityLabel;
+  }
+  if (object.type.trim().toLowerCase() === 'tv_console') {
+    return TV_CONSOLE_RENDER_IDENTITY_LABEL;
+  }
   return object.type.replace(/_/g, ' ');
 }
 
 function visibleObjectLabel(object: VisibleSnapshotObject): string {
   return `${visibleObjectName(object)} - ${object.id}`;
+}
+
+function resolveRenderIdentityForObject(type: string): {
+  label: string | null;
+  hint: string | null;
+} {
+  const normalizedType = type.trim().toLowerCase();
+  if (normalizedType === 'tv_console') {
+    return {
+      label: TV_CONSOLE_RENDER_IDENTITY_LABEL,
+      hint: TV_CONSOLE_RENDER_IDENTITY_HINT,
+    };
+  }
+  return { label: null, hint: null };
 }
 
 function hasPresetSelection(selection: SnapshotImagePresetSelection): boolean {
@@ -2161,6 +2182,9 @@ const GEOMETRY_ATLAS_OBJECTS_PER_IMAGE = 12;
 const GEOMETRY_ATLAS_COLUMNS = 4;
 const GEOMETRY_ATLAS_CELL_SIZE_PX = 256;
 const GEOMETRY_ATLAS_CELL_LABEL_HEIGHT_PX = 28;
+const TV_CONSOLE_RENDER_IDENTITY_LABEL = 'TV console with integrated flat-screen TV';
+const TV_CONSOLE_RENDER_IDENTITY_HINT =
+  'Composite media furniture: preserve the black flat-screen TV/screen panel together with the console cabinet; do not render it as a plain box and do not add a separate duplicate TV.';
 
 function buildReferencePresetDropdownOptions(
   group: Record<string, SnapshotImagePresetOption>
@@ -2571,6 +2595,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const [objectVisualDiagnostics, setObjectVisualDiagnostics] = useState<
     Record<string, ObjectVisualDiagnostic>
   >({});
+  const [isThreeSceneLoading, setIsThreeSceneLoading] = useState(false);
   const [cameraPresets, setCameraPresets] = useState<CameraPreset[]>([]);
   const [activeCameraPresetId, setActiveCameraPresetId] = useState<string | null>(null);
   const lastAppliedCameraPresetIdRef = useRef<string | null>(null);
@@ -2925,6 +2950,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
         .sort((left, right) => left.label.localeCompare(right.label)),
     [objectVisualDiagnostics]
   );
+  const pendingGlbCount = glbObjects.filter(
+    (item) => item.status === 'glb_loading'
+  ).length;
+  const showThreeLoadingOverlay = isThreeSceneLoading || pendingGlbCount > 0;
   const midHeightCameraPresets = useMemo(
     () => cameraPresets.filter((preset) => preset.group === 'mid'),
     [cameraPresets]
@@ -4047,11 +4076,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
   ]);
 
   useEffect(() => {
-    if (viewMode !== '3d') return;
-    if (!containerRef.current) return;
+    if (viewMode !== '3d') {
+      setIsThreeSceneLoading(false);
+      return;
+    }
+    if (!containerRef.current) {
+      setIsThreeSceneLoading(false);
+      return;
+    }
     if (!activeFloorplan) {
       setError('Missing floorplan data for 3D preview.');
       setCameraPresets([]);
+      setIsThreeSceneLoading(false);
       return;
     }
 
@@ -4063,6 +4099,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
     const el = containerRef.current;
     setError(null);
+    setIsThreeSceneLoading(true);
+    const finishSceneLoading = () => {
+      if (!disposed) {
+        setIsThreeSceneLoading(false);
+      }
+    };
 
     const run = async (width: number, height: number) => {
       try {
@@ -4095,7 +4137,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           KTX2Loader = null;
         }
 
-        if (disposed || !el.isConnected) return;
+        if (disposed || !el.isConnected) {
+          finishSceneLoading();
+          return;
+        }
         if (import.meta.env.DEV) {
           console.debug('[3D] init', { width, height });
         }
@@ -4118,6 +4163,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         const gl = renderer.getContext?.();
         if (!gl || (typeof gl.isContextLost === 'function' && gl.isContextLost())) {
           setError('WebGL context unavailable. Please enable WebGL in your browser.');
+          finishSceneLoading();
           return;
         }
         while (el.firstChild) {
@@ -4207,6 +4253,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         const maxDimM = Math.max(spanX, spanY) * MM_TO_M;
         if (!Number.isFinite(maxDimM) || !Number.isFinite(centerXmm) || !Number.isFinite(centerYmm)) {
           setError('Invalid floorplan bounds for 3D preview.');
+          finishSceneLoading();
           return;
         }
         const wallHeightMm = Number(userInput.height ?? 2800);
@@ -4968,11 +5015,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
           objectRoot.add(fallbackProxy);
           objectGroup.add(objectRoot);
           proxyById.set(obj.id, objectRoot);
+          const renderIdentity = resolveRenderIdentityForObject(obj.type);
           objectMetadataById.set(obj.id, {
             id: obj.id,
             assetId: obj.assetId ?? null,
             rawAssetId: obj.rawAssetId ?? null,
             type: obj.type,
+            renderIdentityLabel: renderIdentity.label,
+            renderIdentityHint: renderIdentity.hint,
             colorHex: obj.colorHex,
             material: obj.material ?? null,
             bboxMm: {
@@ -5475,6 +5525,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         };
         renderer.render(scene, camera);
         animate();
+        finishSceneLoading();
 
         return () => {
           window.removeEventListener('resize', handleResize);
@@ -5495,6 +5546,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         };
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Three.js');
+        finishSceneLoading();
       }
     };
 
@@ -5519,6 +5571,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         })
         .catch(() => {
           cleanup = null;
+          finishSceneLoading();
         });
       return true;
     };
@@ -5535,6 +5588,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
     return () => {
       disposed = true;
+      setIsThreeSceneLoading(false);
       window.cancelAnimationFrame(raf);
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -6049,6 +6103,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
       {controlsSlot ? createPortal(threePanelHeader, controlsSlot) : threePanelHeader}
       <div className="three-panel-body">
         <div ref={containerRef} className="three-panel-canvas" />
+        {!error && showThreeLoadingOverlay ? (
+          <div className="three-loading-overlay" role="status" aria-live="polite">
+            <span className="three-loading-spinner" aria-hidden="true" />
+            <span>
+              {isThreeSceneLoading
+                ? 'Loading 3D preview...'
+                : `Loading ${pendingGlbCount} 3D model${pendingGlbCount === 1 ? '' : 's'}...`}
+            </span>
+          </div>
+        ) : null}
         {error ? (
           <div className="three-preview-overlay">
             <div className="muted">{error}</div>

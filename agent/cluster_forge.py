@@ -189,8 +189,8 @@ class ClusterForge:
                 semantic_program_rules=semantic_program_rules,
                 style_policy=style_policy,
                 use_llm=True,
-                temperature=0.2,
-                top_p=0.9,
+                temperature=0.0,
+                top_p=1.0,
                 max_tokens=max_tokens,
             )
             semantic_payload = apply_style_policy_to_semantic_program(

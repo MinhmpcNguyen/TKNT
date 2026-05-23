@@ -41,6 +41,9 @@ _STUBBED_MODULE_NAMES = [
     "agent.solver.solver",
     "agent.stylist",
     "agent.tier_count_director",
+    "agent.visual_relation_bundle_planner",
+    "agent.visual_relation_object_solver",
+    "agent.visual_relation_planner",
     "cluster_composer.merge",
     "cluster_composer.outline",
     "layout.grid_policy",
@@ -74,6 +77,9 @@ _stub_module(
     stylist_model_name_for_variant=lambda variant_index: "gemma-4-31b-it",
 )
 _stub_module("agent.tier_count_director", TierCountDirector=object)
+_stub_module("agent.visual_relation_bundle_planner", VisualRelationBundlePlanner=object)
+_stub_module("agent.visual_relation_object_solver", VisualRelationObjectSolver=object)
+_stub_module("agent.visual_relation_planner", VisualRelationPlanner=object)
 _stub_module(
     "cluster_composer.merge",
     merge_cluster_outputs=lambda cluster_output, tier_output: {
@@ -132,6 +138,9 @@ _stub_module(
 )
 _stub_module(
     "pipeline.layout_variants",
+    build_final_gallery_selection_summary=lambda **kwargs: {
+        "selected_count": len(kwargs.get("selected") or []),
+    },
     select_distinct_final_gallery_candidates=lambda **kwargs: kwargs.get("candidates")
     or [],
 )
@@ -190,6 +199,28 @@ for _module_name in _STUBBED_MODULE_NAMES:
 
 
 class OrchestratorArchitectureTest(unittest.TestCase):
+    def test_requested_non_functional_specs_use_stylist_place_on_methods(
+        self,
+    ) -> None:
+        allowed_methods = {"on_top", "hang_on", "lean_on", "floor"}
+
+        for (
+            object_type,
+            spec,
+        ) in orchestrator._REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.items():
+            place_on = spec.get("place_on") if isinstance(spec, dict) else None
+            if not isinstance(place_on, dict):
+                continue
+            method = str(place_on.get("method") or "")
+            if not method:
+                continue
+
+            self.assertIn(
+                method,
+                allowed_methods,
+                f"{object_type} uses unsupported place_on.method={method}",
+            )
+
     def test_select_final_styling_candidates_caps_to_selected_top_five(self) -> None:
         candidates = [
             {
@@ -200,8 +231,8 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         ]
 
         original_selector = orchestrator.select_distinct_final_gallery_candidates
-        orchestrator.select_distinct_final_gallery_candidates = (
-            lambda **kwargs: list((kwargs.get("candidates") or [])[:5])
+        orchestrator.select_distinct_final_gallery_candidates = lambda **kwargs: list(
+            (kwargs.get("candidates") or [])[:5]
         )
         try:
             selected = orchestrator._select_final_styling_candidates(
@@ -217,7 +248,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             [f"candidate_{index}" for index in range(1, 6)],
         )
 
-    def test_select_final_styling_candidates_falls_back_to_prefix_when_selector_empty(
+    def test_select_final_styling_candidates_returns_empty_when_selector_empty(
         self,
     ) -> None:
         candidates = [
@@ -229,9 +260,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         ]
 
         original_selector = orchestrator.select_distinct_final_gallery_candidates
-        orchestrator.select_distinct_final_gallery_candidates = (
-            lambda **_kwargs: []
-        )
+        orchestrator.select_distinct_final_gallery_candidates = lambda **_kwargs: []
         try:
             selected = orchestrator._select_final_styling_candidates(
                 candidates,
@@ -240,11 +269,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         finally:
             orchestrator.select_distinct_final_gallery_candidates = original_selector
 
-        self.assertEqual(len(selected), 5)
-        self.assertEqual(
-            [item["source"] for item in selected],
-            [f"candidate_{index}" for index in range(1, 6)],
-        )
+        self.assertEqual(selected, [])
 
     def test_fast_layout_mode_caps_attempt_budgets(self) -> None:
         previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
@@ -258,6 +283,53 @@ class OrchestratorArchitectureTest(unittest.TestCase):
                 os.environ.pop("TKNT_LAYOUT_SPEED_MODE", None)
             else:
                 os.environ["TKNT_LAYOUT_SPEED_MODE"] = previous
+
+    def test_visual_relation_planner_v2_env_uses_macro_concept_version(self) -> None:
+        previous = os.environ.get("TKNT_VISUAL_RELATION_PLANNER")
+        os.environ["TKNT_VISUAL_RELATION_PLANNER"] = "v2"
+        try:
+            config = orchestrator._visual_relation_request_config(
+                {
+                    "experimental": {
+                        "visual_relation_planner": {
+                            "enabled": True,
+                            "mode": "shadow",
+                            "floorplan_image_data_url": "data:image/png;base64,abc",
+                        }
+                    }
+                }
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("TKNT_VISUAL_RELATION_PLANNER", None)
+            else:
+                os.environ["TKNT_VISUAL_RELATION_PLANNER"] = previous
+
+        self.assertIsNotNone(config)
+        self.assertEqual(config["planner_version"], "v2")
+        self.assertEqual(
+            orchestrator._visual_relation_artifact_version("v2"),
+            "v2_macro_concept_bundle",
+        )
+
+    def test_visual_relation_planner_v2_skip_stops_before_deterministic(self) -> None:
+        artifact = orchestrator._visual_relation_skip_artifact(
+            mode="shadow",
+            reason="OpenAI error",
+            planner_version="v2_macro_concept_bundle",
+        )
+
+        self.assertTrue(orchestrator._visual_relation_v2_must_stop(artifact))
+        self.assertIn("generation stops", artifact["notes"][0])
+        self.assertFalse(
+            orchestrator._visual_relation_v2_must_stop(
+                {
+                    "mode": "shadow",
+                    "status": "SKIPPED",
+                    "planner_version": "v1_object_region",
+                }
+            )
+        )
 
     def test_compose_status_feedback_keeps_room_overflow_offenders(self) -> None:
         feedback = orchestrator._compose_status_only_feedback(

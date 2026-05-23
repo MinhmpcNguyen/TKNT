@@ -5,14 +5,14 @@
   ],
   "layout_policy": {
     "target_density": "balanced_to_medium",
-    "center_openness_bias": "very_high",
+    "center_openness_bias": "medium_high",
     "wall_loading_bias": "focal_balanced",
     "symmetry_bias": "medium",
     "cluster_spacing_bias": "soft",
     "clutter_tolerance": "low_to_balanced",
     "decor_tolerance": "low_to_balanced",
-    "daylight_bias": "high",
-    "floating_cluster_tolerance": "balanced",
+    "daylight_bias": "balanced",
+    "floating_cluster_tolerance": "low_to_medium",
     "material_weight_bias": "balanced",
     "visual_balance_bias": "calm"
   },
