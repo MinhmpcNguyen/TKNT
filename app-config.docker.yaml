@@ -1,0 +1,94 @@
+authentication:
+  api_key:
+    name: X-API-KEY
+    value: "${TKNT_API_KEY}"
+
+services:
+  semantic_search:
+    enabled: false
+  openai:
+    # Keep validation permissive so the API can boot for health checks without a key.
+    # Calls that need an LLM still require OPENAI_API_KEY or OPENAI_IMAGE_API_KEY.
+    enabled: false
+    azure: false
+    api_version: "${OPENAI_API_VERSION}"
+    api_key: "${OPENAI_API_KEY}"
+    models:
+      primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      helper:
+        name: "${OPENAI_HELPER_MODEL}"
+      embedding:
+        name: "${OPENAI_EMBEDDING_MODEL}"
+    agent_models:
+      forge:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_room_rule_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_room_rule_fallback_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_room_rule_fallback_secondary:
+        name: "${OPENAI_HELPER_MODEL}"
+      planner_adaptive_candidate_overrides_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_candidate_overrides_fallback_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_candidate_overrides_fallback_secondary:
+        name: "${OPENAI_HELPER_MODEL}"
+      planner_adaptive_cluster_semantics_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_cluster_semantics_fallback_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      planner_adaptive_cluster_semantics_fallback_secondary:
+        name: "${OPENAI_HELPER_MODEL}"
+      relation_planner_macro_concept_guidance_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      relation_planner_macro_concept_guidance_fallback_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      relation_planner_macro_concept_guidance_fallback_secondary:
+        name: "${OPENAI_HELPER_MODEL}"
+      placer:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      placer_fallback_primary:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      placer_fallback_helper:
+        name: "${OPENAI_HELPER_MODEL}"
+      stylist:
+        name: "${OPENAI_PRIMARY_MODEL}"
+      judge:
+        name: "${OPENAI_PRIMARY_MODEL}"
+
+presets:
+  lights:
+    daylight:
+      label: Daylight
+      prompt_suffix: bright natural daylight, clean interior exposure, balanced soft shadows; preserve the original architecture and furniture layout
+      reference_image: assets_gen/lighting/daylight_2.png
+    warm_evening:
+      label: Warm evening
+      prompt_suffix: warm evening interior lighting, cozy practical lamp glow, soft ambient pools of light; preserve the original architecture and furniture layout
+      reference_image: assets_gen/lighting/night_3.png
+  sceneries:
+    none:
+      label: None
+      prompt_suffix: null
+      reference_image: null
+    city:
+      label: City
+      prompt_suffix: show a subtle city skyline only outside existing visible openings; do not add windows or change wall geometry
+      reference_image: assets_gen/scenery/city.png
+  styles:
+    modern:
+      label: Modern
+      prompt_suffix: apply a premium modern interior finish language through materials, textures, color palette, and detailing only; preserve the original architecture and furniture layout
+      reference_image: assets_gen/styles/modern.png
+    minimalist:
+      label: Minimalist
+      prompt_suffix: apply a minimalist interior style through neutral palette, clean surfaces, restrained detailing, and uncluttered material finishes only; preserve the original architecture and furniture layout
+      reference_image: assets_gen/styles/minimalist.png
+    japandi:
+      label: Japandi
+      prompt_suffix: apply a Japandi interior style blending Japanese calm with Scandinavian warmth, natural wood, muted neutrals, tactile simplicity, and refined minimal details only; preserve the original layout
+      reference_image: assets_gen/styles/japandi.png
