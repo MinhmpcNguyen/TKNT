@@ -104,7 +104,6 @@ class OpenAIConfig:
     IS_OPENAI_AZURE: bool = openai_config.azure
     OPENAI_API_KEY: str | None = OpenAIAccess.get_openai_access()
     API_VERSION: str = openai_config.api_version
-    BASE_URL: str | None = _configured_value(openai_config.base_url)
     BENCHMARK_TEXT_MODEL: str = _benchmark_text_model_name()
     MODELS: OpenAIModelGroupConfig = _generation_models()
     AGENT_MODELS: dict[str, str] = _agent_models()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import unittest
 from collections.abc import Mapping, Sequence
 from unittest.mock import patch
@@ -34,7 +33,7 @@ class _FakeClient:
 
     def get_model_name(self, key: LLMModelKey) -> str:
         _ = key
-        return "gemini-3.1-flash-lite-preview"
+        return "gpt-5.4-mini"
 
     def chat_completion(
         self,
@@ -88,24 +87,18 @@ def _style_seed(style_name: str) -> dict[str, object]:
 
 
 class StylePolicyArchitectureTest(unittest.TestCase):
-    def test_strict_llm_style_policy_rotates_model_after_unterminated_json(
+    def test_strict_llm_style_policy_repairs_with_openai_model_after_unterminated_json(
         self,
     ) -> None:
         broken_json = '{\n  "style_name": "minimal",\n  "target_density": "balanced'
         fake_client = _FakeClient(
             [
                 broken_json,
-                broken_json,
                 _style_seed("japandi"),
             ]
         )
 
         with (
-            patch.dict(
-                os.environ,
-                {"TKNT_STYLE_POLICY_REQUIRE_LLM": "1"},
-            ),
-            patch.object(style_policy.TextLLMConfig, "PROVIDER", "gemini"),
             patch.object(style_policy.TextLLMConfig, "STRICT_SINGLE_TEXT_MODEL", ""),
             patch.object(style_policy, "get_llm_client", return_value=fake_client),
         ):
@@ -119,9 +112,8 @@ class StylePolicyArchitectureTest(unittest.TestCase):
         self.assertEqual(
             fake_client.model_names,
             [
-                "gemini-3.1-flash-lite-preview",
-                "gemini-3.1-flash-lite-preview",
-                "gemini-3-flash-preview",
+                "gpt-5.4-mini",
+                "gpt-5.4-mini",
             ],
         )
 

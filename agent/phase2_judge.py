@@ -12,11 +12,9 @@ from agent_schema.phase2_judge_schema import Phase2JudgeOutput
 try:
     from clients.base_client import ChatMessage
     from clients.llm_client import get_llm_client
-    from config.gemini_config import GeminiConfig
 except Exception:  # pragma: no cover
     ChatMessage = dict[str, str]  # type: ignore[misc,assignment]
     get_llm_client = None  # type: ignore[assignment]
-    GeminiConfig = None  # type: ignore[assignment]
 
 from prompt.phase2_judge import (
     PHASE2_JUDGE_PROMPT,

@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+_HARD_REQUEST_INTENTS = {"must_keep", "must_try"}
+_SOLVER_OBJECT_PARTICIPATIONS = {"hard_solver_object", "soft_solver_object"}
+_POST_SOLVER_PARTICIPATIONS = {"post_solver_accessory", "ignored_unavailable"}
+
+
 @dataclass(frozen=True)
 class _VariantCandidate:
     absolute_layout: dict[str, Any]
@@ -17,7 +22,9 @@ class _VariantCandidate:
     complete: bool
     gallery_eligible: bool
     coverage_ratio: float
+    request_coverage_score: int
     missing_cluster_ids: list[str] = field(default_factory=list)
+    missing_hard_requested_object_types: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     concept_signature: str = ""
     anchor_signature: str = ""
@@ -26,7 +33,7 @@ class _VariantCandidate:
     state_signature: str = ""
 
 
-_BackfillRank = tuple[int, int, int, int, int, int, int, float, int, int]
+_BackfillRank = tuple[int, int, int, int, int, int, int, int, float, int, int]
 
 
 def select_distinct_final_gallery_candidates(
@@ -145,6 +152,7 @@ def _accept_gallery_candidate(
     raw["visual_family_signature"] = candidate.visual_family_signature
     raw["concept_signature"] = candidate.concept_signature
     raw["anchor_signature"] = candidate.anchor_signature
+    raw["request_coverage_score"] = candidate.request_coverage_score
     raw["gallery_selection_mode"] = mode
     selected.append(raw)
     selected_candidates.append(candidate)
@@ -264,9 +272,13 @@ def _candidate_backfill_rank_tuple(
         )
     else:
         distance = 0
-    gallery_eligible, complete, coverage_ratio, layout_score = _candidate_rank_tuple(
-        candidate
-    )
+    (
+        gallery_eligible,
+        complete,
+        request_coverage_score,
+        coverage_ratio,
+        layout_score,
+    ) = _candidate_rank_tuple(candidate)
     return (
         concept_is_new,
         anchor_is_new,
@@ -275,6 +287,7 @@ def _candidate_backfill_rank_tuple(
         distance,
         gallery_eligible,
         complete,
+        request_coverage_score,
         coverage_ratio,
         layout_score,
         -pool_index,
@@ -306,7 +319,11 @@ def build_final_layout_variants_payload(
                 "complete": candidate.complete,
                 "gallery_eligible": candidate.gallery_eligible,
                 "coverage_ratio": candidate.coverage_ratio,
+                "request_coverage_score": candidate.request_coverage_score,
                 "missing_cluster_ids": deepcopy(candidate.missing_cluster_ids),
+                "missing_hard_requested_object_types": deepcopy(
+                    candidate.missing_hard_requested_object_types
+                ),
                 "notes": deepcopy(candidate.notes),
                 "state_signature": candidate.state_signature,
                 "macro_layout_signature": candidate.macro_layout_signature,
@@ -399,6 +416,17 @@ def build_final_gallery_selection_summary(
             "Final gallery backfilled near-distinct options after exhausting "
             "strongly distinct visual families."
         )
+    material_macro_target = min(requested, 3) if requested >= 3 else requested
+    diversity_degraded = (
+        bool(selected_rows)
+        and material_macro_target > 0
+        and len(selected_macro_signatures) < material_macro_target
+    )
+    if diversity_degraded:
+        notes.append(
+            "Final gallery diversity is degraded because selected options collapse "
+            "to too few material macro layouts."
+        )
     if not selected_rows and candidate_rows and eligible_candidate_count == 0:
         notes.append(
             "Final gallery returned no options because every candidate failed "
@@ -430,6 +458,8 @@ def build_final_gallery_selection_summary(
         "top_quality_gate_reasons": _top_quality_gate_reasons(candidates),
         "macro_distinct_candidate_count": len(candidate_macro_signatures),
         "macro_distinct_returned_count": len(selected_macro_signatures),
+        "material_macro_target_count": material_macro_target,
+        "diversity_degraded": diversity_degraded,
         "visual_family_distinct_candidate_count": len(
             candidate_visual_family_signatures
         ),
@@ -533,7 +563,8 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
         raw.get("styled_result") if isinstance(raw.get("styled_result"), dict) else None
     )
     source = (
-        str(raw.get("source") or "object_level_solver").strip() or "object_level_solver"
+        str(raw.get("source") or "macro_cluster_solver").strip()
+        or "macro_cluster_solver"
     )
     reason = (
         str(raw.get("reason") or "Anchor-first layout candidate.").strip()
@@ -556,6 +587,16 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
     notes = [
         str(item).strip() for item in (raw.get("notes") or []) if str(item).strip()
     ]
+    missing_hard_requested_object_types = _missing_hard_requested_solver_object_types(
+        raw, absolute_layout
+    )
+    if missing_hard_requested_object_types:
+        gallery_eligible = False
+        complete = False
+        notes.append(
+            "Missing hard requested solver objects: "
+            + ", ".join(missing_hard_requested_object_types)
+        )
     relation_plan = (
         raw.get("relation_plan") if isinstance(raw.get("relation_plan"), dict) else {}
     )
@@ -566,6 +607,7 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
     anchor_signature = _anchor_signature(concept=concept, relation_plan=relation_plan)
     macro_signature = _macro_layout_signature(absolute_layout)
     visual_family_signature = _visual_family_signature(absolute_layout)
+    request_coverage_score = _request_coverage_score(raw, absolute_layout)
     return _VariantCandidate(
         absolute_layout=deepcopy(absolute_layout),
         styled_result=deepcopy(styled_result)
@@ -578,9 +620,11 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
         complete=complete,
         gallery_eligible=gallery_eligible,
         coverage_ratio=coverage_ratio,
+        request_coverage_score=request_coverage_score,
         missing_cluster_ids=[
             str(item).strip() for item in missing_cluster_ids if str(item).strip()
         ],
+        missing_hard_requested_object_types=missing_hard_requested_object_types,
         notes=notes,
         concept_signature=concept_signature,
         anchor_signature=anchor_signature,
@@ -590,13 +634,249 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
     )
 
 
-def _candidate_rank_tuple(candidate: _VariantCandidate) -> tuple[int, int, float, int]:
+def _candidate_rank_tuple(
+    candidate: _VariantCandidate,
+) -> tuple[int, int, int, float, int]:
     return (
         1 if candidate.gallery_eligible else 0,
         1 if candidate.complete else 0,
+        int(candidate.request_coverage_score),
         float(candidate.coverage_ratio),
         int(candidate.layout_score),
     )
+
+
+def _request_coverage_score(
+    raw: dict[str, Any],
+    absolute_layout: dict[str, Any],
+) -> int:
+    explicit = raw.get("request_coverage_score")
+    if explicit is not None:
+        try:
+            return int(explicit)
+        except (TypeError, ValueError):
+            pass
+    expected = _expected_request_object_types(raw)
+    if not expected:
+        return 0
+    present = {
+        canonical
+        for item in _layout_objects(absolute_layout)
+        if (canonical := _canonical_layout_object_type(item))
+    }
+    covered = expected & present
+    return int(round(1000 * len(covered) / max(1, len(expected)))) + min(
+        50, len(covered)
+    )
+
+
+def _missing_hard_requested_solver_object_types(
+    raw: dict[str, Any],
+    absolute_layout: dict[str, Any],
+) -> list[str]:
+    expected = _expected_hard_requested_solver_object_types(raw)
+    if not expected:
+        return []
+    present = {
+        canonical
+        for item in _layout_objects(absolute_layout)
+        if (canonical := _canonical_layout_object_type(item))
+    }
+    return sorted(expected - present)
+
+
+def _expected_hard_requested_solver_object_types(raw: dict[str, Any]) -> set[str]:
+    expected: set[str] = set()
+    for root_key in ("tier_output", "merged_output", "cluster_output"):
+        root = raw.get(root_key)
+        if isinstance(root, dict):
+            _collect_hard_requested_solver_object_types(root, expected)
+    return expected
+
+
+def _collect_hard_requested_solver_object_types(
+    payload: dict[str, Any],
+    expected: set[str],
+) -> None:
+    for decision in _iter_decision_rows(payload):
+        if _row_is_hard_requested_solver_object(decision):
+            object_type = _canonical_decision_object_type(decision)
+            if object_type:
+                expected.add(object_type)
+    for request_contract in _request_contracts(payload):
+        for item in request_contract.get("objects") or []:
+            if not isinstance(item, dict):
+                continue
+            if not _row_is_hard_requested_solver_object(item):
+                continue
+            object_type = _canonical_expected_object_type(item)
+            if object_type:
+                expected.add(object_type)
+
+
+def _row_is_hard_requested_solver_object(row: dict[str, Any]) -> bool:
+    intent = (
+        str(row.get("request_contract_intent") or row.get("intent") or "")
+        .strip()
+        .lower()
+    )
+    if intent not in _HARD_REQUEST_INTENTS:
+        return False
+    if (
+        _positive_int(row.get("target_count")) <= 0
+        and _positive_int(row.get("min_keep")) <= 0
+        and _positive_int(row.get("quantity")) <= 0
+    ):
+        return False
+    solver_participation = str(row.get("solver_participation") or "").strip().lower()
+    if solver_participation in _POST_SOLVER_PARTICIPATIONS:
+        return False
+    if solver_participation:
+        return solver_participation in _SOLVER_OBJECT_PARTICIPATIONS
+    return bool(row.get("blocks_floor_area")) or _positive_int(row.get("min_keep")) > 0
+
+
+def _expected_request_object_types(raw: dict[str, Any]) -> set[str]:
+    expected: set[str] = set()
+    for root_key in ("tier_output", "merged_output", "cluster_output"):
+        root = raw.get(root_key)
+        if isinstance(root, dict):
+            _collect_expected_request_object_types(root, expected)
+    return expected
+
+
+def _collect_expected_request_object_types(
+    payload: dict[str, Any],
+    expected: set[str],
+) -> None:
+    for decision in _iter_decision_rows(payload):
+        if _decision_counts_for_request_coverage(decision):
+            object_type = _canonical_decision_object_type(decision)
+            if object_type:
+                expected.add(object_type)
+    for request_contract in _request_contracts(payload):
+        for item in request_contract.get("objects") or []:
+            if not isinstance(item, dict):
+                continue
+            if not _request_contract_object_counts_for_coverage(item):
+                continue
+            object_type = _canonical_expected_object_type(item)
+            if object_type:
+                expected.add(object_type)
+
+
+def _iter_decision_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    decisions = payload.get("decisions")
+    if isinstance(decisions, list):
+        rows.extend(item for item in decisions if isinstance(item, dict))
+    clusters = payload.get("clusters")
+    if isinstance(clusters, list):
+        for cluster in clusters:
+            if not isinstance(cluster, dict):
+                continue
+            cluster_decisions = cluster.get("decisions")
+            if isinstance(cluster_decisions, list):
+                rows.extend(
+                    item for item in cluster_decisions if isinstance(item, dict)
+                )
+            hints = cluster.get("tier_count_hints")
+            if isinstance(hints, dict):
+                object_hints = hints.get("object_hints")
+                if isinstance(object_hints, list):
+                    rows.extend(item for item in object_hints if isinstance(item, dict))
+    return rows
+
+
+def _request_contracts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    contracts: list[dict[str, Any]] = []
+    request_contract = payload.get("request_contract")
+    if isinstance(request_contract, dict):
+        contracts.append(request_contract)
+    semantic_program = payload.get("semantic_layout_program")
+    if isinstance(semantic_program, dict):
+        nested = semantic_program.get("request_contract")
+        if isinstance(nested, dict) and nested not in contracts:
+            contracts.append(nested)
+    return contracts
+
+
+def _decision_counts_for_request_coverage(row: dict[str, Any]) -> bool:
+    if (
+        _positive_int(row.get("quantity")) <= 0
+        and _positive_int(row.get("min_keep")) <= 0
+    ):
+        return False
+    preserve_level = str(row.get("preserve_level") or "").strip().lower()
+    role = str(row.get("role") or row.get("priority") or "").strip().lower()
+    request_intent = (
+        str(row.get("request_contract_intent") or row.get("intent") or "")
+        .strip()
+        .lower()
+    )
+    return (
+        preserve_level in {"highest", "high"}
+        or role in {"dominant_anchor", "support", "secondary_support"}
+        or request_intent in {"must_keep", "target_if_viable"}
+    )
+
+
+def _request_contract_object_counts_for_coverage(row: dict[str, Any]) -> bool:
+    if (
+        _positive_int(row.get("target_count")) <= 0
+        and _positive_int(row.get("min_keep")) <= 0
+    ):
+        return False
+    intent = str(row.get("intent") or "").strip().lower()
+    return intent in {"must_keep", "target_if_viable"}
+
+
+def _positive_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _canonical_decision_object_type(row: dict[str, Any]) -> str:
+    raw = row.get("object_type") or row.get("category") or row.get("type") or ""
+    return _normalize_object_type(raw)
+
+
+def _canonical_expected_object_type(row: dict[str, Any]) -> str:
+    raw = (
+        row.get("fulfilled_by")
+        or row.get("chosen_object_type")
+        or row.get("object_type")
+        or row.get("category")
+        or row.get("type")
+        or ""
+    )
+    return _normalize_object_type(raw)
+
+
+def _canonical_layout_object_type(item: dict[str, Any]) -> str:
+    raw = (
+        item.get("object_type")
+        or item.get("category")
+        or item.get("type")
+        or item.get("object_id")
+        or item.get("instance_id")
+        or ""
+    )
+    return _normalize_object_type(raw)
+
+
+def _normalize_object_type(value: Any) -> str:
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    while "__" in text:
+        text = text.replace("__", "_")
+    if text.endswith("_copy"):
+        text = text[: -len("_copy")]
+    parts = text.split("_")
+    if parts and parts[-1].isdigit():
+        text = "_".join(parts[:-1])
+    return text.strip("_")
 
 
 def _absolute_layout_signature(layout: dict[str, Any]) -> str:
@@ -758,10 +1038,13 @@ def _is_visual_anchor_object(item: dict[str, Any]) -> bool:
         "rug",
         "curtain",
         "art",
+        "bookshelf",
+        "bookcase",
         "plant",
         "ottoman",
         "stool",
         "pouf",
+        "shelf",
     )
     if any(token in text for token in support_tokens):
         return False
@@ -785,9 +1068,6 @@ def _is_visual_anchor_object(item: dict[str, Any]) -> bool:
         "vanity",
         "tv_console",
         "console",
-        "bookshelf",
-        "bookcase",
-        "shelf",
     )
     return any(token in text for token in anchor_tokens)
 

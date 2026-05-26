@@ -14,7 +14,6 @@ fi
 
 : "${MODEL:=gpt-5.4-mini}"
 : "${TKNT_DISABLE_MODEL_FALLBACK:=1}"
-: "${TKNT_GEMINI_DISABLE_MODEL_FALLBACK:=1}"
 : "${TKNT_ENV_PREFIX:=.conda_envs/benchmark-tknt}"
 : "${IDESIGN_ENV_PREFIX:=.conda_envs/benchmark-idesign}"
 : "${FLAIRGPT_ENV_PREFIX:=.conda_envs/benchmark-flairgpt}"
@@ -28,6 +27,15 @@ SYSTEM="${SYSTEM-tknt_full}"
 : "${EXTERNAL_MAX_ATTEMPTS:=3}"
 : "${IDESIGN_LLM_TIMEOUT_S:=0}"
 : "${FLAIRGPT_LLM_TIMEOUT_S:=0}"
+
+case "$SYSTEM" in
+  idesign_gemini)
+    SYSTEM="idesign_openai"
+    ;;
+  flairgpt_gemini)
+    SYSTEM="flairgpt_openai"
+    ;;
+esac
 
 repo_path() {
   local value="$1"
@@ -54,9 +62,7 @@ if [[ ! -x "$BENCHMARK_RUNNER_PYTHON" ]]; then
 fi
 
 export TKNT_DISABLE_MODEL_FALLBACK
-export TKNT_GEMINI_DISABLE_MODEL_FALLBACK
 export TKNT_BENCHMARK_TEXT_MODEL="$MODEL"
-export TKNT_GEMINI_BENCHMARK_TEXT_MODEL="$MODEL"
 export TKNT_PYTHON
 export IDESIGN_PYTHON
 export FLAIRGPT_PYTHON

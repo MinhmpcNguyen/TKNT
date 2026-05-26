@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
@@ -13,45 +12,7 @@ from agent.request_contract import sanitize_request_contract
 from agent_schema.semantic_layout_planner_schema import SemanticLayoutProgram
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
-
-try:
-    from config.llm_config import TextLLMConfig
-except Exception:  # pragma: no cover
-    from config.gemini_config import GeminiConfig
-
-    class TextLLMConfig:
-        PROVIDER = "gemini"
-        STRICT_SINGLE_TEXT_MODEL = str(
-            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
-        ).strip()
-        AGENT_MODELS = dict(getattr(GeminiConfig, "AGENT_MODELS", {}) or {})
-
-        @classmethod
-        def primary_model_name(cls) -> str:
-            return ""
-
-        @classmethod
-        def agent_model(cls, key: str) -> str | None:
-            return cls.AGENT_MODELS.get(key)
-
-        @classmethod
-        def agent_model_chain(
-            cls,
-            model_config_keys: Sequence[str],
-            default_model_chain: Sequence[str] = (),
-        ) -> list[str]:
-            if cls.STRICT_SINGLE_TEXT_MODEL:
-                return [cls.STRICT_SINGLE_TEXT_MODEL]
-            configured = [
-                cls.AGENT_MODELS.get(config_key) for config_key in model_config_keys
-            ]
-            return [
-                model_name
-                for model_name in (*configured, *default_model_chain)
-                if isinstance(model_name, str) and model_name.strip()
-            ]
-
-
+from config.llm_config import TextLLMConfig
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
 from layout.room_profiles.registry import (
     is_profile_floating_object,
@@ -95,22 +56,20 @@ _RELATION_INTENT_CAP_PER_CLUSTER = 6
 _ZONE_CLAIM_CAP_PER_CLUSTER = 4
 _GLOBAL_RELATION_CAP = 20
 _DEGRADATION_STEPS_CAP_PER_CLUSTER = 5
-_ADAPTIVE_SEMANTIC_LLM_ENV = "TKNT_SEMANTIC_ADAPTIVE_LLM"
-_REQUEST_CONTRACT_LLM_ENV = "TKNT_REQUEST_CONTRACT_LLM"
 _ADAPTIVE_STAGE_NOTE = (
-    "Adaptive semantic LLM mode enabled via "
-    f"{_ADAPTIVE_SEMANTIC_LLM_ENV}; deterministic stage fallbacks are disabled."
+    "Adaptive semantic LLM mode is the default runtime path; deterministic stage "
+    "fallbacks are disabled."
 )
 _REQUEST_CONTRACT_STAGE_NOTE = (
-    "Request contract LLM mode enabled via "
-    f"{_REQUEST_CONTRACT_LLM_ENV}; deterministic validation remains active."
+    "Request contract LLM mode is the default runtime path; deterministic validation "
+    "remains active."
 )
 
 
 @dataclass(frozen=True)
 class _AdaptiveStageSpec:
     model_config_keys: tuple[str, str, str]
-    default_model_chain: tuple[str, str, str]
+    default_model_chain: tuple[str, ...]
     system_prompt: str
     task_prompt: str
     output_contract: str
@@ -130,11 +89,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_request_contract_fallback_primary",
             "planner_adaptive_request_contract_fallback_secondary",
         ),
-        default_model_chain=(
-            "gemini-3.1-flash-lite-preview",
-            "gemini-2.5-flash-lite",
-            "gemini-3-flash-preview",
-        ),
+        default_model_chain=(),
         system_prompt=(
             "You extract executable request intent for an interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -147,6 +102,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "Include explicitly requested decor, floor, mounted, or lighting objects such as rugs and ceiling lamps even when they are not functional furniture anchors. "
             "Do not decide inventory availability; the backend computes that from catalog and semantic program facts. "
             "For every object, choose `placement_participation`: `floor_blocking`, `wall_attached`, `textile_overlay`, `host_attached`, `opening_attached`, `ceiling_attached`, or `decor_only`. "
+            "When the wording is relational, include optional `relation_edges` with relation and target object type, and optional `llm_candidates` with plausible canonical object alternatives; deterministic code will choose the final mapping. "
             "Use `wall_attached` for plain mirrors unless the brief says standing, floor, full length, or leaning mirror. "
             "Use `textile_overlay` for rugs, `opening_attached` for curtains, `host_attached` for cushions/pillows/blankets, and `ceiling_attached` for ceiling lights. "
             "Use `must_keep` when the user directly asks to include/need/use an object as a non-negotiable item. "
@@ -160,7 +116,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
         output_contract=(
             "Top-level keys: `objects`, `groups`, `notes`. "
             "Each object must contain `object_type`, `intent`, `min_keep`, `target_count`, `max_keep`, `evidence`, `reason`, and `confidence`. "
-            "Each object must also contain `placement_participation`; do not include inventory or availability fields. "
+            "Each object must also contain `placement_participation`; it may include `relation_edges` and `llm_candidates`; do not include inventory or availability fields. "
             "`intent` must be one of `must_keep`, `target_if_viable`, `optional_if_surplus`, or `max0`. "
             "`evidence` must be a short exact phrase from the brief. "
             "`min_keep` is a hard floor chosen from the brief; it may be greater than 0 for `target_if_viable` when the brief provides a mandatory lower bound. "
@@ -181,11 +137,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_room_rule_fallback_primary",
             "planner_adaptive_room_rule_fallback_secondary",
         ),
-        default_model_chain=(
-            "gemini-3-flash-preview",
-            "gemini-3.1-flash-lite-preview",
-            "gemini-2.5-flash-lite",
-        ),
+        default_model_chain=(),
         system_prompt=(
             "You adapt semantic room rules for a deterministic interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -219,11 +171,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_candidate_overrides_fallback_primary",
             "planner_adaptive_candidate_overrides_fallback_secondary",
         ),
-        default_model_chain=(
-            "gemini-3.1-flash-lite-preview",
-            "gemini-2.5-flash-lite",
-            "gemini-3-flash-preview",
-        ),
+        default_model_chain=(),
         system_prompt=(
             "You produce executable cluster candidate overrides for a deterministic planner. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -261,11 +209,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_cluster_semantics_fallback_primary",
             "planner_adaptive_cluster_semantics_fallback_secondary",
         ),
-        default_model_chain=(
-            "gemini-3.1-flash-lite-preview",
-            "gemini-3-flash-preview",
-            "gemini-2.5-flash-lite",
-        ),
+        default_model_chain=(),
         system_prompt=(
             "You assign compact semantic intent for already-active clusters in a deterministic interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -399,6 +343,18 @@ _ADAPTIVE_REQUEST_CONTRACT_RESPONSE_SCHEMA: dict[str, object] = {
                             "ceiling_attached",
                             "decor_only",
                         ],
+                    },
+                    "llm_candidates": _STRING_ARRAY_SCHEMA,
+                    "relation_edges": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "relation": _STRING_SCHEMA,
+                                "target": _STRING_SCHEMA,
+                            },
+                            "required": ["relation", "target"],
+                        },
                     },
                 },
                 "required": [
@@ -547,13 +503,12 @@ class SemanticLayoutPlanner:
         room_rules = room_rule_plan.rules
         affordance_summary = summarize_room_affordance(room_model_json)
         inventory = _normalize_inventory_catalog(inventory_catalog, room_rules)
-        adaptive_llm_mode = use_llm and _adaptive_semantic_llm_enabled()
+        adaptive_llm_mode = bool(use_llm)
         adaptive_notes: list[str] = []
 
         if adaptive_llm_mode:
             logger.info(
-                "SemanticLayoutPlanner adaptive LLM mode enabled via %s",
-                _ADAPTIVE_SEMANTIC_LLM_ENV,
+                "SemanticLayoutPlanner adaptive LLM mode enabled.",
             )
             room_rules, room_rule_notes = self._generate_adaptive_room_rules(
                 room_type=room_type,
@@ -615,6 +570,7 @@ class SemanticLayoutPlanner:
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
+            use_llm=use_llm,
         )
 
         if adaptive_llm_mode:
@@ -785,79 +741,51 @@ class SemanticLayoutPlanner:
         temperature: float,
         top_p: float,
         max_tokens: int | None,
+        use_llm: bool,
     ) -> dict[str, Any]:
         out = deepcopy(dict(deterministic_program))
-        if not _request_contract_llm_enabled():
+        if not use_llm:
             return out
 
         program_object_types = _request_contract_program_object_types(out)
-        try:
-            prompt_payload = {
-                "stage": "adaptive_request_contract",
-                "room_type": room_type,
-                "brief": {"text": brief_text},
-                "room_summary": {
-                    "area_m2": round(_room_area_m2(room_model_json), 2),
-                },
-                "program_object_types": program_object_types,
-                "inventory_object_types": sorted(inventory_catalog),
-                "inventory_summary": _inventory_summary_for_llm(inventory_catalog),
-                "active_clusters": out.get("active_clusters") or [],
-            }
-            response = self._call_adaptive_stage(
-                stage_name="adaptive_request_contract",
-                prompt_payload=prompt_payload,
-                temperature=min(float(temperature), 0.1),
-                top_p=top_p,
-                max_tokens=max_tokens,
-                response_validator=lambda payload: sanitize_request_contract(
-                    payload,
-                    brief_text=brief_text,
-                    available_object_types=program_object_types,
-                    fallback_to_heuristic=False,
-                ),
-            )
-            contract = sanitize_request_contract(
-                response,
+        prompt_payload = {
+            "stage": "adaptive_request_contract",
+            "room_type": room_type,
+            "brief": {"text": brief_text},
+            "room_summary": {
+                "area_m2": round(_room_area_m2(room_model_json), 2),
+            },
+            "program_object_types": program_object_types,
+            "inventory_object_types": sorted(inventory_catalog),
+            "inventory_summary": _inventory_summary_for_llm(inventory_catalog),
+            "active_clusters": out.get("active_clusters") or [],
+        }
+        response = self._call_adaptive_stage(
+            stage_name="adaptive_request_contract",
+            prompt_payload=prompt_payload,
+            temperature=min(float(temperature), 0.1),
+            top_p=top_p,
+            max_tokens=max_tokens,
+            response_validator=lambda payload: sanitize_request_contract(
+                payload,
                 brief_text=brief_text,
                 available_object_types=program_object_types,
+                inventory_object_types=sorted(inventory_catalog),
                 fallback_to_heuristic=False,
-            )
-            contract["source"] = "llm_request_contract"
-            notes = _merge_notes(
-                [_REQUEST_CONTRACT_STAGE_NOTE],
-                out.get("notes"),
-            )
-        except Exception as exc:
-            logger.warning(
-                "Adaptive request contract failed; skipping heuristic fallback: %s",
-                exc,
-            )
-            contract = sanitize_request_contract(
-                {
-                    "source": "llm_request_contract_failed",
-                    "objects": [],
-                    "groups": [],
-                    "notes": [
-                        (
-                            "Request contract LLM failed; heuristic fallback was "
-                            "skipped because TKNT_REQUEST_CONTRACT_LLM is enabled."
-                        )
-                    ],
-                },
-                brief_text=brief_text,
-                available_object_types=program_object_types,
-                fallback_to_heuristic=False,
-            )
-            notes = _merge_notes(
-                [
-                    (
-                        "Request contract LLM failed; heuristic request contract "
-                        "fallback was skipped."
-                    )
-                ],
-                out.get("notes"),
-            )
+            ),
+        )
+        contract = sanitize_request_contract(
+            response,
+            brief_text=brief_text,
+            available_object_types=program_object_types,
+            inventory_object_types=sorted(inventory_catalog),
+            fallback_to_heuristic=False,
+        )
+        contract["source"] = "llm_request_contract"
+        notes = _merge_notes(
+            [_REQUEST_CONTRACT_STAGE_NOTE],
+            out.get("notes"),
+        )
 
         out["request_contract"] = contract
         out["notes"] = notes
@@ -1414,7 +1342,12 @@ def _normalize_profile_semantic_program(
                 normalized_relation_intents,
             )
         normalized_clusters.append(normalized)
+    normalized_clusters, role_trace = _normalize_active_cluster_layout_roles(
+        normalized_clusters,
+        room_type=room_type,
+    )
     out["active_clusters"] = normalized_clusters
+    out["role_normalization"] = role_trace
     out["macro_relations"] = _build_macro_relations(
         active_clusters=[
             cluster for cluster in normalized_clusters if isinstance(cluster, Mapping)
@@ -1423,6 +1356,178 @@ def _normalize_profile_semantic_program(
         affordance_summary=affordance_summary,
     )
     return out
+
+
+def _normalize_active_cluster_layout_roles(
+    active_clusters: Sequence[Any],
+    *,
+    room_type: object | None,
+) -> tuple[list[Any], dict[str, Any]]:
+    normalized_clusters: list[Any] = [
+        dict(cluster) if isinstance(cluster, Mapping) else cluster
+        for cluster in active_clusters
+    ]
+    cluster_rows = [
+        cluster for cluster in normalized_clusters if isinstance(cluster, Mapping)
+    ]
+    raw_roles = {
+        str(cluster.get("cluster_id") or ""): str(
+            cluster.get("layout_role") or ""
+        ).strip()
+        for cluster in cluster_rows
+        if str(cluster.get("cluster_id") or "").strip()
+    }
+    explicit_primary = _first_cluster_with_layout_role(cluster_rows, "primary")
+    explicit_secondary = _first_cluster_with_layout_role(cluster_rows, "secondary")
+    primary_cluster_id = explicit_primary or _infer_primary_layout_cluster_id(
+        cluster_rows,
+        room_type=room_type,
+    )
+    secondary_cluster_id = explicit_secondary or _infer_secondary_layout_cluster_id(
+        cluster_rows,
+        room_type=room_type,
+        primary_cluster_id=primary_cluster_id,
+    )
+    changes: list[dict[str, str]] = []
+    for cluster in cluster_rows:
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        current_role = str(cluster.get("layout_role") or "").strip().lower()
+        normalized_role = current_role if current_role in _LAYOUT_ROLES else "support"
+        if cluster_id == primary_cluster_id:
+            normalized_role = "primary"
+        elif cluster_id == secondary_cluster_id:
+            normalized_role = "secondary"
+        elif normalized_role not in {"support", "optional"}:
+            normalized_role = "support"
+        if normalized_role == current_role:
+            continue
+        changes.append(
+            {
+                "cluster_id": cluster_id,
+                "raw_layout_role": current_role,
+                "normalized_layout_role": normalized_role,
+            }
+        )
+        cluster["layout_role"] = normalized_role
+    normalized_roles = {
+        str(cluster.get("cluster_id") or ""): str(cluster.get("layout_role") or "")
+        for cluster in cluster_rows
+        if str(cluster.get("cluster_id") or "").strip()
+    }
+    return normalized_clusters, {
+        "controller": "deterministic_role_sanitizer",
+        "applied": bool(changes),
+        "reason": "all_support_or_missing_primary_secondary"
+        if changes
+        else "roles_already_authoritative",
+        "room_type": str(room_type or ""),
+        "primary_cluster_id": primary_cluster_id,
+        "secondary_cluster_id": secondary_cluster_id,
+        "raw_layout_roles": raw_roles,
+        "normalized_layout_roles": normalized_roles,
+        "changes": changes,
+    }
+
+
+def _first_cluster_with_layout_role(
+    active_clusters: Sequence[Mapping[str, Any]],
+    role: str,
+) -> str | None:
+    for cluster in active_clusters:
+        if str(cluster.get("layout_role") or "").strip().lower() != role:
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if cluster_id:
+            return cluster_id
+    return None
+
+
+def _infer_primary_layout_cluster_id(
+    active_clusters: Sequence[Mapping[str, Any]],
+    *,
+    room_type: object | None,
+) -> str | None:
+    ranked = sorted(
+        active_clusters,
+        key=lambda cluster: (
+            _primary_layout_role_rank(cluster, room_type=room_type),
+            str(cluster.get("cluster_id") or ""),
+        ),
+    )
+    if not ranked:
+        return None
+    best = ranked[0]
+    if _primary_layout_role_rank(best, room_type=room_type) >= 90:
+        return None
+    return str(best.get("cluster_id") or "").strip() or None
+
+
+def _infer_secondary_layout_cluster_id(
+    active_clusters: Sequence[Mapping[str, Any]],
+    *,
+    room_type: object | None,
+    primary_cluster_id: str | None,
+) -> str | None:
+    candidates = [
+        cluster
+        for cluster in active_clusters
+        if str(cluster.get("cluster_id") or "").strip() != primary_cluster_id
+    ]
+    ranked = sorted(
+        candidates,
+        key=lambda cluster: (
+            _secondary_layout_role_rank(
+                cluster,
+                room_type=room_type,
+            ),
+            str(cluster.get("cluster_id") or ""),
+        ),
+    )
+    if not ranked:
+        return None
+    best = ranked[0]
+    if _secondary_layout_role_rank(best, room_type=room_type) >= 90:
+        return None
+    return str(best.get("cluster_id") or "").strip() or None
+
+
+def _primary_layout_role_rank(
+    cluster: Mapping[str, Any],
+    *,
+    room_type: object | None,
+) -> int:
+    room = str(room_type or "").strip().lower()
+    object_types = set(_objects_from_active_cluster(cluster))
+    if _cluster_has_sleep(cluster):
+        return 0
+    if object_types & {"sofa", "sectional_sofa"}:
+        return 1
+    if "living" in room and _cluster_has_seating(cluster):
+        return 2
+    if _cluster_has_work(cluster):
+        return 4
+    if str(cluster.get("priority") or "").strip().lower() == "core":
+        return 5
+    return 99
+
+
+def _secondary_layout_role_rank(
+    cluster: Mapping[str, Any],
+    *,
+    room_type: object | None,
+) -> int:
+    room = str(room_type or "").strip().lower()
+    if _cluster_has_media(cluster):
+        return 0
+    if "living" in room and _cluster_has_seating(cluster):
+        return 2
+    if _cluster_has_work(cluster):
+        return 5
+    if str(cluster.get("priority") or "").strip().lower() == "core":
+        return 8
+    return 99
 
 
 def _room_rules_for(
@@ -2548,36 +2653,7 @@ def _is_invalid_json_error(exc: Exception) -> bool:
 
 
 def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
-    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
-        return
-    try:
-        from clients.gemini_client import GeminiClient
-
-        GeminiClient.record_retry_event(
-            stage=stage,
-            model_name=model_name,
-            reason=reason,
-        )
-    except Exception:
-        logger.debug("Failed to record Gemini retry event.", exc_info=True)
-
-
-def _adaptive_semantic_llm_enabled() -> bool:
-    return os.getenv(_ADAPTIVE_SEMANTIC_LLM_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def _request_contract_llm_enabled() -> bool:
-    return os.getenv(_REQUEST_CONTRACT_LLM_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    _ = (stage, model_name, reason)
 
 
 def _sanitize_notes(value: Any) -> list[str]:

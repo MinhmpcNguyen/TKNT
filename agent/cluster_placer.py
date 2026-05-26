@@ -38,11 +38,6 @@ except Exception:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PLACER_FALLBACK_MODELS = (
-    "gemma-3-27b-it",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-)
 _PLACER_MODEL_ROTATION_KEYS = (
     "placer",
     "placer_fallback_primary",
@@ -1484,17 +1479,19 @@ def _extract_message(response: object) -> object:
 
 def _configured_placer_models() -> list[str]:
     if TextLLMConfig is None:
-        return list(_DEFAULT_PLACER_FALLBACK_MODELS)
+        return []
     configured = TextLLMConfig.agent_model_chain(
         _PLACER_MODEL_ROTATION_KEYS,
-        _DEFAULT_PLACER_FALLBACK_MODELS,
     )
-    return configured or list(_DEFAULT_PLACER_FALLBACK_MODELS)
+    primary_model_name = TextLLMConfig.primary_model_name()
+    return configured or ([primary_model_name] if primary_model_name else [])
 
 
 def _current_placer_model_name() -> str:
     global _placer_model_cursor
     candidates = _configured_placer_models()
+    if not candidates:
+        raise RuntimeError("No OpenAI placer model is configured.")
     _placer_model_cursor %= len(candidates)
     return candidates[_placer_model_cursor]
 
@@ -1502,6 +1499,8 @@ def _current_placer_model_name() -> str:
 def _advance_placer_model_name() -> str:
     global _placer_model_cursor
     candidates = _configured_placer_models()
+    if not candidates:
+        raise RuntimeError("No OpenAI placer model is configured.")
     _placer_model_cursor = (_placer_model_cursor + 1) % len(candidates)
     return candidates[_placer_model_cursor]
 
@@ -1524,7 +1523,7 @@ def _is_quota_exhausted_error(exc: Exception) -> bool:
         "429" in lowered
         or "resource_exhausted" in lowered
         or "quota exceeded" in lowered
-    ) and ("generativelanguage" in lowered or "gemini" in lowered or "quota" in lowered)
+    )
 
 
 def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[str, Any]:

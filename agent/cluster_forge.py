@@ -16,28 +16,7 @@ from agent.request_contract import attach_request_contract_to_semantic_program
 from agent_schema.clusterF_schema import ClusterForgeOutput
 from clients.base_client import ChatMessage
 from clients.llm_client import get_llm_client
-
-try:
-    from config.llm_config import TextLLMConfig
-except Exception:  # pragma: no cover
-    from config.gemini_config import GeminiConfig
-
-    class TextLLMConfig:
-        PROVIDER = "gemini"
-        STRICT_SINGLE_TEXT_MODEL = str(
-            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
-        ).strip()
-        AGENT_MODELS = dict(getattr(GeminiConfig, "AGENT_MODELS", {}) or {})
-
-        @classmethod
-        def primary_model_name(cls) -> str:
-            return ""
-
-        @classmethod
-        def agent_model(cls, key: str) -> str | None:
-            return cls.AGENT_MODELS.get(key)
-
-
+from config.llm_config import TextLLMConfig
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM, normalize_cluster_rules_grid
 from layout.semantic_roles import (
     is_bed_like,
@@ -61,18 +40,7 @@ _FORGE_RESPONSE_MIME_TYPE = "application/json"
 
 
 def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
-    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
-        return
-    try:
-        from clients.gemini_client import GeminiClient
-
-        GeminiClient.record_retry_event(
-            stage=stage,
-            model_name=model_name,
-            reason=reason,
-        )
-    except Exception:
-        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+    _ = (stage, model_name, reason)
 
 
 @dataclass(frozen=True)
@@ -200,6 +168,7 @@ class ClusterForge:
             semantic_payload = attach_request_contract_to_semantic_program(
                 semantic_payload,
                 brief_text=brief_text,
+                inventory_object_types=_inventory_object_types(inventory_catalog),
             )
             semantic_payload = _normalize_profile_semantic_program(
                 semantic_payload,
@@ -338,6 +307,7 @@ def _attach_request_contract_to_payload(
     payload: dict[str, object],
     *,
     brief_text: str,
+    inventory_object_types: Sequence[str] = (),
 ) -> dict[str, object]:
     semantic_program = payload.get("semantic_layout_program")
     if not isinstance(semantic_program, Mapping):
@@ -346,7 +316,22 @@ def _attach_request_contract_to_payload(
     out["semantic_layout_program"] = attach_request_contract_to_semantic_program(
         semantic_program,
         brief_text=brief_text,
+        inventory_object_types=inventory_object_types,
     )
+    return out
+
+
+def _inventory_object_types(
+    inventory_catalog: Sequence[Mapping[str, object]] | None,
+) -> list[str]:
+    if inventory_catalog is None:
+        return []
+    out: list[str] = []
+    for item in inventory_catalog:
+        raw = item.get("object_type") or item.get("type") or item.get("category")
+        object_type = str(raw or "").strip()
+        if object_type and object_type not in out:
+            out.append(object_type)
     return out
 
 
@@ -424,7 +409,7 @@ def _normalize_cluster_forge_payload(payload: dict[str, object]) -> dict[str, ob
             cluster_id=cluster_id if isinstance(cluster_id, str) else "",
             cluster=cluster,
         )
-        _finalize_object_level_solver_contract(
+        _finalize_macro_cluster_solver_contract(
             payload=payload,
             room_type=room_type,
             cluster_id=cluster_id if isinstance(cluster_id, str) else "",
@@ -843,7 +828,7 @@ def _normalize_facing_front_token(value: object) -> str | None:
     return None
 
 
-def _finalize_object_level_solver_contract(
+def _finalize_macro_cluster_solver_contract(
     *,
     payload: dict[str, object],
     room_type: str,

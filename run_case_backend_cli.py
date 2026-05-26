@@ -86,7 +86,6 @@ def main() -> int:
         input_payload = EMBEDDED_INPUT
 
     try:
-        from clients.gemini_client import GeminiClient
         from clients.openai_client import OpenAIClient
         from pipeline.orchestrator import run_case
     except ModuleNotFoundError as e:
@@ -96,7 +95,6 @@ def main() -> int:
             f"Original error: {e}"
         ) from e
 
-    GeminiClient.reset_usage_totals()
     OpenAIClient.reset_usage_totals()
     exit_code = 0
     try:
@@ -117,10 +115,7 @@ def main() -> int:
             "case_dir": None,
         }
         exit_code = 2
-    llm_usage = _combine_llm_usage(
-        gemini_usage=GeminiClient.usage_totals(),
-        openai_usage=OpenAIClient.usage_totals(),
-    )
+    llm_usage = _combine_llm_usage(openai_usage=OpenAIClient.usage_totals())
     if int(llm_usage.get("request_count") or 0) > 0 or llm_usage.get("retry_events"):
         result["llm_usage"] = llm_usage
         result["input_tokens"] = llm_usage.get("input_tokens")
@@ -151,23 +146,19 @@ def main() -> int:
 
 def _combine_llm_usage(
     *,
-    gemini_usage: dict[str, object],
     openai_usage: dict[str, object],
 ) -> dict[str, object]:
     by_provider = {
-        "gemini": gemini_usage,
         "openai": openai_usage,
     }
-    retry_events = gemini_usage.get("retry_events")
-    retry_summary = gemini_usage.get("retry_summary")
     return {
         "request_count": _usage_total(by_provider, "request_count"),
         "input_tokens": _usage_total(by_provider, "input_tokens"),
         "output_tokens": _usage_total(by_provider, "output_tokens"),
         "total_tokens": _usage_total(by_provider, "total_tokens"),
         "by_provider": by_provider,
-        "retry_events": list(retry_events) if isinstance(retry_events, list) else [],
-        "retry_summary": dict(retry_summary) if isinstance(retry_summary, dict) else {},
+        "retry_events": [],
+        "retry_summary": {},
     }
 
 

@@ -7,7 +7,6 @@ import {
   frontWorldToLocalSide,
   planRotationToCanvasDeg,
 } from '../utils/planOrientation';
-import { saveUiSnapshot } from '../api';
 
 const GRID_SIZE = 500;
 const DOOR_MARKER_COLOR = '#2f3437';
@@ -23,6 +22,11 @@ const ROTATE_CONTROL_FILL = '#fff7eb';
 const ROTATE_CONTROL_STROKE = '#a46a2a';
 const ROTATE_CONTROL_HIGHLIGHT = '#f4a13c';
 const OBJECT_COLOR_POPOVER_WIDTH = 252;
+const CANVAS_MAX_WIDTH = 900;
+const CANVAS_MAX_HEIGHT = 650;
+const CANVAS_ASPECT_RATIO = CANVAS_MAX_WIDTH / CANVAS_MAX_HEIGHT;
+const CANVAS_PADDING_MIN = 24;
+const CANVAS_PADDING_MAX = 80;
 const OBJECT_COLOR_SWATCHES = [
   '#cfcac2',
   '#6b7280',
@@ -233,15 +237,14 @@ export const Canvas2D: React.FC = () => {
     setFloorplan,
     roomEditMode,
     drawWallMode,
-    lastDesignMeta,
-    snapshotEnabled,
-    tenantId,
     setFloorplanCapture,
   } = useEditorStore();
-  const [scale, setScale] = useState(0.12);
-  const [offset, setOffset] = useState<Point>({ x: 80, y: 80 });
+  const [stageSize, setStageSize] = useState({
+    width: CANVAS_MAX_WIDTH,
+    height: CANVAS_MAX_HEIGHT,
+  });
+  const [zoomMultiplier, setZoomMultiplier] = useState(1);
   const [drawingLine, setDrawingLine] = useState<{ startIndex: number; end: Point } | null>(null);
-  const [lastSnapshotKey, setLastSnapshotKey] = useState<string | null>(null);
 
   const bounds = useMemo(() => {
     if (!floorplan) {
@@ -250,11 +253,58 @@ export const Canvas2D: React.FC = () => {
     return polygonBounds(floorplan.room.polygon_mm);
   }, [floorplan]);
 
+  useEffect(() => {
+    const node = dropZoneRef.current;
+    if (!node) {
+      return undefined;
+    }
+
+    const updateStageSize = () => {
+      const measuredWidth = node.getBoundingClientRect().width;
+      const nextWidth = clamp(measuredWidth, 1, CANVAS_MAX_WIDTH);
+      const nextHeight = Math.round(nextWidth / CANVAS_ASPECT_RATIO);
+      setStageSize((current) =>
+        Math.abs(current.width - nextWidth) < 1 && Math.abs(current.height - nextHeight) < 1
+          ? current
+          : { width: nextWidth, height: nextHeight }
+      );
+    };
+
+    updateStageSize();
+    const observer = new ResizeObserver(updateStageSize);
+    observer.observe(node);
+    window.addEventListener('resize', updateStageSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateStageSize);
+    };
+  }, []);
+
+  const roomWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const roomHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const canvasPadding = clamp(
+    Math.min(stageSize.width, stageSize.height) * 0.12,
+    CANVAS_PADDING_MIN,
+    CANVAS_PADDING_MAX,
+  );
+  const availableCanvasWidth = Math.max(1, stageSize.width - canvasPadding * 2);
+  const availableCanvasHeight = Math.max(1, stageSize.height - canvasPadding * 2);
+  const baseScale = Math.max(
+    0.01,
+    Math.min(availableCanvasWidth / roomWidth, availableCanvasHeight / roomHeight),
+  );
+  const scale = baseScale * zoomMultiplier;
+  const renderedRoomWidth = roomWidth * scale;
+  const renderedRoomHeight = roomHeight * scale;
+  const offset = {
+    x: (stageSize.width - renderedRoomWidth) / 2 - bounds.minX * scale,
+    y: (stageSize.height - renderedRoomHeight) / 2,
+  };
   const toCanvasPoint = (point: Point) => toCanvas(point, scale, offset, bounds);
   const fromCanvasPoint = (point: Point) => fromCanvas(point, scale, offset, bounds);
 
-  const width = 900;
-  const height = 650;
+  const width = stageSize.width;
+  const height = stageSize.height;
   const selectedPlacement =
     design?.placements.find((placement) => placement.placement_id === selectedPlacementId) ?? null;
   const selectedPlacementCanvasPoint = selectedPlacement
@@ -319,26 +369,6 @@ export const Canvas2D: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!snapshotEnabled || !design || !lastDesignMeta) return;
-    const iteration = lastDesignMeta.iteration ?? 0;
-    const attempt = lastDesignMeta.attempt ?? 0;
-    const key = `${iteration}:${attempt}:${lastDesignMeta.receivedAt}`;
-    if (lastSnapshotKey === key) return;
-    const stage = stageRef.current;
-    if (!stage) return;
-    const image = stage.toDataURL({ pixelRatio: 2 });
-    saveUiSnapshot({
-      tenant_id: tenantId,
-      iteration,
-      attempt,
-      image_base64: image,
-    }).catch(() => {
-      // ignore snapshot errors
-    });
-    setLastSnapshotKey(key);
-  }, [design, lastDesignMeta, snapshotEnabled, lastSnapshotKey]);
-
-  useEffect(() => {
     if (!selectedOpeningId || !selectedOpeningType) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -373,7 +403,7 @@ export const Canvas2D: React.FC = () => {
   const handleWheel = (evt: any) => {
     evt.evt.preventDefault();
     const delta = evt.evt.deltaY > 0 ? 0.9 : 1.1;
-    setScale((prev) => clamp(prev * delta, 0.05, 0.4));
+    setZoomMultiplier((prev) => clamp(prev * delta, 0.4, 3.5));
   };
 
   const handleDrop = (evt: React.DragEvent<HTMLDivElement>) => {

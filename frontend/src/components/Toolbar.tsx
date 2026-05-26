@@ -751,7 +751,7 @@ function computePipelineProgressPercent(status: {
     cluster_forge: { start: 24, end: 32 },
     tier_count: { start: 32, end: 38 },
     cluster_output_merger: { start: 38, end: 42 },
-    cluster_relation_planner: { start: 42, end: 54 },
+    seed_concept_generator: { start: 42, end: 54 },
     solver: { start: 54, end: 74 },
     stylist: { start: 74, end: 92 },
     layout_variants: { start: 92, end: 98 },

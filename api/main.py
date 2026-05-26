@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import account, auth, inventory, object_3d, pipeline
+from api.routes import account, auth, inventory, pipeline
 from config import root_config
 from config.logging_config import setup_logging
 from config.models import OpenAIModelGroupConfig
@@ -37,41 +37,10 @@ def _initialize_runtime_schema() -> None:
 
 
 def _log_runtime_profile() -> None:
-    gemini_config = root_config.services.gemini
-    mistral_config = root_config.services.mistral
-    ollama_config = root_config.services.ollama
     openai_config = root_config.services.openai
     semantic_enabled = root_config.services.semantic_search.enabled
-    logged_provider = False
 
-    if mistral_config.enabled and mistral_config.models is not None:
-        logger.info(
-            "LLM provider: Mistral | base_url=%s | primary=%s | helper=%s | embedding=%s",
-            mistral_config.base_url,
-            mistral_config.models.primary.name,
-            mistral_config.models.helper.name,
-            mistral_config.models.embedding.name,
-        )
-        logged_provider = True
-    if ollama_config.enabled and ollama_config.models is not None:
-        logger.info(
-            "LLM provider: Ollama | base_url=%s | primary=%s | helper=%s | embedding=%s",
-            ollama_config.base_url,
-            ollama_config.models.primary.name,
-            ollama_config.models.helper.name,
-            ollama_config.models.embedding.name,
-        )
-        logged_provider = True
-    if gemini_config.enabled and gemini_config.models is not None:
-        logger.info(
-            "LLM provider: Gemini | base_url=%s | primary=%s | helper=%s | embedding=%s",
-            gemini_config.base_url,
-            gemini_config.models.primary.name,
-            gemini_config.models.helper.name,
-            gemini_config.models.embedding.name,
-        )
-        logged_provider = True
-    if not logged_provider and openai_config.azure:
+    if openai_config.azure:
         primary_model, helper_model, embedding_model = _openai_model_names(
             openai_config.models
         )
@@ -81,7 +50,7 @@ def _log_runtime_profile() -> None:
             helper_model,
             embedding_model,
         )
-    elif not logged_provider:
+    else:
         primary_model, helper_model, embedding_model = _openai_model_names(
             openai_config.models
         )
@@ -121,7 +90,6 @@ app.include_router(pipeline.router)
 app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(inventory.router)
-app.include_router(object_3d.router)
 
 assets_gen_dir = Path(__file__).resolve().parents[1] / "assets_gen"
 if assets_gen_dir.exists():

@@ -12,7 +12,7 @@ CUDA and CPU fallback.
 
 ## Why a separate lab
 
-- Your existing Ollama experiments showed that local image-edit behavior was not
+- Previous local image-edit experiments showed that local behavior was not
   reliable enough for exact-preservation testing.
 - These scripts let you test the Hugging Face Diffusers pipelines directly.
 - The code adapts device and dtype automatically for macOS.
@@ -70,7 +70,7 @@ Image-to-image with your own reference image:
 
 ```bash
 python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_flux2_klein_base_4b.py \
-  --image /Users/Yuki/TKNT/experiments/ollama_flux2_klein_lab/test2.png \
+  --image /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png \
   --prompt "Keep the same staircase composition and room layout, but render it more realistically with warm natural materials." \
   --output /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/flux_klein_edit.png
 ```
@@ -137,7 +137,7 @@ python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_flux1_schnell.py
 
 ```bash
 python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_instruct_pix2pix.py \
-  --image /Users/Yuki/TKNT/experiments/ollama_flux2_klein_lab/test2.png \
+  --image /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png \
   --prompt "Keep the same room, staircase, camera angle, table, chairs, and pendant lights. Improve realism only." \
   --output /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/pix2pix_edit.png
 ```
@@ -152,7 +152,7 @@ Example:
 
 ```bash
 python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_instruct_pix2pix.py \
-  --image /Users/Yuki/TKNT/experiments/ollama_flux2_klein_lab/test3.png \
+  --image /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png \
   --prompt "$(cat /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/prompts/exact_preservation_visual_only.txt)" \
   --height 512 \
   --width 512 \
@@ -174,7 +174,7 @@ Example with `FLUX.2-klein-base-4B`:
 
 ```bash
 python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_flux2_klein_base_4b.py \
-  --image /Users/Yuki/TKNT/experiments/ollama_flux2_klein_lab/test2.png \
+  --image /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png \
   --prompt "$(cat /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/prompts/exact_preservation_visual_only.txt)" \
   --output /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/flux_klein_exact_visual.png
 ```
@@ -183,7 +183,7 @@ Example with `InstructPix2Pix`:
 
 ```bash
 python /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/run_instruct_pix2pix.py \
-  --image /Users/Yuki/TKNT/experiments/ollama_flux2_klein_lab/test2.png \
+  --image /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png \
   --prompt "$(cat /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/prompts/exact_preservation_visual_only.txt)" \
   --output /Users/Yuki/TKNT/experiments/hf_image_edit_macos_lab/outputs/pix2pix_exact_visual.png
 ```

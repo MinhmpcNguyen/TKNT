@@ -38,6 +38,7 @@ cases/user_*/
 app-config.yaml
 .env
 .env.*
+!.env.example
 gemini.env
 hidden.env
 openai_key.txt

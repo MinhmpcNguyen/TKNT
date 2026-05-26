@@ -4,31 +4,16 @@ import os
 from collections.abc import Sequence
 from typing import Literal
 
-from config.gemini_config import GeminiConfig
-from config.mistral_config import MistralConfig
-from config.ollama_config import OllamaConfig
 from config.openai_config import OpenAIConfig
 
-TextLLMProvider = Literal["openai", "ollama", "mistral", "gemini"]
+TextLLMProvider = Literal["openai"]
 
-_PROVIDER_ENV = "TKNT_LLM_PROVIDER"
 _BENCHMARK_TEXT_MODEL_ENV = "TKNT_BENCHMARK_TEXT_MODEL"
-_LEGACY_BENCHMARK_TEXT_MODEL_ENV = "TKNT_GEMINI_BENCHMARK_TEXT_MODEL"
 _DISABLE_MODEL_FALLBACK_ENV = "TKNT_DISABLE_MODEL_FALLBACK"
-_LEGACY_DISABLE_MODEL_FALLBACK_ENV = "TKNT_GEMINI_DISABLE_MODEL_FALLBACK"
-_SUPPORTED_PROVIDERS: tuple[TextLLMProvider, ...] = (
-    "openai",
-    "ollama",
-    "mistral",
-    "gemini",
-)
 
 
 def _benchmark_text_model_name() -> str:
-    return (
-        os.getenv(_BENCHMARK_TEXT_MODEL_ENV, "").strip()
-        or os.getenv(_LEGACY_BENCHMARK_TEXT_MODEL_ENV, "").strip()
-    )
+    return os.getenv(_BENCHMARK_TEXT_MODEL_ENV, "").strip()
 
 
 def _truthy_env(name: str) -> bool:
@@ -37,34 +22,12 @@ def _truthy_env(name: str) -> bool:
 
 def _strict_single_text_model_name() -> str:
     forced_model_name = _benchmark_text_model_name()
-    if forced_model_name and (
-        _truthy_env(_DISABLE_MODEL_FALLBACK_ENV)
-        or _truthy_env(_LEGACY_DISABLE_MODEL_FALLBACK_ENV)
-    ):
+    if forced_model_name and _truthy_env(_DISABLE_MODEL_FALLBACK_ENV):
         return forced_model_name
     return ""
 
 
-def _provider_from_env() -> TextLLMProvider | None:
-    raw = os.getenv(_PROVIDER_ENV, "").strip().lower()
-    for provider in _SUPPORTED_PROVIDERS:
-        if raw == provider:
-            return provider
-    return None
-
-
 def _active_provider() -> TextLLMProvider:
-    env_provider = _provider_from_env()
-    if env_provider is not None:
-        return env_provider
-    if OpenAIConfig.ENABLED:
-        return "openai"
-    if OllamaConfig.ENABLED:
-        return "ollama"
-    if MistralConfig.ENABLED:
-        return "mistral"
-    if GeminiConfig.ENABLED:
-        return "gemini"
     return "openai"
 
 
@@ -79,8 +42,6 @@ def _agent_models(provider: TextLLMProvider) -> dict[str, str]:
 def _configured_agent_models(provider: TextLLMProvider) -> dict[str, str]:
     if provider == "openai":
         return dict(OpenAIConfig.AGENT_MODELS)
-    if provider == "gemini":
-        return dict(GeminiConfig.AGENT_MODELS)
     return {}
 
 
@@ -90,17 +51,7 @@ def _primary_model_name(provider: TextLLMProvider) -> str:
         return forced_model_name
     if provider == "openai":
         return OpenAIConfig.MODELS.primary_model().name
-    if provider == "gemini":
-        if GeminiConfig.MODELS is None:
-            return ""
-        return GeminiConfig.MODELS.primary.name
-    if provider == "ollama":
-        if OllamaConfig.MODELS is None:
-            return ""
-        return OllamaConfig.MODELS.primary.name
-    if MistralConfig.MODELS is None:
-        return ""
-    return MistralConfig.MODELS.primary.name
+    return ""
 
 
 def _uniq_model_names(model_names: Sequence[str]) -> list[str]:
@@ -141,11 +92,10 @@ class TextLLMConfig:
         configured_chain = [
             cls.AGENT_MODELS.get(config_key) for config_key in model_config_keys
         ]
-        provider_defaults = default_model_chain if cls.PROVIDER == "gemini" else ()
         model_chain = _uniq_model_names(
             [
                 model_name
-                for model_name in (*configured_chain, *provider_defaults)
+                for model_name in configured_chain
                 if isinstance(model_name, str)
             ]
         )

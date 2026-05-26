@@ -53,64 +53,6 @@ class OpenAIModelGroupConfig(BaseModel):
         return model_config
 
 
-class OllamaModelConfig(BaseModel):
-    name: str
-
-
-class OllamaModelGroupConfig(BaseModel):
-    primary: OllamaModelConfig
-    helper: OllamaModelConfig
-    embedding: OllamaModelConfig
-
-
-class MistralModelConfig(BaseModel):
-    name: str
-
-
-class MistralModelGroupConfig(BaseModel):
-    primary: MistralModelConfig
-    helper: MistralModelConfig
-    embedding: MistralModelConfig
-
-
-class GeminiModelConfig(BaseModel):
-    name: str
-
-
-class GeminiModelGroupConfig(BaseModel):
-    primary: GeminiModelConfig
-    helper: GeminiModelConfig
-    embedding: GeminiModelConfig
-
-
-class GeminiImageConfig(BaseModel):
-    enabled: bool = True
-    api_key: str | None = None
-    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    model: str = "gemini-3.1-flash-image-preview"
-    image_size: str = "1K"
-    max_output_tokens: int = 256
-    include_layout_2d_reference: bool = False
-
-    @model_validator(mode="after")
-    def validate_enabled_config(self) -> Self:
-        if not self.enabled:
-            return self
-        if not self.base_url:
-            raise ValueError(
-                "services.gemini_image.base_url is required when Gemini image is enabled."
-            )
-        if not self.model:
-            raise ValueError(
-                "services.gemini_image.model is required when Gemini image is enabled."
-            )
-        if self.max_output_tokens < 32:
-            raise ValueError(
-                "services.gemini_image.max_output_tokens must be at least 32."
-            )
-        return self
-
-
 class OpenAIConfig(BaseModel):
     enabled: bool = False
     azure: bool = False
@@ -118,7 +60,6 @@ class OpenAIConfig(BaseModel):
     api_key: str | None = None
     public_key: str | None = None
     private_key_file: str | None = None
-    base_url: str | None = None
     models: OpenAIModelGroupConfig
     agent_models: dict[str, OpenAIModelConfig] = Field(default_factory=dict)
 
@@ -153,74 +94,6 @@ class OpenAIConfig(BaseModel):
         return self
 
 
-class OllamaConfig(BaseModel):
-    enabled: bool = False
-    api_key: str = "ollama"
-    base_url: str | None = None
-    models: OllamaModelGroupConfig | None = None
-
-    @model_validator(mode="after")
-    def validate_enabled_config(self) -> Self:
-        if not self.enabled:
-            return self
-        if not self.base_url:
-            raise ValueError(
-                "services.ollama.base_url is required when Ollama is enabled."
-            )
-        if self.models is None:
-            raise ValueError(
-                "services.ollama.models is required when Ollama is enabled."
-            )
-        return self
-
-
-class MistralConfig(BaseModel):
-    enabled: bool = False
-    api_key: str = "mistral"
-    base_url: str | None = None
-    models: MistralModelGroupConfig | None = None
-
-    @model_validator(mode="after")
-    def validate_enabled_config(self) -> Self:
-        if not self.enabled:
-            return self
-        if not self.base_url:
-            raise ValueError(
-                "services.mistral.base_url is required when Mistral is enabled."
-            )
-        if self.models is None:
-            raise ValueError(
-                "services.mistral.models is required when Mistral is enabled."
-            )
-        return self
-
-
-class GeminiConfig(BaseModel):
-    enabled: bool = False
-    api_key: str | None = None
-    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    models: GeminiModelGroupConfig | None = None
-    agent_models: dict[str, GeminiModelConfig] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_enabled_config(self) -> Self:
-        if not self.enabled:
-            return self
-        if not self.api_key:
-            raise ValueError(
-                "services.gemini.api_key is required when Gemini is enabled."
-            )
-        if not self.base_url:
-            raise ValueError(
-                "services.gemini.base_url is required when Gemini is enabled."
-            )
-        if self.models is None:
-            raise ValueError(
-                "services.gemini.models is required when Gemini is enabled."
-            )
-        return self
-
-
 class SemanticSearchConfig(BaseModel):
     enabled: bool = True
 
@@ -239,30 +112,7 @@ class PresetsConfig(BaseModel):
 
 class Service(BaseModel):
     openai: OpenAIConfig
-    ollama: OllamaConfig = Field(default_factory=OllamaConfig)
-    mistral: MistralConfig = Field(default_factory=MistralConfig)
-    gemini: GeminiConfig = Field(default_factory=GeminiConfig)
-    gemini_image: GeminiImageConfig = Field(default_factory=GeminiImageConfig)
     semantic_search: SemanticSearchConfig = Field(default_factory=SemanticSearchConfig)
-
-    @model_validator(mode="after")
-    def validate_provider_selection(self) -> Self:
-        enabled_text_providers = [
-            provider_name
-            for provider_name, enabled in (
-                ("services.openai", self.openai.enabled),
-                ("services.ollama", self.ollama.enabled),
-                ("services.mistral", self.mistral.enabled),
-                ("services.gemini", self.gemini.enabled),
-            )
-            if enabled
-        ]
-        if len(enabled_text_providers) > 1:
-            raise ValueError(
-                "Enable only one text LLM provider at a time: "
-                + ", ".join(enabled_text_providers)
-            )
-        return self
 
 
 class RootConfig(BaseModel):

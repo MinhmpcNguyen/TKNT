@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
   ensureCurrentBillingPeriod,
-  getMonthlyImagesRemaining,
+  getMonthlyCreditsRemaining,
   loadBillingSettings,
   saveBillingSettings,
   type BillingSettings,
@@ -174,8 +174,8 @@ export type EditorState = {
   selectSavedRender: (renderId: string | null) => void;
   setBillingSettings: (settings: BillingSettings) => void;
   updateBillingSettings: (patch: Partial<BillingSettings>) => void;
-  consumeMonthlyImageCredit: () => boolean;
-  recordPaidImageUse: () => void;
+  consumeMonthlyImageCredits: (credits: number) => boolean;
+  recordPaidImageUse: (credits: number) => void;
 };
 
 function normalizeUserInputOptions(userInput: UserInput): UserInput {
@@ -604,9 +604,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       saveBillingSettings(next);
       return { billingSettings: next };
     }),
-  consumeMonthlyImageCredit: () => {
+  consumeMonthlyImageCredits: (credits) => {
+    const creditCount = Math.max(1, Math.round(credits));
     const current = ensureCurrentBillingPeriod(get().billingSettings);
-    if (current.mode !== 'monthly' || getMonthlyImagesRemaining(current) <= 0) {
+    if (
+      current.mode !== 'monthly' ||
+      getMonthlyCreditsRemaining(current) < creditCount
+    ) {
       if (current !== get().billingSettings) {
         saveBillingSettings(current);
         set({ billingSettings: current });
@@ -615,18 +619,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
     const next = {
       ...current,
-      monthlyImagesUsed: current.monthlyImagesUsed + 1,
-      totalMonthlyUses: current.totalMonthlyUses + 1,
+      monthlyCreditsUsed: current.monthlyCreditsUsed + creditCount,
+      totalMonthlyCredits: current.totalMonthlyCredits + creditCount,
     };
     saveBillingSettings(next);
     set({ billingSettings: next });
     return true;
   },
-  recordPaidImageUse: () =>
+  recordPaidImageUse: (credits) =>
     set((state) => {
+      const creditCount = Math.max(1, Math.round(credits));
       const next = ensureCurrentBillingPeriod({
         ...state.billingSettings,
-        totalPaidUses: state.billingSettings.totalPaidUses + 1,
+        totalPaidCredits: state.billingSettings.totalPaidCredits + creditCount,
       });
       saveBillingSettings(next);
       return { billingSettings: next };

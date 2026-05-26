@@ -4,6 +4,16 @@
   background: #f6f4ef;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -14,6 +24,11 @@ body {
 }
 
 .app-root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
   padding: 16px;
 }
 
@@ -29,6 +44,8 @@ header {
   grid-template-columns: 260px minmax(0, 1fr) 300px;
   gap: 12px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
   transition: grid-template-columns 180ms ease;
 }
 
@@ -82,12 +99,12 @@ header {
 }
 
 .left-dock-toggle {
-  right: -10px;
+  right: 6px;
 }
 
 .right-dock-toggle {
   top: 50%;
-  right: -14px;
+  right: 6px;
   left: auto;
   min-height: 118px;
   padding: 10px 7px;
@@ -108,17 +125,17 @@ header {
   width: 260px;
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
+  transform: none;
 }
 
 .left-dock-collapsed .left-dock-content {
   left: 0;
-  transform: translateX(calc(-100% - 16px));
 }
 
 .right-dock-collapsed .right-dock-content {
   right: 0;
   width: 300px;
-  transform: translateX(calc(100% + 16px));
 }
 
 .left-dock-collapsed .left-dock-toggle,
@@ -335,8 +352,10 @@ header {
 
 .canvas-drop-zone {
   position: relative;
-  width: 900px;
+  width: min(100%, 900px);
   max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .canvas-object-color-popover {
@@ -772,6 +791,46 @@ header {
   color: #40372f;
   padding: 8px 9px;
   font: inherit;
+}
+
+.three-render-option-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.three-render-option-field > span {
+  color: #5d5347;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.three-render-option-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid #d8cec0;
+  border-radius: 8px;
+  background: #fffdf9;
+  color: #40372f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.three-render-credit-chip {
+  align-self: end;
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 7px 9px;
+  border: 1px solid #d8cec0;
+  border-radius: 8px;
+  background: #f7f2ea;
+  color: #40372f;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .three-camera-stepper-row {
@@ -1853,10 +1912,19 @@ header {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   margin-bottom: 12px;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+.toolbar > * {
+  min-width: 0;
 }
 
 .toolbar select {
+  max-width: 100%;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid #cfc6b8;
@@ -1865,12 +1933,16 @@ header {
 
 .toolbar-save-layout {
   display: inline-grid;
-  grid-template-columns: minmax(120px, 180px) auto;
+  flex: 1 1 240px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
+  max-width: min(100%, 300px);
+  min-width: 0;
 }
 
 .toolbar-save-layout input {
+  width: 100%;
   min-width: 0;
   height: 34px;
   padding: 7px 9px;
@@ -1952,9 +2024,12 @@ button.danger {
 }
 
 .toolbar-status {
+  min-width: 0;
+  max-width: 100%;
   font-size: 12px;
   color: #6d665c;
   align-self: center;
+  overflow-wrap: anywhere;
 }
 
 .toolbar-status.error {
@@ -1964,7 +2039,9 @@ button.danger {
 .toolbar-loading {
   display: inline-flex;
   align-items: center;
+  flex: 1 1 220px;
   gap: 8px;
+  min-width: 0;
   min-height: 36px;
   max-width: min(420px, 100%);
   padding: 7px 10px;
@@ -1993,6 +2070,7 @@ button.danger {
 .toolbar-loading-copy {
   display: inline-flex;
   align-items: center;
+  flex: 1 1 auto;
   gap: 8px;
   min-width: 0;
 }
@@ -2155,23 +2233,41 @@ button.danger {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.app-header > div:first-child {
+  min-width: 0;
+}
+
+.app-header h1 {
+  overflow-wrap: anywhere;
 }
 
 .app-subtitle {
   margin: 6px 0 0;
   color: #6f6659;
-  max-width: 720px;
+  max-width: min(720px, 100%);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .app-account-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-account-chip {
   display: grid;
   gap: 2px;
+  min-width: 0;
+  max-width: min(240px, 100%);
   padding: 10px 12px;
   border: 1px solid #e7e0d5;
   border-radius: 12px;
@@ -2179,6 +2275,14 @@ button.danger {
   color: inherit;
   font-size: 12px;
   text-align: left;
+}
+
+.app-account-chip strong,
+.app-account-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-account-chip:hover {

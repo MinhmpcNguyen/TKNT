@@ -259,38 +259,38 @@
           }
         ],
         "dominant_anchor_candidates": [
-          "sofa",
-          "armchair"
+          "sofa"
         ],
         "allow_empty_cluster": false,
         "zone_claims": {
           "preferred_regions": [
             "floating_support_zone",
-            "wall_1_usable_200_3800_anchor",
+            "window_1_daylight",
+            "center_openness_core",
             "wall_2_usable_200_4800_anchor",
-            "wall_3_usable_200_3800_anchor",
             "wall_4_usable_200_4800_anchor"
           ],
           "avoid_regions": [
-            "center_access_lane"
+            "door_1_entry_clearance",
+            "entry_to_center_corridor"
           ],
-          "wall_affinity": "low",
+          "wall_affinity": "medium",
           "daylight_affinity": "high",
           "privacy_affinity": "medium",
           "floating_allowed": true
         },
         "layout_role": "primary",
         "degradation_ladder": [
-          "remove_floor_lamp",
+          "drop_side_table",
+          "drop_floor_lamp",
           "reduce_side_table_count",
-          "reduce_armchair_count",
-          "keep_sofa_only"
+          "reduce_floor_lamp_count"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.35,
+          "space_surplus_threshold": 0.55,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -298,7 +298,7 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.35,
+              "space_surplus_threshold": 0.55,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
               "preferred_size_tier": "M"
@@ -308,17 +308,17 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.35,
+              "space_surplus_threshold": 0.55,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "S"
             },
             {
               "object_type": "armchair",
               "min_keep": 0,
-              "max_keep": 2,
+              "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.5,
+              "space_surplus_threshold": 0.75,
               "drop_order_bias": "neutral",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
@@ -326,10 +326,10 @@
             {
               "object_type": "side_table",
               "min_keep": 0,
-              "max_keep": 2,
+              "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.5,
-              "drop_order_bias": "neutral",
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             },
@@ -338,8 +338,8 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.55,
-              "drop_order_bias": "drop_late",
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             }
@@ -348,8 +348,7 @@
         "anchor_first_policy": {
           "dominant_anchor_id": "sofa",
           "dominant_anchor_candidates": [
-            "sofa",
-            "armchair"
+            "sofa"
           ],
           "placement_order": [
             "sofa",
@@ -360,10 +359,10 @@
           ],
           "protected_ids": [
             "sofa",
-            "armchair",
             "coffee_table"
           ],
           "droppable_ids": [
+            "side_table",
             "floor_lamp"
           ],
           "support_chain": [
@@ -515,30 +514,30 @@
         "allow_empty_cluster": false,
         "zone_claims": {
           "preferred_regions": [
-            "wall_1_usable_200_3800_focal",
             "wall_2_usable_200_4800_focal",
-            "wall_3_usable_200_3800_focal",
-            "wall_4_usable_200_4800_focal"
+            "wall_4_usable_200_4800_focal",
+            "wall_1_usable_1600_3800_focal",
+            "wall_3_usable_200_1050_focal"
           ],
           "avoid_regions": [
-            "center_openness_core",
-            "center_access_lane"
+            "window_1_daylight",
+            "door_1_entry_clearance"
           ],
           "wall_affinity": "high",
-          "daylight_affinity": "low",
+          "daylight_affinity": "medium",
           "privacy_affinity": "none",
           "floating_allowed": false
         },
         "layout_role": "primary",
         "degradation_ladder": [
           "drop_media_shelf",
-          "keep_tv_console_only"
+          "reduce_media_shelf_count"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.3,
+          "space_surplus_threshold": 0.5,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -546,7 +545,7 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.3,
+              "space_surplus_threshold": 0.5,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
               "preferred_size_tier": "M"
@@ -556,8 +555,8 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.55,
-              "drop_order_bias": "drop_late",
+              "space_surplus_threshold": 0.72,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             }
@@ -652,17 +651,18 @@
         "allow_empty_cluster": true,
         "zone_claims": {
           "preferred_regions": [
-            "wall_1_usable_200_3800_anchor",
             "wall_2_usable_200_4800_anchor",
-            "wall_3_usable_200_3800_anchor",
-            "wall_4_usable_200_4800_anchor"
+            "wall_4_usable_200_4800_anchor",
+            "wall_1_usable_1600_3800_anchor",
+            "wall_3_usable_200_1050_anchor"
           ],
           "avoid_regions": [
             "center_openness_core",
-            "center_access_lane"
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
           ],
           "wall_affinity": "high",
-          "daylight_affinity": "low",
+          "daylight_affinity": "medium",
           "privacy_affinity": "medium",
           "floating_allowed": false
         },
@@ -671,13 +671,14 @@
           "drop_if_room_capacity_tight_under_style_policy",
           "drop_bookshelf",
           "drop_storage_cabinet",
-          "drop_console_table"
+          "drop_console_table",
+          "reduce_bookshelf_count"
         ],
         "tier_count_hints": {
           "bundle_class": "strong_support",
-          "preserve_level": "high",
+          "preserve_level": "medium",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.55,
+          "space_surplus_threshold": 0.68,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -685,9 +686,9 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.65,
-              "drop_order_bias": "neutral",
-              "preserve_level": "medium",
+              "space_surplus_threshold": 0.78,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "low",
               "preferred_size_tier": "S"
             }
           ]
@@ -720,6 +721,103 @@
           "cluster_id": "storage_display_support"
         }
       }
+    },
+    {
+      "cluster_id": "lighting_support",
+      "tag": "misc",
+      "members": [
+        "floor_lamp"
+      ],
+      "anchors": [
+        "floor_lamp"
+      ],
+      "hard_constraints": [],
+      "soft_constraints": [],
+      "cluster_rules": {
+        "grid_mm": 50,
+        "allowed_rotations": {
+          "floor_lamp": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "facing": {},
+        "access_requirements": [],
+        "semantic_placements": [],
+        "dominant_anchor_candidates": [
+          "floor_lamp"
+        ],
+        "allow_empty_cluster": true,
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_4800_focal",
+            "wall_4_usable_200_4800_focal",
+            "wall_1_usable_1600_3800_focal",
+            "wall_3_usable_200_1050_focal"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "low",
+          "floating_allowed": true
+        },
+        "layout_role": "secondary",
+        "degradation_ladder": [
+          "drop_if_room_capacity_tight_under_style_policy",
+          "drop_floor_lamp"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.6,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "floor_lamp",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.6,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "anchor_first_policy": {
+          "dominant_anchor_id": "floor_lamp",
+          "dominant_anchor_candidates": [
+            "floor_lamp"
+          ],
+          "placement_order": [
+            "floor_lamp"
+          ],
+          "protected_ids": [
+            "floor_lamp"
+          ],
+          "droppable_ids": [],
+          "support_chain": []
+        },
+        "object_solver_policy": {
+          "enabled": true,
+          "layout_flow": "object_level_anchor_first",
+          "solve_level": "object",
+          "anchor_first": true,
+          "support_strategy": "relative_to_graph",
+          "local_cluster_composer_enabled": false,
+          "cluster_outline_enabled": false,
+          "phase2_controller_enabled": false,
+          "degrade_inside_solver": true,
+          "room_type": "living_room",
+          "cluster_id": "lighting_support"
+        }
+      }
     }
   ],
   "semantic_layout_program": {
@@ -732,19 +830,25 @@
         "social"
       ],
       "layout_policy": {
-        "target_density": "balanced",
-        "center_openness_bias": "balanced_to_medium",
+        "target_density": "medium",
+        "center_openness_bias": "very_high",
         "wall_loading_bias": "focal_balanced",
         "symmetry_bias": "medium",
         "cluster_spacing_bias": "soft",
         "clutter_tolerance": "low_to_balanced",
         "decor_tolerance": "low_to_balanced",
-        "daylight_bias": "balanced",
+        "daylight_bias": "high",
         "floating_cluster_tolerance": "medium_high",
         "material_weight_bias": "balanced",
         "visual_balance_bias": "social"
       },
       "cluster_policy_overrides": {
+        "sleep_core": {
+          "prefer_breathing_room": true
+        },
+        "primary_core": {
+          "prefer_breathing_room": true
+        },
         "support_optional": {
           "allow_only_if_space_surplus": true
         },
@@ -756,14 +860,14 @@
         }
       },
       "policy_weights": {
-        "density_multiplier": 1.0,
+        "density_multiplier": 1.06,
         "optional_utility_bias": -0.45,
         "decor_utility_bias": -0.9,
-        "openness_weight": 1.0,
+        "openness_weight": 1.15,
         "symmetry_weight": 1.0,
         "naturalness_weight": 1.12,
         "semantic_coherence_weight": 1.06,
-        "spatial_quality_weight": 1.0
+        "spatial_quality_weight": 1.15
       },
       "search_settings": {
         "style_policy_variants": 1,
@@ -794,7 +898,7 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "a coffee table",
-          "reason": "Explicitly requested and required by the main seating bundle.",
+          "reason": "Directly requested support piece for the seating arrangement.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
           "requested": true,
@@ -814,7 +918,7 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "a rug",
-          "reason": "Explicitly requested decor/textile element for the living room.",
+          "reason": "Explicitly requested floor textile for the room.",
           "confidence": 0.98,
           "placement_participation": "textile_overlay",
           "requested": true,
@@ -833,8 +937,8 @@
           "target_count": 1,
           "preferred_count": 1,
           "max_keep": 1,
-          "evidence": "Include a sofa facing a TV console",
-          "reason": "Directly requested as a core seating anchor and explicitly required by the seating bundle.",
+          "evidence": "include a sofa",
+          "reason": "Directly requested seating anchor for the living room.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
           "requested": true,
@@ -853,8 +957,8 @@
           "target_count": 1,
           "preferred_count": 1,
           "max_keep": 1,
-          "evidence": "a TV console",
-          "reason": "Directly requested as the media anchor for the movie area.",
+          "evidence": "facing a TV console",
+          "reason": "Explicitly requested media anchor for the movie area.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
           "requested": true,
@@ -874,7 +978,7 @@
           "preferred_count": 2,
           "max_keep": 2,
           "evidence": "one or two armchairs if they fit",
-          "reason": "Requested as a fit-dependent target with a lower bound of one and preferred upper count of two.",
+          "reason": "Desired additional seating, with a fit-dependent range.",
           "confidence": 0.97,
           "placement_participation": "floor_blocking",
           "requested": true,
@@ -894,7 +998,7 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "ample lighting",
-          "reason": "Lighting is explicitly requested; floor lamp is the available lighting object and is viable rather than mandatory.",
+          "reason": "Lighting is requested as a room requirement; floor lamp is a viable lighting object from the available program types.",
           "confidence": 0.84,
           "placement_participation": "floor_blocking",
           "requested": true,
@@ -907,35 +1011,15 @@
           "mount_region_type": null
         },
         {
-          "object_type": "bookshelf",
-          "intent": "optional_if_surplus",
-          "min_keep": 0,
-          "target_count": 1,
-          "preferred_count": 1,
-          "max_keep": 1,
-          "evidence": "modern functional",
-          "reason": "Not explicitly requested; only a possible support item if space allows.",
-          "confidence": 0.2,
-          "placement_participation": "floor_blocking",
-          "requested": true,
-          "inventory_available": true,
-          "available_in_program": true,
-          "solver_participation": "soft_solver_object",
-          "blocks_floor_area": true,
-          "can_overlap_floor_objects": false,
-          "host_object_type": null,
-          "mount_region_type": null
-        },
-        {
           "object_type": "media_shelf",
-          "intent": "optional_if_surplus",
+          "intent": "target_if_viable",
           "min_keep": 0,
           "target_count": 1,
           "preferred_count": 1,
           "max_keep": 1,
-          "evidence": "movie area",
-          "reason": "Supports the media zone but is not explicitly named in the brief, so it is only a surplus option.",
-          "confidence": 0.55,
+          "evidence": "large screen and surround sound",
+          "reason": "Supports the designated movie area as a media storage/display element, but is not explicitly named.",
+          "confidence": 0.62,
           "placement_participation": "floor_blocking",
           "requested": true,
           "inventory_available": true,
@@ -955,24 +1039,24 @@
             "coffee_table",
             "armchair"
           ],
-          "intent": "core seating arrangement",
+          "intent": "core seating composition",
           "priority": "core",
-          "drop_policy": "preserve sofa and coffee table first; reduce armchairs before core anchors"
+          "drop_policy": "preserve sofa and coffee table first; reduce armchairs if space is tight"
         },
         {
-          "group_id": "media_zone",
+          "group_id": "movie_area",
           "members": [
             "tv_console",
-            "sofa"
+            "media_shelf"
           ],
-          "intent": "face seating toward media anchor",
+          "intent": "media wall composition",
           "priority": "core",
-          "drop_policy": "keep tv_console and sofa; other media supports may drop first"
+          "drop_policy": "preserve tv_console; drop media_shelf first if surplus is limited"
         }
       ],
       "notes": [
-        "No explicit request for curtains, mirrors, or ceiling lights.",
-        "Surround sound and large screen were mentioned, but no matching object types were provided in the allowed object lists.",
+        "No explicit curtains, mirrors, ceiling lights, or wall-mounted decor were requested.",
+        "The brief emphasizes keeping the room easy to move through and prefers an open center.",
         "Request contract was normalized before tier-count enforcement."
       ]
     },
@@ -1004,17 +1088,17 @@
       "layout_traits_intrinsic_enabled": false,
       "layout_traits_mode": "unified",
       "semantic_rule_enabled": true,
-      "object_count": 8,
-      "recognized_count": 8,
+      "object_count": 9,
+      "recognized_count": 9,
       "coverage_ratio": 1.0,
       "trait_coverage_ratio": 1.0,
       "trait_counts": {
         "anchor": 2,
         "floating": 4,
-        "lighting": 1,
+        "lighting": 2,
         "seating": 2,
         "storage": 2,
-        "support": 6,
+        "support": 7,
         "surface": 4,
         "wall_backed": 3
       },
@@ -1181,6 +1265,26 @@
                 "M",
                 "S"
               ]
+            }
+          ]
+        },
+        {
+          "cluster_id": "lighting_support",
+          "object_count": 1,
+          "recognized_count": 1,
+          "dominant_traits": [
+            "lighting",
+            "support"
+          ],
+          "objects": [
+            {
+              "object_type": "floor_lamp",
+              "canonical_type": "floor_lamp",
+              "traits": [
+                "support",
+                "lighting"
+              ],
+              "recognized": true
             }
           ]
         }
@@ -1193,17 +1297,17 @@
       "layout_traits_intrinsic_enabled": false,
       "layout_traits_mode": "unified",
       "semantic_rule_enabled": true,
-      "object_count": 8,
-      "recognized_count": 8,
+      "object_count": 9,
+      "recognized_count": 9,
       "coverage_ratio": 1.0,
       "trait_coverage_ratio": 1.0,
       "trait_counts": {
         "anchor": 2,
         "floating": 4,
-        "lighting": 1,
+        "lighting": 2,
         "seating": 2,
         "storage": 2,
-        "support": 6,
+        "support": 7,
         "surface": 4,
         "wall_backed": 3
       },
@@ -1372,6 +1476,26 @@
               ]
             }
           ]
+        },
+        {
+          "cluster_id": "lighting_support",
+          "object_count": 1,
+          "recognized_count": 1,
+          "dominant_traits": [
+            "lighting",
+            "support"
+          ],
+          "objects": [
+            {
+              "object_type": "floor_lamp",
+              "canonical_type": "floor_lamp",
+              "traits": [
+                "support",
+                "lighting"
+              ],
+              "recognized": true
+            }
+          ]
         }
       ]
     },
@@ -1381,10 +1505,9 @@
         "layout_role": "primary",
         "priority": "core",
         "activation_reason": "required by compiled semantic rule and supported by inventory",
-        "semantic_role": "social_seating_zone",
+        "semantic_role": "core_social_zone",
         "dominant_anchor_candidates": [
-          "sofa",
-          "armchair"
+          "sofa"
         ],
         "required_bundles": [
           {
@@ -1410,9 +1533,9 @@
               },
               {
                 "object_type": "side_table",
-                "role": "dominant_anchor",
-                "required": true,
-                "max_keep": null
+                "role": "secondary_support",
+                "required": false,
+                "max_keep": 1
               },
               {
                 "object_type": "floor_lamp",
@@ -1426,38 +1549,32 @@
         "zone_claims": {
           "preferred_regions": [
             "floating_support_zone",
-            "wall_1_usable_200_3800_anchor",
+            "window_1_daylight",
+            "center_openness_core",
             "wall_2_usable_200_4800_anchor",
-            "wall_3_usable_200_3800_anchor",
             "wall_4_usable_200_4800_anchor"
           ],
           "avoid_regions": [
-            "center_access_lane"
+            "door_1_entry_clearance",
+            "entry_to_center_corridor"
           ],
-          "wall_affinity": "low",
+          "wall_affinity": "medium",
           "daylight_affinity": "high",
           "privacy_affinity": "medium",
           "floating_allowed": true
         },
-        "relation_intents": [
-          {
-            "type": "face",
-            "target": null,
-            "target_cluster": "media",
-            "strength": "hard"
-          }
-        ],
+        "relation_intents": [],
         "degradation_ladder": [
-          "remove_floor_lamp",
+          "drop_side_table",
+          "drop_floor_lamp",
           "reduce_side_table_count",
-          "reduce_armchair_count",
-          "keep_sofa_only"
+          "reduce_floor_lamp_count"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.35,
+          "space_surplus_threshold": 0.55,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -1465,7 +1582,7 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.35,
+              "space_surplus_threshold": 0.55,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
               "preferred_size_tier": "M"
@@ -1475,17 +1592,17 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.35,
+              "space_surplus_threshold": 0.55,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "S"
             },
             {
               "object_type": "armchair",
               "min_keep": 0,
-              "max_keep": 2,
+              "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.5,
+              "space_surplus_threshold": 0.75,
               "drop_order_bias": "neutral",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
@@ -1493,10 +1610,10 @@
             {
               "object_type": "side_table",
               "min_keep": 0,
-              "max_keep": 2,
+              "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.5,
-              "drop_order_bias": "neutral",
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             },
@@ -1505,8 +1622,8 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.55,
-              "drop_order_bias": "drop_late",
+              "space_surplus_threshold": 0.7,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             }
@@ -1526,7 +1643,7 @@
         "layout_role": "primary",
         "priority": "core",
         "activation_reason": "required by compiled semantic rule and supported by inventory",
-        "semantic_role": "media_focus_zone",
+        "semantic_role": "primary_media_focus",
         "dominant_anchor_candidates": [
           "tv_console"
         ],
@@ -1544,44 +1661,37 @@
                 "object_type": "media_shelf",
                 "role": "support",
                 "required": false,
-                "max_keep": null
+                "max_keep": 1
               }
             ]
           }
         ],
         "zone_claims": {
           "preferred_regions": [
-            "wall_1_usable_200_3800_focal",
             "wall_2_usable_200_4800_focal",
-            "wall_3_usable_200_3800_focal",
-            "wall_4_usable_200_4800_focal"
+            "wall_4_usable_200_4800_focal",
+            "wall_1_usable_1600_3800_focal",
+            "wall_3_usable_200_1050_focal"
           ],
           "avoid_regions": [
-            "center_openness_core",
-            "center_access_lane"
+            "window_1_daylight",
+            "door_1_entry_clearance"
           ],
           "wall_affinity": "high",
-          "daylight_affinity": "low",
+          "daylight_affinity": "medium",
           "privacy_affinity": "none",
           "floating_allowed": false
         },
-        "relation_intents": [
-          {
-            "type": "face",
-            "target": null,
-            "target_cluster": "main_seating",
-            "strength": "hard"
-          }
-        ],
+        "relation_intents": [],
         "degradation_ladder": [
           "drop_media_shelf",
-          "keep_tv_console_only"
+          "reduce_media_shelf_count"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.3,
+          "space_surplus_threshold": 0.5,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -1589,7 +1699,7 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.3,
+              "space_surplus_threshold": 0.5,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
               "preferred_size_tier": "M"
@@ -1599,8 +1709,8 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.55,
-              "drop_order_bias": "drop_late",
+              "space_surplus_threshold": 0.72,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
               "preferred_size_tier": "S"
             }
@@ -1611,8 +1721,8 @@
           "affordance_support": 1.0,
           "brief_support": 0.95,
           "inventory_support": 1.0,
-          "conflict_penalty": 0.15,
-          "score": 0.84
+          "conflict_penalty": 0.0,
+          "score": 0.99
         }
       },
       {
@@ -1620,10 +1730,8 @@
         "layout_role": "secondary",
         "priority": "support",
         "activation_reason": "activated because brief or room capacity makes this support cluster useful",
-        "semantic_role": "storage_display_zone",
-        "dominant_anchor_candidates": [
-          "bookshelf"
-        ],
+        "semantic_role": "peripheral_storage_display",
+        "dominant_anchor_candidates": [],
         "required_bundles": [
           {
             "bundle_id": "storage_display_support_bundle",
@@ -1632,24 +1740,25 @@
                 "object_type": "bookshelf",
                 "role": "support",
                 "required": false,
-                "max_keep": null
+                "max_keep": 1
               }
             ]
           }
         ],
         "zone_claims": {
           "preferred_regions": [
-            "wall_1_usable_200_3800_anchor",
             "wall_2_usable_200_4800_anchor",
-            "wall_3_usable_200_3800_anchor",
-            "wall_4_usable_200_4800_anchor"
+            "wall_4_usable_200_4800_anchor",
+            "wall_1_usable_1600_3800_anchor",
+            "wall_3_usable_200_1050_anchor"
           ],
           "avoid_regions": [
             "center_openness_core",
-            "center_access_lane"
+            "entry_to_center_corridor",
+            "door_1_entry_clearance"
           ],
           "wall_affinity": "high",
-          "daylight_affinity": "low",
+          "daylight_affinity": "medium",
           "privacy_affinity": "medium",
           "floating_allowed": false
         },
@@ -1658,13 +1767,14 @@
           "drop_if_room_capacity_tight_under_style_policy",
           "drop_bookshelf",
           "drop_storage_cabinet",
-          "drop_console_table"
+          "drop_console_table",
+          "reduce_bookshelf_count"
         ],
         "tier_count_hints": {
           "bundle_class": "strong_support",
-          "preserve_level": "high",
+          "preserve_level": "medium",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.55,
+          "space_surplus_threshold": 0.68,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -1672,9 +1782,9 @@
               "min_keep": 0,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.65,
-              "drop_order_bias": "neutral",
-              "preserve_level": "medium",
+              "space_surplus_threshold": 0.78,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "low",
               "preferred_size_tier": "S"
             }
           ]
@@ -1687,18 +1797,87 @@
           "conflict_penalty": 0.0,
           "score": 0.87
         }
+      },
+      {
+        "cluster_id": "lighting_support",
+        "layout_role": "secondary",
+        "priority": "support",
+        "activation_reason": "required by compiled semantic rule and supported by inventory",
+        "semantic_role": "ambient_task_accent_lighting",
+        "dominant_anchor_candidates": [],
+        "required_bundles": [
+          {
+            "bundle_id": "lighting_support_bundle",
+            "objects": [
+              {
+                "object_type": "floor_lamp",
+                "role": "decor",
+                "required": false,
+                "max_keep": 1
+              }
+            ]
+          }
+        ],
+        "zone_claims": {
+          "preferred_regions": [
+            "wall_2_usable_200_4800_focal",
+            "wall_4_usable_200_4800_focal",
+            "wall_1_usable_1600_3800_focal",
+            "wall_3_usable_200_1050_focal"
+          ],
+          "avoid_regions": [
+            "door_1_entry_clearance",
+            "entry_to_center_corridor"
+          ],
+          "wall_affinity": "high",
+          "daylight_affinity": "medium",
+          "privacy_affinity": "low",
+          "floating_allowed": true
+        },
+        "relation_intents": [],
+        "degradation_ladder": [
+          "drop_if_room_capacity_tight_under_style_policy",
+          "drop_floor_lamp"
+        ],
+        "tier_count_hints": {
+          "bundle_class": "strong_support",
+          "preserve_level": "high",
+          "keep_if_space_surplus": true,
+          "space_surplus_threshold": 0.6,
+          "drop_order_bias": "neutral",
+          "object_hints": [
+            {
+              "object_type": "floor_lamp",
+              "min_keep": 0,
+              "max_keep": 1,
+              "keep_if_space_surplus": true,
+              "space_surplus_threshold": 0.6,
+              "drop_order_bias": "drop_first",
+              "preserve_level": "medium",
+              "preferred_size_tier": "S"
+            }
+          ]
+        },
+        "viability_score": {
+          "rule_support": 1.0,
+          "affordance_support": 1.0,
+          "brief_support": 0.6,
+          "inventory_support": 1.0,
+          "conflict_penalty": 0.0,
+          "score": 0.92
+        }
       }
     ],
     "global_layout_intent": {
       "primary_focus": "living",
-      "space_character": "social_balanced_functional",
+      "space_character": "social_modern_functional_living_room_with_media_focus",
       "prefer_open_center": true,
       "prefer_core_before_support": true,
       "prefer_clear_primary_circulation": true,
       "style_name": "balanced",
       "style_policy_summary": {
-        "target_density": "balanced",
-        "center_openness_bias": "balanced_to_medium",
+        "target_density": "medium",
+        "center_openness_bias": "very_high",
         "clutter_tolerance": "low_to_balanced",
         "decor_tolerance": "low_to_balanced"
       }
@@ -1729,7 +1908,11 @@
       ],
       "reserved_regions": [
         {
-          "region": "center_access_lane",
+          "region": "door_1_entry_clearance",
+          "reason": "entry and primary circulation stay clear"
+        },
+        {
+          "region": "entry_to_center_corridor",
           "reason": "entry and primary circulation stay clear"
         }
       ]
@@ -1740,18 +1923,22 @@
         "sofa"
       ],
       "dominant_workflow_required": [
-        "center_access_lane"
+        "entry_to_center_corridor",
+        "center_openness_core",
+        "window_1_daylight"
       ],
       "group_caps": [],
       "group_minimums": []
     },
     "controlled_degradation": {
       "cluster_drop_order": [
+        "lighting_support",
         "storage_display_support",
         "main_seating",
         "media"
       ],
       "bundle_drop_order": [
+        "lighting_support_bundle",
         "storage_display_support_bundle",
         "main_seating_bundle",
         "media_bundle"
@@ -1765,22 +1952,23 @@
       "functionality_weight": 1.0,
       "naturalness_weight": 1.12,
       "semantic_coherence_weight": 1.06,
-      "spatial_quality_weight": 1.0
+      "spatial_quality_weight": 1.15
     },
     "missing": [],
     "conflicts": [],
     "confidence": 0.86,
     "notes": [
-      "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
-      "Kept the canonical core clusters and tightened the seating/media program for a 4m x 5m living room with a clear center lane.",
-      "No new cluster was added because the brief is fully covered by seating, media, and optional support storage within the available inventory.",
-      "20m2 living room supports core media wall plus compact seating; keep sofa, coffee table, and TV console as non-negotiable.",
-      "Comfortable surplus can retain one armchair or a floor lamp, but avoid over-pruning support items only when the room is clearly roomy.",
-      "Storage/display support is optional and should survive only with real headroom; pet/entry support is not justified by the brief.",
-      "No daylight regions or entry landing zones provided; circulation and center openness preserved as hard avoid for non-seating support clusters.",
-      "Media and seating are paired as the primary functional relationship for the room.",
-      "Storage support remains optional-to-secondary and should not block the center access lane.",
-      "Request contract LLM mode enabled via TKNT_REQUEST_CONTRACT_LLM; deterministic validation remains active.",
+      "Adaptive semantic LLM mode is the default runtime path; deterministic stage fallbacks are disabled.",
+      "Kept the canonical seating and media clusters, trimmed seating to a sofa-plus-table core, and added a minimal lighting support cluster because the brief explicitly asks for ample lighting and the room has daylight plus media use.",
+      "Did not add entry or pet support because the brief does not require them and the room should stay open and easy to move through.",
+      "20m2 living room with strong center-openness and media-wall priority supports core seating and TV console as mandatory.",
+      "Support clusters remain useful but should be filtered more aggressively than core; small support items may survive only when surplus is comfortable.",
+      "Lighting is favored because daylight is present yet media use is explicit; bookshelf/storage are optional and should drop before circulation-sensitive items.",
+      "Preserve center openness and entry circulation.",
+      "Media wall is the primary focal constraint; seating should face it.",
+      "Daylight is beneficial for seating but should not block the window region.",
+      "Storage is optional and must stay peripheral to circulation.",
+      "Request contract LLM mode is the default runtime path; deterministic validation remains active.",
       "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
       "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
       "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
@@ -1794,19 +1982,25 @@
       "social"
     ],
     "layout_policy": {
-      "target_density": "balanced",
-      "center_openness_bias": "balanced_to_medium",
+      "target_density": "medium",
+      "center_openness_bias": "very_high",
       "wall_loading_bias": "focal_balanced",
       "symmetry_bias": "medium",
       "cluster_spacing_bias": "soft",
       "clutter_tolerance": "low_to_balanced",
       "decor_tolerance": "low_to_balanced",
-      "daylight_bias": "balanced",
+      "daylight_bias": "high",
       "floating_cluster_tolerance": "medium_high",
       "material_weight_bias": "balanced",
       "visual_balance_bias": "social"
     },
     "cluster_policy_overrides": {
+      "sleep_core": {
+        "prefer_breathing_room": true
+      },
+      "primary_core": {
+        "prefer_breathing_room": true
+      },
       "support_optional": {
         "allow_only_if_space_surplus": true
       },
@@ -1818,14 +2012,14 @@
       }
     },
     "policy_weights": {
-      "density_multiplier": 1.0,
+      "density_multiplier": 1.06,
       "optional_utility_bias": -0.45,
       "decor_utility_bias": -0.9,
-      "openness_weight": 1.0,
+      "openness_weight": 1.15,
       "symmetry_weight": 1.0,
       "naturalness_weight": 1.12,
       "semantic_coherence_weight": 1.06,
-      "spatial_quality_weight": 1.0
+      "spatial_quality_weight": 1.15
     },
     "search_settings": {
       "style_policy_variants": 1,
@@ -1845,16 +2039,17 @@
     ]
   },
   "notes": [
-    "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
-    "Kept the canonical core clusters and tightened the seating/media program for a 4m x 5m living room with a clear center lane.",
-    "No new cluster was added because the brief is fully covered by seating, media, and optional support storage within the available inventory.",
-    "20m2 living room supports core media wall plus compact seating; keep sofa, coffee table, and TV console as non-negotiable.",
-    "Comfortable surplus can retain one armchair or a floor lamp, but avoid over-pruning support items only when the room is clearly roomy.",
-    "Storage/display support is optional and should survive only with real headroom; pet/entry support is not justified by the brief.",
-    "No daylight regions or entry landing zones provided; circulation and center openness preserved as hard avoid for non-seating support clusters.",
-    "Media and seating are paired as the primary functional relationship for the room.",
-    "Storage support remains optional-to-secondary and should not block the center access lane.",
-    "Request contract LLM mode enabled via TKNT_REQUEST_CONTRACT_LLM; deterministic validation remains active.",
+    "Adaptive semantic LLM mode is the default runtime path; deterministic stage fallbacks are disabled.",
+    "Kept the canonical seating and media clusters, trimmed seating to a sofa-plus-table core, and added a minimal lighting support cluster because the brief explicitly asks for ample lighting and the room has daylight plus media use.",
+    "Did not add entry or pet support because the brief does not require them and the room should stay open and easy to move through.",
+    "20m2 living room with strong center-openness and media-wall priority supports core seating and TV console as mandatory.",
+    "Support clusters remain useful but should be filtered more aggressively than core; small support items may survive only when surplus is comfortable.",
+    "Lighting is favored because daylight is present yet media use is explicit; bookshelf/storage are optional and should drop before circulation-sensitive items.",
+    "Preserve center openness and entry circulation.",
+    "Media wall is the primary focal constraint; seating should face it.",
+    "Daylight is beneficial for seating but should not block the window region.",
+    "Storage is optional and must stay peripheral to circulation.",
+    "Request contract LLM mode is the default runtime path; deterministic validation remains active.",
     "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
     "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
     "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",

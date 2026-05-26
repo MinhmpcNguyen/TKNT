@@ -1943,10 +1943,17 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
                     "asset_id": asset_id,
                     "style_key": style_key,
                     "delete_file": params.get("delete_file", [""])[0],
+                    "delete_asset_if_empty": params.get(
+                        "delete_asset_if_empty",
+                        [""],
+                    )[0],
                 }
-                self.inspector.delete_variant(payload)
+                result = self.inspector.delete_variant(payload)
+                query: dict[str, str] = {"deleted": "1"}
+                if bool(result.get("asset_deleted")):
+                    query["deleted_asset"] = "1"
                 self.send_response(int(HTTPStatus.SEE_OTHER))
-                self.send_header("Location", "/?deleted=1")
+                self.send_header("Location", "/?" + urlencode(query))
                 self.end_headers()
                 return
 
@@ -2009,6 +2016,7 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         tilt_z = selected_tilt(target, params.get("tilt_z", [None])[0], axis="z")
         saved = params.get("saved", [""])[0] == "1"
         deleted = params.get("deleted", [""])[0] == "1"
+        deleted_asset = params.get("deleted_asset", [""])[0] == "1"
         selected_key = (
             f"{requested_asset_id}::{requested_style_key}"
             if requested_asset_id and requested_style_key
@@ -2095,6 +2103,8 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         status = (
             "Saved orientation to DB."
             if saved
+            else "Deleted selected GLB and empty DB asset."
+            if deleted_asset
             else "Deleted selected GLB variant from DB."
             if deleted
             else f"Loaded {len(targets)} GLB inventory variants."
@@ -2175,10 +2185,11 @@ class ManualInventoryGlbReviewHandler(BaseHTTPRequestHandler):
         <button class="save" type="submit">Save orientation to DB</button>
       </form>
 
-      <form method="post" action="/delete" onsubmit="return confirm('Delete this selected GLB variant from DB?')">
+      <form method="post" action="/delete" onsubmit="return confirm('Delete this selected GLB from DB, unlink its local file if safe, and delete the DB asset if no GLB remains?')">
         <input type="hidden" name="asset_id" value="{escape(requested_asset_id)}">
         <input type="hidden" name="style_key" value="{escape(requested_style_key)}">
-        <label class="apply"><input type="checkbox" name="delete_file"> Also delete local .glb file</label>
+        <label class="apply"><input type="checkbox" name="delete_file" checked> Also delete local .glb file</label>
+        <label class="apply"><input type="checkbox" name="delete_asset_if_empty" checked> Also delete DB asset if no GLB remains</label>
         <button class="delete" type="submit">Delete selected GLB</button>
       </form>
 

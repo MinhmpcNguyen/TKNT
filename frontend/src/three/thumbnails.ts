@@ -23,6 +23,13 @@ const FALLBACK_HEIGHT_M = 0.8;
 let runtimePromise: Promise<ThreeThumbnailRuntime> | null = null;
 const thumbnailCache = new Map<string, Promise<string | null>>();
 
+function getThreeRuntimeModuleUrl(modulePath: string): string {
+  if (import.meta.env.DEV) {
+    return `/src/vendor/three/${modulePath}`;
+  }
+  return `/assets/three/${modulePath}`;
+}
+
 export function hasInventoryThumbnailModel(
   item: InventoryItem,
   preferredStyle?: string | null
@@ -78,15 +85,9 @@ async function loadThreeThumbnailRuntime(): Promise<ThreeThumbnailRuntime> {
   }
 
   runtimePromise = (async () => {
-    const THREE_URL = new URL('../vendor/three/three.module.js', import.meta.url).toString();
-    const GLTF_LOADER_URL = new URL(
-      '../vendor/three/loaders/GLTFLoader.js',
-      import.meta.url
-    ).toString();
-    const KTX2_LOADER_URL = new URL(
-      '../vendor/three/loaders/KTX2Loader.js',
-      import.meta.url
-    ).toString();
+    const THREE_URL = getThreeRuntimeModuleUrl('three.module.js');
+    const GLTF_LOADER_URL = getThreeRuntimeModuleUrl('loaders/GLTFLoader.js');
+    const KTX2_LOADER_URL = getThreeRuntimeModuleUrl('loaders/KTX2Loader.js');
 
     const THREE: any = await import(/* @vite-ignore */ THREE_URL);
     const gltfLoaderMod: any = await import(/* @vite-ignore */ GLTF_LOADER_URL);

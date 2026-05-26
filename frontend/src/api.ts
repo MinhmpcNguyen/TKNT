@@ -1,55 +1,59 @@
 import {
   AuthUser,
-  DesignPlanV1,
-  FloorplanGeometry,
   GeneratedRenderRecord,
   InventoryItem,
   SavedLayoutRecord,
-  Violation,
 } from './types';
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:8001';
+const DEFAULT_API_BASE = (import.meta as any).env?.PROD
+  ? '/api'
+  : 'http://localhost:8001';
+const API_BASE = normalizeApiBase(
+  (import.meta as any).env?.VITE_API_BASE ?? DEFAULT_API_BASE
+);
 const AUTH_TOKEN_STORAGE_KEY = 'tknt.authToken';
+const API_RELATIVE_URL_PATTERN = /^\/(inventory|account|pipeline|auth|assets_gen)(\/|$)/;
+
+function normalizeApiBase(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || raw === '/') {
+    return '';
+  }
+  return raw.replace(/\/+$/, '');
+}
+
+function normalizePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function joinBasePath(base: string, path: string): string {
+  const normalizedPath = normalizePath(path);
+  if (!base) {
+    return normalizedPath;
+  }
+  return `${base}${normalizedPath}`;
+}
+
+function resolveApiUrl(path: string): string {
+  return joinBasePath(API_BASE, path);
+}
+
+function browserOrigin(): string {
+  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+}
 
 export type SnapshotImageSceneReferenceMode =
   | 'none'
   | 'target_layout_with_scene_reference'
   | 'scene_reference_camera_transfer';
 
+export type SnapshotImageQuality = 'low' | 'medium' | 'high';
+export type SnapshotImageSize = '1024x1024' | '1024x1536' | '1536x1024';
+
 export type AuthSessionResponse = {
   access_token: string;
   token_type: 'bearer';
   user: AuthUser;
-};
-
-export type Object3DCreateResponse = {
-  job_id: string;
-  job_dir: string;
-  stage: string;
-  status_url: string;
-};
-
-export type Object3DStatusResponse = {
-  job_id: string;
-  job_dir: string;
-  mode: string;
-  stage: string;
-  updated_at_utc: string;
-  message?: string | null;
-  error?: string | null;
-  progress_current?: number | null;
-  progress_total?: number | null;
-  artifact_paths: Record<string, string>;
-  artifact_urls: Record<string, string>;
-  result?: Record<string, unknown> | null;
-  actions: Array<{
-    stage: string;
-    message: string;
-    updated_at_utc: string;
-    progress_current?: number | null;
-    progress_total?: number | null;
-    error?: string | null;
-  }>;
 };
 
 export type SnapshotImageRenderResult = {
@@ -60,6 +64,10 @@ export type SnapshotImageRenderResult = {
     raw_user_prompt?: string | null;
     preset_prompt?: string | null;
     preset_selection?: SnapshotImagePresetSelection;
+    image_quality_requested?: SnapshotImageQuality | string | null;
+    image_size_requested?: SnapshotImageSize | string | null;
+    stream_partial_images?: number;
+    streamed?: boolean;
     aspect_ratio: string;
     source_image_mime_type: string;
     structural_image_mime_type?: string | null;
@@ -77,6 +85,8 @@ export type SnapshotImageRenderResult = {
     layout_reference_used: boolean;
     layout_reference_image_mime_type?: string | null;
     annotated_reference_used?: boolean;
+    edit_region_guide_used?: boolean;
+    camera_transfer_reference_used?: boolean;
     annotated_reference_image_mime_type?: string | null;
     scene_reference_mode?: SnapshotImageSceneReferenceMode;
     scene_reference_used?: boolean;
@@ -104,6 +114,8 @@ export type SnapshotImageRenderResult = {
     aspect_ratio: string;
     raw_response: Record<string, unknown>;
     retry_count?: number;
+    usage?: Record<string, unknown>;
+    partial_image_count?: number;
   };
   models: {
     image_model_name: string;
@@ -116,6 +128,9 @@ export type SnapshotImageRenderResult = {
     render_mode?: 'generate' | 'edit' | 'camera_rerender';
     preset_selection?: SnapshotImagePresetSelection;
     edit_operations?: SnapshotImageEditOperationSummary[];
+    render_state?: Record<string, unknown>;
+    edit_region_guide_used?: boolean;
+    camera_transfer_reference_used?: boolean;
     layout_lock_mode?: string;
     object_memory_used?: Array<Record<string, unknown>>;
     locked_items?: Array<Record<string, unknown>>;
@@ -133,6 +148,45 @@ export type SnapshotImageRenderResult = {
 export type SnapshotImageRenderApiResponse = {
   render: SnapshotImageRenderResult;
   saved_render?: GeneratedRenderRecord | null;
+};
+
+export type SnapshotImagePartialImageEvent = {
+  partial_image_index: number;
+  image_data_url: string;
+  size: SnapshotImageSize | string;
+  quality: SnapshotImageQuality | string;
+  attempt: string;
+};
+
+export type SnapshotImageStreamHandlers = {
+  onStatus?: (event: { message: string; attempt: string | null }) => void;
+  onPartialImage?: (event: SnapshotImagePartialImageEvent) => void;
+  onCompleted?: (event: SnapshotImageRenderApiResponse) => void;
+  onError?: (event: { message: string }) => void;
+};
+
+type SnapshotImageRenderClientRequest = {
+  snapshotPayload: Record<string, unknown>;
+  snapshotImageDataUrl: string;
+  depthMapImageDataUrl?: string | null;
+  edgeMapImageDataUrl?: string | null;
+  segmentationMapImageDataUrl?: string | null;
+  layoutReferenceImageDataUrl?: string | null;
+  annotatedReferenceImageDataUrl?: string | null;
+  sceneReferenceImageDataUrl?: string | null;
+  sceneReferenceMode?: SnapshotImageSceneReferenceMode;
+  userPrompt: string;
+  renderMode?: 'generate' | 'edit' | 'camera_rerender';
+  presetSelection?: SnapshotImagePresetSelection;
+  rootLayoutId?: string | null;
+  caseId?: string | null;
+  optionId?: string | null;
+  editOperations?: SnapshotImageEditOperation[];
+  lockedGeometryReferences?: SnapshotImageLockedGeometryReference[];
+  lockedGeometryAtlases?: SnapshotImageLockedGeometryAtlas[];
+  editSourceImageDataUrl?: string | null;
+  imageQuality?: SnapshotImageQuality | null;
+  imageSize?: SnapshotImageSize | null;
 };
 
 export type GeneratedRenderDetailResponse = {
@@ -161,7 +215,7 @@ export type SnapshotImagePresetSelection = {
 export type SnapshotImageEditOperation = {
   object_id: string;
   object_name?: string | null;
-  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | null;
+  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | 'remove' | null;
   prompt?: string | null;
   bbox_norm?: {
     x: number;
@@ -201,7 +255,7 @@ export type SnapshotImageLockedGeometryAtlas = {
 export type SnapshotImageEditOperationSummary = {
   object_id: string;
   object_name?: string | null;
-  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | null;
+  operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | 'remove' | null;
   prompt?: string | null;
   bbox_provided?: boolean;
   replacement_image_provided?: boolean;
@@ -273,7 +327,7 @@ async function requestJson<T>(
   let res: Response;
   try {
     res = await fetch(
-      `${API_BASE}${path}`,
+      resolveApiUrl(path),
       withAuthHeaders(init, options.token, options.includeJsonContentType)
     );
   } catch (error) {
@@ -296,16 +350,15 @@ export function appendAccessToken(url: string, token?: string | null): string {
   }
 
   const resolvedToken = resolveAuthToken(token);
+  const normalizedPath = normalizePath(rawUrl);
   const isAbsoluteUrl = /^https?:\/\//i.test(rawUrl);
-  const isApiRelativeUrl = /^\/(inventory|object-3d|account|pipeline|auth)(\/|$)/.test(rawUrl);
-  const base = isAbsoluteUrl
-    ? undefined
+  const isApiRelativeUrl = API_RELATIVE_URL_PATTERN.test(normalizedPath);
+  const resolvedUrl = isAbsoluteUrl
+    ? rawUrl
     : isApiRelativeUrl
-      ? API_BASE
-      : typeof window !== 'undefined'
-        ? window.location.origin
-        : API_BASE;
-  const absolute = isAbsoluteUrl ? new URL(rawUrl) : new URL(rawUrl, base);
+      ? resolveApiUrl(normalizedPath)
+      : rawUrl;
+  const absolute = new URL(resolvedUrl, browserOrigin());
 
   if (resolvedToken) {
     absolute.searchParams.set('access_token', resolvedToken);
@@ -328,7 +381,11 @@ function resolveReferenceImageUrl(referenceImage: string | null | undefined): st
   if (/^(?:https?:|data:|blob:)/i.test(rawUrl)) {
     return rawUrl;
   }
-  return new URL(rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`, API_BASE).toString();
+  const normalizedPath = normalizePath(rawUrl);
+  if (API_RELATIVE_URL_PATTERN.test(normalizedPath)) {
+    return resolveApiUrl(normalizedPath);
+  }
+  return new URL(normalizedPath, browserOrigin()).toString();
 }
 
 function normalizePresetReferenceImages(
@@ -539,108 +596,6 @@ export async function fetchInventory(
   });
 }
 
-export async function createObject3DFromPrompt(
-  payload: {
-    name: string;
-    category: string;
-    width_mm: number;
-    depth_mm: number;
-    height_mm: number;
-    prompt: string;
-    negative_prompt?: string | null;
-    keep_debug_artifacts?: boolean;
-    triposr_device?: string;
-    triposr_chunk_size?: number | null;
-    triposr_mc_resolution?: number;
-    triposr_mc_threshold?: number;
-  },
-  token?: string | null
-): Promise<Object3DCreateResponse> {
-  return requestJson<Object3DCreateResponse>(
-    '/object-3d/jobs/from-prompt',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    {
-      token,
-      includeJsonContentType: true,
-      fallbackError: 'Failed to start 3D generation from prompt',
-    }
-  );
-}
-
-export async function createObject3DFromImage(
-  payload: {
-    file: File;
-    name: string;
-    category: string;
-    width_mm: number;
-    depth_mm: number;
-    height_mm: number;
-    keep_debug_artifacts?: boolean;
-    triposr_device?: string;
-    triposr_chunk_size?: number | null;
-    triposr_mc_resolution?: number;
-    triposr_mc_threshold?: number;
-  },
-  token?: string | null
-): Promise<Object3DCreateResponse> {
-  const formData = new FormData();
-  formData.set('image', payload.file);
-  formData.set('name', payload.name);
-  formData.set('category', payload.category);
-  formData.set('width_mm', String(payload.width_mm));
-  formData.set('depth_mm', String(payload.depth_mm));
-  formData.set('height_mm', String(payload.height_mm));
-  if (payload.keep_debug_artifacts !== undefined) {
-    formData.set('keep_debug_artifacts', String(payload.keep_debug_artifacts));
-  }
-  if (payload.triposr_device) {
-    formData.set('triposr_device', payload.triposr_device);
-  }
-  if (payload.triposr_chunk_size !== undefined && payload.triposr_chunk_size !== null) {
-    formData.set('triposr_chunk_size', String(payload.triposr_chunk_size));
-  }
-  if (payload.triposr_mc_resolution !== undefined) {
-    formData.set('triposr_mc_resolution', String(payload.triposr_mc_resolution));
-  }
-  if (payload.triposr_mc_threshold !== undefined) {
-    formData.set('triposr_mc_threshold', String(payload.triposr_mc_threshold));
-  }
-  return requestJson<Object3DCreateResponse>(
-    '/object-3d/jobs/from-image',
-    {
-      method: 'POST',
-      body: formData,
-    },
-    {
-      token,
-      fallbackError: 'Failed to start 3D generation from image',
-    }
-  );
-}
-
-export async function getObject3DJobStatus(
-  jobId: string,
-  token?: string | null
-): Promise<Object3DStatusResponse> {
-  const status = await requestJson<Object3DStatusResponse>(
-    `/object-3d/jobs/${jobId}`,
-    {},
-    { token, fallbackError: 'Failed to fetch 3D job status' }
-  );
-  return {
-    ...status,
-    artifact_urls: Object.fromEntries(
-      Object.entries(status.artifact_urls ?? {}).map(([key, value]) => [
-        key,
-        appendAccessToken(value, token),
-      ])
-    ),
-  };
-}
-
 export async function runPipeline(
   payload: {
     user_id: string;
@@ -701,75 +656,15 @@ export async function getPipelineArtifact(caseId: string, name: string, token?: 
   );
 }
 
-export async function getClusterList(caseId: string, token?: string | null): Promise<{ case_id: string; clusters: string[] }> {
-  return requestJson(
-    `/pipeline/${caseId}/clusters`,
-    {},
-    { token, fallbackError: 'Failed to fetch clusters' }
-  );
-}
-
-export async function getClusterComposer(caseId: string, clusterId: string, token?: string | null): Promise<any> {
-  return requestJson(
-    `/pipeline/${caseId}/clusters/${clusterId}`,
-    {},
-    { token, fallbackError: 'Failed to fetch cluster composer' }
-  );
-}
-
 export async function renderSnapshotImage(
-  request: {
-    snapshotPayload: Record<string, unknown>;
-    snapshotImageDataUrl: string;
-    depthMapImageDataUrl?: string | null;
-    edgeMapImageDataUrl?: string | null;
-    segmentationMapImageDataUrl?: string | null;
-    layoutReferenceImageDataUrl?: string | null;
-    annotatedReferenceImageDataUrl?: string | null;
-    sceneReferenceImageDataUrl?: string | null;
-    sceneReferenceMode?: SnapshotImageSceneReferenceMode;
-    userPrompt: string;
-    renderMode?: 'generate' | 'edit' | 'camera_rerender';
-    presetSelection?: SnapshotImagePresetSelection;
-    rootLayoutId?: string | null;
-    caseId?: string | null;
-    optionId?: string | null;
-    editOperations?: SnapshotImageEditOperation[];
-    lockedGeometryReferences?: SnapshotImageLockedGeometryReference[];
-    lockedGeometryAtlases?: SnapshotImageLockedGeometryAtlas[];
-    editSourceImageDataUrl?: string | null;
-  },
+  request: SnapshotImageRenderClientRequest,
   token?: string | null
 ): Promise<SnapshotImageRenderApiResponse> {
   return requestJson<SnapshotImageRenderApiResponse>(
     '/pipeline/render-snapshot-image',
     {
       method: 'POST',
-      body: JSON.stringify({
-        snapshot_payload: request.snapshotPayload,
-        snapshot_image_data_url: request.snapshotImageDataUrl,
-        depth_map_image_data_url: request.depthMapImageDataUrl ?? null,
-        edge_map_image_data_url: request.edgeMapImageDataUrl ?? null,
-        segmentation_map_image_data_url:
-          request.segmentationMapImageDataUrl ?? null,
-        layout_reference_image_data_url:
-          request.layoutReferenceImageDataUrl ?? null,
-        annotated_reference_image_data_url:
-          request.annotatedReferenceImageDataUrl ?? null,
-        scene_reference_image_data_url:
-          request.sceneReferenceImageDataUrl ?? null,
-        scene_reference_mode: request.sceneReferenceMode ?? 'none',
-        user_prompt: request.userPrompt,
-        render_mode: request.renderMode ?? 'generate',
-        preset_selection: request.presetSelection ?? {},
-        root_layout_id: request.rootLayoutId ?? null,
-        case_id: request.caseId ?? null,
-        option_id: request.optionId ?? null,
-        edit_operations: request.editOperations ?? [],
-        locked_geometry_references: request.lockedGeometryReferences ?? [],
-        locked_geometry_atlases: request.lockedGeometryAtlases ?? [],
-        edit_source_image_data_url: request.editSourceImageDataUrl ?? null,
-      }),
+      body: JSON.stringify(buildSnapshotImageRenderBody(request)),
     },
     {
       token,
@@ -785,6 +680,161 @@ export async function renderSnapshotImage(
         }
       : response.saved_render,
   }));
+}
+
+export async function renderSnapshotImageStream(
+  request: SnapshotImageRenderClientRequest,
+  handlers: SnapshotImageStreamHandlers = {},
+  token?: string | null
+): Promise<SnapshotImageRenderApiResponse> {
+  let res: Response;
+  try {
+    res = await fetch(
+      resolveApiUrl('/pipeline/render-snapshot-image/stream'),
+      withAuthHeaders(
+        {
+          method: 'POST',
+          body: JSON.stringify(buildSnapshotImageRenderBody(request)),
+        },
+        token,
+        true
+      )
+    );
+  } catch (error) {
+    const detail =
+      error instanceof Error && error.message.trim()
+        ? error.message.trim()
+        : 'Network request failed';
+    throw new Error(
+      `Failed to stream snapshot image. Cannot reach API at ${API_BASE}. ${detail}`
+    );
+  }
+  if (!res.ok) {
+    throw await parseError(res, 'Failed to stream snapshot image');
+  }
+  if (!res.body) {
+    throw new Error('Snapshot image stream response did not include a body.');
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let completed: SnapshotImageRenderApiResponse | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const blocks = buffer.replace(/\r\n/g, '\n').split('\n\n');
+    buffer = blocks.pop() ?? '';
+    for (const block of blocks) {
+      const event = parseSnapshotImageSseBlock(block);
+      if (!event) {
+        continue;
+      }
+      if (event.eventName === 'status') {
+        handlers.onStatus?.(
+          event.data as { message: string; attempt: string | null }
+        );
+      } else if (event.eventName === 'partial_image') {
+        handlers.onPartialImage?.(event.data as SnapshotImagePartialImageEvent);
+      } else if (event.eventName === 'completed') {
+        completed = appendSnapshotRenderAccessToken(
+          event.data as SnapshotImageRenderApiResponse,
+          token
+        );
+        handlers.onCompleted?.(completed);
+      } else if (event.eventName === 'error') {
+        const errorEvent = event.data as { message?: string };
+        const message = errorEvent.message?.trim() || 'Snapshot image stream failed.';
+        handlers.onError?.({ message });
+        throw new Error(message);
+      }
+    }
+    if (done) {
+      break;
+    }
+  }
+
+  const trailingEvent = parseSnapshotImageSseBlock(buffer);
+  if (trailingEvent?.eventName === 'completed') {
+    completed = appendSnapshotRenderAccessToken(
+      trailingEvent.data as SnapshotImageRenderApiResponse,
+      token
+    );
+    handlers.onCompleted?.(completed);
+  }
+  if (!completed) {
+    throw new Error('Snapshot image stream ended before completion.');
+  }
+  return completed;
+}
+
+function buildSnapshotImageRenderBody(
+  request: SnapshotImageRenderClientRequest
+): Record<string, unknown> {
+  return {
+    snapshot_payload: request.snapshotPayload,
+    snapshot_image_data_url: request.snapshotImageDataUrl,
+    depth_map_image_data_url: request.depthMapImageDataUrl ?? null,
+    edge_map_image_data_url: request.edgeMapImageDataUrl ?? null,
+    segmentation_map_image_data_url: request.segmentationMapImageDataUrl ?? null,
+    layout_reference_image_data_url: request.layoutReferenceImageDataUrl ?? null,
+    annotated_reference_image_data_url:
+      request.annotatedReferenceImageDataUrl ?? null,
+    scene_reference_image_data_url: request.sceneReferenceImageDataUrl ?? null,
+    scene_reference_mode: request.sceneReferenceMode ?? 'none',
+    user_prompt: request.userPrompt,
+    render_mode: request.renderMode ?? 'generate',
+    preset_selection: request.presetSelection ?? {},
+    root_layout_id: request.rootLayoutId ?? null,
+    case_id: request.caseId ?? null,
+    option_id: request.optionId ?? null,
+    edit_operations: request.editOperations ?? [],
+    locked_geometry_references: request.lockedGeometryReferences ?? [],
+    locked_geometry_atlases: request.lockedGeometryAtlases ?? [],
+    edit_source_image_data_url: request.editSourceImageDataUrl ?? null,
+    image_quality: request.imageQuality ?? null,
+    image_size: request.imageSize ?? null,
+  };
+}
+
+function appendSnapshotRenderAccessToken(
+  response: SnapshotImageRenderApiResponse,
+  token?: string | null
+): SnapshotImageRenderApiResponse {
+  return {
+    ...response,
+    saved_render: response.saved_render
+      ? {
+          ...response.saved_render,
+          file_url: appendAccessToken(response.saved_render.file_url, token),
+        }
+      : response.saved_render,
+  };
+}
+
+function parseSnapshotImageSseBlock(
+  block: string
+): { eventName: string; data: unknown } | null {
+  const lines = block.split('\n');
+  let eventName = 'message';
+  const dataLines: string[] = [];
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line.startsWith('event:')) {
+      eventName = line.slice('event:'.length).trim();
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trim());
+    }
+  }
+  const rawData = dataLines.join('\n').trim();
+  if (!rawData || rawData === '[DONE]') {
+    return null;
+  }
+  return {
+    eventName,
+    data: JSON.parse(rawData) as unknown,
+  };
 }
 
 export async function fetchRenderPresets(
@@ -918,17 +968,6 @@ export async function updateSavedLayout(
   );
 }
 
-export async function getSavedLayout(
-  layoutId: string,
-  token?: string | null
-): Promise<SavedLayoutRecord> {
-  return requestJson<SavedLayoutRecord>(
-    `/account/layouts/${layoutId}`,
-    {},
-    { token, fallbackError: 'Failed to load saved layout' }
-  );
-}
-
 export async function listGeneratedRenders(
   token?: string | null
 ): Promise<GeneratedRenderRecord[]> {
@@ -941,21 +980,4 @@ export async function listGeneratedRenders(
     ...render,
     file_url: appendAccessToken(render.file_url, token),
   }));
-}
-
-export async function saveUiSnapshot(_payload: {
-  tenant_id: string;
-  iteration: number | null;
-  attempt: number | null;
-  image_base64: string;
-}): Promise<void> {
-  // Snapshot endpoint removed in new backend; no-op to avoid fetch errors.
-}
-
-export async function checkDesign(_payload: {
-  floorplan_geometry: FloorplanGeometry;
-  placements: DesignPlanV1['placements'];
-  constraints?: Record<string, unknown>;
-}): Promise<Violation[]> {
-  return [];
 }

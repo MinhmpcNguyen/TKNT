@@ -185,6 +185,64 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             "post_solver_accessory",
         )
 
+    def test_requested_bookshelf_is_required_support_not_protected_anchor(self) -> None:
+        cluster_forge = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "members": ["wardrobe", "bookshelf"],
+                    "anchors": ["wardrobe"],
+                    "cluster_rules": {
+                        "semantic_placements": [
+                            {
+                                "id": "bookshelf",
+                                "relative_to": "wardrobe",
+                                "kind": "anchor_side",
+                                "support_role": "wall_support",
+                                "band_intent": "wall_band",
+                            }
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "wardrobe",
+                            "placement_order": ["wardrobe", "bookshelf"],
+                            "protected_ids": ["wardrobe", "bookshelf"],
+                            "droppable_ids": ["bookshelf"],
+                        },
+                    },
+                },
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "wardrobe",
+                    cluster_id="storage_core",
+                    role="dominant_anchor",
+                    protected=True,
+                ),
+                _decision(
+                    "bookshelf",
+                    cluster_id="storage_core",
+                    min_keep=0,
+                    request_contract_intent="target_if_viable",
+                    solver_participation="soft_solver_object",
+                    placement_participation="floor_blocking",
+                ),
+            ],
+        }
+
+        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        object_program = merged["clusters"][0]["object_program"]
+
+        self.assertIn("bookshelf", object_program["required_object_ids"])
+        self.assertEqual(object_program["required_support_ids"], ["bookshelf"])
+        self.assertEqual(object_program["relaxable_required_ids"], ["bookshelf"])
+        self.assertEqual(object_program["protected_ids"], ["wardrobe"])
+        self.assertNotIn("bookshelf", object_program["droppable_ids"])
+        self.assertTrue(
+            object_program["object_specs_by_id"]["bookshelf"]["required_support"]
+        )
+
     def test_merge_uses_min_keep_not_preserve_level_for_required_copies(self) -> None:
         cluster_forge = {
             "clusters": [

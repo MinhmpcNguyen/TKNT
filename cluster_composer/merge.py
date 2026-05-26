@@ -16,6 +16,22 @@ _HARD_REQUEST_CONTRACT_INTENTS = frozenset(
         "required_support",
         "hard_required",
         "fixed",
+        "must_keep",
+        "must_try",
+    }
+)
+_REQUESTED_SUPPORT_CONTRACT_INTENTS = _HARD_REQUEST_CONTRACT_INTENTS | frozenset(
+    {"target_if_viable", "preferred_if_fit"}
+)
+_RELAXABLE_REQUIRED_SUPPORT_TYPES = frozenset(
+    {
+        "bookcase",
+        "bookshelf",
+        "display_shelf",
+        "floor_lamp",
+        "media_shelf",
+        "side_table",
+        "storage_shelf",
     }
 )
 
@@ -427,6 +443,7 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
     required_ids: list[str] = []
     optional_ids: list[str] = []
     decision_droppable_ids: list[str] = []
+    required_support_ids: list[str] = []
 
     for decision in decisions:
         if not isinstance(decision, dict):
@@ -458,11 +475,17 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
         for quantity_index in range(1, quantity + 1):
             object_id = _expanded_object_id(base_object_id, quantity_index)
             anchor_like = role in {"dominant_anchor", "anchor"} or priority == "anchor"
+            required_support = _decision_is_relaxable_required_support(
+                decision, base_object_id=base_object_id
+            )
             required = quantity_index <= min_keep or (
                 anchor_like
                 and not bool(decision.get("droppable"))
                 and quantity_index == 1
             )
+            if required_support:
+                required = True
+            protected = required and not required_support
             droppable = not required
             expanded_ids_by_base.setdefault(base_object_id, []).append(object_id)
             facing_row = facing.get(object_id) or facing.get(base_object_id) or {}
@@ -484,8 +507,10 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
                     "H": height_mm,
                 },
                 "source_id": str(rep_dims.get("source_id") or ""),
-                "protected": required,
+                "protected": protected,
                 "droppable": droppable,
+                "required_support": required_support,
+                "relaxable_required": required_support,
                 "budget_trial": bool(decision.get("budget_trial")),
                 "solver_trial": bool(decision.get("solver_trial")),
                 "trial_optional": bool(decision.get("trial_optional")),
@@ -507,6 +532,8 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
             }
             if required:
                 required_ids.append(object_id)
+                if required_support:
+                    required_support_ids.append(object_id)
             else:
                 optional_ids.append(object_id)
             if droppable:
@@ -590,6 +617,7 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
             for item in [*expanded_policy_protected_ids, *required_ids]
             if item in member_set
             and bool(object_specs_by_id.get(item, {"protected": True}).get("protected"))
+            and not bool(object_specs_by_id.get(item, {}).get("required_support"))
         ]
     )
     final_protected_id_set = set(final_protected_ids)
@@ -621,6 +649,8 @@ def _build_object_program_for_cluster(cluster: dict[str, Any]) -> dict[str, Any]
         "support_edges": support_edges,
         "protected_ids": final_protected_ids,
         "droppable_ids": final_droppable_ids,
+        "required_support_ids": _stable_unique(required_support_ids),
+        "relaxable_required_ids": _stable_unique(required_support_ids),
         "degradation_ladder": _expand_degradation_ladder(
             _string_list(rules.get("degradation_ladder")),
             expanded_ids_by_base,
@@ -682,6 +712,24 @@ def _decision_solver_participation(decision: dict[str, Any]) -> str:
         intent=str(decision.get("request_contract_intent") or "must_keep"),
         evidence=str(decision.get("request_contract_evidence") or ""),
     )
+
+
+def _decision_is_relaxable_required_support(
+    decision: dict[str, Any],
+    *,
+    base_object_id: str,
+) -> bool:
+    object_type = base_object_id.strip().lower()
+    if object_type not in _RELAXABLE_REQUIRED_SUPPORT_TYPES:
+        return False
+    intent = str(decision.get("request_contract_intent") or "").strip().lower()
+    if intent not in _REQUESTED_SUPPORT_CONTRACT_INTENTS:
+        return False
+    if _decision_solver_participation(decision) == "post_solver_accessory":
+        return False
+    role = str(decision.get("role") or "").strip().lower()
+    priority = str(decision.get("priority") or "").strip().lower()
+    return role not in {"dominant_anchor", "anchor"} and priority != "anchor"
 
 
 def _post_solver_accessory_row(decision: dict[str, Any]) -> dict[str, Any]:

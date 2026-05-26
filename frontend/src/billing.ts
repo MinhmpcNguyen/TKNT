@@ -5,29 +5,83 @@ export type BillingChargeKind = 'generate' | 'edit';
 export type BillingSettings = {
   mode: BillingMode;
   monthlyPriceVnd: number;
-  monthlyImageQuota: number;
-  monthlyImagesUsed: number;
+  monthlyCreditQuota: number;
+  monthlyCreditsUsed: number;
   monthlyPeriodStartedAt: string;
-  perUsePriceVnd: number;
-  totalMonthlyUses: number;
-  totalPaidUses: number;
+  perCreditPriceVnd: number;
+  totalMonthlyCredits: number;
+  totalPaidCredits: number;
 };
+
+export type SnapshotImageQuality = 'low' | 'medium' | 'high';
+export type SnapshotImageSize = '1024x1024' | '1024x1536' | '1536x1024';
+
+export const DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES = 2;
 
 const BILLING_STORAGE_KEY = 'tknt.billingSettings.v1';
 const DEFAULT_MONTHLY_PRICE_VND = 299000;
-const DEFAULT_MONTHLY_IMAGE_QUOTA = 100;
-const DEFAULT_PER_USE_PRICE_VND = 5000;
+const DEFAULT_MONTHLY_CREDIT_QUOTA = 100;
+const DEFAULT_PER_CREDIT_PRICE_VND = 5000;
+const GPT_IMAGE_2_OUTPUT_COST_USD: Record<
+  SnapshotImageSize,
+  Record<SnapshotImageQuality, number>
+> = {
+  '1024x1024': {
+    high: 0.211,
+    low: 0.006,
+    medium: 0.053,
+  },
+  '1024x1536': {
+    high: 0.165,
+    low: 0.005,
+    medium: 0.041,
+  },
+  '1536x1024': {
+    high: 0.165,
+    low: 0.005,
+    medium: 0.041,
+  },
+};
+const PARTIAL_IMAGE_OUTPUT_TOKENS = 100;
+const GPT_IMAGE_2_OUTPUT_TOKEN_PRICE_PER_MILLION_USD = 30;
+
+export function estimateImageRenderCredits({
+  quality,
+  size,
+  partialImages = DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES,
+}: {
+  quality: SnapshotImageQuality;
+  size: SnapshotImageSize;
+  partialImages?: number;
+}): number {
+  const outputCost = GPT_IMAGE_2_OUTPUT_COST_USD[size][quality];
+  const partialOverhead = estimatePartialImageOverheadUsd(partialImages);
+  const baselineUsd =
+    GPT_IMAGE_2_OUTPUT_COST_USD['1536x1024'].medium +
+    estimatePartialImageOverheadUsd(DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES);
+  return Math.max(1, Math.ceil((outputCost + partialOverhead) / baselineUsd));
+}
+
+function estimatePartialImageOverheadUsd(partialImages: number): number {
+  const normalizedPartialImages = Math.max(0, Math.min(3, Math.round(partialImages)));
+  return (
+    (normalizedPartialImages *
+      PARTIAL_IMAGE_OUTPUT_TOKENS *
+      GPT_IMAGE_2_OUTPUT_TOKEN_PRICE_PER_MILLION_USD) /
+    1_000_000
+  );
+}
 
 export function createDefaultBillingSettings(now = new Date()): BillingSettings {
   return {
     mode: 'per_use',
     monthlyPriceVnd: DEFAULT_MONTHLY_PRICE_VND,
-    monthlyImageQuota: DEFAULT_MONTHLY_IMAGE_QUOTA,
-    monthlyImagesUsed: 0,
+    monthlyCreditQuota: DEFAULT_MONTHLY_CREDIT_QUOTA,
+    monthlyCreditsUsed: 0,
     monthlyPeriodStartedAt: now.toISOString(),
-    perUsePriceVnd: DEFAULT_PER_USE_PRICE_VND,
-    totalMonthlyUses: 0,
-    totalPaidUses: 0,
+    perCreditPriceVnd: DEFAULT_PER_CREDIT_PRICE_VND,
+    totalMonthlyCredits: 0,
+    totalPaidCredits: 0,
   };
 }
 
@@ -43,15 +97,15 @@ export function ensureCurrentBillingPeriod(
   ) {
     return {
       ...settings,
-      monthlyImagesUsed: 0,
+      monthlyCreditsUsed: 0,
       monthlyPeriodStartedAt: now.toISOString(),
     };
   }
   return settings;
 }
 
-export function getMonthlyImagesRemaining(settings: BillingSettings): number {
-  return Math.max(0, settings.monthlyImageQuota - settings.monthlyImagesUsed);
+export function getMonthlyCreditsRemaining(settings: BillingSettings): number {
+  return Math.max(0, settings.monthlyCreditQuota - settings.monthlyCreditsUsed);
 }
 
 export function formatVnd(amount: number): string {
@@ -104,29 +158,29 @@ function sanitizeBillingSettings(value: unknown): BillingSettings {
       value.monthlyPriceVnd,
       defaults.monthlyPriceVnd
     ),
-    monthlyImageQuota: readPositiveInteger(
-      value.monthlyImageQuota,
-      defaults.monthlyImageQuota
+    monthlyCreditQuota: readPositiveInteger(
+      value.monthlyCreditQuota ?? value.monthlyImageQuota,
+      defaults.monthlyCreditQuota
     ),
-    monthlyImagesUsed: readNonNegativeInteger(
-      value.monthlyImagesUsed,
-      defaults.monthlyImagesUsed
+    monthlyCreditsUsed: readNonNegativeInteger(
+      value.monthlyCreditsUsed ?? value.monthlyImagesUsed,
+      defaults.monthlyCreditsUsed
     ),
     monthlyPeriodStartedAt:
       typeof value.monthlyPeriodStartedAt === 'string'
         ? value.monthlyPeriodStartedAt
         : defaults.monthlyPeriodStartedAt,
-    perUsePriceVnd: readPositiveInteger(
-      value.perUsePriceVnd,
-      defaults.perUsePriceVnd
+    perCreditPriceVnd: readPositiveInteger(
+      value.perCreditPriceVnd ?? value.perUsePriceVnd,
+      defaults.perCreditPriceVnd
     ),
-    totalMonthlyUses: readNonNegativeInteger(
-      value.totalMonthlyUses,
-      defaults.totalMonthlyUses
+    totalMonthlyCredits: readNonNegativeInteger(
+      value.totalMonthlyCredits ?? value.totalMonthlyUses,
+      defaults.totalMonthlyCredits
     ),
-    totalPaidUses: readNonNegativeInteger(
-      value.totalPaidUses,
-      defaults.totalPaidUses
+    totalPaidCredits: readNonNegativeInteger(
+      value.totalPaidCredits ?? value.totalPaidUses,
+      defaults.totalPaidCredits
     ),
   };
 }

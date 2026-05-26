@@ -37,6 +37,7 @@ from agent.solver.solver import (  # noqa: E402
     _near_wall_inward_front_options,
     _normalized_support_side_options,
     _object_level_face_pair_issues,
+    _object_level_interaction_quality,
     _object_level_orientation_issues,
     _object_level_required_face_pairs,
     _object_rect_is_usable,
@@ -44,6 +45,8 @@ from agent.solver.solver import (  # noqa: E402
     _repair_object_level_solution_geometry,
     _rect_inside_polygon,
     _rect_inside_room_footprint,
+    _rect_overlap_ratio,
+    _required_support_standalone_slot_candidates,
     _search_anchor_solutions,
     _support_slot_relaxation_penalty,
     _support_slot_candidates,
@@ -235,6 +238,110 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertTrue(world["room_polygon_is_axis_aligned_rectangle"])
         self.assertTrue(_rect_inside_room_footprint((100, 100, 1200, 1000), world))
         self.assertFalse(_rect_inside_room_footprint((-50, 100, 1200, 1000), world))
+
+    def test_interaction_quality_prefers_axial_view_target_over_bare_diagonal(
+        self,
+    ) -> None:
+        relation_plan = {
+            "object_viewing_pairs": [
+                {
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "target_object_type": "tv_console",
+                    "relation": "view_target",
+                    "required": True,
+                }
+            ]
+        }
+        axial = _object_level_interaction_quality(
+            placed_objects=[
+                {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "rect": (0, 0, 2000, 1600),
+                    "front_world": {"dx": 1, "dy": 0},
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "object_id": "tv_console",
+                    "rect": (3200, 500, 4200, 900),
+                    "front_world": {"dx": -1, "dy": 0},
+                },
+            ],
+            relation_plan=relation_plan,
+        )
+        diagonal = _object_level_interaction_quality(
+            placed_objects=[
+                {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "rect": (0, 0, 2000, 1600),
+                    "front_world": {"dx": 1, "dy": 0},
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "object_id": "tv_console",
+                    "rect": (3200, 2100, 4200, 2500),
+                    "front_world": {"dx": -1, "dy": 0},
+                },
+            ],
+            relation_plan=relation_plan,
+        )
+
+        self.assertGreater(axial["score"], diagonal["score"])
+        self.assertGreater(
+            axial["view_targets"][0]["axis_alignment"],
+            diagonal["view_targets"][0]["axis_alignment"],
+        )
+
+    def test_interaction_quality_penalizes_chair_not_facing_desk(self) -> None:
+        good = _object_level_interaction_quality(
+            placed_objects=[
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "desk",
+                    "category": "desk",
+                    "rect": (1000, 1000, 2200, 1600),
+                    "front_world": {"dx": 0, "dy": 1},
+                },
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "chair",
+                    "category": "chair",
+                    "rect": (1300, 1800, 1800, 2300),
+                    "front_world": {"dx": 0, "dy": -1},
+                },
+            ],
+            relation_plan={},
+        )
+        bad = _object_level_interaction_quality(
+            placed_objects=[
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "desk",
+                    "category": "desk",
+                    "rect": (1000, 1000, 2200, 1600),
+                    "front_world": {"dx": 0, "dy": 1},
+                },
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "chair",
+                    "category": "chair",
+                    "rect": (1300, 1800, 1800, 2300),
+                    "front_world": {"dx": 1, "dy": 0},
+                },
+            ],
+            relation_plan={},
+        )
+
+        self.assertGreater(good["score"], bad["score"])
+        self.assertGreater(
+            good["workflow_pairs"][0]["chair_to_surface_dot"],
+            bad["workflow_pairs"][0]["chair_to_surface_dot"],
+        )
 
     def test_non_rectangular_room_footprint_keeps_polygon_check(self) -> None:
         l_room_model = {
@@ -441,6 +548,119 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
                     desired_fronts=expected_fronts,
                 )
             )
+
+    def test_entry_support_anchor_flanks_door_clearance_without_blocking(self) -> None:
+        room_model = {
+            "room": {
+                "room_id": "entry_support_room",
+                "room_type": "living_room",
+                "polygon_ccw": [
+                    {"x": 0, "y": 0},
+                    {"x": 4100, "y": 0},
+                    {"x": 4100, "y": 5050},
+                    {"x": 0, "y": 5050},
+                ],
+            },
+            "openings": {
+                "doors": [
+                    {
+                        "id": "door_1",
+                        "segment_mm": [{"x": 0, "y": 2761}, {"x": 0, "y": 1761}],
+                    }
+                ]
+            },
+            "affordance_map": {
+                "entry_landing_zones": [
+                    {
+                        "id": "door_1_entry_clearance",
+                        "polygon_ccw": [
+                            {"x": 0, "y": 2761},
+                            {"x": 0, "y": 1761},
+                            {"x": 900, "y": 1761},
+                            {"x": 900, "y": 2761},
+                        ],
+                    }
+                ],
+                "circulation_corridors": [
+                    {
+                        "id": "corridor_1",
+                        "from": "entry",
+                        "to": "room_center",
+                        "polyline_mm": [
+                            {"x": 22, "y": 2261},
+                            {"x": 2043, "y": 2525},
+                        ],
+                        "width_mm": 900,
+                    }
+                ],
+            },
+        }
+        cluster = _object_program_cluster(
+            cluster_id="pet_or_entry_support",
+            object_id="shoe_rack",
+            category="shoe_rack",
+            dims={"L": 810, "W": 250, "H": 780},
+        )
+        relation_plan = {
+            "macro_region_map": {
+                "regions": [
+                    {
+                        "region_id": "entry_adjacent_active_zone",
+                        "source_ids": ["door_1_entry_clearance"],
+                    }
+                ]
+            },
+            "anchor_layout_hints_by_cluster": {
+                "pet_or_entry_support": {
+                    "zone_assignment": "entry_adjacent_active_zone",
+                    "preferred_region_ids": ["entry_adjacent_active_zone"],
+                    "forbidden_region_ids": [
+                        "door_1_entry_clearance",
+                        "entry_to_center_corridor",
+                    ],
+                    "entry_relation": "buffer_entry_if_possible",
+                    "placement_behavior": {
+                        "wall_backing": "required",
+                        "front_space": "optional",
+                    },
+                }
+            },
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        candidates = _generate_anchor_pose_candidates(
+            cluster_program=world["clusters_by_id"]["pet_or_entry_support"],
+            room_model=room_model,
+            relation_plan=relation_plan,
+            world=world,
+            grid_mm=50,
+        )
+
+        self.assertTrue(candidates)
+        best = candidates[0]
+        self.assertEqual(best["anchor_kind"], "entry_side")
+        center_x = (best["rect"][0] + best["rect"][2]) / 2
+        center_y = (best["rect"][1] + best["rect"][3]) / 2
+        distance_sq = (center_x - 22) ** 2 + (center_y - 2261) ** 2
+        self.assertLessEqual(distance_sq, 1500**2)
+        self.assertEqual(
+            _rect_overlap_ratio(
+                best["rect"], world["region_index"]["door_1_entry_clearance"]
+            ),
+            0.0,
+        )
+        self.assertEqual(
+            _rect_overlap_ratio(
+                best["rect"], world["region_index"]["entry_to_center_corridor"]
+            ),
+            0.0,
+        )
 
     def test_near_wall_front_access_anchor_blocks_wall_facing_pose(self) -> None:
         cluster = _object_program_cluster(
@@ -1023,9 +1243,11 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
                 {
                     "viewer_cluster_id": "sleep_core",
                     "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
                     "target_cluster_id": "media_optional",
                     "target_object_id": "tv_console",
-                    "relation": "face_each_other",
+                    "target_object_type": "tv_console",
+                    "relation": "view_target",
                     "required": True,
                 }
             ]
@@ -1061,6 +1283,66 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["viewer_object_id"], "bed")
         self.assertEqual(issues[0]["target_object_id"], "tv_console")
+        self.assertEqual(issues[0]["reason"], "view_target_contract_failed")
+
+    def test_view_target_allows_bed_media_diagonal_alignment(self) -> None:
+        placed_objects = [
+            {
+                "cluster_id": "sleep_core",
+                "object_id": "bed",
+                "priority": "anchor",
+                "rect": (0, 0, 100, 100),
+                "front_world": {"dx": 0, "dy": 1},
+            },
+            {
+                "cluster_id": "media_optional",
+                "object_id": "tv_console",
+                "priority": "anchor",
+                "rect": (615, 789, 715, 889),
+                "front_world": {"dx": 0, "dy": -1},
+            },
+        ]
+        view_target_plan = {
+            "object_viewing_pairs": [
+                {
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "target_object_type": "tv_console",
+                    "relation": "view_target",
+                    "required": True,
+                }
+            ]
+        }
+        mutual_face_plan = {
+            "object_viewing_pairs": [
+                {
+                    "viewer_cluster_id": "sleep_core",
+                    "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
+                    "target_cluster_id": "media_optional",
+                    "target_object_id": "tv_console",
+                    "target_object_type": "tv_console",
+                    "relation": "face_each_other",
+                    "required": True,
+                }
+            ]
+        }
+
+        self.assertEqual(
+            _object_level_face_pair_issues(
+                placed_objects=placed_objects,
+                relation_plan=view_target_plan,
+            ),
+            [],
+        )
+        issues = _object_level_face_pair_issues(
+            placed_objects=placed_objects,
+            relation_plan=mutual_face_plan,
+        )
+        self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["reason"], "required_face_each_other_failed")
 
     def test_object_viewing_pair_score_prefers_tv_over_storage_decoy(self) -> None:
@@ -1069,9 +1351,11 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
                 {
                     "viewer_cluster_id": "sleep_core",
                     "viewer_object_id": "bed",
+                    "viewer_object_type": "bed",
                     "target_cluster_id": "media_optional",
                     "target_object_id": "tv_console",
-                    "relation": "face_each_other",
+                    "target_object_type": "tv_console",
+                    "relation": "view_target",
                     "required": True,
                 }
             ]
@@ -1190,7 +1474,7 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertEqual(issues, [])
         self.assertEqual(_object_level_required_face_pairs(relation_plan), set())
 
-    def test_mixed_media_pair_with_buffered_support_is_required(self) -> None:
+    def test_mixed_media_pair_with_buffered_support_is_not_face_required(self) -> None:
         relation_plan = {
             "layout_intent_profile": {
                 "focus_mode": "mixed",
@@ -1236,8 +1520,7 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             relation_plan=relation_plan,
         )
 
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0]["reason"], "required_face_each_other_failed")
+        self.assertEqual(issues, [])
 
     def test_cluster_face_target_fallback_does_not_crash(self) -> None:
         merged_clusters = {
@@ -2327,6 +2610,81 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             if isinstance(slot, dict)
         }
         self.assertGreater(len(unique_slots), 4)
+
+    def test_required_support_standalone_slots_prefer_inward_wall_orientation(
+        self,
+    ) -> None:
+        cluster_program = _object_program_cluster(
+            cluster_id="storage_core",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 900, "W": 600, "H": 2200},
+            support_edges=[
+                {
+                    "object_id": "bookshelf",
+                    "relative_to": "wardrobe",
+                    "side_options": ["left", "right"],
+                    "support_role": "wall_support",
+                    "band_intent": "wall_band",
+                }
+            ],
+        )
+        object_program = cluster_program["object_program"]
+        object_program["required_object_ids"] = ["wardrobe", "bookshelf"]
+        object_program["required_support_ids"] = ["bookshelf"]
+        object_program["relaxable_required_ids"] = ["bookshelf"]
+        object_program["protected_ids"] = ["wardrobe"]
+        object_program["object_specs_by_id"]["bookshelf"].update(
+            {
+                "role": "support",
+                "priority": "primary",
+                "rep_dims_mm": {"L": 630, "W": 250, "H": 2220},
+                "required_support": True,
+                "relaxable_required": True,
+            }
+        )
+        room_model = _room_model()
+        relation_plan = {
+            "anchor_region_preferences_by_cluster": {
+                "storage_core": {
+                    "zone_assignment": "top_wall_zone",
+                    "preferred_region_ids": ["top_wall_zone", "edge_loading_zone"],
+                }
+            }
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster_program]},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        slots = _required_support_standalone_slot_candidates(
+            cluster_program=cluster_program,
+            object_id="bookshelf",
+            relation_plan=relation_plan,
+            world=world,
+            room_model=room_model,
+            grid_mm=50,
+        )
+
+        self.assertTrue(slots)
+        self.assertGreater(float(slots[0]["orientation_score"]), 1000.0)
+        self.assertEqual(slots[0]["rect"][1], 0)
+
+    def test_required_support_is_not_droppable_from_degradation_ladder(self) -> None:
+        object_program = {
+            "members": ["wardrobe", "bookshelf"],
+            "required_object_ids": ["wardrobe", "bookshelf"],
+            "required_support_ids": ["bookshelf"],
+            "protected_ids": ["wardrobe"],
+            "droppable_ids": ["bookshelf"],
+            "degradation_ladder": ["drop_bookshelf"],
+            "support_edges": [{"object_id": "bookshelf"}],
+        }
+
+        self.assertNotIn("bookshelf", _droppable_object_ids(object_program))
 
 
 if __name__ == "__main__":

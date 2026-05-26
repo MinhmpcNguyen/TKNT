@@ -522,8 +522,8 @@ class Phase2ArchitectureTest(unittest.TestCase):
             llm_calls.append("call")
             if len(llm_calls) == 1:
                 raise RetryablePlacerModelError(
-                    failed_model="gemma-3-27b-it",
-                    next_model="gemini-2.5-flash",
+                    failed_model="gpt-5.4-mini",
+                    next_model="gpt-5.4-mini",
                     retry_delay_s=13.4,
                     detail="quota exceeded",
                 )

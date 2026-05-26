@@ -18,8 +18,9 @@ BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
 sys.path.append(str(ROOT_DIR))
 
-from db import PostgresAssetRepository
-from db.models import Asset, AssetFilter, AssetId, TenantId
+from db import PostgresAssetRepository  # noqa: E402
+from db.models import Asset, AssetFile, AssetFilter, AssetId, TenantId  # noqa: E402
+from db.postgres import create_connection  # noqa: E402
 
 JsonObject = dict[str, object]
 
@@ -35,6 +36,13 @@ MODEL_FRONT_AXIS_BY_OFFSET = {
     180: "+z",
     270: "-x",
 }
+DELETE_EMPTY_ASSET_SQL = """
+DELETE FROM assets
+WHERE id = %(asset_id)s
+  AND tenant_id = %(tenant_id)s
+  AND type = 'FURNITURE'
+RETURNING id
+"""
 
 
 @dataclass(frozen=True)
@@ -209,7 +217,9 @@ class InventoryGlbOrientationInspector:
         self._tenant_id = tenant_id
         self._models_public_dir = models_public_dir
         self._models_url_prefix = models_url_prefix
-        self._asset_ids = {asset_id.strip() for asset_id in asset_ids or [] if asset_id.strip()}
+        self._asset_ids = {
+            asset_id.strip() for asset_id in asset_ids or [] if asset_id.strip()
+        }
         self._style_keys = (
             {canonicalize_style_key(style) for style in style_keys if style.strip()}
             if style_keys
@@ -328,17 +338,28 @@ class InventoryGlbOrientationInspector:
                 attributes.pop("model_url", None)
 
         updated_asset = asset.model_copy(update={"attributes": attributes})
-        self._repo.upsert_asset(updated_asset)
+        delete_asset_if_empty = read_bool(payload.get("delete_asset_if_empty"))
+        asset_deleted = False
+        if delete_asset_if_empty and not self._asset_has_glb_references(updated_asset):
+            asset_deleted = self._delete_empty_asset(updated_asset)
+        else:
+            self._repo.upsert_asset(updated_asset)
 
         deleted_paths: list[str] = []
+        skipped_paths: list[str] = []
         if read_bool(payload.get("delete_file")):
             for path in sorted(removed_paths, key=str):
                 if not path.exists():
+                    skipped_paths.append(f"{path} (missing)")
                     continue
                 if path.suffix.lower() != ".glb" or not path_within(
                     path,
                     self._models_public_dir,
                 ):
+                    skipped_paths.append(f"{path} (outside model root or not a .glb)")
+                    continue
+                if self._path_is_referenced_in_db(path):
+                    skipped_paths.append(f"{path} (still referenced in DB)")
                     continue
                 path.unlink()
                 deleted_paths.append(str(path))
@@ -347,7 +368,9 @@ class InventoryGlbOrientationInspector:
             "ok": True,
             "asset_id": str(asset.id),
             "style_key": variant.style_key,
+            "asset_deleted": asset_deleted,
             "deleted_paths": deleted_paths,
+            "skipped_paths": skipped_paths,
         }
 
     def _load_assets(self) -> list[Asset]:
@@ -425,9 +448,15 @@ class InventoryGlbOrientationInspector:
             )
         ]
 
-    def _find_variant(self, *, asset_id: str, style_key: str) -> tuple[Asset, GlbVariantTarget]:
+    def _find_variant(
+        self, *, asset_id: str, style_key: str
+    ) -> tuple[Asset, GlbVariantTarget]:
         asset = self._repo.get_asset(AssetId(asset_id))
-        if asset is None or str(asset.tenant_id) != self._tenant_id or asset.type != "FURNITURE":
+        if (
+            asset is None
+            or str(asset.tenant_id) != self._tenant_id
+            or asset.type != "FURNITURE"
+        ):
             raise ValueError(
                 f'No furniture asset "{asset_id}" was found for tenant "{self._tenant_id}".'
             )
@@ -437,7 +466,9 @@ class InventoryGlbOrientationInspector:
             if canonicalize_style_key(variant.style_key) == normalized_style_key:
                 return asset, variant
 
-        available = ", ".join(variant.style_key for variant in self._iter_variant_targets(asset))
+        available = ", ".join(
+            variant.style_key for variant in self._iter_variant_targets(asset)
+        )
         raise ValueError(
             f'No GLB variant "{style_key}" was found for asset "{asset_id}". '
             f"Available variants: {available or 'none'}."
@@ -457,7 +488,9 @@ class InventoryGlbOrientationInspector:
             metadata.get("orientation_review") or metadata.get("orientationReview")
         )
         offset = preview_override_offset(metadata)
-        normalized_offset = normalize_cardinal_offset(offset) if offset is not None else 0
+        normalized_offset = (
+            normalize_cardinal_offset(offset) if offset is not None else 0
+        )
         rotation_x_deg = normalize_quarter_turn_tilt(
             preview_override_tilt_deg(metadata, "x") or 0.0
         )
@@ -504,9 +537,12 @@ class InventoryGlbOrientationInspector:
         notes: str | None,
     ) -> JsonObject:
         updated = dict(metadata)
-        override = read_json_object(
-            updated.get("preview_override") or updated.get("previewOverride")
-        ) or {}
+        override = (
+            read_json_object(
+                updated.get("preview_override") or updated.get("previewOverride")
+            )
+            or {}
+        )
         override["enabled"] = True
         override["contexts"] = contexts
         override["rotation_deg_offset"] = float(rotation_offset)
@@ -546,7 +582,9 @@ class InventoryGlbOrientationInspector:
         attributes["model_variants"] = variants_raw
 
         current_model = read_json_object(attributes.get("model_3d"))
-        if current_model is not None and current_model.get("url") == updated_metadata.get("url"):
+        if current_model is not None and current_model.get(
+            "url"
+        ) == updated_metadata.get("url"):
             attributes["model_3d"] = updated_metadata
             attributes["model_url"] = updated_metadata.get("url")
 
@@ -572,6 +610,72 @@ class InventoryGlbOrientationInspector:
                 paths.add(resolved.resolve())
 
         return paths
+
+    def _asset_has_glb_references(self, asset: Asset) -> bool:
+        if self._iter_variant_targets(asset):
+            return True
+        return any(
+            self._asset_file_references_glb(asset_file)
+            for asset_file in self._repo.list_asset_files(asset.id)
+        )
+
+    def _asset_file_references_glb(self, asset_file: AssetFile) -> bool:
+        storage_key = asset_file.storage_key.strip().lower()
+        mime = (asset_file.mime or "").strip().lower()
+        return (
+            ".glb" in storage_key
+            or mime == "model/gltf-binary"
+            or asset_file.file_kind == "MODEL"
+        )
+
+    def _asset_file_model_path(self, asset_file: AssetFile) -> Path | None:
+        if not self._asset_file_references_glb(asset_file):
+            return None
+
+        storage_key = asset_file.storage_key.strip()
+        if not storage_key:
+            return None
+
+        candidate = Path(storage_key).expanduser()
+        if not candidate.is_absolute():
+            candidate = ROOT_DIR / candidate
+        resolved = candidate.resolve()
+        return resolved if resolved.suffix.lower() == ".glb" else None
+
+    def _delete_empty_asset(self, asset: Asset) -> bool:
+        with create_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    DELETE_EMPTY_ASSET_SQL,
+                    {
+                        "asset_id": str(asset.id),
+                        "tenant_id": self._tenant_id,
+                    },
+                )
+                row = cur.fetchone()
+        return row is not None
+
+    def _path_is_referenced_in_db(self, path: Path) -> bool:
+        resolved_path = path.expanduser().resolve()
+        assets = self._repo.list_assets(
+            AssetFilter(tenant_id=TenantId(self._tenant_id), type="FURNITURE")
+        )
+        return any(
+            self._asset_references_path(asset=asset, path=resolved_path)
+            for asset in assets
+        )
+
+    def _asset_references_path(self, *, asset: Asset, path: Path) -> bool:
+        for variant in self._iter_variant_targets(asset):
+            if path in {
+                candidate.resolve()
+                for candidate in self._collect_model_paths(variant.metadata)
+            }:
+                return True
+        return any(
+            self._asset_file_model_path(asset_file) == path
+            for asset_file in self._repo.list_asset_files(asset.id)
+        )
 
 
 class OrientationInspectorRequestHandler(BaseHTTPRequestHandler):

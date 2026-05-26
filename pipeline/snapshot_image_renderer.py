@@ -6,7 +6,7 @@ import json
 import logging
 import math
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -17,12 +17,10 @@ from uuid import uuid4
 import httpx
 from PIL import Image, ImageChops, ImageFilter, UnidentifiedImageError
 
-from config import config_file, load_config, root_config
+from config import config_file, load_config
 from pipeline.image_flow_logging import (
     log_image_flow_event,
     redact_for_image_log,
-    summarize_gemini_payload,
-    summarize_gemini_response,
     summarize_image_data_url,
 )
 from pipeline.snapshot_prompt_compiler import (
@@ -32,30 +30,35 @@ from pipeline.snapshot_prompt_compiler import (
 
 logger = logging.getLogger(__name__)
 
-GEMINI_IMAGE_API_KEY_ENV = "GEMINI_IMAGE_API_KEY"
-GEMINI_IMAGE_BASE_URL_ENV = "GEMINI_IMAGE_BASE_URL"
-SNAPSHOT_RENDER_IMAGE_MODEL_ENV = "TKNT_SNAPSHOT_RENDER_IMAGE_MODEL"
-SNAPSHOT_RENDER_IMAGE_SIZE_ENV = "TKNT_SNAPSHOT_RENDER_IMAGE_SIZE"
 SNAPSHOT_RENDER_MAX_TOKENS_ENV = "TKNT_SNAPSHOT_RENDER_MAX_TOKENS"
 SNAPSHOT_RENDER_INCLUDE_LAYOUT_2D_REFERENCE_ENV = (
     "TKNT_SNAPSHOT_RENDER_INCLUDE_LAYOUT_2D_REFERENCE"
 )
-IMAGE_PROVIDER_ENV = "TKNT_IMAGE_PROVIDER"
+SNAPSHOT_RENDER_INCLUDE_ANNOTATED_REFERENCE_ENV = (
+    "TKNT_SNAPSHOT_RENDER_INCLUDE_ANNOTATED_REFERENCE"
+)
+SNAPSHOT_RENDER_INCLUDE_GEOMETRY_REFERENCES_ENV = (
+    "TKNT_SNAPSHOT_RENDER_INCLUDE_GEOMETRY_REFERENCES"
+)
+SNAPSHOT_RENDER_INCLUDE_LOCKED_GEOMETRY_REFERENCES_ENV = (
+    "TKNT_SNAPSHOT_RENDER_INCLUDE_LOCKED_GEOMETRY_REFERENCES"
+)
+SNAPSHOT_RENDER_INCLUDE_PRESET_REFERENCE_IMAGES_ENV = (
+    "TKNT_SNAPSHOT_RENDER_INCLUDE_PRESET_REFERENCE_IMAGES"
+)
+SNAPSHOT_RENDER_SIMPLE_PROMPT_ENV = "TKNT_SNAPSHOT_RENDER_SIMPLE_PROMPT"
 OPENAI_IMAGE_API_KEY_ENV = "OPENAI_IMAGE_API_KEY"
-OPENAI_IMAGE_BASE_URL_ENV = "OPENAI_IMAGE_BASE_URL"
 OPENAI_IMAGE_MODEL_ENV = "TKNT_OPENAI_IMAGE_MODEL"
 OPENAI_IMAGE_SIZE_ENV = "TKNT_OPENAI_IMAGE_SIZE"
 OPENAI_IMAGE_QUALITY_ENV = "TKNT_OPENAI_IMAGE_QUALITY"
+OPENAI_IMAGE_STREAM_PARTIAL_IMAGES_ENV = "TKNT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES"
 
-_DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-_DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
-_DEFAULT_IMAGE_SIZE = "1K"
 _DEFAULT_MAX_TOKENS = 256
-_DEFAULT_IMAGE_PROVIDER = "openai"
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
-_DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-1.5"
+_DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 _DEFAULT_OPENAI_IMAGE_SIZE = "1536x1024"
 _DEFAULT_OPENAI_IMAGE_QUALITY = "medium"
+_DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES = 2
 _SUPPORTED_OPENAI_IMAGE_SIZES = {
     "1024x1024",
     "1024x1536",
@@ -63,13 +66,15 @@ _SUPPORTED_OPENAI_IMAGE_SIZES = {
     "auto",
 }
 _SUPPORTED_OPENAI_IMAGE_QUALITIES = {"low", "medium", "high", "auto"}
-_GEMINI_INLINE_REQUEST_LIMIT_BYTES = 20_000_000
 _BYTES_PER_MB = 1_000_000
 _DEFAULT_USER_PROMPT = (
     "Convert the exact visible 3D blockout into a photorealistic interior by "
     "improving material realism, lighting, and finishes. Keep the same camera, "
     "architecture, room shell, openings, object count, object colors, object "
     "shapes, main furniture, and visible layout."
+)
+_DEFAULT_SIMPLE_USER_PROMPT = (
+    "make this more photorealistic, don't change anything."
 )
 _TV_CONSOLE_RENDER_IDENTITY_LABEL = "TV console with integrated flat-screen TV"
 _TV_CONSOLE_RENDER_IDENTITY_HINT = (
@@ -94,95 +99,6 @@ _SUPPORTED_ASPECT_RATIOS: tuple[tuple[str, float], ...] = (
     ("16:9", 16 / 9),
     ("21:9", 21 / 9),
 )
-_GEMINI_31_IMAGE_OUTPUT_SIZES: dict[str, dict[str, tuple[int, int]]] = {
-    "0.5K": {
-        "1:1": (512, 512),
-        "1:4": (256, 1024),
-        "1:8": (192, 1536),
-        "2:3": (424, 632),
-        "3:2": (632, 424),
-        "3:4": (448, 600),
-        "4:1": (1024, 256),
-        "4:3": (600, 448),
-        "4:5": (464, 576),
-        "5:4": (576, 464),
-        "8:1": (1536, 192),
-        "9:16": (384, 688),
-        "16:9": (688, 384),
-        "21:9": (792, 336),
-    },
-    "1K": {
-        "1:1": (1024, 1024),
-        "1:4": (512, 2048),
-        "1:8": (384, 3072),
-        "2:3": (848, 1264),
-        "3:2": (1264, 848),
-        "3:4": (896, 1200),
-        "4:1": (2048, 512),
-        "4:3": (1200, 896),
-        "4:5": (928, 1152),
-        "5:4": (1152, 928),
-        "8:1": (3072, 384),
-        "9:16": (768, 1376),
-        "16:9": (1376, 768),
-        "21:9": (1584, 672),
-    },
-    "2K": {
-        "1:1": (2048, 2048),
-        "1:4": (1024, 4096),
-        "1:8": (768, 6144),
-        "2:3": (1696, 2528),
-        "3:2": (2528, 1696),
-        "3:4": (1792, 2400),
-        "4:1": (4096, 1024),
-        "4:3": (2400, 1792),
-        "4:5": (1856, 2304),
-        "5:4": (2304, 1856),
-        "8:1": (6144, 768),
-        "9:16": (1536, 2752),
-        "16:9": (2752, 1536),
-        "21:9": (3168, 1344),
-    },
-    "4K": {
-        "1:1": (4096, 4096),
-        "1:4": (2048, 8192),
-        "1:8": (1536, 12288),
-        "2:3": (3392, 5056),
-        "3:2": (5056, 3392),
-        "3:4": (3584, 4800),
-        "4:1": (8192, 2048),
-        "4:3": (4800, 3584),
-        "4:5": (3712, 4608),
-        "5:4": (4608, 3712),
-        "8:1": (12288, 1536),
-        "9:16": (3072, 5504),
-        "16:9": (5504, 3072),
-        "21:9": (6336, 2688),
-    },
-}
-_GEMINI_3_PRO_IMAGE_OUTPUT_SIZES: dict[str, dict[str, tuple[int, int]]] = {
-    size: {
-        aspect_ratio: dimensions
-        for aspect_ratio, dimensions in aspect_sizes.items()
-        if aspect_ratio not in {"1:4", "1:8", "4:1", "8:1"}
-    }
-    for size, aspect_sizes in _GEMINI_31_IMAGE_OUTPUT_SIZES.items()
-    if size != "0.5K"
-}
-_GEMINI_25_IMAGE_OUTPUT_SIZES: dict[str, dict[str, tuple[int, int]]] = {
-    "1K": {
-        "1:1": (1024, 1024),
-        "2:3": (832, 1248),
-        "3:2": (1248, 832),
-        "3:4": (864, 1184),
-        "4:3": (1184, 864),
-        "4:5": (896, 1152),
-        "5:4": (1152, 896),
-        "9:16": (768, 1344),
-        "16:9": (1344, 768),
-        "21:9": (1536, 672),
-    }
-}
 _GENERATE_SYSTEM_PROMPT = (
     "You are converting a coarse 3D interior blockout into a final photorealistic render.\n\n"
     "Use the input 3D layout image as the absolute source of truth for the camera view, framing, room layout, room shell, openings, furniture placement, object scale, object shape, object color, surface color, and occlusion.\n"
@@ -214,6 +130,15 @@ _EDIT_SYSTEM_PROMPT = (
     "Change only the explicitly requested selected object, drawn region, or global preset attribute. Preserve room identity, materials, style continuity, architecture, openings, camera, layout, object count, object shapes, positions, scale, and every unedited object unless the prompt explicitly asks for that exact target to change.\n"
     "Output a clean photorealistic interior photograph. No colored rectangles, no region IDs, no label text, no guide graphics, no annotations of any kind, no people, no watermarks, no room-type change."
 )
+_CAMERA_TRANSFER_EDIT_SYSTEM_PROMPT = (
+    "You are editing an existing photorealistic interior image while transferring it to a new 3D camera view.\n\n"
+    "The first input image is the approved photorealistic source image. Preserve its object identity, materials, colors, lighting style, and realistic finish unless explicit edit operations or changed presets say otherwise.\n"
+    "The second input image is the sharp target 3D layout/camera reference. It is the source of truth for the new camera angle, framing, perspective, room shell, openings, object placement, object scale, depth order, and occlusion.\n"
+    "Do not preserve the old camera from the first image. Change the output viewpoint to match the second image.\n"
+    "If an edit-region guide image is provided, use its colored boxes and region labels only to locate requested local edits. The boxes, labels, outlines, colored fills, tinted overlays, and all other guide graphics must never appear in the output image.\n"
+    "If preset or replacement reference images are provided, use them only for the explicitly mapped preset or edit operation. Do not copy their room, camera, layout, architecture, object count, object placement, or furniture arrangement.\n"
+    "Output a clean photorealistic interior photograph from the target 3D camera. No colored rectangles, no region IDs, no label text, no guide graphics, no annotations of any kind, no people, no watermarks, no room-type change."
+)
 
 RenderMode = Literal["generate", "edit", "camera_rerender"]
 SceneReferenceMode = Literal[
@@ -221,41 +146,35 @@ SceneReferenceMode = Literal[
     "target_layout_with_scene_reference",
     "scene_reference_camera_transfer",
 ]
+OpenAIImageQuality = Literal["low", "medium", "high"]
+OpenAIImageSize = Literal["1024x1024", "1024x1536", "1536x1024"]
+OpenAIImageStreamEventHandler = Callable[[Mapping[str, object]], None]
 
 
 @dataclass(frozen=True)
 class SnapshotImageRenderConfig:
-    image_model_name: str = _DEFAULT_IMAGE_MODEL
-    image_size: str = _DEFAULT_IMAGE_SIZE
     max_output_tokens: int = _DEFAULT_MAX_TOKENS
-    gemini_base_url: str = _DEFAULT_GEMINI_BASE_URL
-    gemini_api_key: str | None = None
     include_layout_2d_reference: bool = False
-    image_provider: str = _DEFAULT_IMAGE_PROVIDER
+    include_annotated_reference: bool = False
+    include_geometry_references: bool = False
+    include_locked_geometry_references: bool = False
+    include_preset_reference_images: bool = True
+    simple_prompt_mode: bool = False
     openai_api_key: str | None = None
     openai_image_model: str = _DEFAULT_OPENAI_IMAGE_MODEL
     openai_image_size: str = _DEFAULT_OPENAI_IMAGE_SIZE
     openai_image_quality: str = _DEFAULT_OPENAI_IMAGE_QUALITY
-    openai_base_url: str = _DEFAULT_OPENAI_BASE_URL
+    openai_image_stream_partial_images: int = (
+        _DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES
+    )
 
     @classmethod
     def from_env(cls) -> SnapshotImageRenderConfig:
-        image_config = root_config.services.gemini_image
-        image_size = _string(
-            os.getenv(SNAPSHOT_RENDER_IMAGE_SIZE_ENV),
-            fallback=image_config.image_size or _DEFAULT_IMAGE_SIZE,
-        ).upper()
         max_tokens = _read_int_env(
             SNAPSHOT_RENDER_MAX_TOKENS_ENV,
-            default=image_config.max_output_tokens,
+            default=_DEFAULT_MAX_TOKENS,
         )
-        env_api_key = _secret_string(os.getenv(GEMINI_IMAGE_API_KEY_ENV))
-        config_api_key = _secret_string(image_config.api_key)
 
-        image_provider = _string(
-            os.getenv(IMAGE_PROVIDER_ENV),
-            fallback=_DEFAULT_IMAGE_PROVIDER,
-        ).lower()
         openai_api_key = _secret_string(os.getenv(OPENAI_IMAGE_API_KEY_ENV))
         if not openai_api_key:
             try:
@@ -274,35 +193,41 @@ class SnapshotImageRenderConfig:
         openai_image_quality = _normalize_openai_image_quality(
             os.getenv(OPENAI_IMAGE_QUALITY_ENV)
         )
-        openai_base_url = _string(
-            os.getenv(OPENAI_IMAGE_BASE_URL_ENV),
-            fallback=_DEFAULT_OPENAI_BASE_URL,
+        openai_image_stream_partial_images = _normalize_openai_stream_partial_images(
+            os.getenv(OPENAI_IMAGE_STREAM_PARTIAL_IMAGES_ENV)
         )
 
         return cls(
-            image_model_name=_normalize_gemini_model_name(
-                _string(
-                    os.getenv(SNAPSHOT_RENDER_IMAGE_MODEL_ENV),
-                    fallback=image_config.model or _DEFAULT_IMAGE_MODEL,
-                )
-            ),
-            image_size=image_size or _DEFAULT_IMAGE_SIZE,
             max_output_tokens=max(32, max_tokens),
-            gemini_base_url=_string(
-                os.getenv(GEMINI_IMAGE_BASE_URL_ENV),
-                fallback=image_config.base_url or _DEFAULT_GEMINI_BASE_URL,
-            ),
-            gemini_api_key=env_api_key or config_api_key,
             include_layout_2d_reference=_read_bool_env(
                 SNAPSHOT_RENDER_INCLUDE_LAYOUT_2D_REFERENCE_ENV,
-                default=bool(image_config.include_layout_2d_reference),
+                default=False,
             ),
-            image_provider=image_provider,
+            include_annotated_reference=_read_bool_env(
+                SNAPSHOT_RENDER_INCLUDE_ANNOTATED_REFERENCE_ENV,
+                default=False,
+            ),
+            include_geometry_references=_read_bool_env(
+                SNAPSHOT_RENDER_INCLUDE_GEOMETRY_REFERENCES_ENV,
+                default=False,
+            ),
+            include_locked_geometry_references=_read_bool_env(
+                SNAPSHOT_RENDER_INCLUDE_LOCKED_GEOMETRY_REFERENCES_ENV,
+                default=False,
+            ),
+            include_preset_reference_images=_read_bool_env(
+                SNAPSHOT_RENDER_INCLUDE_PRESET_REFERENCE_IMAGES_ENV,
+                default=True,
+            ),
+            simple_prompt_mode=_read_bool_env(
+                SNAPSHOT_RENDER_SIMPLE_PROMPT_ENV,
+                default=False,
+            ),
             openai_api_key=openai_api_key,
             openai_image_model=openai_image_model,
             openai_image_size=openai_image_size,
             openai_image_quality=openai_image_quality,
-            openai_base_url=openai_base_url,
+            openai_image_stream_partial_images=openai_image_stream_partial_images,
         )
 
 
@@ -310,7 +235,9 @@ class SnapshotImageRenderConfig:
 class SnapshotEditOperation:
     object_id: str
     object_name: str | None = None
-    operation_type: Literal["prompt", "add", "replace", "recolor"] | None = None
+    operation_type: (
+        Literal["prompt", "add", "replace", "recolor", "remove"] | None
+    ) = None
     prompt: str | None = None
     bbox_norm: Mapping[str, float] | None = None
     replacement_image_data_url: str | None = None
@@ -345,6 +272,14 @@ class SnapshotLockedGeometryAtlas:
     objects: list[SnapshotLockedGeometryAtlasObject] | None = None
 
 
+@dataclass(frozen=True)
+class SnapshotPresetReferenceImage:
+    group: str
+    key: str
+    label: str
+    image_data_url: str
+
+
 def _system_prompt_for_render_mode(render_mode: RenderMode) -> str:
     if render_mode == "edit":
         return _EDIT_SYSTEM_PROMPT
@@ -359,27 +294,6 @@ def _layout_lock_mode_for_render_mode(render_mode: RenderMode) -> str:
     if render_mode == "camera_rerender":
         return "camera_rerender_layout_lock"
     return "strict_generate_layout_lock"
-
-
-@dataclass(frozen=True)
-class _GeminiRequestAttempt:
-    name: str
-    payload: dict[str, object]
-    generation_config_applied: bool
-    retry_on_http_400: bool = False
-
-
-class _GeminiGenerateContentHttpError(RuntimeError):
-    def __init__(
-        self,
-        *,
-        message: str,
-        status_code: int,
-        response_body: object,
-    ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-        self.response_body = response_body
 
 
 def render_snapshot_image(
@@ -400,57 +314,84 @@ def render_snapshot_image(
     locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
     locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
     edit_source_image_data_url: str | None = None,
+    image_quality: OpenAIImageQuality | str | None = None,
+    image_size: OpenAIImageSize | str | None = None,
+    streamed: bool = False,
+    stream_partial_images: int | None = None,
+    stream_event_handler: OpenAIImageStreamEventHandler | None = None,
     config: SnapshotImageRenderConfig | None = None,
     trace_id: str | None = None,
 ) -> dict[str, object]:
     image_flow_trace_id = trace_id or uuid4().hex
     resolved_config = config or SnapshotImageRenderConfig.from_env()
-    geometry_reference_requested = any(
-        value
-        for value in (
-            depth_map_image_data_url,
-            edge_map_image_data_url,
-            segmentation_map_image_data_url,
-        )
+    effective_image_size = _normalize_openai_image_size(
+        image_size or resolved_config.openai_image_size
     )
-    if render_mode == "camera_rerender" and not all(
-        (
-            depth_map_image_data_url,
-            edge_map_image_data_url,
-            segmentation_map_image_data_url,
+    effective_image_quality = _normalize_openai_image_quality(
+        image_quality or resolved_config.openai_image_quality
+    )
+    effective_stream_partial_images = (
+        _normalize_openai_stream_partial_images(stream_partial_images)
+        if stream_partial_images is not None
+        else resolved_config.openai_image_stream_partial_images
+    )
+    if not streamed:
+        effective_stream_partial_images = 0
+    geometry_references_requested = _geometry_references_used_payload(
+        depth_map_image_data_url=depth_map_image_data_url,
+        edge_map_image_data_url=edge_map_image_data_url,
+        segmentation_map_image_data_url=segmentation_map_image_data_url,
+    )
+    geometry_reference_requested = any(geometry_references_requested.values())
+    geometry_reference_used = (
+        render_mode in {"generate", "camera_rerender"}
+        and geometry_reference_requested
+        and resolved_config.include_geometry_references
+    )
+    if (
+        render_mode == "camera_rerender"
+        and resolved_config.include_geometry_references
+        and not all(
+            (
+                depth_map_image_data_url,
+                edge_map_image_data_url,
+                segmentation_map_image_data_url,
+            )
         )
     ):
         raise ValueError(
             "Camera re-render requires depth_map_image_data_url, "
-            "edge_map_image_data_url, and segmentation_map_image_data_url."
+            "edge_map_image_data_url, and segmentation_map_image_data_url when "
+            f"{SNAPSHOT_RENDER_INCLUDE_GEOMETRY_REFERENCES_ENV}=true."
         )
-    if render_mode in {"generate", "camera_rerender"} and geometry_reference_requested:
-        if resolved_config.image_provider != "openai":
-            raise ValueError(
-                "Geometry reference rendering requires TKNT_IMAGE_PROVIDER=openai "
-                "so the image call uses gpt-image-1.5."
-            )
-        if resolved_config.openai_image_model != _DEFAULT_OPENAI_IMAGE_MODEL:
-            raise ValueError(
-                "Geometry reference rendering is locked to gpt-image-1.5. "
-                f"Configured OpenAI image model: {resolved_config.openai_image_model}."
-            )
     structural_image_data_url = _normalize_image_data_url(snapshot_image_data_url)
     normalized_depth_map = (
         _normalize_image_data_url(depth_map_image_data_url)
-        if depth_map_image_data_url
+        if geometry_reference_used and depth_map_image_data_url
         else None
     )
     normalized_edge_map = (
         _normalize_image_data_url(edge_map_image_data_url)
-        if edge_map_image_data_url
+        if geometry_reference_used and edge_map_image_data_url
         else None
     )
     normalized_segmentation_map = (
         _normalize_image_data_url(segmentation_map_image_data_url)
-        if segmentation_map_image_data_url
+        if geometry_reference_used and segmentation_map_image_data_url
         else None
     )
+    if render_mode in {"generate", "camera_rerender"} and any(
+        (
+            normalized_depth_map,
+            normalized_edge_map,
+            normalized_segmentation_map,
+        )
+    ):
+        if resolved_config.openai_image_model != _DEFAULT_OPENAI_IMAGE_MODEL:
+            raise ValueError(
+                f"Geometry reference rendering is locked to {_DEFAULT_OPENAI_IMAGE_MODEL}. "
+                f"Configured OpenAI image model: {resolved_config.openai_image_model}."
+            )
     normalized_scene_reference = (
         _normalize_image_data_url(scene_reference_image_data_url)
         if scene_reference_image_data_url
@@ -466,6 +407,11 @@ def render_snapshot_image(
     )
     scene_reference_used = (
         resolved_scene_reference_mode == "target_layout_with_scene_reference"
+    )
+    edit_camera_transfer_reference_used = (
+        render_mode == "edit"
+        and resolved_scene_reference_mode == "scene_reference_camera_transfer"
+        and edit_source_image_data_url is not None
     )
     source_image_data_url = (
         _normalize_image_data_url(edit_source_image_data_url)
@@ -485,19 +431,57 @@ def render_snapshot_image(
         edit_operations or [],
         visible_objects=visible_objects,
     )
-    normalized_locked_geometry_references = _normalize_locked_geometry_references(
-        locked_geometry_references or []
+    locked_geometry_reference_requested_count = len(locked_geometry_references or [])
+    locked_geometry_atlas_requested_count = len(locked_geometry_atlases or [])
+    normalized_locked_geometry_references = (
+        _normalize_locked_geometry_references(locked_geometry_references or [])
+        if resolved_config.include_locked_geometry_references
+        else []
     )
-    normalized_locked_geometry_atlases = _normalize_locked_geometry_atlases(
-        locked_geometry_atlases or []
+    normalized_locked_geometry_atlases = (
+        _normalize_locked_geometry_atlases(locked_geometry_atlases or [])
+        if resolved_config.include_locked_geometry_references
+        else []
     )
     preset_prompt = _build_preset_prompt(preset_selection)
+    preset_reference_images = (
+        _build_preset_reference_images(preset_selection)
+        if resolved_config.include_preset_reference_images
+        and render_mode in {"generate", "camera_rerender", "edit"}
+        else []
+    )
+    structural_reference_used = (
+        normalized_depth_map is not None
+        or normalized_edge_map is not None
+        or normalized_segmentation_map is not None
+        or bool(normalized_locked_geometry_references)
+        or bool(normalized_locked_geometry_atlases)
+    )
+    if (
+        render_mode in {"generate", "camera_rerender"}
+        and structural_reference_used
+        and resolved_config.openai_image_model != _DEFAULT_OPENAI_IMAGE_MODEL
+    ):
+        raise ValueError(
+            f"Geometry reference rendering is locked to {_DEFAULT_OPENAI_IMAGE_MODEL}. "
+            f"Configured OpenAI image model: {resolved_config.openai_image_model}."
+        )
     normalized_annotated_reference = (
         _normalize_image_data_url(annotated_reference_image_data_url)
         if annotated_reference_image_data_url
         else None
     )
-    annotated_reference_used = normalized_annotated_reference is not None
+    annotated_reference_requested = normalized_annotated_reference is not None
+    edit_region_guide_used = (
+        render_mode == "edit"
+        and edit_camera_transfer_reference_used
+        and annotated_reference_requested
+        and any(operation.bbox_norm is not None for operation in normalized_operations)
+    )
+    annotated_reference_used = (
+        annotated_reference_requested
+        and (resolved_config.include_annotated_reference or edit_region_guide_used)
+    )
     normalized_layout_reference = (
         _normalize_image_data_url(layout_reference_image_data_url)
         if layout_reference_image_data_url
@@ -511,62 +495,92 @@ def render_snapshot_image(
         and resolved_config.include_layout_2d_reference
         and normalized_layout_reference is not None
     )
+    simple_prompt_used = (
+        render_mode in {"generate", "camera_rerender"}
+        and resolved_config.simple_prompt_mode
+    )
+    effective_operations = [] if simple_prompt_used else normalized_operations
     layout_lock_prompt = (
         _build_generate_layout_lock_prompt(
             scene_reference_mode=resolved_scene_reference_mode,
             snapshot_payload=effective_snapshot_payload,
         )
-        if render_mode in {"generate", "camera_rerender"}
+        if render_mode in {"generate", "camera_rerender"} and not simple_prompt_used
         else ""
     )
     locked_items = _build_locked_items(effective_snapshot_payload)
     layout_lock_mode = _layout_lock_mode_for_render_mode(render_mode)
-    normalized_user_prompt = _build_final_user_prompt(
-        user_prompt=user_prompt,
-        render_mode=render_mode,
-        preset_prompt=preset_prompt,
-        edit_operations=normalized_operations,
-        visible_objects=visible_objects,
-        layout_lock_prompt=layout_lock_prompt,
-        layout_reference_used=layout_reference_used,
-        annotated_reference_used=annotated_reference_used,
-        depth_map_used=normalized_depth_map is not None,
-        edge_map_used=normalized_edge_map is not None,
-        segmentation_map_used=normalized_segmentation_map is not None,
-        scene_reference_mode=resolved_scene_reference_mode,
-        locked_geometry_references=normalized_locked_geometry_references,
-        locked_geometry_atlases=normalized_locked_geometry_atlases,
+    normalized_user_prompt = (
+        _build_simple_generate_user_prompt(
+            user_prompt=user_prompt,
+            preset_prompt=preset_prompt,
+            preset_reference_images=preset_reference_images,
+        )
+        if simple_prompt_used
+        else _build_final_user_prompt(
+            user_prompt=user_prompt,
+            render_mode=render_mode,
+            preset_prompt=preset_prompt,
+            edit_operations=effective_operations,
+            visible_objects=visible_objects,
+            layout_lock_prompt=layout_lock_prompt,
+            layout_reference_used=layout_reference_used,
+            annotated_reference_used=annotated_reference_used,
+            depth_map_used=normalized_depth_map is not None,
+            edge_map_used=normalized_edge_map is not None,
+            segmentation_map_used=normalized_segmentation_map is not None,
+            scene_reference_mode=resolved_scene_reference_mode,
+            locked_geometry_references=normalized_locked_geometry_references,
+            locked_geometry_atlases=normalized_locked_geometry_atlases,
+            preset_reference_count=len(preset_reference_images),
+            camera_transfer_reference_used=edit_camera_transfer_reference_used,
+        )
     )
+    simple_prompt_image_role_hint_used = simple_prompt_used
     aspect_ratio = _resolve_canvas_aspect_ratio(effective_snapshot_payload)
     reference_images = [
         operation.replacement_image_data_url
-        for operation in normalized_operations
+        for operation in effective_operations
         if operation.replacement_image_data_url is not None
     ]
-    effective_model_name = (
-        resolved_config.openai_image_model
-        if resolved_config.image_provider == "openai"
-        else resolved_config.image_model_name
-    )
+    effective_model_name = resolved_config.openai_image_model
 
     log_image_flow_event(
         "snapshot_image.render_input",
         {
             "trace_id": image_flow_trace_id,
             "render_mode": render_mode,
-            "image_provider": resolved_config.image_provider,
+            "image_provider": "openai",
             "model_name": effective_model_name,
-            "image_size": resolved_config.image_size,
+            "image_size": effective_image_size,
+            "image_quality": effective_image_quality,
+            "streamed": streamed,
+            "stream_partial_images": effective_stream_partial_images,
             "max_output_tokens": resolved_config.max_output_tokens,
             "aspect_ratio": aspect_ratio,
+            "simple_prompt_used": simple_prompt_used,
+            "simple_prompt_config": resolved_config.simple_prompt_mode,
+            "simple_prompt_image_role_hint_used": (
+                simple_prompt_image_role_hint_used
+            ),
             "scene_reference_mode": resolved_scene_reference_mode,
             "layout_reference_enabled": layout_reference_enabled,
             "layout_reference_used": layout_reference_used,
+            "annotated_reference_requested": annotated_reference_requested,
             "annotated_reference_used": annotated_reference_used,
+            "edit_region_guide_used": edit_region_guide_used,
+            "camera_transfer_reference_used": edit_camera_transfer_reference_used,
+            "include_annotated_reference_config": (
+                resolved_config.include_annotated_reference
+            ),
+            "geometry_references_requested": geometry_references_requested,
             "geometry_references_used": _geometry_references_used_payload(
                 depth_map_image_data_url=normalized_depth_map,
                 edge_map_image_data_url=normalized_edge_map,
                 segmentation_map_image_data_url=normalized_segmentation_map,
+            ),
+            "include_geometry_references_config": (
+                resolved_config.include_geometry_references
             ),
             "scene_reference_used": scene_reference_used,
             "reference_only_camera_transfer_used": (
@@ -580,10 +594,25 @@ def render_snapshot_image(
                 _serialize_locked_geometry_reference(reference)
                 for reference in normalized_locked_geometry_references
             ],
+            "locked_geometry_reference_requested_count": (
+                locked_geometry_reference_requested_count
+            ),
+            "locked_geometry_reference_used_count": len(
+                normalized_locked_geometry_references
+            ),
             "locked_geometry_atlases": [
                 _serialize_locked_geometry_atlas(atlas)
                 for atlas in normalized_locked_geometry_atlases
             ],
+            "locked_geometry_atlas_requested_count": (
+                locked_geometry_atlas_requested_count
+            ),
+            "locked_geometry_atlas_used_count": len(
+                normalized_locked_geometry_atlases
+            ),
+            "include_locked_geometry_references_config": (
+                resolved_config.include_locked_geometry_references
+            ),
             **_geometry_lock_metadata(
                 locked_items=locked_items,
                 atlases=normalized_locked_geometry_atlases,
@@ -593,11 +622,18 @@ def render_snapshot_image(
             "normalized_user_prompt": normalized_user_prompt,
             "preset_prompt": preset_prompt,
             "preset_selection": dict(preset_selection or {}),
+            "include_preset_reference_images_config": (
+                resolved_config.include_preset_reference_images
+            ),
+            "preset_reference_images": [
+                _serialize_preset_reference_image(reference)
+                for reference in preset_reference_images
+            ],
             "visible_object_count": len(visible_objects),
             "visible_object_ids": list(visible_objects.keys()),
             "edit_operations": [
                 _serialize_edit_operation(operation)
-                for operation in normalized_operations
+                for operation in effective_operations
             ],
             "snapshot_payload": dict(snapshot_payload),
             "images": {
@@ -622,6 +658,10 @@ def render_snapshot_image(
                 "replacement_references": [
                     summarize_image_data_url(data_url) for data_url in reference_images
                 ],
+                "preset_references": [
+                    summarize_image_data_url(reference.image_data_url)
+                    for reference in preset_reference_images
+                ],
                 "locked_geometry_references": [
                     summarize_image_data_url(reference.image_data_url)
                     for reference in normalized_locked_geometry_references
@@ -634,73 +674,53 @@ def render_snapshot_image(
         },
     )
 
-    active_system_prompt = _system_prompt_for_render_mode(render_mode)
+    active_system_prompt = (
+        ""
+        if simple_prompt_used
+        else _CAMERA_TRANSFER_EDIT_SYSTEM_PROMPT
+        if edit_camera_transfer_reference_used
+        else _system_prompt_for_render_mode(render_mode)
+    )
     try:
-        if resolved_config.image_provider == "openai":
-            image_result = _generate_image_with_openai(
-                trace_id=image_flow_trace_id,
-                model_name=resolved_config.openai_image_model,
-                aspect_ratio=aspect_ratio,
-                system_prompt=active_system_prompt,
-                user_prompt=normalized_user_prompt,
-                source_image_data_url=source_image_data_url,
-                depth_map_image_data_url=normalized_depth_map,
-                edge_map_image_data_url=normalized_edge_map,
-                segmentation_map_image_data_url=normalized_segmentation_map,
-                annotated_reference_image_data_url=(
-                    normalized_annotated_reference if annotated_reference_used else None
-                ),
-                scene_reference_image_data_url=(
-                    normalized_scene_reference if scene_reference_used else None
-                ),
-                layout_reference_image_data_url=(
-                    normalized_layout_reference if layout_reference_used else None
-                ),
-                reference_image_data_urls=reference_images,
-                locked_geometry_references=normalized_locked_geometry_references,
-                locked_geometry_atlases=normalized_locked_geometry_atlases,
-                edit_operations=normalized_operations,
-                render_mode=render_mode,
-                locked_items=locked_items,
-                openai_api_key=resolved_config.openai_api_key,
-                openai_image_size=resolved_config.openai_image_size,
-                openai_image_quality=resolved_config.openai_image_quality,
-                openai_base_url=resolved_config.openai_base_url,
-            )
-        else:
-            image_result = _generate_image_with_gemini(
-                trace_id=image_flow_trace_id,
-                model_name=resolved_config.image_model_name,
-                image_size=resolved_config.image_size,
-                max_output_tokens=resolved_config.max_output_tokens,
-                gemini_base_url=resolved_config.gemini_base_url,
-                gemini_api_key=resolved_config.gemini_api_key,
-                aspect_ratio=aspect_ratio,
-                system_prompt=active_system_prompt,
-                user_prompt=normalized_user_prompt,
-                source_image_data_url=source_image_data_url,
-                depth_map_image_data_url=normalized_depth_map,
-                edge_map_image_data_url=normalized_edge_map,
-                segmentation_map_image_data_url=normalized_segmentation_map,
-                annotated_reference_image_data_url=(
-                    normalized_annotated_reference if annotated_reference_used else None
-                ),
-                scene_reference_image_data_url=(
-                    normalized_scene_reference if scene_reference_used else None
-                ),
-                layout_reference_image_data_url=(
-                    normalized_layout_reference if layout_reference_used else None
-                ),
-                reference_image_data_urls=reference_images,
-                locked_geometry_references=normalized_locked_geometry_references,
-                locked_geometry_atlases=normalized_locked_geometry_atlases,
-            )
-            image_result["validation"] = {
-                "status": "skipped",
-                "reason": "validation_only_runs_for_openai_provider",
-                "locked_item_count": len(locked_items),
-                "visibility_diagnostics": visibility_diagnostics,
-            }
+        image_result = _generate_image_with_openai(
+            trace_id=image_flow_trace_id,
+            model_name=resolved_config.openai_image_model,
+            aspect_ratio=aspect_ratio,
+            system_prompt=active_system_prompt,
+            user_prompt=normalized_user_prompt,
+            source_image_data_url=source_image_data_url,
+            depth_map_image_data_url=normalized_depth_map,
+            edge_map_image_data_url=normalized_edge_map,
+            segmentation_map_image_data_url=normalized_segmentation_map,
+            annotated_reference_image_data_url=(
+                normalized_annotated_reference if annotated_reference_used else None
+            ),
+            camera_reference_image_data_url=(
+                structural_image_data_url if edit_camera_transfer_reference_used else None
+            ),
+            scene_reference_image_data_url=(
+                normalized_scene_reference if scene_reference_used else None
+            ),
+            layout_reference_image_data_url=(
+                normalized_layout_reference if layout_reference_used else None
+            ),
+            preset_reference_images=preset_reference_images,
+            reference_image_data_urls=reference_images,
+            locked_geometry_references=normalized_locked_geometry_references,
+            locked_geometry_atlases=normalized_locked_geometry_atlases,
+            edit_operations=effective_operations,
+            render_mode=render_mode,
+            disable_edit_mask=edit_camera_transfer_reference_used,
+            disable_edit_scope_validation=edit_camera_transfer_reference_used,
+            locked_items=locked_items,
+            openai_api_key=resolved_config.openai_api_key,
+            openai_image_size=effective_image_size,
+            openai_image_quality=effective_image_quality,
+            openai_base_url=_DEFAULT_OPENAI_BASE_URL,
+            streamed=streamed,
+            stream_partial_images=effective_stream_partial_images,
+            stream_event_handler=stream_event_handler,
+        )
     except Exception as exc:
         log_image_flow_event(
             "snapshot_image.render_error",
@@ -739,6 +759,15 @@ def render_snapshot_image(
             "raw_user_prompt": _string(user_prompt) or None,
             "preset_prompt": preset_prompt,
             "preset_selection": dict(preset_selection or {}),
+            "image_quality_requested": image_quality,
+            "image_size_requested": image_size,
+            "stream_partial_images": effective_stream_partial_images,
+            "streamed": streamed,
+            "simple_prompt_used": simple_prompt_used,
+            "simple_prompt_config": resolved_config.simple_prompt_mode,
+            "simple_prompt_image_role_hint_used": (
+                simple_prompt_image_role_hint_used
+            ),
             "aspect_ratio": aspect_ratio,
             "source_image_mime_type": _extract_data_url_mime_type(
                 source_image_data_url
@@ -750,6 +779,10 @@ def render_snapshot_image(
                 depth_map_image_data_url=normalized_depth_map,
                 edge_map_image_data_url=normalized_edge_map,
                 segmentation_map_image_data_url=normalized_segmentation_map,
+            ),
+            "geometry_references_requested": geometry_references_requested,
+            "include_geometry_references_config": (
+                resolved_config.include_geometry_references
             ),
             "geometry_reference_image_mime_types": (
                 _geometry_reference_mime_types_payload(
@@ -765,7 +798,13 @@ def render_snapshot_image(
                 if layout_reference_used and normalized_layout_reference is not None
                 else None
             ),
+            "annotated_reference_requested": annotated_reference_requested,
             "annotated_reference_used": annotated_reference_used,
+            "edit_region_guide_used": edit_region_guide_used,
+            "camera_transfer_reference_used": edit_camera_transfer_reference_used,
+            "include_annotated_reference_config": (
+                resolved_config.include_annotated_reference
+            ),
             "annotated_reference_image_mime_type": (
                 _extract_data_url_mime_type(normalized_annotated_reference)
                 if annotated_reference_used
@@ -784,9 +823,17 @@ def render_snapshot_image(
                 else None
             ),
             "reference_image_count": len(reference_images),
+            "preset_reference_image_count": len(preset_reference_images),
+            "include_preset_reference_images_config": (
+                resolved_config.include_preset_reference_images
+            ),
+            "preset_reference_images": [
+                _serialize_preset_reference_image(reference)
+                for reference in preset_reference_images
+            ],
             "edit_operations": [
                 _serialize_edit_operation(operation)
-                for operation in normalized_operations
+                for operation in effective_operations
             ],
             "layout_lock_mode": layout_lock_mode,
             "visibility_diagnostics": visibility_diagnostics,
@@ -795,15 +842,30 @@ def render_snapshot_image(
                     "object_id": operation.object_id,
                     "object_name": operation.object_name,
                 }
-                for operation in normalized_operations
+                for operation in effective_operations
                 if operation.replacement_image_data_url is not None
                 and operation.bbox_norm is None
             ],
             "locked_items": locked_items,
+            "locked_geometry_reference_requested_count": (
+                locked_geometry_reference_requested_count
+            ),
+            "locked_geometry_reference_used_count": len(
+                normalized_locked_geometry_references
+            ),
             "locked_geometry_references": [
                 _serialize_locked_geometry_reference(reference)
                 for reference in normalized_locked_geometry_references
             ],
+            "locked_geometry_atlas_requested_count": (
+                locked_geometry_atlas_requested_count
+            ),
+            "locked_geometry_atlas_used_count": len(
+                normalized_locked_geometry_atlases
+            ),
+            "include_locked_geometry_references_config": (
+                resolved_config.include_locked_geometry_references
+            ),
             "locked_geometry_atlases": [
                 _serialize_locked_geometry_atlas(atlas)
                 for atlas in normalized_locked_geometry_atlases
@@ -825,26 +887,70 @@ def render_snapshot_image(
             "visible_object_ids": list(visible_objects.keys()),
             "render_mode": render_mode,
             "preset_selection": dict(preset_selection or {}),
+            "image_quality_requested": image_quality,
+            "image_size_requested": image_size,
+            "stream_partial_images": effective_stream_partial_images,
+            "streamed": streamed,
             "edit_operations": [
                 _serialize_edit_operation(operation)
-                for operation in normalized_operations
+                for operation in effective_operations
             ],
             "layout_lock_mode": layout_lock_mode,
+            "simple_prompt_used": simple_prompt_used,
+            "simple_prompt_config": resolved_config.simple_prompt_mode,
+            "simple_prompt_image_role_hint_used": (
+                simple_prompt_image_role_hint_used
+            ),
+            "annotated_reference_requested": annotated_reference_requested,
+            "annotated_reference_used": annotated_reference_used,
+            "edit_region_guide_used": edit_region_guide_used,
+            "camera_transfer_reference_used": edit_camera_transfer_reference_used,
+            "include_annotated_reference_config": (
+                resolved_config.include_annotated_reference
+            ),
+            "geometry_references_requested": geometry_references_requested,
+            "geometry_references_used": _geometry_references_used_payload(
+                depth_map_image_data_url=normalized_depth_map,
+                edge_map_image_data_url=normalized_edge_map,
+                segmentation_map_image_data_url=normalized_segmentation_map,
+            ),
+            "include_geometry_references_config": (
+                resolved_config.include_geometry_references
+            ),
+            "preset_reference_image_count": len(preset_reference_images),
+            "include_preset_reference_images_config": (
+                resolved_config.include_preset_reference_images
+            ),
             "visibility_diagnostics": visibility_diagnostics,
             "object_memory_used": [
                 {
                     "object_id": operation.object_id,
                     "object_name": operation.object_name,
                 }
-                for operation in normalized_operations
+                for operation in effective_operations
                 if operation.replacement_image_data_url is not None
                 and operation.bbox_norm is None
             ],
             "locked_items": locked_items,
+            "locked_geometry_reference_requested_count": (
+                locked_geometry_reference_requested_count
+            ),
+            "locked_geometry_reference_used_count": len(
+                normalized_locked_geometry_references
+            ),
             "locked_geometry_references": [
                 _serialize_locked_geometry_reference(reference)
                 for reference in normalized_locked_geometry_references
             ],
+            "locked_geometry_atlas_requested_count": (
+                locked_geometry_atlas_requested_count
+            ),
+            "locked_geometry_atlas_used_count": len(
+                normalized_locked_geometry_atlases
+            ),
+            "include_locked_geometry_references_config": (
+                resolved_config.include_locked_geometry_references
+            ),
             "locked_geometry_atlases": [
                 _serialize_locked_geometry_atlas(atlas)
                 for atlas in normalized_locked_geometry_atlases
@@ -877,6 +983,11 @@ def render_snapshot_image_from_path(
     locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
     locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
     edit_source_image_data_url: str | None = None,
+    image_quality: OpenAIImageQuality | str | None = None,
+    image_size: OpenAIImageSize | str | None = None,
+    streamed: bool = False,
+    stream_partial_images: int | None = None,
+    stream_event_handler: OpenAIImageStreamEventHandler | None = None,
     config: SnapshotImageRenderConfig | None = None,
     trace_id: str | None = None,
 ) -> dict[str, object]:
@@ -914,6 +1025,11 @@ def render_snapshot_image_from_path(
         locked_geometry_references=locked_geometry_references,
         locked_geometry_atlases=locked_geometry_atlases,
         edit_source_image_data_url=edit_source_image_data_url,
+        image_quality=image_quality,
+        image_size=image_size,
+        streamed=streamed,
+        stream_partial_images=stream_partial_images,
+        stream_event_handler=stream_event_handler,
         config=config,
         trace_id=trace_id,
     )
@@ -936,6 +1052,18 @@ def _normalize_openai_image_quality(value: str | None) -> str:
     if normalized in _SUPPORTED_OPENAI_IMAGE_QUALITIES:
         return normalized
     return _DEFAULT_OPENAI_IMAGE_QUALITY
+
+
+def _normalize_openai_stream_partial_images(value: int | str | None) -> int:
+    try:
+        parsed = (
+            int(value)
+            if value is not None
+            else _DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES
+        )
+    except (TypeError, ValueError):
+        parsed = _DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES
+    return max(0, min(3, parsed))
 
 
 def _geometry_references_used_payload(
@@ -1077,18 +1205,25 @@ def _generate_image_with_openai(
     edge_map_image_data_url: str | None,
     segmentation_map_image_data_url: str | None,
     annotated_reference_image_data_url: str | None,
+    camera_reference_image_data_url: str | None,
     scene_reference_image_data_url: str | None,
     layout_reference_image_data_url: str | None,
+    preset_reference_images: list[SnapshotPresetReferenceImage],
     reference_image_data_urls: list[str],
     locked_geometry_references: list[SnapshotLockedGeometryReference],
     locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
     edit_operations: list[SnapshotEditOperation],
     render_mode: RenderMode,
+    disable_edit_mask: bool,
+    disable_edit_scope_validation: bool,
     locked_items: list[dict[str, object]],
     openai_api_key: str | None,
     openai_image_size: str,
     openai_image_quality: str,
     openai_base_url: str,
+    streamed: bool = False,
+    stream_partial_images: int = 0,
+    stream_event_handler: OpenAIImageStreamEventHandler | None = None,
 ) -> dict[str, object]:
     if not openai_api_key:
         raise ValueError(
@@ -1098,7 +1233,9 @@ def _generate_image_with_openai(
 
     size = _normalize_openai_image_size(openai_image_size)
     quality = _normalize_openai_image_quality(openai_image_quality)
-    combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+    combined_prompt = "\n\n".join(
+        part for part in (_string(system_prompt), _string(user_prompt)) if part
+    )
     geometry_references_used = any(
         value is not None
         for value in (
@@ -1106,10 +1243,14 @@ def _generate_image_with_openai(
             edge_map_image_data_url,
             segmentation_map_image_data_url,
         )
-    )
-    mask_file = _build_openai_edit_mask_file(
-        source_image_data_url,
-        edit_operations=edit_operations,
+    ) or bool(locked_geometry_references) or bool(locked_geometry_atlases)
+    mask_file = (
+        None
+        if disable_edit_mask
+        else _build_openai_edit_mask_file(
+            source_image_data_url,
+            edit_operations=edit_operations,
+        )
     )
 
     image_files: list[tuple[str, tuple[str, bytes, str]]] = []
@@ -1141,11 +1282,17 @@ def _generate_image_with_openai(
         )
 
     append_image_slot(
-        role="clean_3d_source",
+        role="current_render_source" if render_mode == "edit" else "clean_3d_source",
         data_url=source_image_data_url,
         filename_stem="source",
         force_png=mask_file is not None,
     )
+    if camera_reference_image_data_url is not None:
+        append_image_slot(
+            role="target_3d_camera_reference",
+            data_url=camera_reference_image_data_url,
+            filename_stem="camera_reference",
+        )
     if depth_map_image_data_url is not None:
         append_image_slot(
             role="depth_map_geometry_reference",
@@ -1198,6 +1345,12 @@ def _generate_image_with_openai(
             data_url=reference.image_data_url,
             filename_stem=f"geometry_lock_{i + 1}",
         )
+    for i, reference in enumerate(preset_reference_images):
+        append_image_slot(
+            role=f"preset_{reference.group}_reference",
+            data_url=reference.image_data_url,
+            filename_stem=f"preset_{reference.group}_{i + 1}",
+        )
     for i, ref_url in enumerate(reference_image_data_urls):
         append_image_slot(
             role=f"object_appearance_reference_{i + 1}",
@@ -1231,6 +1384,9 @@ def _generate_image_with_openai(
         quality=quality,
         attempt_name="geometry_locked" if geometry_references_used else "standard",
         combined_prompt=combined_prompt,
+        streamed=streamed,
+        stream_partial_images=stream_partial_images,
+        stream_event_handler=stream_event_handler,
     )
     validation = _validate_generated_geometry_against_reference(
         generated_image_data_url=str(image_result["data_url"]),
@@ -1240,11 +1396,15 @@ def _generate_image_with_openai(
         locked_geometry_references=locked_geometry_references,
         locked_geometry_atlases=locked_geometry_atlases,
     )
-    edit_scope_validation = _validate_edit_change_scope(
-        source_image_data_url=source_image_data_url,
-        generated_image_data_url=str(image_result["data_url"]),
-        edit_operations=edit_operations,
-        render_mode=render_mode,
+    edit_scope_validation = (
+        None
+        if disable_edit_scope_validation
+        else _validate_edit_change_scope(
+            source_image_data_url=source_image_data_url,
+            generated_image_data_url=str(image_result["data_url"]),
+            edit_operations=edit_operations,
+            render_mode=render_mode,
+        )
     )
     if edit_scope_validation is not None:
         validation = {**validation, "edit_scope": edit_scope_validation}
@@ -1280,6 +1440,9 @@ def _generate_image_with_openai(
             quality=quality,
             attempt_name="geometry_retry",
             combined_prompt=retry_prompt,
+            streamed=streamed,
+            stream_partial_images=stream_partial_images,
+            stream_event_handler=stream_event_handler,
         )
         retry_validation = _validate_generated_geometry_against_reference(
             generated_image_data_url=str(retry_result["data_url"]),
@@ -1318,7 +1481,29 @@ def _post_openai_images_edit(
     quality: str,
     attempt_name: str,
     combined_prompt: str,
+    streamed: bool = False,
+    stream_partial_images: int = 0,
+    stream_event_handler: OpenAIImageStreamEventHandler | None = None,
 ) -> dict[str, object]:
+    if streamed:
+        return _post_openai_images_edit_stream(
+            trace_id=trace_id,
+            model_name=model_name,
+            endpoint=endpoint,
+            headers=headers,
+            form_data=form_data,
+            image_files=image_files,
+            image_slots=image_slots,
+            mask_used=mask_used,
+            aspect_ratio=aspect_ratio,
+            size=size,
+            quality=quality,
+            attempt_name=attempt_name,
+            combined_prompt=combined_prompt,
+            stream_partial_images=stream_partial_images,
+            stream_event_handler=stream_event_handler,
+        )
+
     log_image_flow_event(
         "openai.images_edit.attempt_input",
         {
@@ -1396,7 +1581,7 @@ def _post_openai_images_edit(
         },
     )
 
-    return {
+    result: dict[str, object] = {
         "mime_type": mime_type,
         "image_base64": b64_data,
         "data_url": f"data:{mime_type};base64,{b64_data}",
@@ -1404,6 +1589,265 @@ def _post_openai_images_edit(
         "quality": quality,
         "aspect_ratio": aspect_ratio,
         "raw_response": {k: v for k, v in parsed.items() if k != "data"},
+        "partial_image_count": 0,
+    }
+    if isinstance(parsed.get("usage"), Mapping):
+        result["usage"] = dict(parsed["usage"])
+    return result
+
+
+def _post_openai_images_edit_stream(
+    *,
+    trace_id: str,
+    model_name: str,
+    endpoint: str,
+    headers: Mapping[str, str],
+    form_data: Mapping[str, str],
+    image_files: list[tuple[str, tuple[str, bytes, str]]],
+    image_slots: list[dict[str, object]],
+    mask_used: bool,
+    aspect_ratio: str,
+    size: str,
+    quality: str,
+    attempt_name: str,
+    combined_prompt: str,
+    stream_partial_images: int,
+    stream_event_handler: OpenAIImageStreamEventHandler | None,
+) -> dict[str, object]:
+    normalized_partial_images = _normalize_openai_stream_partial_images(
+        stream_partial_images
+    )
+    stream_form_data = {
+        **dict(form_data),
+        "stream": "true",
+        "partial_images": str(normalized_partial_images),
+    }
+    log_image_flow_event(
+        "openai.images_edit.stream_attempt_input",
+        {
+            "trace_id": trace_id,
+            "model_name": model_name,
+            "attempt": attempt_name,
+            "endpoint": endpoint,
+            "size": size,
+            "quality": quality,
+            "stream_partial_images": normalized_partial_images,
+            "aspect_ratio": aspect_ratio,
+            "image_count": sum(
+                1 for field_name, _ in image_files if field_name == "image[]"
+            ),
+            "image_slots": image_slots,
+            "mask_used": mask_used,
+            "combined_prompt": combined_prompt,
+        },
+    )
+    _emit_openai_stream_event(
+        stream_event_handler,
+        "status",
+        {
+            "message": "OpenAI image stream started.",
+            "attempt": attempt_name,
+        },
+    )
+
+    started_at = perf_counter()
+    final_event: Mapping[str, object] | None = None
+    final_b64_data = ""
+    final_usage: Mapping[str, object] | None = None
+    partial_image_count = 0
+    with httpx.Client(timeout=600.0) as client:
+        with client.stream(
+            "POST",
+            endpoint,
+            headers=headers,
+            data=stream_form_data,
+            files=image_files,
+        ) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                body = response.text.strip()
+                log_image_flow_event(
+                    "openai.images_edit.stream_http_error",
+                    {
+                        "trace_id": trace_id,
+                        "model_name": model_name,
+                        "attempt": attempt_name,
+                        "status_code": response.status_code,
+                        "elapsed_ms": round((perf_counter() - started_at) * 1000, 2),
+                        "response_body": body[:2000],
+                    },
+                )
+                detail = f"{exc}. OpenAI response: {body}" if body else str(exc)
+                raise ValueError(detail) from exc
+
+            for event in _iter_openai_sse_payloads(response):
+                event_type = _string(event.get("type"))
+                if isinstance(event.get("usage"), Mapping):
+                    final_usage = event["usage"]
+
+                if event_type == "partial_image" or event_type.endswith(
+                    ".partial_image"
+                ):
+                    partial_b64 = _openai_stream_event_b64(event)
+                    if not partial_b64:
+                        continue
+                    partial_image_count += 1
+                    partial_bytes = base64.b64decode(partial_b64)
+                    partial_mime_type = _guess_image_mime_type(partial_bytes)
+                    _emit_openai_stream_event(
+                        stream_event_handler,
+                        "partial_image",
+                        {
+                            "partial_image_index": _openai_stream_partial_index(
+                                event,
+                                fallback=partial_image_count,
+                            ),
+                            "image_data_url": (
+                                f"data:{partial_mime_type};base64,{partial_b64}"
+                            ),
+                            "size": size,
+                            "quality": quality,
+                            "attempt": attempt_name,
+                        },
+                    )
+                    continue
+
+                if event_type == "completed" or event_type.endswith(".completed"):
+                    final_event = event
+                    event_b64 = _openai_stream_event_b64(event)
+                    if event_b64:
+                        final_b64_data = event_b64
+                    continue
+
+                if event_type in {"error", "failed"} or event_type.endswith(".failed"):
+                    message = _string(
+                        event.get("message"), fallback="OpenAI image stream failed."
+                    )
+                    raise ValueError(message)
+
+    elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
+    if not final_b64_data:
+        raise ValueError("OpenAI image stream completed without final b64_json data.")
+
+    image_bytes = base64.b64decode(final_b64_data)
+    mime_type = _guess_image_mime_type(image_bytes)
+
+    log_image_flow_event(
+        "openai.images_edit.stream_image_output",
+        {
+            "trace_id": trace_id,
+            "model_name": model_name,
+            "attempt": attempt_name,
+            "elapsed_ms": elapsed_ms,
+            "mime_type": mime_type,
+            "byte_length": len(image_bytes),
+            "size": size,
+            "quality": quality,
+            "partial_image_count": partial_image_count,
+        },
+    )
+
+    result: dict[str, object] = {
+        "mime_type": mime_type,
+        "image_base64": final_b64_data,
+        "data_url": f"data:{mime_type};base64,{final_b64_data}",
+        "size": size,
+        "quality": quality,
+        "aspect_ratio": aspect_ratio,
+        "raw_response": _redact_openai_stream_event(final_event),
+        "partial_image_count": partial_image_count,
+    }
+    if final_usage is not None:
+        result["usage"] = dict(final_usage)
+    return result
+
+
+def _emit_openai_stream_event(
+    stream_event_handler: OpenAIImageStreamEventHandler | None,
+    event_type: str,
+    payload: Mapping[str, object],
+) -> None:
+    if stream_event_handler is None:
+        return
+    stream_event_handler({"type": event_type, **dict(payload)})
+
+
+def _iter_openai_sse_payloads(response: httpx.Response) -> Iterator[dict[str, object]]:
+    buffer = ""
+    for chunk in response.iter_text():
+        buffer += chunk
+        while "\n\n" in buffer:
+            raw_event, buffer = buffer.split("\n\n", 1)
+            parsed = _parse_openai_sse_event(raw_event)
+            if parsed is not None:
+                yield parsed
+    parsed = _parse_openai_sse_event(buffer)
+    if parsed is not None:
+        yield parsed
+
+
+def _parse_openai_sse_event(raw_event: str) -> dict[str, object] | None:
+    data_lines = []
+    for raw_line in raw_event.splitlines():
+        line = raw_line.strip()
+        if line.startswith("data:"):
+            data_lines.append(line.removeprefix("data:").strip())
+    raw_data = "\n".join(data_lines).strip()
+    if not raw_data or raw_data == "[DONE]":
+        return None
+    try:
+        parsed = json.loads(raw_data)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse OpenAI image stream event.") from exc
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
+def _openai_stream_event_b64(event: Mapping[str, object]) -> str:
+    direct = event.get("b64_json")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    data = event.get("data")
+    if isinstance(data, Mapping):
+        nested = data.get("b64_json")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, Mapping):
+                continue
+            nested = item.get("b64_json")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    return ""
+
+
+def _openai_stream_partial_index(
+    event: Mapping[str, object],
+    *,
+    fallback: int,
+) -> int:
+    raw_index = event.get("partial_image_index")
+    if raw_index is None:
+        data = event.get("data")
+        if isinstance(data, Mapping):
+            raw_index = data.get("partial_image_index")
+    try:
+        parsed = int(raw_index) if raw_index is not None else fallback
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(1, parsed)
+
+
+def _redact_openai_stream_event(
+    event: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if event is None:
+        return {}
+    return {
+        key: value for key, value in event.items() if key not in {"b64_json", "data"}
     }
 
 
@@ -1904,424 +2348,6 @@ def _aspect_ratio_value(value: str) -> float:
     return width / height
 
 
-def _generate_image_with_gemini(
-    *,
-    trace_id: str,
-    model_name: str,
-    image_size: str,
-    max_output_tokens: int,
-    gemini_base_url: str,
-    gemini_api_key: str | None,
-    aspect_ratio: str,
-    system_prompt: str,
-    user_prompt: str,
-    source_image_data_url: str,
-    depth_map_image_data_url: str | None,
-    edge_map_image_data_url: str | None,
-    segmentation_map_image_data_url: str | None,
-    annotated_reference_image_data_url: str | None,
-    scene_reference_image_data_url: str | None,
-    layout_reference_image_data_url: str | None,
-    reference_image_data_urls: list[str],
-    locked_geometry_references: list[SnapshotLockedGeometryReference],
-    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
-) -> dict[str, object]:
-    if not gemini_api_key:
-        raise ValueError(
-            "Missing Gemini image API key. Set services.gemini_image.api_key in "
-            "app-config.yaml or set GEMINI_IMAGE_API_KEY before using AI image rendering."
-        )
-
-    endpoint = f"{gemini_base_url.rstrip('/')}/models/{model_name}:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": gemini_api_key,
-    }
-    attempts = _build_gemini_request_attempts(
-        model_name=model_name,
-        image_size=image_size,
-        max_output_tokens=max_output_tokens,
-        aspect_ratio=aspect_ratio,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        source_image_data_url=source_image_data_url,
-        depth_map_image_data_url=depth_map_image_data_url,
-        edge_map_image_data_url=edge_map_image_data_url,
-        segmentation_map_image_data_url=segmentation_map_image_data_url,
-        annotated_reference_image_data_url=annotated_reference_image_data_url,
-        scene_reference_image_data_url=scene_reference_image_data_url,
-        layout_reference_image_data_url=layout_reference_image_data_url,
-        reference_image_data_urls=reference_image_data_urls,
-        locked_geometry_references=locked_geometry_references,
-        locked_geometry_atlases=locked_geometry_atlases,
-    )
-    last_response: Mapping[str, object] | None = None
-    with httpx.Client(timeout=600.0) as client:
-        for attempt in attempts:
-            try:
-                parsed = _post_gemini_generate_content(
-                    client=client,
-                    trace_id=trace_id,
-                    model_name=model_name,
-                    attempt_name=attempt.name,
-                    endpoint=endpoint,
-                    headers=headers,
-                    payload=attempt.payload,
-                )
-            except _GeminiGenerateContentHttpError as exc:
-                if _should_retry_gemini_http_error_with_minimal_payload(
-                    model_name=model_name,
-                    attempt=attempt,
-                    error=exc,
-                ):
-                    logger.warning(
-                        "Gemini image request for %s failed with HTTP %s on "
-                        "%s. Retrying with compatibility payload.",
-                        model_name,
-                        exc.status_code,
-                        attempt.name,
-                    )
-                    continue
-                raise
-            last_response = parsed
-            image_bytes = _extract_image_bytes(parsed)
-            if image_bytes is None:
-                log_image_flow_event(
-                    "gemini.generate_content.no_image",
-                    {
-                        "trace_id": trace_id,
-                        "model_name": model_name,
-                        "attempt": attempt.name,
-                        "finish_reason": _extract_gemini_finish_reason(parsed),
-                        "finish_message": _extract_gemini_finish_message(parsed),
-                        "response_text": _extract_gemini_response_text(parsed),
-                        "response": summarize_gemini_response(parsed),
-                    },
-                )
-                if _should_retry_gemini_with_minimal_payload(
-                    model_name=model_name,
-                    attempt=attempt,
-                    response_payload=parsed,
-                ):
-                    logger.warning(
-                        "Gemini image response for %s returned no image with "
-                        "finishReason=%s. Retrying with compatibility payload.",
-                        model_name,
-                        _extract_gemini_finish_reason(parsed) or "unknown",
-                    )
-                    continue
-                raise ValueError(_build_gemini_missing_image_error(parsed))
-            mime_type = _guess_image_mime_type(image_bytes)
-            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-            log_image_flow_event(
-                "gemini.generate_content.image_output",
-                {
-                    "trace_id": trace_id,
-                    "model_name": model_name,
-                    "attempt": attempt.name,
-                    "mime_type": mime_type,
-                    "byte_length": len(image_bytes),
-                    "generation_config_applied": attempt.generation_config_applied,
-                    "response": summarize_gemini_response(parsed),
-                },
-            )
-            return {
-                "mime_type": mime_type,
-                "image_base64": image_base64,
-                "data_url": f"data:{mime_type};base64,{image_base64}",
-                "size": image_size,
-                "aspect_ratio": aspect_ratio,
-                "request_strategy": attempt.name,
-                "generation_config_applied": attempt.generation_config_applied,
-                "raw_response": parsed,
-            }
-
-    raise ValueError(
-        _build_gemini_missing_image_error(last_response or {"error": "No response"})
-    )
-
-
-def _build_gemini_request_attempts(
-    *,
-    model_name: str,
-    image_size: str,
-    max_output_tokens: int,
-    aspect_ratio: str,
-    system_prompt: str,
-    user_prompt: str,
-    source_image_data_url: str,
-    depth_map_image_data_url: str | None,
-    edge_map_image_data_url: str | None,
-    segmentation_map_image_data_url: str | None,
-    annotated_reference_image_data_url: str | None,
-    scene_reference_image_data_url: str | None,
-    layout_reference_image_data_url: str | None,
-    reference_image_data_urls: list[str],
-    locked_geometry_references: list[SnapshotLockedGeometryReference],
-    locked_geometry_atlases: list[SnapshotLockedGeometryAtlas],
-) -> list[_GeminiRequestAttempt]:
-    resolved_user_prompt = user_prompt
-    include_system_instruction = not _model_inlines_system_prompt(model_name)
-    if not include_system_instruction:
-        resolved_user_prompt = system_prompt + "\n\n" + user_prompt
-
-    normalized_source_image_data_url = _normalize_gemini_input_image_data_url(
-        source_image_data_url,
-        model_name=model_name,
-        image_size=image_size,
-        aspect_ratio=aspect_ratio,
-    )
-    normalized_scene_reference_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            scene_reference_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if scene_reference_image_data_url is not None
-        else None
-    )
-    normalized_depth_map_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            depth_map_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if depth_map_image_data_url is not None
-        else None
-    )
-    normalized_edge_map_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            edge_map_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if edge_map_image_data_url is not None
-        else None
-    )
-    normalized_segmentation_map_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            segmentation_map_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if segmentation_map_image_data_url is not None
-        else None
-    )
-    normalized_annotated_reference_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            annotated_reference_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if annotated_reference_image_data_url is not None
-        else None
-    )
-    normalized_layout_reference_image_data_url = (
-        _normalize_gemini_input_image_data_url(
-            layout_reference_image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        if layout_reference_image_data_url is not None
-        else None
-    )
-    normalized_reference_image_data_urls = [
-        _normalize_gemini_input_image_data_url(
-            data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        for data_url in reference_image_data_urls
-    ]
-    normalized_locked_geometry_reference_urls = [
-        _normalize_gemini_input_image_data_url(
-            reference.image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        for reference in locked_geometry_references
-        if reference.image_data_url is not None
-    ]
-    normalized_locked_geometry_atlas_urls = [
-        _normalize_gemini_input_image_data_url(
-            atlas.image_data_url,
-            model_name=model_name,
-            image_size=image_size,
-            aspect_ratio=aspect_ratio,
-        )
-        for atlas in locked_geometry_atlases
-        if atlas.image_data_url is not None
-    ]
-
-    content: list[dict[str, object]] = [
-        {"text": resolved_user_prompt},
-        _data_url_to_inline_part(normalized_source_image_data_url),
-    ]
-    has_supplemental_images = (
-        any(
-            data_url is not None
-            for data_url in (
-                normalized_scene_reference_image_data_url,
-                normalized_depth_map_image_data_url,
-                normalized_edge_map_image_data_url,
-                normalized_segmentation_map_image_data_url,
-                normalized_annotated_reference_image_data_url,
-                normalized_layout_reference_image_data_url,
-            )
-        )
-        or bool(normalized_reference_image_data_urls)
-        or bool(normalized_locked_geometry_reference_urls)
-        or bool(normalized_locked_geometry_atlas_urls)
-    )
-    if normalized_depth_map_image_data_url is not None:
-        content.append(_data_url_to_inline_part(normalized_depth_map_image_data_url))
-    if normalized_edge_map_image_data_url is not None:
-        content.append(_data_url_to_inline_part(normalized_edge_map_image_data_url))
-    if normalized_segmentation_map_image_data_url is not None:
-        content.append(
-            _data_url_to_inline_part(normalized_segmentation_map_image_data_url)
-        )
-    if normalized_scene_reference_image_data_url is not None:
-        content.append(
-            _data_url_to_inline_part(normalized_scene_reference_image_data_url)
-        )
-    if normalized_layout_reference_image_data_url is not None:
-        content.append(
-            _data_url_to_inline_part(normalized_layout_reference_image_data_url)
-        )
-    if normalized_annotated_reference_image_data_url is not None:
-        content.append(
-            _data_url_to_inline_part(normalized_annotated_reference_image_data_url)
-        )
-    content.extend(
-        _data_url_to_inline_part(data_url)
-        for data_url in normalized_locked_geometry_atlas_urls
-    )
-    content.extend(
-        _data_url_to_inline_part(data_url)
-        for data_url in normalized_locked_geometry_reference_urls
-    )
-    content.extend(
-        _data_url_to_inline_part(data_url)
-        for data_url in normalized_reference_image_data_urls
-    )
-
-    base_payload: dict[str, object] = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": content,
-            }
-        ],
-    }
-    if include_system_instruction:
-        base_payload["systemInstruction"] = {
-            "parts": [{"text": system_prompt}],
-        }
-
-    configured_payload = {
-        **base_payload,
-        "generationConfig": _build_gemini_generation_config(
-            model_name=model_name,
-            image_size=image_size,
-            max_output_tokens=max_output_tokens,
-            aspect_ratio=aspect_ratio,
-        ),
-    }
-    attempts = [
-        _GeminiRequestAttempt(
-            name="configured",
-            payload=configured_payload,
-            generation_config_applied=True,
-            retry_on_http_400=True,
-        )
-    ]
-    if _model_uses_compatibility_image_generation_config(model_name):
-        attempts.append(
-            _GeminiRequestAttempt(
-                name="compatibility_no_generation_config",
-                payload=base_payload,
-                generation_config_applied=False,
-                retry_on_http_400=has_supplemental_images,
-            )
-        )
-    elif _model_uses_nano_banana_2_generation_config(model_name):
-        attempts.append(
-            _GeminiRequestAttempt(
-                name="compatibility_no_generation_config",
-                payload=base_payload,
-                generation_config_applied=False,
-                retry_on_http_400=has_supplemental_images,
-            )
-        )
-    if has_supplemental_images and _model_can_retry_with_minimal_image_payload(
-        model_name
-    ):
-        source_only_payload: dict[str, object] = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": _remove_supplemental_image_prompt_references(
-                                resolved_user_prompt
-                            )
-                        },
-                        _data_url_to_inline_part(normalized_source_image_data_url),
-                    ],
-                }
-            ],
-        }
-        if include_system_instruction:
-            source_only_payload["systemInstruction"] = {
-                "parts": [{"text": system_prompt}],
-            }
-        attempts.append(
-            _GeminiRequestAttempt(
-                name="compatibility_source_only_no_generation_config",
-                payload=source_only_payload,
-                generation_config_applied=False,
-            )
-        )
-    return attempts
-
-
-def _build_gemini_generation_config(
-    *,
-    model_name: str,
-    image_size: str,
-    max_output_tokens: int,
-    aspect_ratio: str,
-) -> dict[str, object]:
-    image_config = {
-        "aspectRatio": aspect_ratio,
-        "imageSize": image_size,
-    }
-    if _model_uses_nano_banana_2_generation_config(model_name):
-        return {
-            "responseModalities": ["TEXT", "IMAGE"],
-            "imageConfig": image_config,
-        }
-    if _model_uses_compatibility_image_generation_config(model_name):
-        return {
-            "responseModalities": ["IMAGE"],
-            "imageConfig": image_config,
-        }
-    return {
-        "responseModalities": ["TEXT", "IMAGE"],
-        "imageConfig": image_config,
-        "maxOutputTokens": max_output_tokens,
-    }
-
-
 def _remove_supplemental_image_prompt_references(prompt: str) -> str:
     prompt_parts: list[str] = []
     for paragraph in prompt.split("\n\n"):
@@ -2350,114 +2376,6 @@ def _line_references_supplemental_image(line: str) -> bool:
     ):
         return True
     return line.startswith("The top-down layout image is supplemental")
-
-
-def _model_inlines_system_prompt(model_name: str) -> bool:
-    normalized = _normalize_gemini_model_name(model_name)
-    return normalized == "gemini-3.1-flash-image-preview"
-
-
-def _model_uses_nano_banana_2_generation_config(model_name: str) -> bool:
-    normalized = _normalize_gemini_model_name(model_name)
-    return normalized == "gemini-3.1-flash-image-preview"
-
-
-def _model_uses_compatibility_image_generation_config(model_name: str) -> bool:
-    normalized = _normalize_gemini_model_name(model_name)
-    if "-image" not in normalized:
-        return False
-    if _model_uses_nano_banana_2_generation_config(normalized):
-        return False
-    return normalized.startswith("gemini-3")
-
-
-def _post_gemini_generate_content(
-    *,
-    client: httpx.Client,
-    trace_id: str,
-    model_name: str,
-    attempt_name: str,
-    endpoint: str,
-    headers: Mapping[str, str],
-    payload: Mapping[str, object],
-) -> dict[str, object]:
-    payload_size_bytes = _payload_json_size_bytes(payload)
-    inline_image_summaries = _collect_inline_image_summaries(payload)
-    log_image_flow_event(
-        "gemini.generate_content.attempt_input",
-        {
-            "trace_id": trace_id,
-            "model_name": model_name,
-            "attempt": attempt_name,
-            "endpoint": endpoint,
-            "payload_size_bytes": payload_size_bytes,
-            "inline_image_count": len(inline_image_summaries),
-            "inline_images": inline_image_summaries,
-            "payload": summarize_gemini_payload(dict(payload)),
-        },
-    )
-    if payload_size_bytes >= _GEMINI_INLINE_REQUEST_LIMIT_BYTES:
-        log_image_flow_event(
-            "gemini.generate_content.payload_too_large",
-            {
-                "trace_id": trace_id,
-                "model_name": model_name,
-                "attempt": attempt_name,
-                "payload_size_bytes": payload_size_bytes,
-                "limit_bytes": _GEMINI_INLINE_REQUEST_LIMIT_BYTES,
-                "inline_image_count": len(inline_image_summaries),
-                "inline_images": inline_image_summaries,
-            },
-        )
-        payload_size_mb = payload_size_bytes / _BYTES_PER_MB
-        limit_mb = _GEMINI_INLINE_REQUEST_LIMIT_BYTES / _BYTES_PER_MB
-        raise ValueError(
-            "Gemini inline image request is "
-            f"{payload_size_mb:.2f} MB, exceeding the {limit_mb:.0f} MB inline "
-            "request limit. Reduce canvas/reference image size or switch this "
-            "flow to the Gemini Files API for large images."
-        )
-    started_at = perf_counter()
-    response = client.post(endpoint, json=payload, headers=dict(headers))
-    elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        body = response.text.strip()
-        response_body = _safe_response_body(response)
-        log_image_flow_event(
-            "gemini.generate_content.http_error",
-            {
-                "trace_id": trace_id,
-                "model_name": model_name,
-                "attempt": attempt_name,
-                "status_code": response.status_code,
-                "elapsed_ms": elapsed_ms,
-                "response_body": response_body,
-            },
-        )
-        detail = f"{exc}. Gemini response body: {body}" if body else str(exc)
-        raise _GeminiGenerateContentHttpError(
-            message=detail,
-            status_code=response.status_code,
-            response_body=response_body,
-        ) from exc
-
-    parsed = response.json()
-    if not isinstance(parsed, dict):
-        raise ValueError("Gemini image response must be a JSON object.")
-    log_image_flow_event(
-        "gemini.generate_content.http_output",
-        {
-            "trace_id": trace_id,
-            "model_name": model_name,
-            "attempt": attempt_name,
-            "status_code": response.status_code,
-            "elapsed_ms": elapsed_ms,
-            "response": summarize_gemini_response(parsed),
-        },
-    )
-    return parsed
 
 
 def _payload_json_size_bytes(payload: Mapping[str, object]) -> int:
@@ -2498,117 +2416,6 @@ def _collect_inline_image_summaries(value: object) -> list[dict[str, object]]:
     return summaries
 
 
-def _safe_response_body(response: httpx.Response) -> object:
-    try:
-        return summarize_gemini_response(response.json())
-    except ValueError:
-        text = response.text.strip()
-        return redact_for_image_log(text)
-
-
-def _should_retry_gemini_with_minimal_payload(
-    *,
-    model_name: str,
-    attempt: _GeminiRequestAttempt,
-    response_payload: Mapping[str, object],
-) -> bool:
-    if not _model_can_retry_with_minimal_image_payload(model_name):
-        return False
-    if attempt.name != "configured":
-        return False
-    _ = response_payload
-    return True
-
-
-def _should_retry_gemini_http_error_with_minimal_payload(
-    *,
-    model_name: str,
-    attempt: _GeminiRequestAttempt,
-    error: _GeminiGenerateContentHttpError,
-) -> bool:
-    if not _model_can_retry_with_minimal_image_payload(model_name):
-        return False
-    if not attempt.retry_on_http_400:
-        return False
-    if error.status_code != 400:
-        return False
-    return True
-
-
-def _model_can_retry_with_minimal_image_payload(model_name: str) -> bool:
-    return _model_uses_compatibility_image_generation_config(
-        model_name
-    ) or _model_uses_nano_banana_2_generation_config(model_name)
-
-
-def _build_gemini_missing_image_error(payload: Mapping[str, object]) -> str:
-    detail_parts: list[str] = []
-    finish_reason = _extract_gemini_finish_reason(payload)
-    if finish_reason:
-        detail_parts.append(f"finishReason={finish_reason}")
-    finish_message = _extract_gemini_finish_message(payload)
-    if finish_message:
-        detail_parts.append(f"finishMessage={_truncate_text(finish_message)}")
-    response_text = _extract_gemini_response_text(payload)
-    if response_text:
-        detail_parts.append(f"text={_truncate_text(response_text)}")
-    detail = f" Details: {'; '.join(detail_parts)}" if detail_parts else ""
-    return "Gemini image response did not contain image data." + detail
-
-
-def _extract_gemini_finish_reason(payload: Mapping[str, object]) -> str | None:
-    candidate = _extract_first_gemini_candidate(payload)
-    if candidate is None:
-        return None
-    value = candidate.get("finishReason")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _extract_gemini_finish_message(payload: Mapping[str, object]) -> str | None:
-    candidate = _extract_first_gemini_candidate(payload)
-    if candidate is None:
-        return None
-    value = candidate.get("finishMessage")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _extract_gemini_response_text(payload: Mapping[str, object]) -> str:
-    candidate = _extract_first_gemini_candidate(payload)
-    if candidate is None:
-        return ""
-    content = candidate.get("content")
-    if not isinstance(content, Mapping):
-        return ""
-    parts = content.get("parts")
-    if not isinstance(parts, list):
-        return ""
-
-    texts: list[str] = []
-    for part in parts:
-        if not isinstance(part, Mapping):
-            continue
-        text = part.get("text")
-        if isinstance(text, str) and text.strip():
-            texts.append(text.strip())
-    return "\n".join(texts)
-
-
-def _extract_first_gemini_candidate(
-    payload: Mapping[str, object],
-) -> Mapping[str, object] | None:
-    candidates = payload.get("candidates")
-    if not isinstance(candidates, list) or not candidates:
-        return None
-    first = candidates[0]
-    if isinstance(first, Mapping):
-        return first
-    return None
-
-
 def _truncate_text(value: str, *, limit: int = 240) -> str:
     normalized = " ".join(value.split())
     if len(normalized) <= limit:
@@ -2644,6 +2451,119 @@ def _build_preset_prompt(preset_selection: Mapping[str, object] | None) -> str:
     return "\n".join(prompt_parts)
 
 
+def _build_preset_reference_images(
+    preset_selection: Mapping[str, object] | None,
+) -> list[SnapshotPresetReferenceImage]:
+    if preset_selection is None:
+        return []
+
+    preset_config = load_config(config_file).presets
+    requested_presets = (
+        ("style", preset_config.styles, _string(preset_selection.get("style"))),
+        ("lighting", preset_config.lights, _string(preset_selection.get("lighting"))),
+        (
+            "scenery",
+            preset_config.sceneries,
+            _string(preset_selection.get("scenery")),
+        ),
+    )
+    references: list[SnapshotPresetReferenceImage] = []
+    for group, options, key in requested_presets:
+        if not key:
+            continue
+        option = options.get(key)
+        if option is None:
+            raise ValueError(f"Unknown {group} preset: {key}")
+        image_data_url = _resolve_preset_reference_image_data_url(
+            option.reference_image
+        )
+        if image_data_url is None:
+            continue
+        references.append(
+            SnapshotPresetReferenceImage(
+                group=group,
+                key=key,
+                label=option.label,
+                image_data_url=image_data_url,
+            )
+        )
+    return references
+
+
+def _resolve_preset_reference_image_data_url(reference_image: str | None) -> str | None:
+    raw_reference = _string(reference_image)
+    if not raw_reference:
+        return None
+    if raw_reference.startswith("data:image/"):
+        return _normalize_image_data_url(raw_reference)
+    if raw_reference.startswith(("http://", "https://", "blob:")):
+        logger.warning(
+            "Skipping non-local preset reference image for OpenAI input: %s",
+            raw_reference,
+        )
+        return None
+
+    config_root = Path(config_file).resolve().parent
+    image_path = (config_root / raw_reference.lstrip("/")).resolve()
+    if not image_path.is_file():
+        logger.warning("Preset reference image not found: %s", image_path)
+        return None
+    return _encode_file_as_data_url(image_path)
+
+
+def _build_simple_generate_user_prompt(
+    *,
+    user_prompt: str | None,
+    preset_prompt: str,
+    preset_reference_images: list[SnapshotPresetReferenceImage],
+) -> str:
+    prompt_parts = [
+        _build_simple_prompt_image_role_hint(preset_reference_images),
+        _string(user_prompt) or _DEFAULT_SIMPLE_USER_PROMPT,
+    ]
+    if preset_prompt:
+        prompt_parts.append(
+            "Apply these selected presets as finish realism, material texture, "
+            "lighting/illumination, and exterior scenery visible through existing "
+            "openings only. They must not change architecture, openings, "
+            "built-ins, object colors, object shape, object count, object size, "
+            "camera, depth order, occlusion, or object placement:\n" + preset_prompt
+        )
+    return "\n\n".join(prompt_parts)
+
+
+def _build_simple_prompt_image_role_hint(
+    preset_reference_images: list[SnapshotPresetReferenceImage],
+) -> str:
+    prompt_lines = ["Image 1 is the only target 3D layout/source to transform."]
+    if not preset_reference_images:
+        return "\n".join(prompt_lines)
+
+    last_image_number = len(preset_reference_images) + 1
+    if len(preset_reference_images) == 1:
+        prompt_lines.append(
+            "Image 2 is a preset reference only. Use it only for finish, "
+            "material, lighting, or scenery cues."
+        )
+    else:
+        prompt_lines.append(
+            f"Images 2-{last_image_number} are preset references only. Use them "
+            "only for finish, material texture, lighting mood, or exterior "
+            "scenery cues through existing openings."
+        )
+    for image_number, reference in enumerate(preset_reference_images, start=2):
+        prompt_lines.append(
+            f"Image {image_number}: {reference.group} preset reference "
+            f"({reference.label}) only."
+        )
+    prompt_lines.append(
+        "Do not copy room, camera, furniture, openings, layout, object count, "
+        "object size, object color, or object placement from preset reference "
+        "images."
+    )
+    return "\n".join(prompt_lines)
+
+
 def _build_final_user_prompt(
     *,
     user_prompt: str | None,
@@ -2660,6 +2580,8 @@ def _build_final_user_prompt(
     scene_reference_mode: SceneReferenceMode = "none",
     locked_geometry_references: list[SnapshotLockedGeometryReference] | None = None,
     locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
+    preset_reference_count: int = 0,
+    camera_transfer_reference_used: bool = False,
 ) -> str:
     raw_user_prompt = _string(user_prompt)
     if render_mode in {"generate", "camera_rerender"}:
@@ -2676,6 +2598,7 @@ def _build_final_user_prompt(
             segmentation_map_used=segmentation_map_used,
             locked_geometry_atlas_count=len(geometry_atlas_list),
             locked_geometry_reference_count=len(geometry_reference_list),
+            preset_reference_count=preset_reference_count,
             appearance_reference_count=sum(
                 1
                 for operation in edit_operations
@@ -2722,23 +2645,34 @@ def _build_final_user_prompt(
             "Provide at least one edit operation, preset change, or prompt change."
         )
 
-    prompt_parts: list[str] = []
-    prompt_parts.append("Edit the first image.")
+    prompt_parts: list[str] = [
+        "Transform Image 1, which is the current rendered photo and the primary source image."
+    ]
+    next_image_number = 2
+    if camera_transfer_reference_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is the sharp target 3D layout/camera reference. "
+            "Use it only to match the new camera angle, framing, perspective, "
+            "depth order, occlusion, and visible room/object placement. Preserve "
+            "Image 1's materials, object identity, colors, and realism unless "
+            "changed by explicit edit operations or changed presets."
+        )
+        next_image_number += 1
     if layout_reference_used:
         prompt_parts.append(
-            "Image 2 is an optional same-camera structural guide for identifying existing objects only. Do not transfer camera, layout, or geometry from it, and do not reproduce any guide graphics."
+            f"Image {next_image_number} is an optional same-camera structural guide for identifying existing objects only. Do not transfer camera, layout, or geometry from it, and do not reproduce any guide graphics."
         )
-    else:
+        next_image_number += 1
+    elif not camera_transfer_reference_used:
         prompt_parts.append(
             "Preserve the current camera, room layout, architecture, openings, object count, and all unselected objects."
         )
     prompt_parts.append(
-        "Immutable edit rule: pixels and objects outside the selected object or drawn edit boxes must remain unchanged in shape, position, scale, perspective, material identity, lighting relationship, and visibility."
+        "Immutable edit rule: pixels and objects outside the selected object or drawn edit boxes must remain unchanged in shape, position, scale, perspective, material identity, lighting relationship, and visibility unless a camera-transfer reference is explicitly provided."
     )
     if annotated_reference_used:
-        bbox_image_number = 3 if layout_reference_used else 2
         prompt_parts.append(
-            f"Image {bbox_image_number} is the edit-region guide. "
+            f"Image {next_image_number} is the edit-region guide. "
             "It shows colored bounding boxes drawn over the photo. Each box marks a region to edit; "
             "the small label inside (e.g. R1, R2, R3) is the region ID that matches the instructions below. "
             "Use the boxes and IDs only as your instruction map — they are never part of the scene. "
@@ -2746,6 +2680,41 @@ def _build_final_user_prompt(
             "no colored box outlines, no bounding rectangles, no region IDs, no label text, "
             "no tinted overlays, no guide graphics, no annotations of any kind."
         )
+        next_image_number += 1
+    if preset_reference_count > 0:
+        end_image_number = next_image_number + preset_reference_count - 1
+        if preset_reference_count == 1:
+            prompt_parts.append(
+                f"Image {next_image_number} is a changed preset reference only. "
+                "Use it only for the explicitly changed finish, material texture, "
+                "lighting mood, or exterior scenery. Do not copy its room, camera, "
+                "furniture, openings, layout, object count, object shape, object "
+                "size, object color, or object placement."
+            )
+        else:
+            prompt_parts.append(
+                f"Images {next_image_number}-{end_image_number} are changed preset "
+                "references only. Use them only for the explicitly changed finish, "
+                "material texture, lighting mood, or exterior scenery. Do not copy "
+                "their rooms, camera, furniture, openings, layout, object count, "
+                "object shape, object size, object color, or object placement."
+            )
+        next_image_number = end_image_number + 1
+    appearance_reference_count = sum(
+        1
+        for operation in edit_operations
+        if operation.replacement_image_data_url is not None
+    )
+    if appearance_reference_count > 0:
+        end_image_number = next_image_number + appearance_reference_count - 1
+        if appearance_reference_count == 1:
+            prompt_parts.append(
+                f"Image {next_image_number} is an uploaded object/appearance reference for an explicit edit operation only."
+            )
+        else:
+            prompt_parts.append(
+                f"Images {next_image_number}-{end_image_number} are uploaded object/appearance references for explicit edit operations only."
+            )
     if visible_objects:
         visible_summary = [
             f"{object_id} ({_visible_object_name(payload)})"
@@ -2768,6 +2737,21 @@ def _build_final_user_prompt(
 
     replacement_index = 1
     for operation in edit_operations:
+        if operation.operation_type == "remove":
+            if operation.bbox_norm is not None:
+                prompt_parts.append(
+                    f"Drawn region id: {operation.object_id}.\n"
+                    "Remove the object or visual content inside the matching boxed region. "
+                    "Fill the area naturally with the surrounding wall, floor, bedding, or "
+                    "background surfaces as appropriate. Do not remove or alter objects "
+                    "outside the boxed region."
+                )
+            else:
+                prompt_parts.append(
+                    f"Selected object id: {operation.object_id}.\n"
+                    f"Remove only the selected {operation.object_name or 'object'} and fill the area naturally. "
+                    "Do not alter any unselected object."
+                )
         if operation.prompt is not None:
             target_text = (
                 f"drawn region {operation.object_id}"
@@ -2870,7 +2854,7 @@ def _build_edit_target_geometry_prompt(
 
 
 def _operation_type_label(
-    operation_type: Literal["prompt", "add", "replace", "recolor"] | None,
+    operation_type: Literal["prompt", "add", "replace", "recolor", "remove"] | None,
 ) -> str:
     if operation_type == "add":
         return "add object"
@@ -2878,6 +2862,8 @@ def _operation_type_label(
         return "replace object"
     if operation_type == "recolor":
         return "change color"
+    if operation_type == "remove":
+        return "remove object"
     return "prompt edit"
 
 
@@ -2986,6 +2972,7 @@ def _build_generate_image_role_prompt(
     segmentation_map_used: bool,
     locked_geometry_atlas_count: int = 0,
     locked_geometry_reference_count: int = 0,
+    preset_reference_count: int = 0,
     appearance_reference_count: int = 0,
 ) -> str:
     if render_mode == "camera_rerender":
@@ -3059,6 +3046,26 @@ def _build_generate_image_role_prompt(
             f"Images {next_image_number}-{end_image_number} are legacy exact object-level geometry lock crops from the clean 3D source. Use them only to preserve listed object silhouettes, proportions, and structural relationships."
         )
         next_image_number = end_image_number + 1
+    if preset_reference_count > 0:
+        end_image_number = next_image_number + preset_reference_count - 1
+        if preset_reference_count == 1:
+            prompt_parts.append(
+                f"Image {next_image_number} is a selected preset reference image. "
+                "Use it only for finish realism, material texture, lighting mood, "
+                "or exterior scenery through existing openings. Do not use it to "
+                "change camera, layout, architecture, object count, object shape, "
+                "object color, object size, or object placement."
+            )
+        else:
+            prompt_parts.append(
+                f"Images {next_image_number}-{end_image_number} are selected preset "
+                "reference images. Use them only for finish realism, material "
+                "texture, lighting mood, or exterior scenery through existing "
+                "openings. Do not use them to change camera, layout, architecture, "
+                "object count, object shape, object color, object size, or object "
+                "placement."
+            )
+        next_image_number = end_image_number + 1
     if appearance_reference_count > 0:
         end_image_number = next_image_number + appearance_reference_count - 1
         prompt_parts.append(
@@ -3074,10 +3081,13 @@ def _resolve_scene_reference_mode(
     render_mode: RenderMode,
     scene_reference_image_data_url: str | None,
 ) -> SceneReferenceMode:
-    if (
-        render_mode not in {"generate", "camera_rerender"}
-        or scene_reference_image_data_url is None
-    ):
+    if render_mode == "edit":
+        if scene_reference_mode == "scene_reference_camera_transfer":
+            return "scene_reference_camera_transfer"
+        return "none"
+    if render_mode not in {"generate", "camera_rerender"}:
+        return "none"
+    if scene_reference_image_data_url is None:
         return "none"
     if scene_reference_mode == "target_layout_with_scene_reference":
         return "target_layout_with_scene_reference"
@@ -3374,7 +3384,7 @@ def _normalize_edit_operations(
         target_color = _string(operation.target_color) or None
         prompt = _string(operation.prompt) or None
         operation_type = operation.operation_type
-        if operation_type not in {"prompt", "add", "replace", "recolor", None}:
+        if operation_type not in {"prompt", "add", "replace", "recolor", "remove", None}:
             operation_type = None
         if operation_type is None:
             operation_type = (
@@ -3643,6 +3653,17 @@ def _serialize_locked_geometry_reference(
     }
 
 
+def _serialize_preset_reference_image(
+    reference: SnapshotPresetReferenceImage,
+) -> dict[str, object]:
+    return {
+        "group": reference.group,
+        "key": reference.key,
+        "label": reference.label,
+        "image_provided": True,
+    }
+
+
 def _serialize_locked_geometry_atlas(
     atlas: SnapshotLockedGeometryAtlas,
 ) -> dict[str, object]:
@@ -3775,125 +3796,6 @@ def _serialize_edit_operation(operation: SnapshotEditOperation) -> dict[str, obj
     }
 
 
-def _normalize_gemini_input_image_data_url(
-    data_url: str,
-    *,
-    model_name: str,
-    image_size: str,
-    aspect_ratio: str,
-) -> str:
-    target_size = _resolve_gemini_image_output_size(
-        model_name=model_name,
-        image_size=image_size,
-        aspect_ratio=aspect_ratio,
-    )
-    if target_size is None:
-        return data_url
-
-    _, _, image_base64 = data_url.partition(",")
-    try:
-        image_bytes = base64.b64decode(image_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("Image data URL contains invalid base64 image data.") from exc
-
-    try:
-        with Image.open(BytesIO(image_bytes)) as image:
-            image.load()
-            normalized_image = image.convert("RGBA")
-    except UnidentifiedImageError as exc:
-        raise ValueError("Image data URL contains unsupported image bytes.") from exc
-
-    fitted_image = (
-        normalized_image
-        if normalized_image.size == target_size
-        else _fit_image_to_gemini_canvas(normalized_image, target_size)
-    )
-    flattened_image = _flatten_image_to_rgb(fitted_image)
-
-    output = BytesIO()
-    flattened_image.save(output, format="PNG", optimize=True)
-    image_base64 = base64.b64encode(output.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{image_base64}"
-
-
-def _resolve_gemini_image_output_size(
-    *,
-    model_name: str,
-    image_size: str,
-    aspect_ratio: str,
-) -> tuple[int, int] | None:
-    normalized_model = _normalize_gemini_model_name(model_name)
-    normalized_image_size = image_size.upper()
-    if normalized_image_size == "512":
-        normalized_image_size = "0.5K"
-
-    if normalized_model == "gemini-3.1-flash-image-preview":
-        return _GEMINI_31_IMAGE_OUTPUT_SIZES.get(normalized_image_size, {}).get(
-            aspect_ratio
-        )
-    if normalized_model == "gemini-3-pro-image-preview":
-        return _GEMINI_3_PRO_IMAGE_OUTPUT_SIZES.get(normalized_image_size, {}).get(
-            aspect_ratio
-        )
-    if normalized_model == "gemini-2.5-flash-image":
-        return _GEMINI_25_IMAGE_OUTPUT_SIZES["1K"].get(aspect_ratio)
-    return None
-
-
-def _fit_image_to_gemini_canvas(
-    image: Image.Image,
-    target_size: tuple[int, int],
-) -> Image.Image:
-    target_width, target_height = target_size
-    width, height = image.size
-    scale = min(target_width / width, target_height / height)
-    resized_size = (
-        max(1, round(width * scale)),
-        max(1, round(height * scale)),
-    )
-    resized = image.resize(resized_size, Image.Resampling.LANCZOS)
-    canvas = Image.new(
-        "RGBA",
-        target_size,
-        _sample_image_background_color(image),
-    )
-    offset = (
-        (target_width - resized.width) // 2,
-        (target_height - resized.height) // 2,
-    )
-    canvas.alpha_composite(resized, offset)
-    return canvas
-
-
-def _flatten_image_to_rgb(image: Image.Image) -> Image.Image:
-    rgba_image = image.convert("RGBA")
-    background = Image.new(
-        "RGBA",
-        rgba_image.size,
-        _sample_image_background_color(rgba_image),
-    )
-    background.alpha_composite(rgba_image)
-    return background.convert("RGB")
-
-
-def _sample_image_background_color(image: Image.Image) -> tuple[int, int, int, int]:
-    red, green, blue, alpha = image.getpixel((0, 0))
-    if alpha < 255:
-        return (255, 255, 255, 255)
-    return (red, green, blue, alpha)
-
-
-def _data_url_to_inline_part(data_url: str) -> dict[str, object]:
-    mime_type = _extract_data_url_mime_type(data_url)
-    _, _, image_base64 = data_url.partition(",")
-    return {
-        "inline_data": {
-            "mime_type": mime_type,
-            "data": image_base64,
-        }
-    }
-
-
 def _normalize_user_prompt(user_prompt: str | None) -> str:
     normalized = _string(user_prompt)
     if normalized:
@@ -3950,59 +3852,6 @@ def _extract_data_url_mime_type(data_url: str) -> str:
     mime_section = prefix.removeprefix("data:")
     mime_type, _, _ = mime_section.partition(";")
     return mime_type or "application/octet-stream"
-
-
-def _extract_image_bytes(payload: Mapping[str, object]) -> bytes | None:
-    for inline_key in ("inlineData", "inline_data"):
-        inline_payload = payload.get(inline_key)
-        if isinstance(inline_payload, Mapping):
-            mime_type = inline_payload.get("mimeType") or inline_payload.get(
-                "mime_type"
-            )
-            data = inline_payload.get("data")
-            if isinstance(mime_type, str) and mime_type.startswith("image/"):
-                if isinstance(data, str):
-                    decoded = _decode_base64_image(data)
-                    if decoded is not None:
-                        return decoded
-
-    direct_value = payload.get("b64_json") or payload.get("image") or payload.get("url")
-    if isinstance(direct_value, str):
-        return _decode_base64_image(direct_value)
-
-    for value in payload.values():
-        if isinstance(value, Mapping):
-            nested = _extract_image_bytes(value)
-            if nested is not None:
-                return nested
-        elif isinstance(value, list):
-            nested = _extract_image_bytes_from_list(value)
-            if nested is not None:
-                return nested
-    return None
-
-
-def _extract_image_bytes_from_list(values: list[object]) -> bytes | None:
-    for item in values:
-        if isinstance(item, str):
-            decoded = _decode_base64_image(item)
-            if decoded is not None:
-                return decoded
-        elif isinstance(item, Mapping):
-            nested = _extract_image_bytes(item)
-            if nested is not None:
-                return nested
-    return None
-
-
-def _decode_base64_image(value: str) -> bytes | None:
-    normalized = value.strip()
-    if normalized.startswith("data:image/") and "," in normalized:
-        normalized = normalized.split(",", maxsplit=1)[1]
-    try:
-        return base64.b64decode(normalized, validate=True)
-    except (binascii.Error, ValueError):
-        return None
 
 
 def _guess_image_mime_type(image_bytes: bytes) -> str:
@@ -4099,11 +3948,4 @@ def _secret_string(value: object) -> str | None:
         return None
     if normalized.lower().startswith("your-"):
         return None
-    return normalized
-
-
-def _normalize_gemini_model_name(value: str) -> str:
-    normalized = _string(value, fallback=_DEFAULT_IMAGE_MODEL)
-    if "/" in normalized:
-        return normalized.rsplit("/", maxsplit=1)[-1]
     return normalized

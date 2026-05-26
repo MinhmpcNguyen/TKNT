@@ -1,7 +1,7 @@
 {
   "case_id": "simple_living_01_movie_social__tknt_full",
   "scope": "pipeline.orchestrator.run_case",
-  "generated_at_utc": "2026-05-23T04:24:01.334017+00:00",
+  "generated_at_utc": "2026-05-23T11:34:15.691673+00:00",
   "modules": [
     {
       "module": "room_interpreter",
@@ -77,31 +77,31 @@
       "legacy_artifact": "04_cluster_merged.json"
     },
     {
-      "module": "cluster_relation_planner_bundle",
-      "implementation": "agent.cluster_relation_planner.ClusterRelationPlanner.generate_bundle",
+      "module": "seed_concept_generator",
+      "implementation": "agent.seed_concept_generator.SeedConceptGenerator.generate_bundle",
       "inputs": [
         "room_output",
         "merged_object_program",
         "target_count"
       ],
-      "output": "bundle of deterministic anchor-first macro concepts",
-      "output_artifact": "module_outputs/cluster_relation_planner_bundle.json",
+      "output": "bundle of LLM-guided anchor-first macro concepts",
+      "output_artifact": "module_outputs/seed_concept_generator.json",
       "legacy_artifact": "05c_seed_relation_plans.json"
     },
     {
-      "module": "cluster_relation_plan",
+      "module": "seed_concept_relation_plan",
       "implementation": "agent.seed_concept_generator.solver_plan_from_concept",
       "inputs": [
         "macro_concept",
         "room_output",
         "room_type"
       ],
-      "output": "canonical relation plan consumed by the object-level solver",
-      "output_artifact": "module_outputs/cluster_relation_plan.json",
+      "output": "canonical relation plan consumed by the macro cluster solver",
+      "output_artifact": "module_outputs/seed_concept_relation_plan.json",
       "legacy_artifact": "05b_cluster_relation_plan.json"
     },
     {
-      "module": "object_level_solver",
+      "module": "macro_cluster_solver",
       "implementation": "agent.solver.solver.MacroClusterSolver.generate_object_layout",
       "inputs": [
         "room_output",
@@ -109,8 +109,8 @@
         "relation_plan",
         "cluster_output"
       ],
-      "output": "absolute object-level layout solved directly from anchors and support constraints",
-      "output_artifact": "module_outputs/object_level_solver.json",
+      "output": "absolute macro-cluster layout solved directly from anchors and support constraints",
+      "output_artifact": "module_outputs/macro_cluster_solver.json",
       "legacy_artifact": "06a_cluster_solver.json"
     },
     {
@@ -131,7 +131,7 @@
       "module": "absolute_layout",
       "implementation": "agent.solver.solver.MacroClusterSolver.generate_object_layout:absolute_layout",
       "inputs": [
-        "object_level_solver output",
+        "macro_cluster_solver output",
         "manual_placements"
       ],
       "output": "canonical absolute layout consumed by Stylist",

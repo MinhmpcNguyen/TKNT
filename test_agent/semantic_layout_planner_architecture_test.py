@@ -7,7 +7,9 @@ from agent import semantic_layout_planner
 
 
 class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
-    def test_request_contract_llm_failure_skips_heuristic_fallback(self) -> None:
+    def test_request_contract_llm_failure_raises_without_heuristic_fallback(
+        self,
+    ) -> None:
         class FailingPlanner(semantic_layout_planner.SemanticLayoutPlanner):
             def _call_adaptive_stage(
                 self,
@@ -16,11 +18,8 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             ) -> dict[str, object]:
                 raise RuntimeError("boom")
 
-        with (
-            patch.dict("os.environ", {"TKNT_REQUEST_CONTRACT_LLM": "1"}),
-            self.assertLogs(semantic_layout_planner.logger, level="WARNING") as logs,
-        ):
-            result = FailingPlanner()._attach_llm_request_contract_if_enabled(
+        with self.assertRaises(RuntimeError):
+            FailingPlanner()._attach_llm_request_contract_if_enabled(
                 deterministic_program={
                     "active_clusters": [{"cluster_id": "work", "members": ["desk"]}]
                 },
@@ -31,13 +30,8 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
                 temperature=0.2,
                 top_p=0.9,
                 max_tokens=256,
+                use_llm=True,
             )
-
-        contract = result["request_contract"]
-        self.assertEqual(contract["source"], "llm_request_contract_failed")
-        self.assertEqual(contract["objects"], [])
-        self.assertIn("skipping heuristic fallback", "\n".join(logs.output))
-        self.assertIn("fallback was skipped", " ".join(result["notes"]))
 
     def test_adaptive_request_contract_has_response_schema(self) -> None:
         schema = semantic_layout_planner._adaptive_stage_response_schema(
@@ -116,6 +110,64 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         self.assertEqual(cluster["layout_role"], "primary")
         self.assertEqual(cluster["dominant_anchor_candidates"], ["bed"])
         self.assertEqual(cluster["zone_claims"]["preferred_regions"], ["wall_north"])
+
+    def test_role_sanitizer_repairs_all_support_bedroom_clusters(self) -> None:
+        program = semantic_layout_planner._normalize_profile_semantic_program(
+            {
+                "room_type": "bedroom",
+                "active_clusters": [
+                    {
+                        "cluster_id": "sleep_core",
+                        "layout_role": "support",
+                        "priority": "core",
+                        "semantic_role": "primary_anchor_zone",
+                        "required_bundles": [
+                            {
+                                "bundle_id": "sleep_core_bundle",
+                                "objects": [{"object_type": "bed"}],
+                            }
+                        ],
+                    },
+                    {
+                        "cluster_id": "media_optional",
+                        "layout_role": "support",
+                        "priority": "support",
+                        "semantic_role": "secondary_support_zone",
+                        "required_bundles": [
+                            {
+                                "bundle_id": "media_bundle",
+                                "objects": [{"object_type": "tv_console"}],
+                            }
+                        ],
+                    },
+                    {
+                        "cluster_id": "storage_core",
+                        "layout_role": "support",
+                        "priority": "core",
+                        "semantic_role": "storage_zone",
+                        "required_bundles": [
+                            {
+                                "bundle_id": "storage_bundle",
+                                "objects": [{"object_type": "wardrobe"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+            affordance_summary={},
+        )
+
+        roles = {
+            cluster["cluster_id"]: cluster["layout_role"]
+            for cluster in program["active_clusters"]
+        }
+        self.assertEqual(roles["sleep_core"], "primary")
+        self.assertEqual(roles["media_optional"], "secondary")
+        self.assertEqual(roles["storage_core"], "support")
+        trace = program["role_normalization"]
+        self.assertTrue(trace["applied"])
+        self.assertEqual(trace["primary_cluster_id"], "sleep_core")
+        self.assertEqual(trace["secondary_cluster_id"], "media_optional")
 
     def test_bedroom_profile_trace_is_shadow_only_for_legacy_layout(self) -> None:
         with patch.dict(

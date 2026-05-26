@@ -1,0 +1,61 @@
+{
+  "user_input": {
+    "description": "Could you please design a Living Room for me? The room is 4.0m x 5.0m. Designed for relaxation and socializing, the living room should feature a comfortable sofa arrangement, ample lighting for different activities, and a designated movie area with a large screen and surround sound for an immersive experience. Include a sofa facing a TV console, a coffee table, a rug, and one or two armchairs if they fit while keeping the room easy to move through. Opening positions: the door is on the bottom wall, spanning from 0.6m to 1.5m; the window is on the top wall, spanning from 1.2m to 2.8m.",
+    "room_type": "living_room",
+    "floor_area_m2": 20.0,
+    "height": 2800,
+    "shape_points": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 5000,
+        "y": 0
+      },
+      {
+        "x": 5000,
+        "y": 4000
+      },
+      {
+        "x": 0,
+        "y": 4000
+      }
+    ],
+    "windows": 1,
+    "window_direction": "N",
+    "style": "japandi"
+  },
+  "doors": [
+    {
+      "id": "door_1",
+      "segment_mm": [
+        {
+          "x": 600,
+          "y": 0
+        },
+        {
+          "x": 1500,
+          "y": 0
+        }
+      ],
+      "swing_radius_mm": 850
+    }
+  ],
+  "windows": [
+    {
+      "id": "window_1",
+      "segment_mm": [
+        {
+          "x": 1200,
+          "y": 4000
+        },
+        {
+          "x": 2800,
+          "y": 4000
+        }
+      ],
+      "clearance_mm": 450
+    }
+  ]
+}

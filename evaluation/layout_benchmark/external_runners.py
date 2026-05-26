@@ -14,6 +14,10 @@ BENCHMARK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BENCHMARK_DIR.parents[1]
 DEFAULT_MODEL = "gpt-5.4-nano"
 WRITE_STDOUT_LOG_ENV = "LAYOUT_BENCHMARK_WRITE_STDOUT_LOG"
+SYSTEM_ID_ALIASES: Mapping[str, str] = {
+    "idesign_gemini": "idesign_openai",
+    "flairgpt_gemini": "flairgpt_openai",
+}
 
 
 def run_external_case(
@@ -224,12 +228,11 @@ def _external_command(
     env["MPLBACKEND"] = "Agg"
     _configure_writable_cache_env(env, output_path.parent)
 
+    system_id = _canonical_system_id(system_id)
     locked_model = model or DEFAULT_MODEL
-    if system_id == "idesign_gemini":
-        if _truthy_env("IDESIGN_USE_OPENAI"):
-            env["IDESIGN_OPENAI_MODEL"] = locked_model
-        else:
-            env["IDESIGN_GEMINI_MODEL"] = locked_model
+    if system_id == "idesign_openai":
+        env["IDESIGN_USE_OPENAI"] = "true"
+        env["IDESIGN_OPENAI_MODEL"] = locked_model
         cwd = REPO_ROOT / "other_systems" / "IDesign"
         return (
             [
@@ -249,11 +252,9 @@ def _external_command(
             env,
         )
 
-    if system_id == "flairgpt_gemini":
-        if _truthy_env("FLAIRGPT_USE_OPENAI"):
-            env["FLAIRGPT_OPENAI_MODEL"] = locked_model
-        else:
-            env["FLAIRGPT_GEMINI_MODEL"] = locked_model
+    if system_id == "flairgpt_openai":
+        env["FLAIRGPT_USE_OPENAI"] = "true"
+        env["FLAIRGPT_OPENAI_MODEL"] = locked_model
         cwd = REPO_ROOT / "other_systems" / "FlairGPT" / "Scene_Synthesis"
         return (
             [
@@ -272,6 +273,10 @@ def _external_command(
         )
 
     raise ValueError(f"Unsupported external system: {system_id}")
+
+
+def _canonical_system_id(system_id: str) -> str:
+    return SYSTEM_ID_ALIASES.get(system_id, system_id)
 
 
 def _python_executable(python_env: str, prefix_env: str) -> str:
@@ -362,7 +367,7 @@ def _opening_rows(
 
 
 def _opening_segment(
-    opening: Mapping[str, object]
+    opening: Mapping[str, object],
 ) -> tuple[tuple[float, float], tuple[float, float]] | None:
     segment = opening.get("segment_mm")
     if not isinstance(segment, list) or len(segment) < 2:
@@ -400,7 +405,7 @@ def _opening_label(*, kind: str, index: int) -> str:
 
 
 def _room_bounds(
-    benchmark_case: Mapping[str, object]
+    benchmark_case: Mapping[str, object],
 ) -> tuple[float, float, float, float] | None:
     room = _mapping(benchmark_case.get("room"))
     points = room.get("polygon_mm")

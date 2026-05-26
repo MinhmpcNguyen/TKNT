@@ -34,26 +34,17 @@ except Exception:  # pragma: no cover
     TextLLMConfig = None  # type: ignore[assignment]
 
 
-_STYLE_VARIANT_MODEL_NAMES = (
-    "gemma-4-31b-it",
-    "gemini-3.1-flash-lite-preview",
-    "gemma-3-27b-it",
-    "gemini-3-flash-preview",
-    "gemma-4-31b-it",
-)
-
-
 def stylist_model_name_for_variant(variant_index: int) -> str:
+    _ = variant_index
     strict_model_name = _strict_single_model_name()
     if strict_model_name:
         return strict_model_name
     configured_model_name = _configured_agent_model_name("stylist")
     if configured_model_name:
         return configured_model_name
-    safe_index = max(1, int(variant_index))
-    return _STYLE_VARIANT_MODEL_NAMES[
-        (safe_index - 1) % len(_STYLE_VARIANT_MODEL_NAMES)
-    ]
+    if TextLLMConfig is not None:
+        return TextLLMConfig.primary_model_name()
+    return ""
 
 
 @dataclass(frozen=True)
@@ -572,23 +563,12 @@ def _style_plan_model_attempt_order(model_name: str | None) -> list[str]:
         return [strict_model_name]
     configured_model_name = _configured_agent_model_name("stylist")
     requested_model_name = str(model_name or configured_model_name or "").strip()
-    sequence = (
-        list(_STYLE_VARIANT_MODEL_NAMES)
-        if TextLLMConfig is None or TextLLMConfig.PROVIDER == "gemini"
-        else []
-    )
     if not requested_model_name:
         primary_model_name = (
             TextLLMConfig.primary_model_name() if TextLLMConfig is not None else ""
         )
-        return sequence or ([primary_model_name] if primary_model_name else [])
-    if requested_model_name in sequence:
-        start_index = sequence.index(requested_model_name)
-        return sequence[start_index:] + sequence[:start_index]
-    return [
-        requested_model_name,
-        *[name for name in sequence if name != requested_model_name],
-    ]
+        return [primary_model_name] if primary_model_name else []
+    return [requested_model_name]
 
 
 def _strict_single_model_name() -> str:
@@ -604,18 +584,7 @@ def _configured_agent_model_name(key: str) -> str | None:
 
 
 def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
-    if TextLLMConfig is None or getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
-        return
-    try:
-        from clients.gemini_client import GeminiClient
-
-        GeminiClient.record_retry_event(
-            stage=stage,
-            model_name=model_name,
-            reason=reason,
-        )
-    except Exception:
-        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+    _ = (stage, model_name, reason)
 
 
 def _is_retryable_model_unavailable_error(exc: Exception) -> bool:

@@ -27,8 +27,8 @@
   "cases": [
     {
       "id": "test3_pix2pix_exact_preservation",
-      "source_image": "../ollama_flux2_klein_lab/test3.png",
-      "reference_image": "../ollama_flux2_klein_lab/test3.png",
+      "source_image": "../hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png",
+      "reference_image": "../hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png",
       "target_caption": "a photorealistic interior render preserving the same room layout, camera, furniture positions, and object relationships",
       "edit_prompt": "Keep the same room, camera angle, architecture, furniture layout, and major objects. Improve photorealistic material quality only.",
       "variants": [
@@ -36,7 +36,7 @@
           "id": "baseline_self_check",
           "mode": "baseline",
           "provider": "evaluate_only",
-          "output_image": "../ollama_flux2_klein_lab/test3.png"
+          "output_image": "../hf_image_edit_macos_lab/outputs/test3_pix2pix_exact_visual.png"
         }
       ]
     }

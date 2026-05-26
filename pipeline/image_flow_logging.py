@@ -93,14 +93,6 @@ def summarize_image_data_url(data_url: str | None) -> dict[str, object] | None:
     }
 
 
-def summarize_gemini_payload(payload: object) -> object:
-    return redact_for_image_log(payload)
-
-
-def summarize_gemini_response(payload: object) -> object:
-    return redact_for_image_log(payload)
-
-
 def _redact_string(value: str, *, key: str | None) -> object:
     normalized_key = key or ""
     if value.startswith("data:image/") and "," in value:

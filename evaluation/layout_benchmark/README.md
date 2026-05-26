@@ -3,8 +3,8 @@
 This folder contains the evaluation process for comparing:
 
 - `tknt_full`
-- `idesign_gemini`
-- `flairgpt_gemini`
+- `idesign_openai`
+- `flairgpt_openai`
 - `tknt_a1_no_style_policy`
 - `tknt_a2_no_capacity_control`
 - `tknt_a3_single_concept`
@@ -24,14 +24,14 @@ The runner sets these env controls for TKNT subprocesses:
 
 - `TKNT_BENCHMARK_TEXT_MODEL=<model>`: forces TKNT primary/helper/agent text models to the same model.
 - `TKNT_DISABLE_MODEL_FALLBACK=1`: disables configured text-model fallback chains.
-- `TKNT_STYLE_POLICY_REQUIRE_LLM=1`: full TKNT and non-style ablations require the style policy LLM output rather than deterministic fallback.
+- TKNT now requires the style policy LLM output by default; no separate strict-mode flag is needed.
 
 For IDesign and FlairGPT, run their prompts with the same locked text model and put outputs under `external_outputs`.
 Their output wrapper includes `runtime_s`, `llm_usage`, `input_tokens`, and `output_tokens` when the OpenAI-compatible response includes usage data; the scorer preserves them in the summary.
 
 Use separate keys for the external systems:
 
-- IDesign: `other_systems/IDesign/gemini.env` with `IDESIGN_USE_OPENAI=true` and either `IDESIGN_OPENAI_API_KEY` or `OPENAI_API_KEY`.
+- IDesign: an OpenAI env file with `IDESIGN_USE_OPENAI=true` and either `IDESIGN_OPENAI_API_KEY` or `OPENAI_API_KEY`.
 - FlairGPT: `other_systems/FlairGPT/Scene_Synthesis/hidden.env` with `FLAIRGPT_USE_OPENAI=true` and either `FLAIRGPT_OPENAI_API_KEY` or `OPENAI_API_KEY`.
 
 ## Commands

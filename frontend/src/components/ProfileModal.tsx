@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import {
   formatVnd,
-  getMonthlyImagesRemaining,
+  getMonthlyCreditsRemaining,
   type BillingMode,
 } from '../billing';
 import { useEditorStore } from '../store';
@@ -65,13 +65,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
     billingSettings,
     updateBillingSettings,
   } = useEditorStore();
-  const monthlyRemaining = getMonthlyImagesRemaining(billingSettings);
+  const monthlyRemaining = getMonthlyCreditsRemaining(billingSettings);
   const usagePercent =
-    billingSettings.monthlyImageQuota > 0
+    billingSettings.monthlyCreditQuota > 0
       ? Math.min(
           100,
           Math.round(
-            (billingSettings.monthlyImagesUsed / billingSettings.monthlyImageQuota) * 100
+            (billingSettings.monthlyCreditsUsed /
+              billingSettings.monthlyCreditQuota) *
+              100
           )
         )
       : 0;
@@ -108,7 +110,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
       mode === 'monthly' && billingSettings.mode !== 'monthly'
         ? {
             mode,
-            monthlyImagesUsed: 0,
+            monthlyCreditsUsed: 0,
             monthlyPeriodStartedAt: new Date().toISOString(),
           }
         : { mode }
@@ -184,8 +186,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 <strong>{renderStats.total}</strong>
               </div>
               <div className="profile-stat-card">
-                <span>Paid Single Images</span>
-                <strong>{billingSettings.totalPaidUses}</strong>
+                <span>Paid Credits</span>
+                <strong>{billingSettings.totalPaidCredits}</strong>
               </div>
             </div>
           </section>
@@ -194,7 +196,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
             <div className="profile-section-header">
               <h2>Billing</h2>
               <span>
-                {billingSettings.mode === 'monthly' ? 'Monthly pack' : 'Pay per image'}
+                {billingSettings.mode === 'monthly' ? 'Monthly pack' : 'Pay per credit'}
               </span>
             </div>
             <div className="billing-plan-grid">
@@ -207,7 +209,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
               >
                 <span>Monthly Pack</span>
                 <strong>{formatVnd(billingSettings.monthlyPriceVnd)}</strong>
-                <small>{billingSettings.monthlyImageQuota} images / month</small>
+                <small>{billingSettings.monthlyCreditQuota} credits / month</small>
               </button>
               <button
                 className={`billing-plan-card${
@@ -216,9 +218,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 type="button"
                 onClick={() => selectBillingMode('per_use')}
               >
-                <span>Pay Per Image</span>
-                <strong>{formatVnd(billingSettings.perUsePriceVnd)}</strong>
-                <small>QR before every generate/edit</small>
+                <span>Pay Per Credit</span>
+                <strong>{formatVnd(billingSettings.perCreditPriceVnd)}</strong>
+                <small>QR by selected render credits</small>
               </button>
             </div>
 
@@ -227,11 +229,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 <div>
                   <strong>Monthly Image Credits</strong>
                   <span>
-                    {billingSettings.monthlyImagesUsed} used · {monthlyRemaining} left
+                    {billingSettings.monthlyCreditsUsed} used · {monthlyRemaining} left
                   </span>
                 </div>
                 <strong>
-                  {billingSettings.monthlyImagesUsed}/{billingSettings.monthlyImageQuota}
+                  {billingSettings.monthlyCreditsUsed}/
+                  {billingSettings.monthlyCreditQuota}
                 </strong>
               </div>
               <div className="billing-meter" aria-hidden="true">
@@ -255,17 +258,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 />
               </label>
               <label>
-                <span>Monthly image quota</span>
+                <span>Monthly credit quota</span>
                 <input
                   type="number"
                   min={1}
                   step={1}
-                  value={billingSettings.monthlyImageQuota}
+                  value={billingSettings.monthlyCreditQuota}
                   onChange={(event) =>
                     updateBillingSettings({
-                      monthlyImageQuota: clampInteger(event.target.value, 1),
-                      monthlyImagesUsed: Math.min(
-                        billingSettings.monthlyImagesUsed,
+                      monthlyCreditQuota: clampInteger(event.target.value, 1),
+                      monthlyCreditsUsed: Math.min(
+                        billingSettings.monthlyCreditsUsed,
                         clampInteger(event.target.value, 1)
                       ),
                     })
@@ -273,15 +276,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 />
               </label>
               <label>
-                <span>Single image price</span>
+                <span>Credit price</span>
                 <input
                   type="number"
                   min={1000}
                   step={1000}
-                  value={billingSettings.perUsePriceVnd}
+                  value={billingSettings.perCreditPriceVnd}
                   onChange={(event) =>
                     updateBillingSettings({
-                      perUsePriceVnd: clampInteger(event.target.value, 1000),
+                      perCreditPriceVnd: clampInteger(event.target.value, 1000),
                     })
                   }
                 />

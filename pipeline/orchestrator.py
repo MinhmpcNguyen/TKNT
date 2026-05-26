@@ -6,7 +6,8 @@ import logging
 import os
 import re
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,9 +21,8 @@ from agent.cluster_composer import (
 from agent.cluster_forge import ClusterForge
 from agent.cluster_placer import build_phase2_payload
 from agent.phase2_controller import Phase2Controller, build_phase2_preview_candidate
-from agent.cluster_relation_planner import ClusterRelationPlanner
 from agent.room_interpreter import RoomInterpreter
-from agent.seed_concept_generator import solver_plan_from_concept
+from agent.seed_concept_generator import SeedConceptGenerator, solver_plan_from_concept
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist, stylist_model_name_for_variant
 from agent.tier_count_director import TierCountDirector
@@ -89,6 +89,42 @@ _VISUAL_RELATION_OFF_VALUES = {"", "0", "false", "no", "off"}
 _VISUAL_RELATION_V1_VALUES = {"1", "true", "yes", "on", "v1"}
 _VISUAL_RELATION_V2_VALUES = {"v2", "macro", "macro_concept", "bundle"}
 _VISUAL_RELATION_V2_ARTIFACT_VERSION = "v2_macro_concept_bundle"
+_CONCEPT_REPAIR_MAX_ATTEMPTS = 3
+_CONCEPT_REPAIR_BLOCKED_REGION_TOKENS = (
+    "door",
+    "entry",
+    "corridor",
+    "center_openness",
+    "keep_open",
+    "floating_center",
+)
+_CONCEPT_REPAIR_FUNCTIONAL_REGION_PRIORITY = (
+    "edge_loading_zone",
+    "bottom_wall_zone",
+    "window_side_zone",
+    "left_wall_zone",
+    "right_wall_zone",
+    "top_wall_zone",
+    "quiet_private_deep_zone",
+)
+_HARD_REQUEST_CONTRACT_INTENTS = {"must_keep", "must_try"}
+
+
+@dataclass(frozen=True)
+class _ConceptRepairAttempt:
+    repair_id: str
+    concept: dict[str, Any]
+    relation_plan: dict[str, Any]
+    merged_output: dict[str, Any]
+    notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ObjectLevelSolveResult:
+    bundles: list[dict[str, Any]]
+    failure_diagnostics: list[dict[str, Any]]
+
+
 _REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS: dict[str, dict[str, Any]] = {
     "rug": {
         "width_ratio": 0.56,
@@ -207,10 +243,6 @@ class CasePaths:
     @property
     def room_interpreter(self) -> Path:
         return self.root / "01_room_interpreter.json"
-
-    @property
-    def initial_intents(self) -> Path:
-        return self.root / "01b_initial_intents.json"
 
     @property
     def cluster_forge(self) -> Path:
@@ -369,23 +401,23 @@ ORCHESTRATOR_MODULE_SPECS: tuple[OrchestratorModuleSpec, ...] = (
         legacy_artifact="04_cluster_merged.json",
     ),
     OrchestratorModuleSpec(
-        name="cluster_relation_planner_bundle",
-        implementation="agent.cluster_relation_planner.ClusterRelationPlanner.generate_bundle",
+        name="seed_concept_generator",
+        implementation="agent.seed_concept_generator.SeedConceptGenerator.generate_bundle",
         inputs=("room_output", "merged_object_program", "target_count"),
-        output="bundle of deterministic anchor-first macro concepts",
-        output_artifact="module_outputs/cluster_relation_planner_bundle.json",
+        output="bundle of LLM-guided anchor-first macro concepts",
+        output_artifact="module_outputs/seed_concept_generator.json",
         legacy_artifact="05c_seed_relation_plans.json",
     ),
     OrchestratorModuleSpec(
-        name="cluster_relation_plan",
+        name="seed_concept_relation_plan",
         implementation="agent.seed_concept_generator.solver_plan_from_concept",
         inputs=("macro_concept", "room_output", "room_type"),
-        output="canonical relation plan consumed by the object-level solver",
-        output_artifact="module_outputs/cluster_relation_plan.json",
+        output="canonical relation plan consumed by the macro cluster solver",
+        output_artifact="module_outputs/seed_concept_relation_plan.json",
         legacy_artifact="05b_cluster_relation_plan.json",
     ),
     OrchestratorModuleSpec(
-        name="object_level_solver",
+        name="macro_cluster_solver",
         implementation="agent.solver.solver.MacroClusterSolver.generate_object_layout",
         inputs=(
             "room_output",
@@ -393,8 +425,8 @@ ORCHESTRATOR_MODULE_SPECS: tuple[OrchestratorModuleSpec, ...] = (
             "relation_plan",
             "cluster_output",
         ),
-        output="absolute object-level layout solved directly from anchors and support constraints",
-        output_artifact="module_outputs/object_level_solver.json",
+        output="absolute macro-cluster layout solved directly from anchors and support constraints",
+        output_artifact="module_outputs/macro_cluster_solver.json",
         legacy_artifact="06a_cluster_solver.json",
     ),
     OrchestratorModuleSpec(
@@ -414,7 +446,7 @@ ORCHESTRATOR_MODULE_SPECS: tuple[OrchestratorModuleSpec, ...] = (
     OrchestratorModuleSpec(
         name="absolute_layout",
         implementation="agent.solver.solver.MacroClusterSolver.generate_object_layout:absolute_layout",
-        inputs=("object_level_solver output", "manual_placements"),
+        inputs=("macro_cluster_solver output", "manual_placements"),
         output="canonical absolute layout consumed by Stylist",
         output_artifact="module_outputs/absolute_layout.json",
         legacy_artifact="07_absolute_layout.json",
@@ -497,6 +529,227 @@ def _speed_split_cluster_output(
 ) -> tuple[dict[str, Any], list[str]]:
     _ = room_output
     return cluster_output, []
+
+
+def _validate_semantic_cluster_unique_members(
+    cluster_output: dict[str, Any],
+) -> dict[str, Any]:
+    clusters = cluster_output.get("clusters")
+    if not isinstance(clusters, list):
+        return cluster_output
+
+    output = deepcopy(cluster_output)
+    mutable_clusters = [
+        cluster for cluster in output.get("clusters", []) if isinstance(cluster, dict)
+    ]
+    owner_by_member: dict[str, tuple[int, str, int]] = {}
+    removals_by_cluster_index: dict[int, set[str]] = {}
+    notes: list[str] = []
+
+    for index, cluster in enumerate(mutable_clusters):
+        cluster_id = str(cluster.get("cluster_id") or f"cluster_{index}").strip()
+        cluster_score = _semantic_cluster_member_owner_score(cluster)
+        for member in _semantic_cluster_member_ids(cluster):
+            owner = owner_by_member.get(member)
+            if owner is None:
+                owner_by_member[member] = (index, cluster_id, cluster_score)
+                continue
+            owner_index, owner_cluster_id, owner_score = owner
+            if cluster_score > owner_score:
+                removals_by_cluster_index.setdefault(owner_index, set()).add(member)
+                owner_by_member[member] = (index, cluster_id, cluster_score)
+                notes.append(
+                    f"Removed duplicate member {member} from {owner_cluster_id}; kept in {cluster_id}."
+                )
+                continue
+            removals_by_cluster_index.setdefault(index, set()).add(member)
+            notes.append(
+                f"Removed duplicate member {member} from {cluster_id}; already owned by {owner_cluster_id}."
+            )
+
+    if not removals_by_cluster_index:
+        return cluster_output
+
+    surviving_clusters: list[dict[str, Any]] = []
+    surviving_cluster_ids: set[str] = set()
+    dropped_cluster_ids: set[str] = set()
+    for index, cluster in enumerate(mutable_clusters):
+        removed_members = removals_by_cluster_index.get(index, set())
+        if removed_members:
+            cluster = _remove_semantic_cluster_members(cluster, removed_members)
+        members = _semantic_cluster_member_ids(cluster)
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not members:
+            if cluster_id:
+                dropped_cluster_ids.add(cluster_id)
+                notes.append(f"Dropped empty semantic support cluster {cluster_id}.")
+            continue
+        surviving_clusters.append(cluster)
+        if cluster_id:
+            surviving_cluster_ids.add(cluster_id)
+
+    output["clusters"] = surviving_clusters
+    _filter_semantic_layout_program_after_member_dedupe(
+        output,
+        removals_by_cluster_index=removals_by_cluster_index,
+        dropped_cluster_ids=dropped_cluster_ids,
+        surviving_cluster_ids=surviving_cluster_ids,
+        original_clusters=mutable_clusters,
+    )
+    output["notes"] = _collect_unique_notes(output.get("notes"), notes)
+    return output
+
+
+def _semantic_cluster_member_owner_score(cluster: dict[str, Any]) -> int:
+    cluster_id = str(cluster.get("cluster_id") or "").strip().lower()
+    tag = str(cluster.get("tag") or "").strip().lower()
+    priority = str(cluster.get("priority") or "").strip().lower()
+    layout_role = str(cluster.get("layout_role") or "").strip().lower()
+    semantic_role = str(cluster.get("semantic_role") or "").strip().lower()
+    rules = cluster.get("cluster_rules")
+    if isinstance(rules, dict):
+        priority = priority or str(rules.get("priority") or "").strip().lower()
+        layout_role = layout_role or str(rules.get("layout_role") or "").strip().lower()
+    text = " ".join([cluster_id, tag, priority, layout_role, semantic_role])
+    score = 0
+    if priority == "core":
+        score += 80
+    if layout_role == "primary":
+        score += 70
+    if any(token in text for token in ("main", "core", "primary", "anchor")):
+        score += 30
+    if any(token in text for token in ("support", "lighting", "decor", "optional")):
+        score -= 20
+    anchors = cluster.get("anchors")
+    if isinstance(anchors, list) and anchors:
+        score += 10
+    return score
+
+
+def _semantic_cluster_member_ids(cluster: dict[str, Any]) -> list[str]:
+    members = cluster.get("members")
+    if not isinstance(members, list):
+        return []
+    out: list[str] = []
+    for member in members:
+        if not isinstance(member, str):
+            continue
+        text = member.strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _remove_semantic_cluster_members(
+    cluster: dict[str, Any],
+    removed_members: set[str],
+) -> dict[str, Any]:
+    payload = deepcopy(cluster)
+    members = [
+        member
+        for member in _semantic_cluster_member_ids(payload)
+        if member not in removed_members
+    ]
+    kept = set(members)
+    payload["members"] = members
+    anchors = payload.get("anchors")
+    if isinstance(anchors, list):
+        payload["anchors"] = [
+            anchor for anchor in anchors if isinstance(anchor, str) and anchor in kept
+        ]
+    rules = payload.get("cluster_rules")
+    if isinstance(rules, dict):
+        payload["cluster_rules"] = _filter_cluster_rules_local(rules, kept)
+    footprint = payload.get("cluster_footprint")
+    if isinstance(footprint, dict) and isinstance(footprint.get("rects"), list):
+        footprint = deepcopy(footprint)
+        footprint["rects"] = [
+            rect
+            for rect in footprint["rects"]
+            if isinstance(rect, dict)
+            and str(rect.get("id") or "").strip() not in removed_members
+        ]
+        payload["cluster_footprint"] = footprint
+    object_program = payload.get("object_program")
+    if isinstance(object_program, dict):
+        object_program = deepcopy(object_program)
+        specs = object_program.get("object_specs_by_id")
+        if isinstance(specs, dict):
+            object_program["object_specs_by_id"] = {
+                key: value for key, value in specs.items() if key in kept
+            }
+        payload["object_program"] = object_program
+    return payload
+
+
+def _filter_semantic_layout_program_after_member_dedupe(
+    output: dict[str, Any],
+    *,
+    removals_by_cluster_index: dict[int, set[str]],
+    dropped_cluster_ids: set[str],
+    surviving_cluster_ids: set[str],
+    original_clusters: list[dict[str, Any]],
+) -> None:
+    program = output.get("semantic_layout_program")
+    if not isinstance(program, dict):
+        return
+    active_clusters = program.get("active_clusters")
+    if not isinstance(active_clusters, list):
+        return
+
+    removals_by_cluster_id: dict[str, set[str]] = {}
+    for index, removed_members in removals_by_cluster_index.items():
+        if index >= len(original_clusters):
+            continue
+        cluster_id = str(original_clusters[index].get("cluster_id") or "").strip()
+        if cluster_id:
+            removals_by_cluster_id[cluster_id] = set(removed_members)
+
+    filtered_active_clusters: list[dict[str, Any]] = []
+    for active_cluster in active_clusters:
+        if not isinstance(active_cluster, dict):
+            continue
+        cluster_id = str(active_cluster.get("cluster_id") or "").strip()
+        if (
+            not cluster_id
+            or cluster_id in dropped_cluster_ids
+            or cluster_id not in surviving_cluster_ids
+        ):
+            continue
+        removed_members = removals_by_cluster_id.get(cluster_id, set())
+        filtered_active_clusters.append(
+            _filter_active_cluster_required_bundles(active_cluster, removed_members)
+        )
+    program["active_clusters"] = filtered_active_clusters
+
+
+def _filter_active_cluster_required_bundles(
+    active_cluster: dict[str, Any],
+    removed_members: set[str],
+) -> dict[str, Any]:
+    if not removed_members:
+        return active_cluster
+    payload = deepcopy(active_cluster)
+    bundles = payload.get("required_bundles")
+    if not isinstance(bundles, list):
+        return payload
+    filtered_bundles: list[dict[str, Any]] = []
+    for bundle in bundles:
+        if not isinstance(bundle, dict):
+            continue
+        next_bundle = deepcopy(bundle)
+        objects = next_bundle.get("objects")
+        if isinstance(objects, list):
+            next_bundle["objects"] = [
+                item
+                for item in objects
+                if isinstance(item, dict)
+                and str(item.get("object_type") or "").strip() not in removed_members
+            ]
+        if next_bundle.get("objects"):
+            filtered_bundles.append(next_bundle)
+    payload["required_bundles"] = filtered_bundles
+    return payload
 
 
 def _log_cluster_forge_output(
@@ -913,50 +1166,6 @@ def _room_fill_ratio(room_output: dict[str, Any]) -> float:
     return max(0.0, min(1.0, polygon_area / bbox_area))
 
 
-def _append_initial_intent_guidance(
-    base_text: str,
-    intent: dict[str, Any] | None,
-) -> str:
-    if not isinstance(intent, dict):
-        return base_text
-
-    intent_payload = {
-        "intent_id": intent.get("intent_id"),
-        "label": intent.get("label"),
-        "summary": intent.get("summary"),
-        "focus_mode": intent.get("focus_mode"),
-        "primary_tag": intent.get("primary_tag"),
-        "secondary_tag": intent.get("secondary_tag"),
-        "circulation_priority": intent.get("circulation_priority"),
-        "center_open_preference": intent.get("center_open_preference"),
-        "support_cluster_behavior": intent.get("support_cluster_behavior"),
-        "distribution_mode": intent.get("distribution_mode"),
-        "forge_guidance": intent.get("forge_guidance"),
-        "composer_guidance": intent.get("composer_guidance"),
-        "notes": intent.get("notes"),
-    }
-    parts = [base_text.strip()] if base_text.strip() else []
-    parts.append(
-        "INITIAL_LAYOUT_INTENT_JSON:\n"
-        + json.dumps(intent_payload, ensure_ascii=True, indent=2)
-    )
-    return "\n\n".join(parts)
-
-
-def _extract_primary_intent(
-    initial_intents: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    if not isinstance(initial_intents, dict):
-        return None
-    intents = initial_intents.get("intents")
-    if not isinstance(intents, list):
-        return None
-    for item in intents:
-        if isinstance(item, dict):
-            return item
-    return None
-
-
 def run_case(
     *,
     input_payload: dict[str, Any],
@@ -1016,7 +1225,7 @@ def run_case(
 
     cluster_forge = ClusterForge()
     tier_count = TierCountDirector()
-    relation_planner = ClusterRelationPlanner()
+    concept_generator = SeedConceptGenerator()
     solver = _build_runtime_solver()
     stylist = Stylist()
 
@@ -1069,6 +1278,7 @@ def run_case(
     cluster_output, speed_split_notes = _speed_split_cluster_output(
         room_output=room_output, cluster_output=cluster_output
     )
+    cluster_output = _validate_semantic_cluster_unique_members(cluster_output)
     if speed_split_notes:
         logger.info("Fast mode split clusters before tier count: %s", speed_split_notes)
     _log_cluster_forge_output(cluster_output, context="primary")
@@ -1134,27 +1344,27 @@ def run_case(
         }
     _update_status(
         paths,
-        "cluster_relation_planner",
+        "seed_concept_generator",
         message=_variant_progress_message(
             "Planning layout concepts", 0, target_final_count
         ),
         progress_current=0,
         progress_total=target_final_count,
     )
-    seed_relation_plans = relation_planner.generate_bundle(
+    seed_relation_plans = concept_generator.generate_bundle(
         room_model_json=room_output,
         clusters_json=merged_output,
         target_count=target_final_count,
         description=planning_guidance_text or None,
+        use_llm=False,
     )
     seed_relation_plans = _strip_raw_text(seed_relation_plans)
     _write_module_json(
         paths,
-        "cluster_relation_planner_bundle",
+        "seed_concept_generator",
         seed_relation_plans,
         legacy_path=paths.seed_relation_plans,
     )
-    _write_module_json(paths, "seed_concept_generator", seed_relation_plans)
     concepts = [
         item
         for item in (seed_relation_plans.get("concepts") or [])
@@ -1179,60 +1389,111 @@ def run_case(
     )
     if visual_candidate_bundles:
         solved_bundles.extend(visual_candidate_bundles)
-    for concept_index, concept in enumerate(concepts[:target_final_count], start=1):
-        relation_plan = solver_plan_from_concept(
-            concept=concept,
-            room_model_json=room_output,
-            room_type=room_type,
-        )
-        relation_plan = _strip_raw_text(relation_plan)
-        if concept_index == 1:
-            _write_module_json(
-                paths,
-                "cluster_relation_plan",
-                relation_plan,
-                legacy_path=paths.cluster_relation_plan,
-            )
-            _write_module_json(paths, "seed_concept_relation_plan", relation_plan)
-        _update_status(
-            paths,
-            "solver",
-            message=f"Concept {concept_index}/{target_final_count}: solving object-level anchor-first layout.",
-            progress_current=len(solved_bundles),
-            progress_total=target_final_count,
-        )
-        concept_bundles = _solve_object_level_variant_bundle(
-            concept=concept,
-            relation_plan=relation_plan,
+    solved_bundles.extend(
+        _solve_seed_concept_pool(
+            concepts=concepts,
             room_output=room_output,
+            room_type=room_type,
             cluster_output=cluster_output,
             tier_output=tier_output,
             merged_output=merged_output,
             solver=solver,
             manual_placements=manual_placements,
-            variant_index=concept_index,
             ablation_mode=resolved_ablation_mode,
+            target_final_count=target_final_count,
+            paths=paths,
+            progress_offset=len(solved_bundles),
+            write_first_relation_plan=True,
+            write_first_bundle_artifacts=True,
         )
-        if not concept_bundles:
-            continue
-        for solution_offset, solved_bundle in enumerate(concept_bundles, start=1):
-            solved_bundle = _refill_judged_variant_accessories(
-                bundle=solved_bundle,
-                room_output=room_output,
-                variant_index=len(solved_bundles) + 1,
-                ablation_mode=resolved_ablation_mode,
-            )
-            solved_bundles.append(solved_bundle)
-            if concept_index == 1 and solution_offset == 1:
-                _write_bundle_stage_artifacts(paths, solved_bundle)
+    )
+
+    styling_candidates = _select_final_styling_candidates(
+        solved_bundles,
+        max_variants=target_final_count,
+    )
+    selection_summary = build_final_gallery_selection_summary(
+        candidates=solved_bundles,
+        selected=styling_candidates,
+        requested_count=target_final_count,
+    )
+    if _seed_bundle_uses_llm_guidance(
+        seed_relation_plans
+    ) and _should_retry_seed_concepts(
+        selection_summary,
+        target_final_count=target_final_count,
+    ):
+        retry_feedback = _seed_retry_feedback_from_selection(
+            seed_relation_plans=seed_relation_plans,
+            candidates=solved_bundles,
+            selected=styling_candidates,
+            selection_summary=selection_summary,
+            target_final_count=target_final_count,
+        )
+        seed_relation_plans["llm_retry_feedback"] = retry_feedback
+        validation = seed_relation_plans.get("llm_guidance_validation")
+        if isinstance(validation, dict):
+            validation["retry_attempted"] = True
+            validation["retry_reason"] = retry_feedback["retry_reason"]
         _update_status(
             paths,
-            "solver",
-            message=_variant_progress_message(
-                "Solving layout concepts", len(solved_bundles), target_final_count
-            ),
-            progress_current=len(solved_bundles),
-            progress_total=target_final_count,
+            "seed_concept_generator",
+            message="Retrying LLM concept guidance after solver/gallery diversity collapse.",
+            progress_current=0,
+            progress_total=1,
+        )
+        try:
+            retry_seed_relation_plans = concept_generator.generate_bundle(
+                room_model_json=room_output,
+                clusters_json=merged_output,
+                target_count=target_final_count,
+                description=planning_guidance_text or None,
+                retry_feedback=retry_feedback,
+            )
+            retry_seed_relation_plans = _strip_raw_text(retry_seed_relation_plans)
+            seed_relation_plans["llm_retry_seed_concepts"] = retry_seed_relation_plans
+            retry_concepts = [
+                item
+                for item in (retry_seed_relation_plans.get("concepts") or [])
+                if isinstance(item, dict)
+            ]
+            retry_bundles = _solve_seed_concept_pool(
+                concepts=retry_concepts,
+                room_output=room_output,
+                room_type=room_type,
+                cluster_output=cluster_output,
+                tier_output=tier_output,
+                merged_output=merged_output,
+                solver=solver,
+                manual_placements=manual_placements,
+                ablation_mode=resolved_ablation_mode,
+                target_final_count=target_final_count,
+                paths=paths,
+                progress_offset=len(solved_bundles),
+                status_label="Solving retry layout concepts",
+            )
+            solved_bundles.extend(
+                _mark_seed_retry_bundles(
+                    retry_bundles,
+                    retry_reason=str(retry_feedback["retry_reason"]),
+                )
+            )
+            styling_candidates = _select_final_styling_candidates(
+                solved_bundles,
+                max_variants=target_final_count,
+            )
+            seed_relation_plans["llm_retry_result"] = {
+                "solved_bundle_count": len(retry_bundles),
+                "selected_after_retry_count": len(styling_candidates),
+            }
+        except Exception as exc:
+            logger.warning("LLM seed concept retry skipped: %s", exc)
+            seed_relation_plans["llm_retry_error"] = str(exc)
+        _write_module_json(
+            paths,
+            "seed_concept_generator",
+            seed_relation_plans,
+            legacy_path=paths.seed_relation_plans,
         )
 
     if not solved_bundles:
@@ -1248,10 +1509,6 @@ def run_case(
             "error": "object-level solver could not produce any feasible anchor-first layouts",
         }
 
-    styling_candidates = _select_final_styling_candidates(
-        solved_bundles,
-        max_variants=target_final_count,
-    )
     if not styling_candidates:
         layout_variants = _build_layout_variants_payload_from_final_candidates(
             [], status="UNSAT"
@@ -1384,7 +1641,7 @@ def run_case(
     canonical_bundle["source"] = str(
         canonical_variant.get("source")
         or final_gallery_candidates[0].get("source")
-        or "object_level_solver"
+        or "macro_cluster_solver"
     )
     canonical_bundle["reason"] = str(
         canonical_variant.get("reason")
@@ -1484,7 +1741,7 @@ def _run_visual_relation_planner_experiment(
         visual_solver = (
             solver if visual_solver_mode == "v1" else VisualRelationObjectSolver()
         )
-        visual_bundles = _solve_object_level_variant_bundle(
+        visual_solve_result = _solve_object_level_variant_bundle(
             concept=relation_plan.get("macro_concept")
             if isinstance(relation_plan.get("macro_concept"), dict)
             else {},
@@ -1498,6 +1755,7 @@ def _run_visual_relation_planner_experiment(
             variant_index=0,
             ablation_mode=ablation_mode,
         )
+        visual_bundles = visual_solve_result.bundles
         visual_bundles = _mark_visual_relation_bundles(
             visual_bundles,
             mode=mode,
@@ -1625,7 +1883,7 @@ def _run_visual_relation_bundle_planner_v2(
                     "relation_plan": relation_plan,
                 }
             )
-            concept_bundles = _solve_object_level_variant_bundle(
+            concept_solve_result = _solve_object_level_variant_bundle(
                 concept=concept,
                 relation_plan=relation_plan,
                 room_output=room_output,
@@ -1637,7 +1895,7 @@ def _run_visual_relation_bundle_planner_v2(
                 variant_index=concept_index,
                 ablation_mode=ablation_mode,
             )
-            visual_bundles.extend(concept_bundles)
+            visual_bundles.extend(concept_solve_result.bundles)
 
         visual_bundles = _mark_visual_relation_bundles(
             visual_bundles,
@@ -1913,6 +2171,368 @@ def _visual_relation_candidate_bundles(
     ]
 
 
+def _solve_seed_concept_pool(
+    *,
+    concepts: list[dict[str, Any]],
+    room_output: dict[str, Any],
+    room_type: str,
+    cluster_output: dict[str, Any],
+    tier_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver: MacroClusterSolver,
+    manual_placements: list[dict[str, Any]] | None,
+    ablation_mode: AblationMode,
+    target_final_count: int,
+    paths: CasePaths | None,
+    progress_offset: int = 0,
+    status_label: str = "Solving layout concepts",
+    write_first_relation_plan: bool = False,
+    write_first_bundle_artifacts: bool = False,
+) -> list[dict[str, Any]]:
+    entries: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
+    for concept_index, concept in enumerate(concepts[:target_final_count], start=1):
+        relation_plan = solver_plan_from_concept(
+            concept=concept,
+            room_model_json=room_output,
+            room_type=room_type,
+        )
+        relation_plan = _strip_raw_text(relation_plan)
+        entries.append((concept_index, concept, relation_plan))
+        if write_first_relation_plan and concept_index == 1 and paths is not None:
+            _write_module_json(
+                paths,
+                "seed_concept_relation_plan",
+                relation_plan,
+                legacy_path=paths.cluster_relation_plan,
+            )
+            _write_module_json(paths, "seed_concept_relation_plan", relation_plan)
+
+    if not entries:
+        return []
+
+    cloneable_solver = _solver_is_cloneable(solver)
+    parallel_tasks = min(_solver_parallel_limit(target_final_count), len(entries))
+    if not cloneable_solver:
+        parallel_tasks = 1
+    workers_per_task = (
+        _solver_workers_per_task(solver, parallel_tasks=parallel_tasks)
+        if cloneable_solver
+        else 1
+    )
+
+    solved_by_concept: list[tuple[int, _ObjectLevelSolveResult]] = []
+    if parallel_tasks <= 1:
+        for entry in entries:
+            concept_index = entry[0]
+            if paths is not None:
+                _update_status(
+                    paths,
+                    "solver",
+                    message=(
+                        f"Concept {concept_index}/{target_final_count}: "
+                        "solving object-level anchor-first layout."
+                    ),
+                    progress_current=progress_offset + len(solved_by_concept),
+                    progress_total=target_final_count,
+                )
+            solved_by_concept.append(
+                (
+                    concept_index,
+                    _solve_seed_concept_entry(
+                        entry=entry,
+                        room_output=room_output,
+                        cluster_output=cluster_output,
+                        tier_output=tier_output,
+                        merged_output=merged_output,
+                        solver=solver,
+                        manual_placements=manual_placements,
+                        ablation_mode=ablation_mode,
+                    ),
+                )
+            )
+    else:
+        with ThreadPoolExecutor(max_workers=parallel_tasks) as executor:
+            future_by_index = {
+                executor.submit(
+                    _solve_seed_concept_entry,
+                    entry=entry,
+                    room_output=room_output,
+                    cluster_output=cluster_output,
+                    tier_output=tier_output,
+                    merged_output=merged_output,
+                    solver=_solver_with_workers(solver, num_workers=workers_per_task),
+                    manual_placements=manual_placements,
+                    ablation_mode=ablation_mode,
+                ): entry[0]
+                for entry in entries
+            }
+            for future in as_completed(future_by_index):
+                concept_index = future_by_index[future]
+                solved_by_concept.append((concept_index, future.result()))
+                if paths is not None:
+                    _update_status(
+                        paths,
+                        "solver",
+                        message=_variant_progress_message(
+                            status_label,
+                            progress_offset + len(solved_by_concept),
+                            target_final_count,
+                        ),
+                        progress_current=progress_offset + len(solved_by_concept),
+                        progress_total=target_final_count,
+                    )
+
+    solved_bundles: list[dict[str, Any]] = []
+    failure_diagnostics: list[dict[str, Any]] = []
+    first_artifacts_written = False
+    for concept_index, solve_result in sorted(
+        solved_by_concept, key=lambda row: row[0]
+    ):
+        failure_diagnostics.extend(solve_result.failure_diagnostics)
+        for solution_offset, solved_bundle in enumerate(
+            solve_result.bundles,
+            start=1,
+        ):
+            solved_bundle = _refill_judged_variant_accessories(
+                bundle=solved_bundle,
+                room_output=room_output,
+                variant_index=progress_offset + len(solved_bundles) + 1,
+                ablation_mode=ablation_mode,
+            )
+            solved_bundles.append(solved_bundle)
+            if (
+                write_first_bundle_artifacts
+                and not first_artifacts_written
+                and paths is not None
+                and concept_index == 1
+                and solution_offset == 1
+            ):
+                _write_bundle_stage_artifacts(paths, solved_bundle)
+                first_artifacts_written = True
+
+    if paths is not None and failure_diagnostics:
+        _write_module_json(
+            paths,
+            "macro_cluster_solver_failure",
+            _macro_cluster_solver_failure_payload(failure_diagnostics),
+        )
+
+    if paths is not None:
+        _update_status(
+            paths,
+            "solver",
+            message=_variant_progress_message(
+                status_label,
+                progress_offset + len(solved_bundles),
+                target_final_count,
+            ),
+            progress_current=progress_offset + len(solved_bundles),
+            progress_total=target_final_count,
+        )
+    return solved_bundles
+
+
+def _solve_seed_concept_entry(
+    *,
+    entry: tuple[int, dict[str, Any], dict[str, Any]],
+    room_output: dict[str, Any],
+    cluster_output: dict[str, Any],
+    tier_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver: MacroClusterSolver,
+    manual_placements: list[dict[str, Any]] | None,
+    ablation_mode: AblationMode,
+) -> _ObjectLevelSolveResult:
+    concept_index, concept, relation_plan = entry
+    return _solve_object_level_variant_bundle(
+        concept=concept,
+        relation_plan=relation_plan,
+        room_output=room_output,
+        cluster_output=cluster_output,
+        tier_output=tier_output,
+        merged_output=merged_output,
+        solver=solver,
+        manual_placements=manual_placements,
+        variant_index=concept_index,
+        ablation_mode=ablation_mode,
+    )
+
+
+def _solver_is_cloneable(solver: object) -> bool:
+    return all(
+        hasattr(solver, attribute)
+        for attribute in (
+            "tools_path",
+            "max_variants_per_cluster",
+            "initial_candidates_per_cluster",
+            "max_rounds",
+            "time_limit_s",
+            "num_workers",
+        )
+    )
+
+
+def _should_retry_seed_concepts(
+    summary: Mapping[str, Any],
+    *,
+    target_final_count: int,
+) -> bool:
+    target = max(1, int(target_final_count))
+    returned_count = _summary_int(summary, "returned_count")
+    macro_distinct = _summary_int(summary, "macro_distinct_candidate_count")
+    visual_distinct = _summary_int(summary, "visual_family_distinct_candidate_count")
+    fallback_near = _summary_int(summary, "fallback_near_distinct_count")
+    if returned_count < target:
+        return True
+    diversity_target = min(target, 4)
+    if macro_distinct < diversity_target:
+        return True
+    if visual_distinct < diversity_target:
+        return True
+    return fallback_near > 1
+
+
+def _summary_int(summary: Mapping[str, Any], key: str) -> int:
+    try:
+        return int(summary.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _seed_bundle_uses_llm_guidance(seed_relation_plans: Mapping[str, Any]) -> bool:
+    settings = seed_relation_plans.get("settings")
+    return isinstance(settings, Mapping) and bool(settings.get("llm_guided"))
+
+
+def _seed_retry_feedback_from_selection(
+    *,
+    seed_relation_plans: Mapping[str, Any],
+    candidates: list[dict[str, Any]],
+    selected: list[dict[str, Any]],
+    selection_summary: Mapping[str, Any],
+    target_final_count: int,
+) -> dict[str, Any]:
+    retry_reason = "macro_or_visual_diversity_collapse"
+    if _summary_int(selection_summary, "returned_count") < max(
+        1, int(target_final_count)
+    ):
+        retry_reason = "insufficient_distinct_solver_candidates"
+    if not candidates:
+        retry_reason = "solver_returned_no_eligible_bundles"
+    concepts = [
+        concept
+        for concept in seed_relation_plans.get("concepts", [])
+        if isinstance(concept, Mapping)
+    ]
+    return {
+        "retry_reason": retry_reason,
+        "requested_count": int(target_final_count),
+        "returned_count": _summary_int(selection_summary, "returned_count"),
+        "candidate_count": _summary_int(selection_summary, "candidate_count"),
+        "macro_distinct_candidate_count": _summary_int(
+            selection_summary, "macro_distinct_candidate_count"
+        ),
+        "visual_family_distinct_candidate_count": _summary_int(
+            selection_summary, "visual_family_distinct_candidate_count"
+        ),
+        "fallback_near_distinct_count": _summary_int(
+            selection_summary, "fallback_near_distinct_count"
+        ),
+        "collapsed_macro_layouts": deepcopy(
+            selection_summary.get("collapsed_macro_layouts") or []
+        ),
+        "collapsed_visual_families": deepcopy(
+            selection_summary.get("collapsed_visual_families") or []
+        ),
+        "top_quality_gate_reasons": deepcopy(
+            selection_summary.get("top_quality_gate_reasons") or {}
+        ),
+        "used_projected_physical_signatures": _seed_concepts_projected_signatures(
+            concepts
+        ),
+        "collapsed_concept_physical_signatures": (
+            _top_collapsed_concepts_by_projected_signature(concepts)
+        ),
+        "used_macro_layout_signatures": _candidate_macro_layout_signatures(candidates),
+        "selected_sources": [
+            str(item.get("source") or "") for item in selected if item.get("source")
+        ],
+    }
+
+
+def _seed_concepts_projected_signatures(
+    concepts: list[Mapping[str, Any]],
+) -> list[str]:
+    return _sorted_non_empty_unique(
+        str(concept.get("projected_physical_signature") or "") for concept in concepts
+    )
+
+
+def _top_collapsed_concepts_by_projected_signature(
+    concepts: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[str]] = {}
+    for concept in concepts:
+        signature = str(concept.get("projected_physical_signature") or "").strip()
+        if not signature:
+            continue
+        family = str(concept.get("concept_family") or concept.get("concept_id") or "")
+        grouped.setdefault(signature, []).append(family)
+    return [
+        {
+            "projected_physical_signature": signature,
+            "concept_families": families[:6],
+            "concept_count": len(families),
+        }
+        for signature, families in sorted(grouped.items())
+        if len(families) > 1
+    ][:6]
+
+
+def _candidate_macro_layout_signatures(candidates: list[dict[str, Any]]) -> list[str]:
+    signatures: list[str] = []
+    for candidate in candidates:
+        signature = str(candidate.get("macro_layout_signature") or "")
+        concept = candidate.get("concept")
+        if not signature and isinstance(concept, Mapping):
+            signature = str(concept.get("diversity_signature") or "")
+        signatures.append(signature)
+    return _sorted_non_empty_unique(signatures)
+
+
+def _sorted_non_empty_unique(values: Any) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return sorted(out)
+
+
+def _mark_seed_retry_bundles(
+    bundles: list[dict[str, Any]],
+    *,
+    retry_reason: str,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for bundle in bundles:
+        next_bundle = deepcopy(bundle)
+        source = str(next_bundle.get("source") or "")
+        if source:
+            next_bundle["source"] = f"seed_retry:{source}"
+        next_bundle["seed_concept_retry_applied"] = True
+        next_bundle["seed_concept_retry_reason"] = retry_reason
+        next_bundle["notes"] = _collect_unique_notes(
+            next_bundle.get("notes"),
+            ["LLM seed concept retry applied after solver/gallery diversity collapse."],
+        )
+        out.append(next_bundle)
+    return out
+
+
 def _solve_object_level_variant_bundle(
     *,
     concept: dict[str, Any],
@@ -1925,146 +2545,1502 @@ def _solve_object_level_variant_bundle(
     manual_placements: list[dict[str, Any]] | None,
     variant_index: int,
     ablation_mode: AblationMode,
-) -> list[dict[str, Any]]:
+) -> _ObjectLevelSolveResult:
+    failure_diagnostics: list[dict[str, Any]] = []
     try:
-        solver_output = solver.generate_object_layout(
-            room_model_json=room_output,
-            merged_clusters_json=merged_output,
-            relation_plan_json=relation_plan,
-            cluster_constraints_json=cluster_output,
-            grid_mm=GLOBAL_LAYOUT_GRID_MM,
+        solver_output = _run_object_level_solver_output(
+            solver=solver,
+            room_output=room_output,
+            merged_output=merged_output,
+            relation_plan=relation_plan,
+            cluster_output=cluster_output,
         )
-        solver_output = _strip_raw_text(solver_output)
-        solver_candidates = [
-            item
-            for item in (solver_output.get("solutions") or [])
-            if isinstance(item, dict)
-        ]
-        if not solver_candidates:
-            solver_candidates = [solver_output]
-
-        bundles: list[dict[str, Any]] = []
-        for solution_index, solver_candidate in enumerate(solver_candidates, start=1):
-            absolute_layout = _strip_raw_text(
-                solver_candidate.get("absolute_layout")
-                or solver_output.get("absolute_layout")
-                or {}
+        bundles = _object_level_solver_output_to_bundles(
+            concept=concept,
+            relation_plan=relation_plan,
+            room_output=room_output,
+            cluster_output=cluster_output,
+            tier_output=tier_output,
+            merged_output=merged_output,
+            solver_output=solver_output,
+            manual_placements=manual_placements,
+            variant_index=variant_index,
+            ablation_mode=ablation_mode,
+            repair_attempt=None,
+        )
+        if bundles:
+            return _ObjectLevelSolveResult(
+                bundles=bundles,
+                failure_diagnostics=failure_diagnostics,
             )
-            if not isinstance(absolute_layout, dict) or str(
-                absolute_layout.get("status") or ""
-            ).upper() not in {"OK", "PARTIAL"}:
-                continue
-            absolute_layout = merge_manual_placements_into_absolute_layout(
-                absolute_layout,
-                manual_placements,
-            )
-            absolute_layout = _annotate_object_level_layout_coverage(
-                absolute_layout=absolute_layout,
+        failure_diagnostics.append(
+            _object_level_failure_diagnostic(
+                concept=concept,
+                relation_plan=relation_plan,
                 merged_output=merged_output,
-                solver_output=solver_candidate,
+                solver_output=solver_output,
+                repair_attempt=None,
             )
-            notes = _collect_unique_notes(
-                [
-                    f"Anchor-first concept {concept.get('concept_id') or variant_index} solved directly at object level."
-                ],
-                absolute_layout.get("notes")
-                if isinstance(absolute_layout, dict)
-                else [],
-                solver_candidate.get("notes")
-                if isinstance(solver_candidate, dict)
-                else [],
-                solver_output.get("notes") if isinstance(solver_output, dict) else [],
+        )
+
+        repair_attempts = _build_concept_repair_attempts(
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            solver_output=solver_output,
+        )
+        for repair_attempt in repair_attempts:
+            repaired_solver_output = _run_object_level_solver_output(
+                solver=solver,
+                room_output=room_output,
+                merged_output=repair_attempt.merged_output,
+                relation_plan=repair_attempt.relation_plan,
+                cluster_output=cluster_output,
             )
-            bundles.append(
-                {
-                    "concept": deepcopy(concept),
-                    "relation_plan": relation_plan,
-                    "room_output": room_output,
-                    "cluster_output": cluster_output,
-                    "tier_output": tier_output,
-                    "merged_output": merged_output,
-                    "solver_output": solver_candidate,
-                    "absolute_layout": absolute_layout,
-                    "layout_score": int(
-                        (solver_candidate.get("verify_summary") or {}).get(
-                            "layout_score"
-                        )
-                        or (solver_output.get("verify_summary") or {}).get(
-                            "layout_score"
-                        )
-                        or 0
-                    ),
-                    "hard_valid": bool(
-                        solver_candidate.get(
-                            "hard_valid", solver_output.get("hard_valid", False)
-                        )
-                    ),
-                    "geometry_valid": bool(
-                        solver_candidate.get(
-                            "geometry_valid",
-                            solver_output.get(
-                                "geometry_valid",
-                                solver_candidate.get(
-                                    "hard_valid", solver_output.get("hard_valid", False)
-                                ),
-                            ),
-                        )
-                    ),
-                    "complete": bool(
-                        solver_candidate.get(
-                            "complete", solver_output.get("complete", False)
-                        )
-                    ),
-                    "gallery_eligible": bool(
-                        solver_candidate.get(
-                            "gallery_eligible",
-                            solver_output.get("gallery_eligible", False),
-                        )
-                    ),
-                    "coverage_ratio": float(
-                        solver_candidate.get("coverage_ratio")
-                        or solver_output.get("coverage_ratio")
-                        or 0.0
-                    ),
-                    "missing_cluster_ids": deepcopy(
-                        (solver_candidate.get("verify_summary") or {}).get(
-                            "missing_cluster_ids"
-                        )
-                        or (solver_output.get("verify_summary") or {}).get(
-                            "missing_cluster_ids"
-                        )
-                        or []
-                    ),
-                    "notes": notes,
-                    "source": f"concept:{concept.get('concept_id') or variant_index}",
-                    "reason": f"Solved from macro concept {concept.get('concept_family') or concept.get('concept_id') or variant_index} using object-level anchor-first search.",
-                    "dropped_inventory_by_cluster": deepcopy(
-                        solver_candidate.get("dropped_inventory_by_cluster")
-                        or solver_output.get("dropped_inventory_by_cluster")
-                        or {}
-                    ),
-                    "state_signature": str(
-                        solver_candidate.get("state_signature")
-                        or concept.get("diversity_signature")
-                        or concept.get("concept_id")
-                        or f"{variant_index}_{solution_index}"
-                    ),
-                    "macro_layout_signature": str(
-                        concept.get("diversity_signature")
-                        or concept.get("concept_family")
-                        or variant_index
-                    ),
-                    "ablation_mode": ablation_mode,
-                }
+            repaired_bundles = _object_level_solver_output_to_bundles(
+                concept=repair_attempt.concept,
+                relation_plan=repair_attempt.relation_plan,
+                room_output=room_output,
+                cluster_output=cluster_output,
+                tier_output=tier_output,
+                merged_output=repair_attempt.merged_output,
+                solver_output=repaired_solver_output,
+                manual_placements=manual_placements,
+                variant_index=variant_index,
+                ablation_mode=ablation_mode,
+                repair_attempt=repair_attempt,
             )
-        return bundles
+            if repaired_bundles:
+                return _ObjectLevelSolveResult(
+                    bundles=repaired_bundles,
+                    failure_diagnostics=failure_diagnostics,
+                )
+            failure_diagnostics.append(
+                _object_level_failure_diagnostic(
+                    concept=repair_attempt.concept,
+                    relation_plan=repair_attempt.relation_plan,
+                    merged_output=repair_attempt.merged_output,
+                    solver_output=repaired_solver_output,
+                    repair_attempt=repair_attempt,
+                )
+            )
+        return _ObjectLevelSolveResult(
+            bundles=[],
+            failure_diagnostics=failure_diagnostics,
+        )
     except Exception as exc:
         logger.warning(
             "Skipping concept %s because object-level solving failed: %s",
             concept.get("concept_id") or variant_index,
             exc,
         )
+        failure_diagnostics.append(
+            {
+                "concept_id": str(concept.get("concept_id") or variant_index),
+                "repair_attempt": None,
+                "status": "EXCEPTION",
+                "error": str(exc),
+            }
+        )
+        return _ObjectLevelSolveResult(
+            bundles=[],
+            failure_diagnostics=failure_diagnostics,
+        )
+
+
+def _run_object_level_solver_output(
+    *,
+    solver: MacroClusterSolver | VisualRelationObjectSolver,
+    room_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    relation_plan: dict[str, Any],
+    cluster_output: dict[str, Any],
+) -> dict[str, Any]:
+    solver_output = solver.generate_object_layout(
+        room_model_json=room_output,
+        merged_clusters_json=merged_output,
+        relation_plan_json=relation_plan,
+        cluster_constraints_json=cluster_output,
+        grid_mm=GLOBAL_LAYOUT_GRID_MM,
+    )
+    return _strip_raw_text(solver_output)
+
+
+def _macro_cluster_solver_failure_payload(
+    diagnostics: list[dict[str, Any]],
+) -> dict[str, Any]:
+    quality_reasons: dict[str, int] = {}
+    offending_objects: dict[str, int] = {}
+    for row in diagnostics:
+        for reason in row.get("quality_gate_reasons") or []:
+            key = str(reason or "").strip()
+            if key:
+                quality_reasons[key] = quality_reasons.get(key, 0) + 1
+        for issue in row.get("blocking_objects") or []:
+            object_id = str(issue.get("object_id") or "").strip()
+            if object_id:
+                offending_objects[object_id] = offending_objects.get(object_id, 0) + 1
+    return {
+        "status": "UNSAT",
+        "attempt_count": len(diagnostics),
+        "top_quality_gate_reasons": [
+            {"reason": reason, "count": count}
+            for reason, count in sorted(
+                quality_reasons.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ],
+        "top_offending_objects": [
+            {"object_id": object_id, "count": count}
+            for object_id, count in sorted(
+                offending_objects.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ],
+        "attempts": diagnostics,
+    }
+
+
+def _object_level_failure_diagnostic(
+    *,
+    concept: Mapping[str, Any],
+    relation_plan: Mapping[str, Any],
+    merged_output: Mapping[str, Any],
+    solver_output: Mapping[str, Any],
+    repair_attempt: _ConceptRepairAttempt | None,
+) -> dict[str, Any]:
+    best_partial = _as_mapping(solver_output.get("best_partial"))
+    best_verify = _as_mapping(best_partial.get("verify_summary"))
+    degradation = _as_mapping(solver_output.get("solver_degradation_report"))
+    return {
+        "concept_id": str(concept.get("concept_id") or ""),
+        "concept_family": str(concept.get("concept_family") or ""),
+        "repair_attempt": repair_attempt.repair_id if repair_attempt else None,
+        "repair_notes": list(repair_attempt.notes) if repair_attempt else [],
+        "status": str(solver_output.get("status") or ""),
+        "quality_gate_reasons": _clean_str_list(best_verify.get("quality_gate_reasons")),
+        "offending_clusters": _clean_str_list(best_verify.get("offending_clusters")),
+        "blocking_objects": _blocking_object_rows_from_verify(best_verify),
+        "protected_ids_by_cluster": _solver_policy_map(
+            relation_plan,
+            "protected_ids_by_cluster",
+        ),
+        "droppable_ids_by_cluster": _solver_policy_map(
+            relation_plan,
+            "droppable_ids_by_cluster",
+        ),
+        "required_support_ids_by_cluster": _required_support_ids_by_cluster(
+            merged_output,
+            relation_plan,
+        ),
+        "best_partial_verify_summary": deepcopy(dict(best_verify)),
+        "solver_debug": deepcopy(dict(_as_mapping(solver_output.get("solver_debug")))),
+        "solver_degradation_report": deepcopy(dict(degradation)),
+    }
+
+
+def _blocking_object_rows_from_verify(verify: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for key in (
+        "blocking_orientation_issues",
+        "blocking_protected_region_issues",
+        "blocking_forbidden_region_issues",
+        "blocking_functional_geometry_issues",
+    ):
+        for issue in verify.get(key) or []:
+            if isinstance(issue, Mapping):
+                rows.append(
+                    {
+                        "issue_type": key,
+                        "cluster_id": str(issue.get("cluster_id") or ""),
+                        "object_id": str(
+                            issue.get("object_id")
+                            or issue.get("blocked_object_id")
+                            or ""
+                        ),
+                        "reason": str(issue.get("reason") or ""),
+                    }
+                )
+    return rows
+
+
+def _solver_policy_map(
+    relation_plan: Mapping[str, Any],
+    key: str,
+) -> dict[str, list[str]]:
+    policy = _as_mapping(relation_plan.get("object_solver_policy"))
+    value = policy.get(key)
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(cluster_id): _clean_str_list(ids)
+        for cluster_id, ids in value.items()
+        if str(cluster_id).strip()
+    }
+
+
+def _required_support_ids_by_cluster(
+    merged_output: Mapping[str, Any],
+    relation_plan: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    out = _solver_policy_map(relation_plan, "required_support_ids_by_cluster")
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, Mapping):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        object_program = _as_mapping(cluster.get("object_program"))
+        support_ids = _clean_str_list(
+            object_program.get("required_support_ids")
+            or object_program.get("relaxable_required_ids")
+        )
+        if support_ids:
+            out[cluster_id] = support_ids
+    return out
+
+
+def _object_level_solver_output_to_bundles(
+    *,
+    concept: dict[str, Any],
+    relation_plan: dict[str, Any],
+    room_output: dict[str, Any],
+    cluster_output: dict[str, Any],
+    tier_output: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver_output: dict[str, Any],
+    manual_placements: list[dict[str, Any]] | None,
+    variant_index: int,
+    ablation_mode: AblationMode,
+    repair_attempt: _ConceptRepairAttempt | None,
+) -> list[dict[str, Any]]:
+    solver_candidates = [
+        item
+        for item in (solver_output.get("solutions") or [])
+        if isinstance(item, dict)
+    ]
+    if not solver_candidates:
+        solver_candidates = [solver_output]
+
+    bundles: list[dict[str, Any]] = []
+    for solution_index, solver_candidate in enumerate(solver_candidates, start=1):
+        solver_candidate = deepcopy(solver_candidate)
+        absolute_layout = _strip_raw_text(
+            solver_candidate.get("absolute_layout")
+            or solver_output.get("absolute_layout")
+            or {}
+        )
+        if not isinstance(absolute_layout, dict) or str(
+            absolute_layout.get("status") or ""
+        ).upper() not in {"OK", "PARTIAL"}:
+            continue
+        absolute_layout = merge_manual_placements_into_absolute_layout(
+            absolute_layout,
+            manual_placements,
+        )
+        absolute_layout = _annotate_object_level_layout_coverage(
+            absolute_layout=absolute_layout,
+            merged_output=merged_output,
+            solver_output=solver_candidate,
+        )
+        hard_valid = bool(
+            solver_candidate.get("hard_valid", solver_output.get("hard_valid", False))
+        )
+        geometry_valid = bool(
+            solver_candidate.get(
+                "geometry_valid",
+                solver_output.get(
+                    "geometry_valid",
+                    solver_candidate.get(
+                        "hard_valid", solver_output.get("hard_valid", False)
+                    ),
+                ),
+            )
+        )
+        complete = bool(
+            solver_candidate.get("complete", solver_output.get("complete", False))
+        )
+        gallery_eligible = bool(
+            solver_candidate.get(
+                "gallery_eligible",
+                solver_output.get("gallery_eligible", False),
+            )
+        )
+        if repair_attempt is not None and not (hard_valid and gallery_eligible):
+            continue
+
+        base_note = (
+            f"Anchor-first concept {concept.get('concept_id') or variant_index} "
+            "solved directly at object level."
+        )
+        repair_notes: list[str] = []
+        if repair_attempt is not None:
+            repair_notes = [
+                f"Deterministic concept repair applied: {repair_attempt.repair_id}.",
+                *repair_attempt.notes,
+            ]
+        notes = _collect_unique_notes(
+            [base_note],
+            repair_notes,
+            absolute_layout.get("notes") if isinstance(absolute_layout, dict) else [],
+            solver_candidate.get("notes") if isinstance(solver_candidate, dict) else [],
+            solver_output.get("notes") if isinstance(solver_output, dict) else [],
+        )
+        if repair_attempt is not None:
+            solver_candidate["concept_repair_applied"] = True
+            solver_candidate["concept_repair_attempt"] = repair_attempt.repair_id
+            solver_candidate["concept_repair_notes"] = list(repair_attempt.notes)
+            absolute_layout["concept_repair_applied"] = True
+            absolute_layout["concept_repair_attempt"] = repair_attempt.repair_id
+        bundle = {
+            "concept": deepcopy(concept),
+            "relation_plan": relation_plan,
+            "room_output": room_output,
+            "cluster_output": cluster_output,
+            "tier_output": tier_output,
+            "merged_output": merged_output,
+            "solver_output": solver_candidate,
+            "absolute_layout": absolute_layout,
+            "layout_score": int(
+                (solver_candidate.get("verify_summary") or {}).get("layout_score")
+                or (solver_output.get("verify_summary") or {}).get("layout_score")
+                or 0
+            ),
+            "hard_valid": hard_valid,
+            "geometry_valid": geometry_valid,
+            "complete": complete,
+            "gallery_eligible": gallery_eligible,
+            "coverage_ratio": float(
+                solver_candidate.get("coverage_ratio")
+                or solver_output.get("coverage_ratio")
+                or 0.0
+            ),
+            "missing_cluster_ids": deepcopy(
+                (solver_candidate.get("verify_summary") or {}).get(
+                    "missing_cluster_ids"
+                )
+                or (solver_output.get("verify_summary") or {}).get(
+                    "missing_cluster_ids"
+                )
+                or []
+            ),
+            "notes": notes,
+            "source": f"concept:{concept.get('concept_id') or variant_index}",
+            "reason": (
+                "Solved from macro concept "
+                f"{concept.get('concept_family') or concept.get('concept_id') or variant_index} "
+                "using object-level anchor-first search."
+            ),
+            "dropped_inventory_by_cluster": deepcopy(
+                solver_candidate.get("dropped_inventory_by_cluster")
+                or solver_output.get("dropped_inventory_by_cluster")
+                or {}
+            ),
+            "state_signature": str(
+                solver_candidate.get("state_signature")
+                or concept.get("diversity_signature")
+                or concept.get("concept_id")
+                or f"{variant_index}_{solution_index}"
+            ),
+            "macro_layout_signature": str(
+                concept.get("diversity_signature")
+                or concept.get("concept_family")
+                or variant_index
+            ),
+            "ablation_mode": ablation_mode,
+        }
+        if repair_attempt is not None:
+            bundle["concept_repair_applied"] = True
+            bundle["concept_repair_attempt"] = repair_attempt.repair_id
+            bundle["concept_repair_notes"] = list(repair_attempt.notes)
+        bundles.append(bundle)
+    return bundles
+
+
+def _build_concept_repair_attempts(
+    *,
+    concept: dict[str, Any],
+    relation_plan: dict[str, Any],
+    merged_output: dict[str, Any],
+    solver_output: dict[str, Any],
+) -> list[_ConceptRepairAttempt]:
+    diagnostics = _concept_repair_diagnostics(solver_output)
+    if str(solver_output.get("status") or "").upper() != "UNSAT":
         return []
+
+    attempts: list[_ConceptRepairAttempt] = []
+    zone_pileup_clusters = _relation_plan_zone_pileup_clusters(relation_plan)
+    needs_zone_spread = (
+        bool(zone_pileup_clusters) or diagnostics["raw_solution_count"] == 0
+    )
+    needs_functional = bool(
+        set(diagnostics["quality_gate_reasons"])
+        & {
+            "view_corridor_blocked",
+            "front_access_zone_blocked",
+            "front_inward_contract_failed",
+        }
+    )
+    support_changed = _support_droppable_repair_has_changes(merged_output)
+    required_support_changed = _required_support_relaxation_has_changes(merged_output)
+    needs_required_support = required_support_changed and bool(
+        set(diagnostics["quality_gate_reasons"])
+        & {
+            "blocking_forbidden_region_overlap",
+            "blocking_protected_region_overlap",
+            "front_inward_contract_failed",
+            "layout_incomplete",
+        }
+    )
+
+    if needs_zone_spread:
+        attempt = _make_concept_repair_attempt(
+            repair_id="zone_spread",
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics=diagnostics,
+            apply_zone_spread=True,
+            apply_functional_gate=False,
+            apply_required_support_relaxation=False,
+            apply_support_droppable=False,
+            zone_pileup_clusters=zone_pileup_clusters,
+        )
+        if attempt is not None:
+            attempts.append(attempt)
+
+    if needs_functional:
+        attempt = _make_concept_repair_attempt(
+            repair_id="functional_gate",
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics=diagnostics,
+            apply_zone_spread=False,
+            apply_functional_gate=True,
+            apply_required_support_relaxation=False,
+            apply_support_droppable=False,
+            zone_pileup_clusters=zone_pileup_clusters,
+        )
+        if attempt is not None:
+            attempts.append(attempt)
+
+    if needs_required_support:
+        attempt = _make_concept_repair_attempt(
+            repair_id="required_support_relaxation",
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics=diagnostics,
+            apply_zone_spread=False,
+            apply_functional_gate=False,
+            apply_required_support_relaxation=True,
+            apply_support_droppable=False,
+            zone_pileup_clusters=zone_pileup_clusters,
+        )
+        if attempt is not None:
+            attempts.append(attempt)
+
+    if support_changed:
+        repair_id = (
+            "combined_zone_support"
+            if needs_zone_spread or needs_functional
+            else "support_droppable"
+        )
+        attempt = _make_concept_repair_attempt(
+            repair_id=repair_id,
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics=diagnostics,
+            apply_zone_spread=needs_zone_spread,
+            apply_functional_gate=needs_functional,
+            apply_required_support_relaxation=needs_required_support,
+            apply_support_droppable=True,
+            zone_pileup_clusters=zone_pileup_clusters,
+        )
+        if attempt is not None:
+            attempts.append(attempt)
+
+    unique_attempts: list[_ConceptRepairAttempt] = []
+    seen: set[str] = set()
+    for attempt in attempts:
+        signature = json.dumps(
+            {
+                "relation_plan": attempt.relation_plan,
+                "merged_output": attempt.merged_output,
+            },
+            sort_keys=True,
+            default=str,
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique_attempts.append(attempt)
+        if len(unique_attempts) >= _CONCEPT_REPAIR_MAX_ATTEMPTS:
+            break
+    return unique_attempts
+
+
+def _concept_repair_diagnostics(solver_output: Mapping[str, Any]) -> dict[str, Any]:
+    debug = _as_mapping(solver_output.get("solver_debug"))
+    degradation = _as_mapping(solver_output.get("solver_degradation_report"))
+    best_partial = _as_mapping(solver_output.get("best_partial"))
+    best_verify = _as_mapping(best_partial.get("verify_summary"))
+
+    raw_solution_count = _int_or_none(debug.get("raw_solution_count"))
+    if raw_solution_count is None:
+        raw_solution_count = _int_or_none(degradation.get("raw_solution_count"))
+
+    quality_gate_reasons = set(_clean_str_list(best_verify.get("quality_gate_reasons")))
+    for item in degradation.get("top_quality_gate_reasons") or []:
+        if isinstance(item, Mapping):
+            reason = str(item.get("reason") or "").strip()
+            if reason:
+                quality_gate_reasons.add(reason)
+
+    offending_clusters = set(_clean_str_list(solver_output.get("offending_clusters")))
+    offending_clusters.update(_clean_str_list(best_verify.get("offending_clusters")))
+    for issue_key in (
+        "blocking_protected_region_issues",
+        "blocking_forbidden_region_issues",
+        "blocking_orientation_issues",
+        "blocking_functional_geometry_issues",
+    ):
+        for issue in best_verify.get(issue_key) or []:
+            if isinstance(issue, Mapping):
+                cluster_id = str(issue.get("cluster_id") or "").strip()
+                if cluster_id:
+                    offending_clusters.add(cluster_id)
+
+    anchor_counts = _as_mapping(
+        debug.get("anchor_candidate_counts")
+        or degradation.get("anchor_candidate_counts")
+    )
+    return {
+        "raw_solution_count": raw_solution_count,
+        "quality_gate_reasons": sorted(quality_gate_reasons),
+        "offending_clusters": sorted(offending_clusters),
+        "anchor_candidate_counts": dict(anchor_counts),
+    }
+
+
+def _make_concept_repair_attempt(
+    *,
+    repair_id: str,
+    concept: dict[str, Any],
+    relation_plan: dict[str, Any],
+    merged_output: dict[str, Any],
+    diagnostics: Mapping[str, Any],
+    apply_zone_spread: bool,
+    apply_functional_gate: bool,
+    apply_required_support_relaxation: bool,
+    apply_support_droppable: bool,
+    zone_pileup_clusters: set[str],
+) -> _ConceptRepairAttempt | None:
+    repaired_concept = deepcopy(concept)
+    repaired_relation_plan = deepcopy(relation_plan)
+    repaired_merged_output = deepcopy(merged_output)
+    notes: list[str] = []
+    changed = False
+
+    if apply_zone_spread:
+        changed = (
+            _apply_zone_spread_repair(
+                relation_plan=repaired_relation_plan,
+                concept=repaired_concept,
+                diagnostics=diagnostics,
+                zone_pileup_clusters=zone_pileup_clusters,
+            )
+            or changed
+        )
+        if changed:
+            notes.append("Relaxed crowded zone/wall pins before retrying the solver.")
+
+    if apply_functional_gate:
+        functional_changed = _apply_functional_gate_repair(
+            relation_plan=repaired_relation_plan,
+            concept=repaired_concept,
+            diagnostics=diagnostics,
+        )
+        changed = functional_changed or changed
+        if functional_changed:
+            notes.append(
+                "Moved offending clusters toward safer edge/window/bottom regions "
+                "while preserving protected topology."
+            )
+
+    if apply_required_support_relaxation:
+        required_support_changed = _apply_required_support_relaxation(
+            merged_output=repaired_merged_output,
+            relation_plan=repaired_relation_plan,
+            concept=repaired_concept,
+        )
+        changed = required_support_changed or changed
+        if required_support_changed:
+            notes.append(
+                "Relaxed required support placement while keeping it required for final coverage."
+            )
+
+    if apply_support_droppable:
+        support_changed = _apply_support_droppable_repair(
+            merged_output=repaired_merged_output,
+            relation_plan=repaired_relation_plan,
+            concept=repaired_concept,
+        )
+        changed = support_changed or changed
+        if support_changed:
+            notes.append(
+                "Moved optional support objects from protected to droppable sets."
+            )
+
+    if apply_support_droppable or "front_inward_contract_failed" in set(
+        diagnostics.get("quality_gate_reasons") or []
+    ):
+        front_changed = _apply_storage_front_token_repair(
+            merged_output=repaired_merged_output,
+            diagnostics=diagnostics,
+        )
+        changed = front_changed or changed
+        if front_changed:
+            notes.append(
+                "Aligned storage-anchor front metadata with wall-contact inward checks."
+            )
+
+    if not changed:
+        return None
+    _append_concept_repair_note(repaired_relation_plan, repair_id, notes)
+    return _ConceptRepairAttempt(
+        repair_id=repair_id,
+        concept=repaired_concept,
+        relation_plan=repaired_relation_plan,
+        merged_output=repaired_merged_output,
+        notes=tuple(notes),
+    )
+
+
+def _apply_zone_spread_repair(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    diagnostics: Mapping[str, Any],
+    zone_pileup_clusters: set[str],
+) -> bool:
+    anchor_prefs = _anchor_region_preferences_by_cluster(relation_plan)
+    if not anchor_prefs:
+        return False
+    offenders = set(_clean_str_list(diagnostics.get("offending_clusters")))
+    raw_solution_count = diagnostics.get("raw_solution_count")
+    affected_clusters = set(zone_pileup_clusters)
+    if raw_solution_count == 0:
+        affected_clusters.update(anchor_prefs.keys())
+    if offenders:
+        affected_clusters.update(offenders)
+    if not affected_clusters:
+        affected_clusters.update(anchor_prefs.keys())
+
+    used_regions = _assigned_repair_regions(anchor_prefs)
+    changed = False
+    for cluster_id in sorted(affected_clusters):
+        pref = _as_mutable_mapping(anchor_prefs.get(cluster_id))
+        if not pref:
+            continue
+        current_region = str(pref.get("zone_assignment") or "").strip()
+        used_regions.discard(current_region)
+        next_region = _select_repair_region(
+            pref,
+            used_regions=used_regions,
+            functional=False,
+        )
+        updates: dict[str, Any] = {}
+        if next_region and next_region != current_region:
+            updates["zone_assignment"] = next_region
+            updates["preferred_region_ids"] = _prepend_unique_region(
+                pref.get("preferred_region_ids"),
+                next_region,
+            )
+            used_regions.add(next_region)
+        else:
+            used_regions.add(current_region)
+        if str(pref.get("preferred_wall_side") or "").strip():
+            updates["preferred_wall_side"] = ""
+        if str(pref.get("anchor_strength") or "").strip().lower() == "strong":
+            updates["anchor_strength"] = "medium"
+        if str(pref.get("placement_bias") or "").strip() in {
+            "wall_backed",
+            "float_allowed",
+        }:
+            updates["placement_bias"] = "balanced"
+        if updates:
+            _sync_repair_cluster_updates(
+                relation_plan=relation_plan,
+                concept=concept,
+                cluster_id=cluster_id,
+                updates=updates,
+            )
+            changed = True
+    return changed
+
+
+def _apply_functional_gate_repair(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    diagnostics: Mapping[str, Any],
+) -> bool:
+    anchor_prefs = _anchor_region_preferences_by_cluster(relation_plan)
+    offenders = set(_clean_str_list(diagnostics.get("offending_clusters")))
+    if not anchor_prefs or not offenders:
+        return False
+    used_regions = _assigned_repair_regions(anchor_prefs)
+    changed = False
+    for cluster_id in sorted(offenders):
+        pref = _as_mutable_mapping(anchor_prefs.get(cluster_id))
+        if not pref:
+            continue
+        current_region = str(pref.get("zone_assignment") or "").strip()
+        used_regions.discard(current_region)
+        next_region = _select_repair_region(
+            pref,
+            used_regions=used_regions,
+            functional=True,
+        )
+        updates: dict[str, Any] = {}
+        if next_region and next_region != current_region:
+            updates["zone_assignment"] = next_region
+            updates["preferred_region_ids"] = _prepend_unique_region(
+                pref.get("preferred_region_ids"),
+                next_region,
+            )
+            used_regions.add(next_region)
+        else:
+            used_regions.add(current_region)
+        if str(pref.get("preferred_wall_side") or "").strip():
+            updates["preferred_wall_side"] = ""
+        if str(pref.get("anchor_strength") or "").strip().lower() == "strong":
+            updates["anchor_strength"] = "medium"
+        if str(pref.get("center_usage") or "").strip().lower() == "primary":
+            updates["center_usage"] = "partial"
+        placement_behavior = _as_mutable_mapping(pref.get("placement_behavior"))
+        if placement_behavior:
+            next_behavior = dict(placement_behavior)
+            if str(next_behavior.get("wall_backing") or "") == "required":
+                next_behavior["wall_backing"] = "preferred"
+            if str(next_behavior.get("pose_flexibility") or "") == "low":
+                next_behavior["pose_flexibility"] = "medium"
+            if next_behavior != placement_behavior:
+                updates["placement_behavior"] = next_behavior
+        if updates:
+            _sync_repair_cluster_updates(
+                relation_plan=relation_plan,
+                concept=concept,
+                cluster_id=cluster_id,
+                updates=updates,
+            )
+            changed = True
+    return changed
+
+
+def _support_droppable_repair_has_changes(merged_output: Mapping[str, Any]) -> bool:
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, Mapping):
+            continue
+        optional_ids = _optional_support_member_ids(cluster)
+        if optional_ids:
+            return True
+    return False
+
+
+def _required_support_relaxation_has_changes(merged_output: Mapping[str, Any]) -> bool:
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, Mapping):
+            continue
+        if _required_support_member_ids(cluster):
+            return True
+    return False
+
+
+def _apply_required_support_relaxation(
+    *,
+    merged_output: dict[str, Any],
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+) -> bool:
+    changed = False
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        required_support_ids = _required_support_member_ids(cluster)
+        if not required_support_ids:
+            continue
+        object_program = _as_mutable_mapping(cluster.get("object_program"))
+        if object_program:
+            current_required_support = _clean_str_list(
+                object_program.get("required_support_ids")
+            )
+            next_required_support = _ordered_unique(
+                [*current_required_support, *sorted(required_support_ids)]
+            )
+            if next_required_support != current_required_support:
+                object_program["required_support_ids"] = next_required_support
+                changed = True
+            current_relaxable = _clean_str_list(
+                object_program.get("relaxable_required_ids")
+            )
+            next_relaxable = _ordered_unique(
+                [*current_relaxable, *sorted(required_support_ids)]
+            )
+            if next_relaxable != current_relaxable:
+                object_program["relaxable_required_ids"] = next_relaxable
+                changed = True
+            protected = _clean_str_list(object_program.get("protected_ids"))
+            next_protected = [
+                item for item in protected if item not in required_support_ids
+            ]
+            if next_protected != protected:
+                object_program["protected_ids"] = next_protected
+                changed = True
+            droppable = _clean_str_list(object_program.get("droppable_ids"))
+            next_droppable = [
+                item for item in droppable if item not in required_support_ids
+            ]
+            if next_droppable != droppable:
+                object_program["droppable_ids"] = next_droppable
+                changed = True
+            specs = _as_mutable_mapping(object_program.get("object_specs_by_id"))
+            for object_id in required_support_ids:
+                spec = _as_mutable_mapping(specs.get(object_id))
+                if not spec:
+                    continue
+                for key, value in (
+                    ("protected", False),
+                    ("droppable", False),
+                    ("required_support", True),
+                    ("relaxable_required", True),
+                ):
+                    if spec.get(key) != value:
+                        spec[key] = value
+                        changed = True
+
+        rules = _as_mutable_mapping(cluster.get("cluster_rules"))
+        policy = _as_mutable_mapping(rules.get("anchor_first_policy"))
+        if policy:
+            protected = _clean_str_list(policy.get("protected_ids"))
+            next_protected = [
+                item for item in protected if item not in required_support_ids
+            ]
+            if next_protected != protected:
+                policy["protected_ids"] = next_protected
+                changed = True
+            droppable = _clean_str_list(policy.get("droppable_ids"))
+            next_droppable = [
+                item for item in droppable if item not in required_support_ids
+            ]
+            if next_droppable != droppable:
+                policy["droppable_ids"] = next_droppable
+                changed = True
+
+        _sync_object_solver_policy_support_sets(
+            relation_plan=relation_plan,
+            concept=concept,
+            cluster_id=cluster_id,
+            required_support_ids=sorted(required_support_ids),
+        )
+        _sync_object_solver_policy_drop_sets(
+            relation_plan=relation_plan,
+            concept=concept,
+            cluster_id=cluster_id,
+            protected_ids=_clean_str_list(
+                object_program.get("protected_ids") if object_program else []
+            ),
+            droppable_ids=_clean_str_list(
+                object_program.get("droppable_ids") if object_program else []
+            ),
+        )
+        changed = True
+    return changed
+
+
+def _apply_support_droppable_repair(
+    *,
+    merged_output: dict[str, Any],
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+) -> bool:
+    changed = False
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        optional_ids = _optional_support_member_ids(cluster)
+        if not optional_ids:
+            continue
+        rules = _as_mutable_mapping(cluster.get("cluster_rules"))
+        policy = _as_mutable_mapping(rules.get("anchor_first_policy"))
+        if not policy:
+            continue
+        protected = _clean_str_list(policy.get("protected_ids"))
+        droppable = _clean_str_list(policy.get("droppable_ids"))
+        next_protected = [item for item in protected if item not in optional_ids]
+        next_droppable = _ordered_unique([*droppable, *sorted(optional_ids)])
+        if next_protected != protected or next_droppable != droppable:
+            policy["protected_ids"] = next_protected
+            policy["droppable_ids"] = next_droppable
+            changed = True
+        if _omit_optional_support_from_cluster_program(cluster, optional_ids):
+            changed = True
+        _sync_object_solver_policy_drop_sets(
+            relation_plan=relation_plan,
+            concept=concept,
+            cluster_id=cluster_id,
+            protected_ids=next_protected,
+            droppable_ids=next_droppable,
+        )
+    return changed
+
+
+def _apply_storage_front_token_repair(
+    *,
+    merged_output: dict[str, Any],
+    diagnostics: Mapping[str, Any],
+) -> bool:
+    affected_clusters = set(_clean_str_list(diagnostics.get("offending_clusters")))
+    changed = False
+    for cluster in merged_output.get("clusters") or []:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if affected_clusters and cluster_id not in affected_clusters:
+            continue
+        anchor_id = _dominant_anchor_id_for_repair(cluster)
+        if not anchor_id or not _storage_like_object_id(anchor_id):
+            continue
+        object_program = _as_mutable_mapping(cluster.get("object_program"))
+        specs = _as_mutable_mapping(object_program.get("object_specs_by_id"))
+        spec = _as_mutable_mapping(specs.get(anchor_id))
+        if spec and spec.get("front") != "left":
+            spec["front"] = "left"
+            changed = True
+        rules = _as_mutable_mapping(cluster.get("cluster_rules"))
+        facing = rules.setdefault("facing", {})
+        if isinstance(facing, dict):
+            object_facing = facing.setdefault(anchor_id, {})
+            if isinstance(object_facing, dict) and object_facing.get("front") != "left":
+                object_facing["front"] = "left"
+                changed = True
+    return changed
+
+
+def _dominant_anchor_id_for_repair(cluster: Mapping[str, Any]) -> str:
+    rules = _as_mapping(cluster.get("cluster_rules"))
+    policy = _as_mapping(rules.get("anchor_first_policy"))
+    for source in (
+        policy.get("dominant_anchor_id"),
+        _as_mapping(cluster.get("object_program")).get("dominant_anchor_id"),
+    ):
+        value = str(source or "").strip()
+        if value:
+            return value
+    for source in (cluster.get("anchors"), policy.get("dominant_anchor_candidates")):
+        values = _clean_str_list(source)
+        if values:
+            return values[0]
+    return ""
+
+
+def _storage_like_object_id(object_id: str) -> bool:
+    lowered = object_id.lower()
+    return any(
+        token in lowered
+        for token in ("wardrobe", "cabinet", "bookshelf", "shelf", "dresser", "storage")
+    )
+
+
+def _required_support_member_ids(cluster: Mapping[str, Any]) -> set[str]:
+    object_program = _as_mapping(cluster.get("object_program"))
+    members = _clean_str_list(cluster.get("members"))
+    out = set(
+        _clean_str_list(
+            object_program.get("required_support_ids")
+            or object_program.get("relaxable_required_ids")
+        )
+    )
+    specs = object_program.get("object_specs_by_id")
+    if isinstance(specs, Mapping):
+        for object_id, spec in specs.items():
+            if not isinstance(spec, Mapping):
+                continue
+            object_id_text = str(object_id or "").strip()
+            if not object_id_text:
+                continue
+            if bool(spec.get("required_support")) or bool(
+                spec.get("relaxable_required")
+            ):
+                out.add(object_id_text)
+    decisions = cluster.get("decisions")
+    if isinstance(decisions, list):
+        for row in decisions:
+            if not isinstance(row, Mapping) or not _decision_requires_solver_keep(row):
+                continue
+            object_type = _clean_str(
+                row.get("object_type")
+                or row.get("base_type")
+                or row.get("canonical_type")
+                or row.get("category")
+            )
+            if object_type is None or not _relaxable_required_support_type(object_type):
+                continue
+            out.update(_member_ids_matching_type(members, object_type))
+    if not members:
+        return out
+    member_set = set(members)
+    return {
+        item
+        for item in out
+        if item in member_set
+        or any(
+            member.startswith(f"{item}_") or item.startswith(f"{member}_")
+            for member in member_set
+        )
+    }
+
+
+def _relaxable_required_support_type(object_type: str) -> bool:
+    token = object_type.strip().lower()
+    return token in {
+        "bookcase",
+        "bookshelf",
+        "display_shelf",
+        "floor_lamp",
+        "media_shelf",
+        "side_table",
+        "storage_shelf",
+    }
+
+
+def _optional_support_member_ids(cluster: Mapping[str, Any]) -> set[str]:
+    rules = _as_mapping(cluster.get("cluster_rules"))
+    tier_hints = _as_mapping(rules.get("tier_count_hints"))
+    optional_types = {
+        str(item.get("object_type") or "").strip()
+        for item in tier_hints.get("object_hints") or []
+        if isinstance(item, Mapping) and _int_or_none(item.get("min_keep")) == 0
+    }
+    optional_types.discard("")
+    if not optional_types:
+        return set()
+    member_ids = _clean_str_list(cluster.get("members"))
+    required_ids = set(_clean_str_list(cluster.get("anchors")))
+    required_ids.update(_required_member_ids_from_tier_hints(cluster))
+    required_ids.update(_required_member_ids_from_decisions(cluster))
+    required_ids.update(_required_member_ids_from_object_program(cluster))
+    droppable: set[str] = set()
+    for member_id in member_ids:
+        if member_id in required_ids:
+            continue
+        if any(
+            member_id == optional_type or member_id.startswith(f"{optional_type}_")
+            for optional_type in optional_types
+        ):
+            droppable.add(member_id)
+    return droppable
+
+
+def _required_member_ids_from_decisions(cluster: Mapping[str, Any]) -> set[str]:
+    out: set[str] = set()
+    members = _clean_str_list(cluster.get("members"))
+    decisions = cluster.get("decisions")
+    if not isinstance(decisions, list):
+        return out
+    for row in decisions:
+        if not isinstance(row, Mapping):
+            continue
+        if not _decision_requires_solver_keep(row):
+            continue
+        object_type = _clean_str(
+            row.get("object_type")
+            or row.get("base_type")
+            or row.get("canonical_type")
+            or row.get("category")
+        )
+        if object_type is None:
+            continue
+        out.update(_member_ids_matching_type(members, object_type))
+    return out
+
+
+def _required_member_ids_from_object_program(cluster: Mapping[str, Any]) -> set[str]:
+    object_program = _as_mapping(cluster.get("object_program"))
+    if not object_program:
+        return set()
+    out = set(_clean_str_list(object_program.get("required_object_ids")))
+    specs = object_program.get("object_specs_by_id")
+    if isinstance(specs, Mapping):
+        for object_id, spec in specs.items():
+            if not isinstance(spec, Mapping) or not _decision_requires_solver_keep(
+                spec
+            ):
+                continue
+            object_id_text = _clean_str(object_id)
+            if object_id_text is not None:
+                out.add(object_id_text)
+    members = set(_clean_str_list(cluster.get("members")))
+    if not members:
+        return out
+    return {
+        item
+        for item in out
+        if item in members
+        or any(
+            member.startswith(f"{item}_") or item.startswith(f"{member}_")
+            for member in members
+        )
+    }
+
+
+def _decision_requires_solver_keep(row: Mapping[str, Any]) -> bool:
+    intent = str(row.get("request_contract_intent") or row.get("intent") or "").strip()
+    return intent in _HARD_REQUEST_CONTRACT_INTENTS or (
+        _int_or_none(row.get("min_keep")) or 0
+    ) > 0
+
+
+def _member_ids_matching_type(members: list[str], object_type: str) -> set[str]:
+    return {
+        member_id
+        for member_id in members
+        if member_id == object_type or member_id.startswith(f"{object_type}_")
+    }
+
+
+def _required_member_ids_from_tier_hints(cluster: Mapping[str, Any]) -> set[str]:
+    rules = _as_mapping(cluster.get("cluster_rules"))
+    tier_hints = _as_mapping(rules.get("tier_count_hints"))
+    required_types = {
+        str(item.get("object_type") or "").strip()
+        for item in tier_hints.get("object_hints") or []
+        if isinstance(item, Mapping) and (_int_or_none(item.get("min_keep")) or 0) > 0
+    }
+    out: set[str] = set()
+    for member_id in _clean_str_list(cluster.get("members")):
+        if any(
+            member_id == required_type or member_id.startswith(f"{required_type}_")
+            for required_type in required_types
+        ):
+            out.add(member_id)
+    return out
+
+
+def _omit_optional_support_from_cluster_program(
+    cluster: dict[str, Any],
+    optional_ids: set[str],
+) -> bool:
+    if not optional_ids:
+        return False
+    changed = False
+    object_program = _as_mutable_mapping(cluster.get("object_program"))
+    if object_program:
+        for key in ("placement_order", "members", "optional_object_ids"):
+            current = _clean_str_list(object_program.get(key))
+            if not current:
+                continue
+            next_values = [item for item in current if item not in optional_ids]
+            if next_values != current:
+                object_program[key] = next_values
+                changed = True
+        support_edges = object_program.get("support_edges")
+        if isinstance(support_edges, list):
+            next_edges = [
+                item
+                for item in support_edges
+                if not (
+                    isinstance(item, Mapping)
+                    and str(item.get("object_id") or "").strip() in optional_ids
+                )
+            ]
+            if next_edges != support_edges:
+                object_program["support_edges"] = next_edges
+                changed = True
+        object_program["droppable_ids"] = _ordered_unique(
+            [
+                *_clean_str_list(object_program.get("droppable_ids")),
+                *sorted(optional_ids),
+            ]
+        )
+        object_program["protected_ids"] = [
+            item
+            for item in _clean_str_list(object_program.get("protected_ids"))
+            if item not in optional_ids
+        ]
+
+    rules = _as_mutable_mapping(cluster.get("cluster_rules"))
+    semantic_placements = rules.get("semantic_placements")
+    if isinstance(semantic_placements, list):
+        next_placements = [
+            item
+            for item in semantic_placements
+            if not (
+                isinstance(item, Mapping)
+                and str(item.get("id") or item.get("object_id") or "").strip()
+                in optional_ids
+            )
+        ]
+        if next_placements != semantic_placements:
+            rules["semantic_placements"] = next_placements
+            changed = True
+
+    if not object_program:
+        current_members = _clean_str_list(cluster.get("members"))
+        next_members = [item for item in current_members if item not in optional_ids]
+        if next_members != current_members:
+            cluster["members"] = next_members
+            changed = True
+    return changed
+
+
+def _relation_plan_zone_pileup_clusters(relation_plan: Mapping[str, Any]) -> set[str]:
+    anchor_prefs = _anchor_region_preferences_by_cluster(relation_plan)
+    zone_groups: dict[str, list[str]] = {}
+    wall_groups: dict[str, list[str]] = {}
+    for cluster_id, pref in anchor_prefs.items():
+        if not isinstance(pref, Mapping):
+            continue
+        zone = str(pref.get("zone_assignment") or "").strip()
+        if zone:
+            zone_groups.setdefault(zone, []).append(cluster_id)
+        wall = str(pref.get("preferred_wall_side") or "").strip()
+        if wall:
+            wall_groups.setdefault(wall, []).append(cluster_id)
+
+    pileup: set[str] = set()
+    for group in [*zone_groups.values(), *wall_groups.values()]:
+        if len(group) > 1:
+            pileup.update(group)
+    return pileup
+
+
+def _anchor_region_preferences_by_cluster(
+    relation_plan: Mapping[str, Any],
+) -> dict[str, Any]:
+    value = relation_plan.get("anchor_region_preferences_by_cluster")
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(cluster_id): pref
+        for cluster_id, pref in value.items()
+        if isinstance(cluster_id, str) and isinstance(pref, dict)
+    }
+
+
+def _sync_repair_cluster_updates(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    cluster_id: str,
+    updates: Mapping[str, Any],
+) -> None:
+    anchor_prefs = relation_plan.setdefault("anchor_region_preferences_by_cluster", {})
+    if isinstance(anchor_prefs, dict):
+        pref = anchor_prefs.setdefault(cluster_id, {})
+        if isinstance(pref, dict):
+            pref.update(deepcopy(dict(updates)))
+
+    macro_concept = _as_mutable_mapping(relation_plan.get("macro_concept"))
+    _sync_cluster_zone_plan_updates(macro_concept, cluster_id, updates)
+    _sync_cluster_zone_plan_updates(concept, cluster_id, updates)
+
+    macro_constraints = _as_mutable_mapping(relation_plan.get("macro_constraints"))
+    constraints = macro_constraints.get("anchor_region_constraints")
+    if isinstance(constraints, list):
+        for item in constraints:
+            if isinstance(item, dict) and item.get("cluster_id") == cluster_id:
+                item.update(deepcopy(dict(updates)))
+    next_region = updates.get("zone_assignment")
+    if isinstance(next_region, str) and next_region.strip():
+        _sync_orientation_target_region(relation_plan, cluster_id, next_region.strip())
+        _sync_orientation_target_region(macro_concept, cluster_id, next_region.strip())
+        _sync_orientation_target_region(concept, cluster_id, next_region.strip())
+
+
+def _sync_cluster_zone_plan_updates(
+    payload: dict[str, Any],
+    cluster_id: str,
+    updates: Mapping[str, Any],
+) -> None:
+    cluster_zone_plan = payload.get("cluster_zone_plan")
+    if not isinstance(cluster_zone_plan, list):
+        return
+    for row in cluster_zone_plan:
+        if isinstance(row, dict) and row.get("cluster_id") == cluster_id:
+            row.update(deepcopy(dict(updates)))
+
+
+def _sync_orientation_target_region(
+    payload: dict[str, Any],
+    cluster_id: str,
+    target_region: str,
+) -> None:
+    for key in ("object_orientations", "critical_object_orientations"):
+        rows = payload.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if row.get("cluster_id") != cluster_id:
+                continue
+            if "target_region" in row:
+                row["target_region"] = target_region
+
+
+def _sync_object_solver_policy_drop_sets(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    cluster_id: str,
+    protected_ids: list[str],
+    droppable_ids: list[str],
+) -> None:
+    for payload in (relation_plan, concept):
+        object_policy = payload.setdefault("object_solver_policy", {})
+        if not isinstance(object_policy, dict):
+            continue
+        protected_map = object_policy.setdefault("protected_ids_by_cluster", {})
+        droppable_map = object_policy.setdefault("droppable_ids_by_cluster", {})
+        if isinstance(protected_map, dict):
+            protected_map[cluster_id] = list(protected_ids)
+        if isinstance(droppable_map, dict):
+            droppable_map[cluster_id] = list(droppable_ids)
+
+
+def _sync_object_solver_policy_support_sets(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    cluster_id: str,
+    required_support_ids: list[str],
+) -> None:
+    for payload in (relation_plan, concept):
+        object_policy = payload.setdefault("object_solver_policy", {})
+        if not isinstance(object_policy, dict):
+            continue
+        for key in (
+            "required_support_ids_by_cluster",
+            "relaxable_required_ids_by_cluster",
+        ):
+            value = object_policy.setdefault(key, {})
+            if isinstance(value, dict):
+                value[cluster_id] = list(required_support_ids)
+
+
+def _append_concept_repair_note(
+    relation_plan: dict[str, Any],
+    repair_id: str,
+    notes: list[str],
+) -> None:
+    existing = relation_plan.get("notes")
+    note_list = existing if isinstance(existing, list) else []
+    relation_plan["notes"] = _collect_unique_notes(
+        note_list,
+        [f"Deterministic concept repair attempt={repair_id}.", *notes],
+    )
+
+
+def _assigned_repair_regions(anchor_prefs: Mapping[str, Any]) -> set[str]:
+    regions: set[str] = set()
+    for pref in anchor_prefs.values():
+        if isinstance(pref, Mapping):
+            region = str(pref.get("zone_assignment") or "").strip()
+            if region:
+                regions.add(region)
+    return regions
+
+
+def _select_repair_region(
+    pref: Mapping[str, Any],
+    *,
+    used_regions: set[str],
+    functional: bool,
+) -> str:
+    current = str(pref.get("zone_assignment") or "").strip()
+    forbidden = set(_clean_str_list(pref.get("forbidden_region_ids")))
+    preferred_regions = _clean_str_list(pref.get("preferred_region_ids"))
+    priority = list(_CONCEPT_REPAIR_FUNCTIONAL_REGION_PRIORITY)
+    candidates = (
+        [*priority, *preferred_regions]
+        if functional
+        else [*preferred_regions, *priority]
+    )
+    candidates = _ordered_unique(candidates)
+
+    for allow_used in (False, True):
+        for candidate in candidates:
+            if not candidate or candidate == current:
+                continue
+            if candidate in forbidden or _region_blocked_for_repair(candidate):
+                continue
+            if not allow_used and candidate in used_regions:
+                continue
+            return candidate
+    return ""
+
+
+def _region_blocked_for_repair(region_id: str) -> bool:
+    lowered = region_id.lower()
+    if lowered.startswith("window_") and lowered.endswith("_daylight"):
+        return True
+    return any(token in lowered for token in _CONCEPT_REPAIR_BLOCKED_REGION_TOKENS)
+
+
+def _prepend_unique_region(value: Any, region_id: str) -> list[str]:
+    return _ordered_unique([region_id, *_clean_str_list(value)])
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = str(value or "").strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        out.append(clean)
+    return out
+
+
+def _clean_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _clean_str(value: Any) -> str | None:
+    clean = str(value or "").strip()
+    return clean or None
+
+
+def _as_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _as_mutable_mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _annotate_object_level_layout_coverage(
@@ -2252,243 +4228,6 @@ def _make_layout_variant_entry(
         "absolute_layout": deepcopy(absolute_layout),
         "styled_result": deepcopy(styled_result),
     }
-
-
-def _build_external_intent_candidates(
-    *,
-    initial_intents: dict[str, Any] | None,
-    primary_intent: dict[str, Any] | None,
-    room_output: dict[str, Any],
-    prepared_input_payload: dict[str, Any],
-    room_type: str,
-    base_guidance_text: str,
-    manual_placements: list[dict[str, Any]] | None,
-    cluster_forge: ClusterForge,
-    tier_count: TierCountDirector,
-    composer: ClusterComposer,
-    relation_planner: ClusterRelationPlanner,
-    solver: MacroClusterSolver,
-    stylist: Stylist,
-    stylist_user_context_json: dict[str, Any],
-    stylist_tenant_id: str | None,
-    style_plan: dict[str, Any],
-    max_candidates: int = 4,
-    on_candidate: Callable[[list[dict[str, Any]]], None] | None = None,
-) -> list[dict[str, Any]]:
-    intents = (
-        initial_intents.get("intents") if isinstance(initial_intents, dict) else None
-    )
-    if not isinstance(intents, list):
-        return []
-
-    primary_id = (
-        str(primary_intent.get("intent_id") or "")
-        if isinstance(primary_intent, dict)
-        else ""
-    )
-    candidates: list[dict[str, Any]] = []
-    for intent in intents:
-        if len(candidates) >= max(0, int(max_candidates)):
-            break
-        if not isinstance(intent, dict):
-            continue
-        intent_id = str(intent.get("intent_id") or "").strip()
-        if not intent_id or intent_id == primary_id:
-            continue
-        candidate = _run_intent_branch_candidate(
-            intent=intent,
-            room_output=room_output,
-            prepared_input_payload=prepared_input_payload,
-            room_type=room_type,
-            base_guidance_text=base_guidance_text,
-            manual_placements=manual_placements,
-            cluster_forge=cluster_forge,
-            tier_count=tier_count,
-            composer=composer,
-            relation_planner=relation_planner,
-            solver=solver,
-            stylist=stylist,
-            stylist_user_context_json=stylist_user_context_json,
-            stylist_tenant_id=stylist_tenant_id,
-            style_plan=style_plan,
-        )
-        if candidate is not None:
-            candidates.append(candidate)
-            if on_candidate is not None:
-                on_candidate(candidates)
-    return candidates
-
-
-def _run_intent_branch_candidate(
-    *,
-    intent: dict[str, Any],
-    room_output: dict[str, Any],
-    prepared_input_payload: dict[str, Any],
-    room_type: str,
-    base_guidance_text: str,
-    manual_placements: list[dict[str, Any]] | None,
-    cluster_forge: ClusterForge,
-    tier_count: TierCountDirector,
-    composer: ClusterComposer,
-    relation_planner: ClusterRelationPlanner,
-    solver: MacroClusterSolver,
-    stylist: Stylist,
-    stylist_user_context_json: dict[str, Any],
-    stylist_tenant_id: str | None,
-    style_plan: dict[str, Any],
-) -> dict[str, Any] | None:
-    intent_id = str(intent.get("intent_id") or "").strip()
-    if not intent_id:
-        return None
-
-    try:
-        branch_guidance = _append_initial_intent_guidance(base_guidance_text, intent)
-        cluster_output = cluster_forge.generate(
-            room_type,
-            description=branch_guidance or None,
-            special_notes=None,
-            room_model_json=room_output,
-            inventory_catalog=_extract_inventory_catalog(prepared_input_payload),
-            style_policy_json=extract_style_policy(stylist_user_context_json),
-        ).model_dump()
-        cluster_output = _strip_raw_text(cluster_output)
-        cluster_output = augment_cluster_forge_with_manual_placements(
-            cluster_output,
-            manual_placements,
-        )
-        _log_cluster_forge_output(cluster_output, context=f"intent:{intent_id}")
-
-        tier_output = tier_count.generate(
-            description=branch_guidance,
-            special_notes="",
-            room_model_json=room_output,
-            user_intent_json=prepared_input_payload,
-            clusters_json=cluster_output,
-        )
-        tier_output = _strip_raw_text(tier_output)
-        tier_output = apply_manual_placements_to_tier_output(
-            tier_output,
-            manual_placements,
-            clusters_json=cluster_output,
-        )
-
-        merged_output = merge_cluster_outputs(cluster_output, tier_output)
-        merged_output = _strip_raw_text(merged_output)
-
-        cluster_outlines: dict[str, Any] = {}
-        for cluster in merged_output.get("clusters", []):
-            if not isinstance(cluster, dict):
-                continue
-            cluster_id = str(cluster.get("cluster_id") or "")
-            if not cluster_id:
-                continue
-            cluster_result = composer.generate(
-                merged_clusters=merged_output,
-                cluster_id=cluster_id,
-                description=branch_guidance,
-                special_notes="",
-            )
-            cluster_result = _strip_raw_text(cluster_result)
-            cluster_outlines[cluster_id] = _strip_raw_text(
-                compute_cluster_outline(cluster_result)
-            )
-
-        relation_plan = relation_planner.generate(
-            room_model_json=room_output,
-            clusters_json=cluster_outlines,
-            description=branch_guidance,
-            special_notes="",
-        )
-        relation_plan = _strip_raw_text(relation_plan)
-
-        filtered_cluster_outlines = _filter_unsat_cluster_outlines(cluster_outlines)
-        preview_solver = MacroClusterSolver(
-            tools_path=solver.tools_path,
-            max_variants_per_cluster=min(int(solver.max_variants_per_cluster), 6),
-            initial_candidates_per_cluster=min(
-                int(solver.initial_candidates_per_cluster),
-                24,
-            ),
-            max_rounds=min(int(solver.max_rounds), 2),
-            time_limit_s=min(float(solver.time_limit_s), 8.0),
-            num_workers=int(solver.num_workers),
-        )
-        solver_output = preview_solver.generate(
-            room_model_json=room_output,
-            clusters_outlines_json=filtered_cluster_outlines,
-            relation_plan_json=relation_plan,
-            cluster_constraints_json=cluster_output,
-            grid_mm=GLOBAL_LAYOUT_GRID_MM,
-        )
-        solver_output = _strip_raw_text(solver_output)
-
-        preview_payload = build_phase2_payload(
-            room_output,
-            merged_output,
-            cluster_outlines,
-            relation_plan,
-            solver_output,
-            cluster_output,
-        )
-        preview_result = build_phase2_preview_candidate(
-            payload=preview_payload,
-            rounds=1,
-            move_limit=24,
-            note=f"Fast preview candidate for intent branch {intent_id}.",
-        )
-        absolute_layout = _strip_raw_text(preview_result.get("absolute_layout") or {})
-        absolute_layout = merge_manual_placements_into_absolute_layout(
-            absolute_layout,
-            manual_placements,
-        )
-        if str(absolute_layout.get("status") or "").upper() != "OK":
-            return None
-
-        notes: list[str] = []
-        label = str(intent.get("label") or intent_id).strip() or intent_id
-        summary = str(intent.get("summary") or "").strip()
-        notes.append(f"Intent branch: {label}.")
-        if summary:
-            notes.append(summary)
-        proposal = preview_result.get("proposal")
-        if isinstance(proposal, dict):
-            for note in proposal.get("notes") or []:
-                if isinstance(note, str) and note.strip() and note.strip() not in notes:
-                    notes.append(note.strip())
-        for note in absolute_layout.get("notes") or []:
-            if isinstance(note, str) and note.strip() and note.strip() not in notes:
-                notes.append(note.strip())
-        styled_result = stylist.apply_style_plan(
-            layout_json=absolute_layout,
-            user_context_json=stylist_user_context_json,
-            tenant_id=stylist_tenant_id,
-            style_plan=style_plan,
-        )
-        styled_result = _strip_raw_text(styled_result)
-        styled_result = merge_manual_placements_into_styled_output(
-            styled_result,
-            manual_placements,
-        )
-        evaluation = preview_result.get("evaluation")
-
-        return {
-            "absolute_layout": absolute_layout,
-            "styled_result": styled_result,
-            "source": f"intent_branch:{intent_id}",
-            "reason": summary or f"Generated from initial intent branch {label}.",
-            "layout_score": _tool_candidate_score(evaluation),
-            "hard_valid": _tool_hard_valid(evaluation),
-            "notes": notes,
-            "family": f"intent_branch:{intent_id}",
-            "promoted_payload": preview_result.get("payload") or {},
-        }
-    except Exception as exc:
-        logger.warning(
-            "Skipping intent branch %s because branch generation failed: %s",
-            intent_id,
-            exc,
-        )
-        return None
 
 
 def _variant_progress_message(label: str, current: int, total: int) -> str:
@@ -2996,7 +4735,7 @@ def _plan_seed_variant_bundles(
     bundle: dict[str, Any],
     room_output: dict[str, Any],
     guidance_text: str,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     target_count: int,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -3006,7 +4745,7 @@ def _plan_seed_variant_bundles(
         bundle=bundle,
         solver_output=solver_output if isinstance(solver_output, dict) else None,
     )
-    macro_concept_bundle = relation_planner.generate_bundle(
+    macro_concept_bundle = concept_generator.generate_bundle(
         room_model_json=room_output,
         clusters_json=planner_clusters_json,
         target_count=target_count,
@@ -3355,7 +5094,7 @@ def _write_bundle_stage_artifacts(paths: CasePaths, bundle: dict[str, Any]) -> N
     if isinstance(relation_plan, dict):
         _write_module_json(
             paths,
-            "cluster_relation_plan",
+            "seed_concept_relation_plan",
             relation_plan,
             legacy_path=paths.cluster_relation_plan,
         )
@@ -3602,6 +5341,9 @@ def _build_layout_variants_payload_from_final_candidates(
                 "complete": bool(candidate.get("complete", False)),
                 "gallery_eligible": bool(candidate.get("gallery_eligible", False)),
                 "coverage_ratio": float(candidate.get("coverage_ratio") or 0.0),
+                "request_coverage_score": int(
+                    candidate.get("request_coverage_score") or 0
+                ),
                 "missing_cluster_ids": deepcopy(
                     candidate.get("missing_cluster_ids") or []
                 ),
@@ -4352,14 +6094,14 @@ def _plan_variant_bundle(
     bundle: dict[str, Any],
     room_output: dict[str, Any],
     guidance_text: str,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     variant_index: int,
 ) -> dict[str, Any] | None:
     try:
         cluster_outlines = bundle.get("cluster_outlines")
         if not isinstance(cluster_outlines, dict):
             return None
-        relation_plan = relation_planner.generate(
+        relation_plan = concept_generator.generate(
             room_model_json=room_output,
             clusters_json=cluster_outlines,
             description=guidance_text,
@@ -4628,7 +6370,7 @@ def _seek_feasible_bundle_from_tier_output(
     cluster_output: dict[str, Any],
     tier_output: dict[str, Any],
     composer: ClusterComposer,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     solver: MacroClusterSolver,
     seed_notes: list[str] | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
@@ -4682,7 +6424,7 @@ def _seek_feasible_bundle_from_tier_output(
 
         active_feedback = compose_feasibility
         if compose_feasibility.get("feasible"):
-            canonical_relation_plan = relation_planner.generate(
+            canonical_relation_plan = concept_generator.generate(
                 room_model_json=room_output,
                 clusters_json=cluster_outlines,
                 description=guidance_text,
@@ -4774,7 +6516,7 @@ def _build_feasible_variant_seed_bundles(
     cluster_output: dict[str, Any],
     tier_count: TierCountDirector,
     composer: ClusterComposer,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     solver: MacroClusterSolver,
     target_variants: int,
     on_progress: Callable[[int, int, str], None] | None = None,
@@ -4811,7 +6553,7 @@ def _build_feasible_variant_seed_bundles(
             cluster_output=cluster_output,
             tier_output=diversified_tier_output,
             composer=composer,
-            relation_planner=relation_planner,
+            concept_generator=concept_generator,
             solver=solver,
             seed_notes=seed_notes,
             max_attempts=_solver_attempt_limit(8),
@@ -4861,7 +6603,7 @@ def _build_feasible_base_bundle(
     cluster_output: dict[str, Any],
     tier_count: TierCountDirector,
     composer: ClusterComposer,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     solver: MacroClusterSolver,
     on_progress: Callable[[int, int, str], None] | None = None,
     max_attempts: int = 8,
@@ -4885,7 +6627,7 @@ def _build_feasible_base_bundle(
         cluster_output=cluster_output,
         tier_output=tier_output,
         composer=composer,
-        relation_planner=relation_planner,
+        concept_generator=concept_generator,
         solver=solver,
         on_progress=on_progress,
         max_attempts=max_attempts,
@@ -4986,148 +6728,6 @@ def _run_canonical_screening_bundle(
             coverage.get("missing_cluster_ids") if isinstance(coverage, dict) else []
         ),
     }
-
-
-def _run_intent_branch_screening_bundle(
-    *,
-    intent: dict[str, Any],
-    feasible_base_bundle: dict[str, Any],
-    room_output: dict[str, Any],
-    base_guidance_text: str,
-    manual_placements: list[dict[str, Any]] | None,
-    relation_planner: ClusterRelationPlanner,
-    solver: MacroClusterSolver,
-) -> dict[str, Any] | None:
-    intent_id = str(intent.get("intent_id") or "").strip()
-    if not intent_id:
-        return None
-
-    try:
-        branch_guidance = _append_initial_intent_guidance(base_guidance_text, intent)
-        cluster_output = deepcopy(feasible_base_bundle.get("cluster_output") or {})
-        tier_output = deepcopy(feasible_base_bundle.get("tier_output") or {})
-        merged_output = deepcopy(feasible_base_bundle.get("merged_output") or {})
-        cluster_results = deepcopy(feasible_base_bundle.get("cluster_results") or {})
-        cluster_outlines = deepcopy(feasible_base_bundle.get("cluster_outlines") or {})
-        base_notes = feasible_base_bundle.get("notes")
-        relation_plan = relation_planner.generate(
-            room_model_json=room_output,
-            clusters_json=cluster_outlines,
-            description=branch_guidance,
-            special_notes="",
-        )
-        relation_plan = _strip_raw_text(relation_plan)
-
-        filtered_cluster_outlines = _filter_unsat_cluster_outlines(cluster_outlines)
-        preview_solver = MacroClusterSolver(
-            tools_path=solver.tools_path,
-            max_variants_per_cluster=min(int(solver.max_variants_per_cluster), 6),
-            initial_candidates_per_cluster=min(
-                int(solver.initial_candidates_per_cluster),
-                24,
-            ),
-            max_rounds=min(int(solver.max_rounds), 2),
-            time_limit_s=min(float(solver.time_limit_s), 8.0),
-            num_workers=int(solver.num_workers),
-        )
-        solver_output = preview_solver.generate(
-            room_model_json=room_output,
-            clusters_outlines_json=filtered_cluster_outlines,
-            relation_plan_json=relation_plan,
-            cluster_constraints_json=cluster_output,
-            grid_mm=GLOBAL_LAYOUT_GRID_MM,
-        )
-        solver_output = _strip_raw_text(solver_output)
-
-        preview_payload = build_phase2_payload(
-            room_output,
-            merged_output,
-            cluster_outlines,
-            relation_plan,
-            solver_output,
-            cluster_output,
-        )
-        preview_result = build_phase2_preview_candidate(
-            payload=preview_payload,
-            rounds=1,
-            move_limit=24,
-            note=f"Fast preview candidate for intent branch {intent_id}.",
-        )
-        absolute_layout = _strip_raw_text(preview_result.get("absolute_layout") or {})
-        absolute_layout = merge_manual_placements_into_absolute_layout(
-            absolute_layout,
-            manual_placements,
-        )
-        if str(absolute_layout.get("status") or "").upper() != "OK":
-            return None
-
-        label = str(intent.get("label") or intent_id).strip() or intent_id
-        summary = str(intent.get("summary") or "").strip()
-        notes: list[str] = [f"Intent branch: {label}."]
-        if summary:
-            notes.append(summary)
-        notes = _collect_unique_notes(
-            base_notes,
-            notes,
-            (preview_result.get("proposal") or {}).get("notes")
-            if isinstance(preview_result.get("proposal"), dict)
-            else [],
-            absolute_layout.get("notes") if isinstance(absolute_layout, dict) else [],
-        )
-        evaluation = preview_result.get("evaluation")
-        hard_valid = _tool_hard_valid(evaluation)
-        acceptable_valid = _tool_acceptable_valid(evaluation)
-        absolute_layout = annotate_layout_coverage(
-            absolute_layout=absolute_layout,
-            merged_output=merged_output,
-            relation_plan=relation_plan,
-            cluster_outlines=cluster_outlines,
-            hard_valid=hard_valid,
-            acceptable_valid=acceptable_valid,
-        )
-        if absolute_layout.get("missing_cluster_ids"):
-            notes.append(
-                "Screening bundle is incomplete: missing clusters "
-                + ", ".join(absolute_layout["missing_cluster_ids"])
-            )
-        coverage = (
-            absolute_layout.get("coverage") if isinstance(absolute_layout, dict) else {}
-        )
-
-        return {
-            "intent": deepcopy(intent),
-            "cluster_output": cluster_output,
-            "tier_output": tier_output,
-            "merged_output": merged_output,
-            "cluster_results": cluster_results,
-            "cluster_outlines": cluster_outlines,
-            "relation_plan": relation_plan,
-            "solver_output": solver_output,
-            "phase2_result": None,
-            "absolute_layout": absolute_layout,
-            "source": f"intent_branch:{intent_id}",
-            "reason": summary or f"Generated from initial intent branch {label}.",
-            "layout_score": _tool_candidate_score(evaluation),
-            "hard_valid": hard_valid,
-            "notes": notes,
-            "family": f"intent_bias:{intent_id}",
-            "promoted_payload": preview_result.get("payload") or {},
-            "complete": bool(absolute_layout.get("complete", False)),
-            "gallery_eligible": bool(absolute_layout.get("gallery_eligible", False)),
-            "coverage_ratio": float(absolute_layout.get("coverage_ratio") or 0.0),
-            "missing_cluster_ids": deepcopy(
-                coverage.get("missing_cluster_ids")
-                if isinstance(coverage, dict)
-                else []
-            ),
-        }
-    except Exception as exc:
-        logger.warning(
-            "Skipping intent branch %s because preview screening failed: %s",
-            intent_id,
-            exc,
-        )
-        return None
 
 
 def _judge_solved_variant_bundle(
@@ -5292,7 +6892,7 @@ def _finalize_feasible_variant_bundle(
     bundle: dict[str, Any],
     room_output: dict[str, Any],
     guidance_text: str,
-    relation_planner: ClusterRelationPlanner,
+    concept_generator: SeedConceptGenerator,
     solver: MacroClusterSolver,
     controller: Phase2Controller,
     stylist: Stylist,
@@ -5327,7 +6927,7 @@ def _finalize_feasible_variant_bundle(
                 ]
             ).strip()
 
-        relation_plan = relation_planner.generate(
+        relation_plan = concept_generator.generate(
             room_model_json=room_output,
             clusters_json=cluster_outlines,
             description=variant_guidance,
@@ -5503,7 +7103,7 @@ def _write_canonical_branch_artifacts(
     if isinstance(relation_plan, dict):
         _write_module_json(
             paths,
-            "cluster_relation_plan",
+            "seed_concept_relation_plan",
             relation_plan,
             legacy_path=paths.cluster_relation_plan,
         )

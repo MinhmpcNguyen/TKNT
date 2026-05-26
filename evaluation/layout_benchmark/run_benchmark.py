@@ -20,8 +20,12 @@ from evaluation.layout_benchmark.scoring import canonical_object_type, score_lay
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BENCHMARK_DIR.parents[1]
-DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_MODEL = "gpt-5.4-mini"
 WRITE_STDOUT_LOG_ENV = "LAYOUT_BENCHMARK_WRITE_STDOUT_LOG"
+SYSTEM_ID_ALIASES: Mapping[str, str] = {
+    "idesign_gemini": "idesign_openai",
+    "flairgpt_gemini": "flairgpt_openai",
+}
 
 
 @dataclass(frozen=True)
@@ -95,8 +99,7 @@ def main() -> int:
         type=int,
         default=None,
         help=(
-            "Optional timeout for IDesign/FlairGPT subprocesses. "
-            "Use 0 to disable it."
+            "Optional timeout for IDesign/FlairGPT subprocesses. Use 0 to disable it."
         ),
     )
     parser.add_argument(
@@ -217,7 +220,11 @@ def _select_systems(
     systems: Sequence[SystemSpec],
     include_systems: str,
 ) -> list[SystemSpec]:
-    requested = {value.strip() for value in include_systems.split(",") if value.strip()}
+    requested = {
+        _canonical_system_id(value.strip())
+        for value in include_systems.split(",")
+        if value.strip()
+    }
     if not requested:
         return list(systems)
     selected = [system for system in systems if system.system_id in requested]
@@ -225,6 +232,10 @@ def _select_systems(
     if missing:
         raise ValueError(f"Unknown requested systems: {', '.join(sorted(missing))}")
     return selected
+
+
+def _canonical_system_id(system_id: str) -> str:
+    return SYSTEM_ID_ALIASES.get(system_id, system_id)
 
 
 def _select_cases(
@@ -413,15 +424,10 @@ def _run_tknt_case(
     locked_model = _string(row.get("model")) or DEFAULT_MODEL
     env["TKNT_DISABLE_MODEL_FALLBACK"] = env.get(
         "TKNT_DISABLE_MODEL_FALLBACK",
-        env.get("TKNT_GEMINI_DISABLE_MODEL_FALLBACK", "1"),
-    )
-    env["TKNT_GEMINI_DISABLE_MODEL_FALLBACK"] = env.get(
-        "TKNT_GEMINI_DISABLE_MODEL_FALLBACK",
-        env["TKNT_DISABLE_MODEL_FALLBACK"],
+        "1",
     )
     env["TKNT_STYLE_POLICY_REQUIRE_LLM"] = "1"
     env["TKNT_BENCHMARK_TEXT_MODEL"] = locked_model
-    env["TKNT_GEMINI_BENCHMARK_TEXT_MODEL"] = locked_model
     if system.ablation:
         env["TKNT_ABLATION_MODE"] = system.ablation
     _configure_writable_cache_env(env, output_path.parent)
@@ -1051,9 +1057,9 @@ def _semantic_objects_by_canonical_type(
                 row["cluster_id"] = cluster_id
                 row["layout_role"] = layout_role
                 row["brief_support"] = viability.get("brief_support")
-                objects_by_type.setdefault(canonical_object_type(object_type), []).append(
-                    row
-                )
+                objects_by_type.setdefault(
+                    canonical_object_type(object_type), []
+                ).append(row)
     return objects_by_type
 
 
@@ -1137,9 +1143,7 @@ def _write_drop_diagnostics(*, source_dir: Path, destination_path: Path) -> None
         return
 
     tier_decisions = [
-        _mapping(row)
-        for row in _sequence(tier_count.get("decisions"))
-        if _mapping(row)
+        _mapping(row) for row in _sequence(tier_count.get("decisions")) if _mapping(row)
     ]
     cluster_decisions = [
         _mapping(row)
@@ -1152,9 +1156,7 @@ def _write_drop_diagnostics(*, source_dir: Path, destination_path: Path) -> None
             "budget_mode": _string(tier_count.get("budget_mode")),
             "budget_valid": tier_count.get("budget_valid"),
             "decision_summary": _mapping(tier_count.get("decision_summary")),
-            "budget_adjustments": list(
-                _sequence(tier_count.get("budget_adjustments"))
-            ),
+            "budget_adjustments": list(_sequence(tier_count.get("budget_adjustments"))),
             "dropped_decisions": [
                 _drop_decision_summary(row, decision_reasons=decision_reasons)
                 for row in tier_decisions

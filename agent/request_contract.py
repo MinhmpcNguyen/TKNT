@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
+from agent.request_reconciliation import (
+    reconcile_request_contract_with_semantic_program,
+)
 from layout.room_profiles.registry import (
     all_profile_non_functional_contract_types,
     all_profile_object_aliases,
 )
 
-_REQUEST_CONTRACT_LLM_ENV = "TKNT_REQUEST_CONTRACT_LLM"
-
 _OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
     "bed": ("bed", "queen bed", "king bed", "single bed", "double bed"),
+    "bean_bag": ("bean bag", "beanbag", "pouf"),
     "blanket": ("blanket", "throw blanket", "throw"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
     "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
@@ -101,6 +102,36 @@ _POST_SOLVER_PLACEMENT_PARTICIPATIONS = frozenset(
         "decor_only",
     }
 )
+_FLOOR_SOLVER_GUARDRAIL_OBJECT_TYPES = frozenset(
+    {
+        "armchair",
+        "bed",
+        "bean_bag",
+        "bookshelf",
+        "chair",
+        "coffee_table",
+        "console_table",
+        "desk",
+        "dresser",
+        "floor_lamp",
+        "bedside_lamp",
+        "table_lamp",
+        "desk_lamp",
+        "media_shelf",
+        "nightstand",
+        "office_chair",
+        "ottoman",
+        "sectional_sofa",
+        "side_table",
+        "sofa",
+        "storage_cabinet",
+        "tv_console",
+        "wardrobe",
+    }
+)
+_PLACEMENT_GUARDRAIL_REASON = (
+    "coerced_solver_capable_inventory_object_to_floor_blocking"
+)
 _FLOOR_MIRROR_EVIDENCE_PATTERNS = (
     "standing mirror",
     "floor mirror",
@@ -181,6 +212,7 @@ def sanitize_request_contract(
     *,
     brief_text: str,
     available_object_types: Sequence[str] = (),
+    inventory_object_types: Sequence[str] | None = None,
     fallback_to_heuristic: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(contract, Mapping):
@@ -192,11 +224,20 @@ def sanitize_request_contract(
         return _empty_contract(source="invalid_contract")
 
     text = _normalize_text(brief_text)
-    available = {
+    program_available = {
         canonical_object_type(item)
         for item in available_object_types
         if str(item).strip()
     }
+    inventory_available = (
+        {
+            canonical_object_type(item)
+            for item in inventory_object_types
+            if str(item).strip()
+        }
+        if inventory_object_types is not None
+        else set(program_available)
+    )
     by_type: dict[str, dict[str, Any]] = {}
     raw_objects = contract.get("objects")
     if isinstance(raw_objects, Sequence) and not isinstance(raw_objects, str):
@@ -204,7 +245,8 @@ def sanitize_request_contract(
             item = _sanitize_contract_object(
                 raw_item,
                 text=text,
-                available_object_types=available,
+                available_object_types=program_available,
+                inventory_object_types=inventory_available,
             )
             if item is None:
                 continue
@@ -231,7 +273,8 @@ def sanitize_request_contract(
         _append_missing_non_functional_contract_objects(
             objects=objects,
             text=text,
-            available_object_types=available,
+            available_object_types=program_available,
+            inventory_object_types=inventory_available,
         )
     )
     objects = sorted(
@@ -265,37 +308,31 @@ def attach_request_contract_to_semantic_program(
     semantic_program: Mapping[str, Any],
     *,
     brief_text: str,
+    inventory_object_types: Sequence[str] = (),
 ) -> dict[str, Any]:
     out = deepcopy(dict(semantic_program))
     available_object_types = _semantic_program_object_types(out)
     existing_contract = out.get("request_contract")
-    request_contract_llm_enabled = _request_contract_llm_enabled()
+    inventory_for_sanitize = inventory_object_types or available_object_types
     if isinstance(existing_contract, Mapping):
         contract = sanitize_request_contract(
             existing_contract,
             brief_text=brief_text,
             available_object_types=available_object_types,
-            fallback_to_heuristic=not request_contract_llm_enabled,
+            inventory_object_types=inventory_for_sanitize,
+            fallback_to_heuristic=False,
         )
-    elif request_contract_llm_enabled:
-        contract = {
-            "version": 1,
-            "source": "llm_request_contract_missing",
-            "objects": [],
-            "groups": [],
-            "notes": [
-                (
-                    "Request contract LLM mode was enabled, but no LLM request "
-                    "contract was attached; heuristic fallback was skipped."
-                )
-            ],
-        }
     else:
-        contract = build_request_contract(
-            brief_text=brief_text,
-            available_object_types=available_object_types,
+        raise ValueError(
+            "Semantic layout program is missing an LLM request contract; "
+            "heuristic request-contract fallback is disabled."
         )
     out["request_contract"] = contract
+    out = reconcile_request_contract_with_semantic_program(
+        out,
+        brief_text=brief_text,
+        inventory_object_types=inventory_object_types,
+    )
     notes = [str(item) for item in out.get("notes") or [] if str(item).strip()]
     notes.append(
         (
@@ -640,6 +677,7 @@ def _sanitize_contract_object(
     *,
     text: str,
     available_object_types: set[str],
+    inventory_object_types: set[str],
 ) -> dict[str, Any] | None:
     if not isinstance(item, Mapping):
         return None
@@ -686,7 +724,9 @@ def _sanitize_contract_object(
 
     max_keep = max(max_keep, target_count, min_keep)
 
-    return {
+    llm_candidates = _sanitize_llm_candidates(item.get("llm_candidates"))
+    relation_edges = _sanitize_relation_edges(item.get("relation_edges"))
+    out = {
         "object_type": object_type,
         "intent": intent,
         "min_keep": min_keep,
@@ -697,12 +737,18 @@ def _sanitize_contract_object(
         "reason": str(item.get("reason") or _reason_for_intent(intent)).strip(),
         "confidence": _confidence_value(item.get("confidence")),
         "placement_participation": item.get("placement_participation"),
-    } | _participation_fields(
+    }
+    if llm_candidates:
+        out["llm_candidates"] = llm_candidates
+    if relation_edges:
+        out["relation_edges"] = relation_edges
+    return out | _participation_fields(
         object_type=object_type,
         intent=intent,
         evidence=evidence,
         raw_placement=item.get("placement_participation"),
         available_object_types=available_object_types,
+        inventory_object_types=inventory_object_types,
     )
 
 
@@ -711,6 +757,7 @@ def _append_missing_non_functional_contract_objects(
     objects: Sequence[dict[str, Any]],
     text: str,
     available_object_types: set[str],
+    inventory_object_types: set[str],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     existing_types = {
         canonical_object_type(str(item.get("object_type") or ""))
@@ -735,6 +782,7 @@ def _append_missing_non_functional_contract_objects(
         restored = _with_participation_fields(
             restored,
             available_object_types=available_object_types,
+            inventory_object_types=inventory_object_types,
         )
         out.append(restored)
         existing_types.add(object_type)
@@ -746,6 +794,7 @@ def _with_participation_fields(
     item: dict[str, Any],
     *,
     available_object_types: set[str],
+    inventory_object_types: set[str] | None = None,
 ) -> dict[str, Any]:
     object_type = canonical_object_type(str(item.get("object_type") or ""))
     intent = _normalize_contract_intent(item.get("intent"))
@@ -758,6 +807,7 @@ def _with_participation_fields(
             evidence=evidence,
             raw_placement=item.get("placement_participation"),
             available_object_types=available_object_types,
+            inventory_object_types=inventory_object_types or available_object_types,
         )
     )
     return out
@@ -770,22 +820,35 @@ def _participation_fields(
     evidence: str,
     raw_placement: object,
     available_object_types: set[str],
+    inventory_object_types: set[str],
 ) -> dict[str, Any]:
+    raw_placement_text = _normalize_placement_text(raw_placement)
     placement = _placement_participation_for_object(
         object_type=object_type,
         raw_value=raw_placement,
         evidence=evidence,
     )
+    guardrail_applied = False
+    if _should_force_floor_solver_participation(
+        object_type=object_type,
+        intent=intent,
+        placement_participation=placement,
+        available_object_types=inventory_object_types,
+    ):
+        placement = "floor_blocking"
+        guardrail_applied = True
     solver_participation = _solver_participation_for(
         object_type=object_type,
         intent=intent,
         placement_participation=placement,
     )
-    inventory_available = object_type in available_object_types
-    return {
+    inventory_available = object_type in inventory_object_types
+    program_available = object_type in available_object_types
+    out = {
         "requested": intent != "max0",
         "inventory_available": inventory_available,
-        "available_in_program": inventory_available,
+        "available_in_inventory": inventory_available,
+        "available_in_program": program_available,
         "placement_participation": placement,
         "solver_participation": solver_participation,
         "blocks_floor_area": solver_participation
@@ -794,6 +857,34 @@ def _participation_fields(
         "host_object_type": _default_host_object_type(object_type, placement),
         "mount_region_type": _default_mount_region_type(placement),
     }
+    if guardrail_applied:
+        out.update(
+            {
+                "placement_guardrail_applied": True,
+                "placement_guardrail_reason": _PLACEMENT_GUARDRAIL_REASON,
+                "raw_placement_participation": raw_placement_text,
+            }
+        )
+    return out
+
+
+def _normalize_placement_text(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "_")
+
+
+def _should_force_floor_solver_participation(
+    *,
+    object_type: str,
+    intent: str,
+    placement_participation: str,
+    available_object_types: set[str],
+) -> bool:
+    return (
+        intent != "max0"
+        and object_type in _FLOOR_SOLVER_GUARDRAIL_OBJECT_TYPES
+        and object_type in available_object_types
+        and placement_participation in _POST_SOLVER_PLACEMENT_PARTICIPATIONS
+    )
 
 
 def _placement_participation_for_object(
@@ -808,8 +899,6 @@ def _placement_participation_for_object(
         if any(pattern in evidence_text for pattern in _FLOOR_MIRROR_EVIDENCE_PATTERNS):
             return "floor_blocking"
         return "wall_attached"
-    if raw_text in _PLACEMENT_PARTICIPATIONS:
-        return raw_text
     if object_type == "rug":
         return "textile_overlay"
     if object_type in {"blanket", "cushion"}:
@@ -822,6 +911,8 @@ def _placement_participation_for_object(
         return "wall_attached"
     if object_type in _NON_FUNCTIONAL_CONTRACT_TYPES:
         return "decor_only"
+    if raw_text in _PLACEMENT_PARTICIPATIONS:
+        return raw_text
     return "floor_blocking"
 
 
@@ -927,6 +1018,40 @@ def _sanitize_contract_groups(
     return groups
 
 
+def _sanitize_llm_candidates(value: object) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return []
+    candidates: list[str] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            raw = item.get("object_type") or item.get("candidate") or item.get("type")
+        else:
+            raw = item
+        canonical = canonical_object_type(str(raw or ""))
+        if canonical and canonical not in candidates:
+            candidates.append(canonical)
+    return candidates[:6]
+
+
+def _sanitize_relation_edges(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return []
+    edges: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        relation = str(item.get("relation") or item.get("type") or "").strip()
+        target = canonical_object_type(
+            str(item.get("target") or item.get("target_object_type") or "")
+        )
+        if not relation or not target:
+            continue
+        edge = {"relation": relation, "target": target}
+        if edge not in edges:
+            edges.append(edge)
+    return edges[:8]
+
+
 def _contract_objects(contract: Mapping[str, Any] | None) -> list[Mapping[str, Any]]:
     if not isinstance(contract, Mapping):
         return []
@@ -971,15 +1096,6 @@ def _reason_for_intent(intent: str) -> str:
 
 def _normalize_text(text: str) -> str:
     return " ".join(str(text or "").lower().replace("-", " ").split())
-
-
-def _request_contract_llm_enabled() -> bool:
-    return os.getenv(_REQUEST_CONTRACT_LLM_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
 
 
 def _alias_matches(normalized: str, alias: str) -> bool:

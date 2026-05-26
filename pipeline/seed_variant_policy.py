@@ -8,7 +8,6 @@ from typing import Any
 @dataclass(frozen=True)
 class SeedVariantBrief:
     source: str
-    model_name: str
     reason: str
     special_notes: str
     focus_mode: str
@@ -22,7 +21,6 @@ def build_seed_variant_briefs(target_count: int) -> list[SeedVariantBrief]:
     briefs = [
         SeedVariantBrief(
             source="seed_stable",
-            model_name="gemma-3-27b-it",
             reason="Keep the seed structure stable and improve the macro logic around it.",
             special_notes=(
                 "Variant brief: stay close to the current seed, preserve the existing side-of-room distribution where possible, "
@@ -40,7 +38,6 @@ def build_seed_variant_briefs(target_count: int) -> list[SeedVariantBrief]:
         ),
         SeedVariantBrief(
             source="seed_focal_axis",
-            model_name="gemini-3.1-flash-lite-preview",
             reason="Strengthen the focal or viewing axis without forcing a full rearrangement.",
             special_notes=(
                 "Variant brief: bias the primary pair into a stronger focal-facing arrangement and make this option read as a grouped "
@@ -58,7 +55,6 @@ def build_seed_variant_briefs(target_count: int) -> list[SeedVariantBrief]:
         ),
         SeedVariantBrief(
             source="seed_open_center",
-            model_name="gemma-4-31b-it",
             reason="Protect a cleaner open center and clearer entry circulation.",
             special_notes=(
                 "Variant brief: deliberately keep a cleaner center lane and move support pressure away from the central field, "
@@ -76,7 +72,6 @@ def build_seed_variant_briefs(target_count: int) -> list[SeedVariantBrief]:
         ),
         SeedVariantBrief(
             source="seed_edge_weighted",
-            model_name="gemma-3-27b-it",
             reason="Move support pressure toward edges or recesses to free the main zone.",
             special_notes=(
                 "Variant brief: push support and storage clusters harder toward perimeter or recess conditions and keep them from "
@@ -94,7 +89,6 @@ def build_seed_variant_briefs(target_count: int) -> list[SeedVariantBrief]:
         ),
         SeedVariantBrief(
             source="seed_zoned",
-            model_name="gemma-4-31b-it",
             reason="Create a more clearly zoned arrangement from the current seed.",
             special_notes=(
                 "Variant brief: form a visibly separate support zone relative to the primary pair and keep each cluster family in "

@@ -26,13 +26,7 @@ class _DummyStylist:
 
 
 fake_stylist.Stylist = _DummyStylist
-fake_stylist.stylist_model_name_for_variant = lambda variant_index: (
-    "gemma-4-31b-it",
-    "gemini-3.1-flash-lite-preview",
-    "gemma-3-27b-it",
-    "gemini-3-flash-preview",
-    "gemma-4-31b-it",
-)[(max(1, int(variant_index)) - 1) % 5]
+fake_stylist.stylist_model_name_for_variant = lambda variant_index: "gpt-5.4-mini"
 sys.modules.setdefault("agent.stylist", fake_stylist)
 
 fake_tools_v2 = types.ModuleType("cluster_placer.tools_v2")
@@ -776,22 +770,22 @@ class LayoutVariantsArchitectureTest(unittest.TestCase):
         self.assertEqual(
             stylist.model_names,
             [
-                "gemma-4-31b-it",
-                "gemini-3.1-flash-lite-preview",
-                "gemma-3-27b-it",
+                "gpt-5.4-mini",
+                "gpt-5.4-mini",
+                "gpt-5.4-mini",
             ],
         )
         self.assertEqual(
             payload["variants"][0]["styled_result"]["notes"][0],
-            "gemma-4-31b-it",
+            "gpt-5.4-mini",
         )
         self.assertEqual(
             payload["variants"][1]["styled_result"]["notes"][0],
-            "gemini-3.1-flash-lite-preview",
+            "gpt-5.4-mini",
         )
         self.assertEqual(
             payload["variants"][2]["styled_result"]["notes"][0],
-            "gemma-3-27b-it",
+            "gpt-5.4-mini",
         )
 
     def test_build_layout_variants_artifact_includes_external_intent_candidates(

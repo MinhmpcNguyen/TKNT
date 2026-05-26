@@ -128,6 +128,12 @@ OBJECT_LEVEL_GEOMETRY_REPAIR_MAX_CANDIDATES = 120
 OBJECT_LEVEL_GEOMETRY_REPAIR_LOCAL_RADIUS_MM = 1800
 OBJECT_LEVEL_REPAIR_BATCH_SIZE = OBJECT_LEVEL_MAX_OBJECT_SOLUTIONS * 2
 OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT = 0.8
+OBJECT_LEVEL_VIEW_TARGET_BED_VIEWER_MIN_DOT = 0.65
+OBJECT_LEVEL_VIEW_TARGET_SEATED_VIEWER_MIN_DOT = 0.75
+OBJECT_LEVEL_VIEW_TARGET_TARGET_MIN_DOT = 0.75
+OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM = 1800.0
+OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MAX_DISTANCE_MM = 4500.0
+OBJECT_LEVEL_ENTRY_SUPPORT_PREFERRED_DISTANCE_MM = 1500.0
 OBJECT_LEVEL_SUPPORT_ALIGNMENT_FACTORS = (-0.35, 0.0, 0.35)
 OBJECT_LEVEL_WALL_CONTACT_TOLERANCE_MM = 1
 OBJECT_LEVEL_NEAR_WALL_FRONT_ACCESS_TOLERANCE_MM = 150
@@ -162,6 +168,9 @@ SEMANTIC_VARIANT_FAMILIES = CORE_SEMANTIC_VARIANT_FAMILIES | frozenset(
 )
 
 STRICT_ROLE_KINDS = frozenset({"focal", "kitchen", "media", "work", "workflow"})
+VIEW_TARGET_RELATIONS = frozenset({"view_target", "viewer_target", "bed_views_media"})
+MUTUAL_FACE_RELATIONS = frozenset({"", "face_each_other", "mutual_face"})
+VIEW_TARGET_BED_VIEWER_TYPES = frozenset({"bed", "lounge_chair"})
 
 
 @dataclass(frozen=True)
@@ -1753,7 +1762,10 @@ def _apply_macro_concept_profiles(
             profile["prefer"].add("window_side")
         if daylight_blocking == "avoid" or daylight_relation == "avoid_window_blocking":
             profile["avoid"].add("window_blocking")
-        if (
+        if entry_relation == "buffer_entry_if_possible":
+            profile["prefer"].update({"entry_side", "near_entry"})
+            profile["prefer"].discard("far_from_entry")
+        elif (
             "private" in zone_assignment
             or entry_relation == "avoid_direct_entry_conflict"
         ):
@@ -1763,6 +1775,40 @@ def _apply_macro_concept_profiles(
             profile["avoid"].add("center")
         elif center_usage in {"partial", "primary"}:
             profile["prefer"].add("center")
+
+
+def _cluster_entry_relation_for_plan(
+    relation_plan: Mapping[str, Any] | None,
+    cluster_id: str,
+) -> str:
+    if not isinstance(relation_plan, Mapping) or not cluster_id:
+        return ""
+    for section_name in (
+        "anchor_layout_hints_by_cluster",
+        "anchor_region_preferences_by_cluster",
+    ):
+        section = relation_plan.get(section_name)
+        if not isinstance(section, Mapping):
+            continue
+        row = section.get(cluster_id)
+        if not isinstance(row, Mapping):
+            continue
+        relation = str(row.get("entry_relation") or "").strip()
+        if relation:
+            return relation
+    macro_concept = relation_plan.get("macro_concept")
+    if not isinstance(macro_concept, Mapping):
+        return ""
+    zone_plan = macro_concept.get("cluster_zone_plan")
+    if not isinstance(zone_plan, Sequence) or isinstance(zone_plan, str):
+        return ""
+    for row in zone_plan:
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("cluster_id") or "").strip() != cluster_id:
+            continue
+        return str(row.get("entry_relation") or "").strip()
+    return ""
 
 
 def _cluster_prefers_wall(profile: Mapping[str, set[str]]) -> bool:
@@ -1789,6 +1835,8 @@ def _cluster_avoids_window(profile: Mapping[str, set[str]]) -> bool:
 def _cluster_avoids_entry(profile: Mapping[str, set[str]]) -> bool:
     avoid = set(profile.get("avoid") or set())
     prefer = set(profile.get("prefer") or set())
+    if prefer & _CLUSTER_ENTRY_PREFER_TAGS:
+        return False
     return bool(avoid & _CLUSTER_ENTRY_AVOID_TAGS) or ("far_from_entry" in prefer)
 
 
@@ -5124,7 +5172,7 @@ def solve_object_level_layout(
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
             "offending_clusters": offending,
-            "solver_degradation_report": _object_level_solver_degradation_report(
+            "solver_degradation_report": _macro_cluster_solver_degradation_report(
                 raw_solution_count=0,
                 eligible_solutions=[],
                 partial_solutions=[],
@@ -5159,7 +5207,7 @@ def solve_object_level_layout(
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
             "offending_clusters": list(anchor_order),
-            "solver_degradation_report": _object_level_solver_degradation_report(
+            "solver_degradation_report": _macro_cluster_solver_degradation_report(
                 raw_solution_count=0,
                 eligible_solutions=[],
                 partial_solutions=[],
@@ -5287,7 +5335,7 @@ def solve_object_level_layout(
             ),
             "best_partial": best_partial,
             "partial_solutions": partial_solutions,
-            "solver_degradation_report": _object_level_solver_degradation_report(
+            "solver_degradation_report": _macro_cluster_solver_degradation_report(
                 raw_solution_count=len(raw_solution_pool),
                 eligible_solutions=ranked_pool,
                 partial_solutions=partial_ranked_pool,
@@ -5347,7 +5395,7 @@ def solve_object_level_layout(
         "dropped_inventory_by_cluster": deepcopy(
             best_solution.get("dropped_inventory_by_cluster") or {}
         ),
-        "solver_degradation_report": _object_level_solver_degradation_report(
+        "solver_degradation_report": _macro_cluster_solver_degradation_report(
             raw_solution_count=len(raw_solution_pool),
             eligible_solutions=ranked_pool,
             partial_solutions=partial_ranked_pool,
@@ -6655,6 +6703,7 @@ def _generate_anchor_pose_candidates(
     if not hint and region_preference:
         hint = region_preference
     placement_behavior = _placement_behavior_from_rows(hint, region_preference)
+    entry_relation = _cluster_entry_relation_for_plan(relation_plan, cluster_id)
     requires_near_wall_inward = _anchor_requires_near_wall_inward_contract(
         cluster_id=cluster_id,
         object_id=anchor_id,
@@ -6714,6 +6763,21 @@ def _generate_anchor_pose_candidates(
         world=world,
         resolved_region_bboxes=forbidden_region_bboxes,
     )
+    entry_reference_bboxes = _entry_reference_bboxes_for_anchor(
+        refs=[
+            zone_assignment,
+            *required_region_ids,
+            *preferred_region_ids,
+            *[
+                region_id
+                for region_id in forbidden_region_ids
+                if _entry_reference_region_id_allowed(region_id)
+            ],
+        ],
+        region_index=world["region_index"],
+        relation_plan=relation_plan,
+        room_model=room_model,
+    )
     primary_cluster = _extract_layout_primary_cluster_id(
         dict(relation_plan) if isinstance(relation_plan, dict) else None
     )
@@ -6752,6 +6816,19 @@ def _generate_anchor_pose_candidates(
                     h_mm=h_mm,
                     grid_mm=grid_mm,
                 )
+                if (
+                    entry_relation == "buffer_entry_if_possible"
+                    and _anchor_kind_is_entry(anchor_kind)
+                ):
+                    origin_positions.extend(
+                        _entry_wall_flank_origin_candidates(
+                            entry_bbox=region_bbox,
+                            room_bbox=world["room_bbox"],
+                            w_mm=w_mm,
+                            h_mm=h_mm,
+                            grid_mm=grid_mm,
+                        )
+                    )
                 centers = _candidate_centers_for_region(
                     region_bbox=region_bbox,
                     room_bbox=world["room_bbox"],
@@ -6853,6 +6930,7 @@ def _generate_anchor_pose_candidates(
                             forbidden_regions=forbidden_regions,
                             cluster_id=cluster_id,
                             relation_plan=relation_plan,
+                            entry_reference_bboxes=entry_reference_bboxes,
                         )
                         + orientation_score
                         + score_adjustment
@@ -6882,6 +6960,30 @@ def _generate_anchor_pose_candidates(
         )
     )
     return candidates[:OBJECT_LEVEL_MAX_ANCHOR_CANDIDATES_PER_CLUSTER]
+
+
+def _entry_reference_bboxes_for_anchor(
+    *,
+    refs: Sequence[str],
+    region_index: Mapping[str, tuple[int, int, int, int]],
+    relation_plan: Mapping[str, Any] | None,
+    room_model: Mapping[str, Any],
+) -> list[tuple[int, int, int, int]]:
+    bboxes: list[tuple[int, int, int, int]] = []
+    for ref in refs:
+        if not _entry_reference_region_id_allowed(ref):
+            continue
+        bboxes.extend(
+            _region_bboxes_from_ref(ref, region_index, relation_plan, room_model)
+        )
+    return _dedupe_region_bboxes(bboxes)
+
+
+def _entry_reference_region_id_allowed(region_id: str) -> bool:
+    token = str(region_id or "").strip().lower()
+    if not token or not ("entry" in token or "door" in token):
+        return False
+    return not any(part in token for part in ("corridor", "path", "center"))
 
 
 def _anchor_forbidden_regions_for_cluster(
@@ -7080,6 +7182,55 @@ def _wall_flush_origin_candidates(
     return out
 
 
+def _entry_wall_flank_origin_candidates(
+    *,
+    entry_bbox: tuple[int, int, int, int],
+    room_bbox: tuple[int, int, int, int],
+    w_mm: int,
+    h_mm: int,
+    grid_mm: int,
+) -> list[tuple[int, int]]:
+    wall = _nearest_wall_name_for_region(region_bbox=entry_bbox, room_bbox=room_bbox)
+    min_x, min_y, max_x, max_y = entry_bbox
+    room_min_x, room_min_y, room_max_x, room_max_y = room_bbox
+    margin = max(1, int(grid_mm))
+    origins: list[tuple[int, int]] = []
+
+    def append_origin(x: int, y: int) -> None:
+        origins.append(
+            _snap_origin_inside_room(
+                x=x,
+                y=y,
+                w_mm=w_mm,
+                h_mm=h_mm,
+                room_bbox=room_bbox,
+                grid_mm=grid_mm,
+            )
+        )
+
+    if wall in {"left_wall", "right_wall"}:
+        x = room_min_x if wall == "left_wall" else room_max_x - w_mm
+        append_origin(x, min_y - h_mm - margin)
+        append_origin(x, max_y + margin)
+        append_origin(x, min_y - h_mm - margin * 3)
+        append_origin(x, max_y + margin * 3)
+    else:
+        y = room_min_y if wall == "top_wall" else room_max_y - h_mm
+        append_origin(min_x - w_mm - margin, y)
+        append_origin(max_x + margin, y)
+        append_origin(min_x - w_mm - margin * 3, y)
+        append_origin(max_x + margin * 3, y)
+
+    out: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for origin in origins:
+        if origin in seen:
+            continue
+        seen.add(origin)
+        out.append(origin)
+    return out
+
+
 def _candidate_centers_for_region(
     *,
     region_bbox: tuple[int, int, int, int],
@@ -7200,6 +7351,7 @@ def _anchor_candidate_score(
     forbidden_regions: Sequence[Mapping[str, Any]],
     cluster_id: str,
     relation_plan: Mapping[str, Any] | None,
+    entry_reference_bboxes: Sequence[tuple[int, int, int, int]] = (),
 ) -> float:
     cx = (rect[0] + rect[2]) / 2.0
     cy = (rect[1] + rect[3]) / 2.0
@@ -7262,7 +7414,38 @@ def _anchor_candidate_score(
                 1200.0,
             )
             score -= min(1.5, excess_overlap) * penalty
+    if _cluster_entry_relation_for_plan(relation_plan, cluster_id) == (
+        "buffer_entry_if_possible"
+    ):
+        if _anchor_kind_is_entry(anchor_kind):
+            score += 2400.0
+        entry_distance = _rect_center_distance_to_nearest_bbox(
+            rect,
+            entry_reference_bboxes,
+        )
+        if entry_distance is None and ("entry" in token or "door" in token):
+            entry_distance = dist_region
+        if entry_distance is not None:
+            preferred_distance = OBJECT_LEVEL_ENTRY_SUPPORT_PREFERRED_DISTANCE_MM
+            if entry_distance <= preferred_distance:
+                score += 2800.0 + (preferred_distance - entry_distance) * 1.2
+            else:
+                score -= min(4500.0, (entry_distance - preferred_distance) * 1.8)
     return score
+
+
+def _rect_center_distance_to_nearest_bbox(
+    rect: tuple[int, int, int, int],
+    bboxes: Sequence[tuple[int, int, int, int]],
+) -> float | None:
+    if not bboxes:
+        return None
+    cx = (rect[0] + rect[2]) / 2.0
+    cy = (rect[1] + rect[3]) / 2.0
+    return min(
+        math.hypot(cx - (bbox[0] + bbox[2]) / 2.0, cy - (bbox[1] + bbox[3]) / 2.0)
+        for bbox in bboxes
+    )
 
 
 def _forbidden_region_excess_overlap(
@@ -7818,7 +8001,7 @@ def _anchor_object_viewing_pair_solution_score(
             target, str(pair.get("target_object_id") or "")
         ):
             continue
-        score += _viewing_pair_anchor_score(viewer, target)
+        score += _viewing_pair_anchor_score(viewer, target, pair)
         score -= _non_participant_viewing_target_penalty(
             anchor_solution=anchor_solution,
             viewer=viewer,
@@ -7836,9 +8019,44 @@ def _anchor_matches_viewing_pair_object(
     return str(anchor.get("object_id") or "") == object_id
 
 
+def _viewing_pair_relation(pair: Mapping[str, Any]) -> str:
+    relation = str(pair.get("relation") or "face_each_other").strip().lower()
+    if relation == "mutual_face":
+        return "face_each_other"
+    return relation
+
+
+def _view_target_viewer_min_dot(
+    pair: Mapping[str, Any],
+    viewer: Mapping[str, Any],
+) -> float:
+    tokens = _object_type_tokens(
+        pair.get("viewer_object_type"),
+        pair.get("viewer_object_id"),
+        viewer.get("object_id"),
+        viewer.get("category"),
+        viewer.get("anchor_kind"),
+    )
+    if tokens & VIEW_TARGET_BED_VIEWER_TYPES:
+        return OBJECT_LEVEL_VIEW_TARGET_BED_VIEWER_MIN_DOT
+    return OBJECT_LEVEL_VIEW_TARGET_SEATED_VIEWER_MIN_DOT
+
+
+def _object_type_tokens(*values: Any) -> set[str]:
+    tokens: set[str] = set()
+    for value in values:
+        normalized = str(value or "").strip().lower().replace("-", "_")
+        if not normalized:
+            continue
+        tokens.add(normalized)
+        tokens.update(part for part in normalized.split("_") if part)
+    return tokens
+
+
 def _viewing_pair_anchor_score(
     viewer: Mapping[str, Any],
     target: Mapping[str, Any],
+    pair: Mapping[str, Any],
 ) -> float:
     viewer_rect = viewer.get("rect")
     target_rect = target.get("rect")
@@ -7863,6 +8081,30 @@ def _viewing_pair_anchor_score(
         viewer_center[1] - target_center[1],
     )
     axis_alignment = max(abs(viewer_to_target[0]), abs(viewer_to_target[1]))
+    relation = _viewing_pair_relation(pair)
+    if relation in VIEW_TARGET_RELATIONS:
+        viewer_min_dot = _view_target_viewer_min_dot(pair, viewer)
+        target_min_dot = OBJECT_LEVEL_VIEW_TARGET_TARGET_MIN_DOT
+        score = 1800.0 - abs(distance - 3000.0) * 0.35
+        score += viewer_dot * 6200.0
+        score += target_dot * 5600.0
+        if viewer_dot >= viewer_min_dot and target_dot >= target_min_dot:
+            score += 5200.0
+        else:
+            score -= max(viewer_min_dot - viewer_dot, 0.0) * 10000.0
+            score -= max(target_min_dot - target_dot, 0.0) * 10000.0
+        if distance < OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM:
+            score -= (
+                OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM - distance
+            ) * 1.2
+        elif distance > OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MAX_DISTANCE_MM:
+            score -= (
+                distance - OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MAX_DISTANCE_MM
+            ) * 0.8
+        else:
+            score += 900.0
+        score += axis_alignment * 700.0
+        return score
     score = 1800.0 - abs(distance - 2400.0)
     score += pair_dot * 7200.0
     if pair_dot >= OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT:
@@ -8147,6 +8389,7 @@ def _place_support_objects_for_solution(
         cluster_program = world["clusters_by_id"][cluster_id]
         object_program = cluster_program["object_program"]
         anchor_id = _cluster_program_dominant_anchor(cluster_program)
+        required_support_ids = _required_support_object_ids(object_program)
         droppable = _droppable_object_ids(object_program)
         protected = set(object_program.get("protected_ids") or [])
 
@@ -8170,6 +8413,17 @@ def _place_support_objects_for_solution(
             edge=edge,
             grid_mm=grid_mm,
         )
+        if object_id in required_support_ids:
+            slots.extend(
+                _required_support_standalone_slot_candidates(
+                    cluster_program=cluster_program,
+                    object_id=object_id,
+                    relation_plan=relation_plan,
+                    world=world,
+                    room_model=room_model,
+                    grid_mm=grid_mm,
+                )
+            )
         clean_slots: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
         repair_slots: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
         for slot in slots:
@@ -8184,7 +8438,7 @@ def _place_support_objects_for_solution(
                 slot["x"],
                 slot["y"],
                 slot["rot"],
-                relative_to=base_id,
+                relative_to=slot.get("relative_to", base_id),
             )
             slot_is_clean = _object_rect_is_usable(
                 rect,
@@ -8765,6 +9019,9 @@ def _apply_object_level_geometry_repair_penalty(
 def _droppable_object_ids(object_program: Mapping[str, Any]) -> set[str]:
     members = {str(item) for item in (object_program.get("members") or []) if str(item)}
     protected = {str(item) for item in (object_program.get("protected_ids") or [])}
+    required = {str(item) for item in (object_program.get("required_object_ids") or [])}
+    required_support = _required_support_object_ids(object_program)
+    non_droppable = protected | required | required_support
     optional = {str(item) for item in (object_program.get("optional_object_ids") or [])}
     support_edge_ids = {
         str(row.get("object_id"))
@@ -8779,9 +9036,11 @@ def _droppable_object_ids(object_program: Mapping[str, Any]) -> set[str]:
     droppable = {
         str(item)
         for item in (object_program.get("droppable_ids") or [])
-        if str(item) in members
+        if str(item) in members and str(item) not in non_droppable
     }
-    droppable.update(item for item in optional if item in members)
+    droppable.update(
+        item for item in optional if item in members and item not in non_droppable
+    )
     for action in object_program.get("degradation_ladder") or []:
         token = str(action or "").strip()
         if token == "drop_secondary_support":
@@ -8802,7 +9061,7 @@ def _droppable_object_ids(object_program: Mapping[str, Any]) -> set[str]:
                     else ""
                 )
                 if (
-                    object_id not in protected
+                    object_id not in non_droppable
                     and object_id in support_edge_ids
                     and (
                         priority in {"secondary", "optional", "support"}
@@ -8819,9 +9078,78 @@ def _droppable_object_ids(object_program: Mapping[str, Any]) -> set[str]:
             continue
         if token.startswith("drop_"):
             object_id = token.removeprefix("drop_")
-            if object_id and object_id in members:
+            if object_id and object_id in members and object_id not in non_droppable:
                 droppable.add(object_id)
     return droppable
+
+
+def _required_support_object_ids(object_program: Mapping[str, Any]) -> set[str]:
+    members = {str(item) for item in (object_program.get("members") or []) if str(item)}
+    out = {
+        str(item)
+        for item in (
+            object_program.get("required_support_ids")
+            or object_program.get("relaxable_required_ids")
+            or []
+        )
+        if str(item) in members
+    }
+    specs = (
+        object_program.get("object_specs_by_id")
+        if isinstance(object_program.get("object_specs_by_id"), Mapping)
+        else {}
+    )
+    for object_id, spec in specs.items():
+        if not isinstance(spec, Mapping):
+            continue
+        if str(object_id) in members and (
+            bool(spec.get("required_support")) or bool(spec.get("relaxable_required"))
+        ):
+            out.add(str(object_id))
+    return out
+
+
+def _missing_required_object_rows(
+    *,
+    placed_objects: Sequence[Mapping[str, Any]],
+    world: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    placed = {
+        (str(row.get("cluster_id") or ""), str(row.get("object_id") or ""))
+        for row in placed_objects
+        if isinstance(row, Mapping)
+    }
+    clusters_by_id = (
+        world.get("clusters_by_id")
+        if isinstance(world.get("clusters_by_id"), Mapping)
+        else {}
+    )
+    missing: list[dict[str, str]] = []
+    for cluster_id, cluster_program in clusters_by_id.items():
+        if not isinstance(cluster_program, Mapping):
+            continue
+        object_program = (
+            cluster_program.get("object_program")
+            if isinstance(cluster_program.get("object_program"), Mapping)
+            else {}
+        )
+        required_ids = {
+            str(item)
+            for item in (object_program.get("required_object_ids") or [])
+            if str(item)
+        }
+        required_ids.update(_required_support_object_ids(object_program))
+        for object_id in sorted(required_ids):
+            key = (str(cluster_id), object_id)
+            if key not in placed:
+                missing.append(
+                    {
+                        "cluster_id": str(cluster_id),
+                        "object_id": object_id,
+                        "reason": "required_object_missing",
+                    }
+                )
+    return missing
 
 
 def _surface_seat_supports_by_cluster(
@@ -9021,6 +9349,139 @@ def _normalized_support_side_options(edge: Mapping[str, Any]) -> list[str]:
         filtered = [option for option in raw_options if option in {"left", "right"}]
         return filtered or ["left", "right"]
     return raw_options or ["front"]
+
+
+def _required_support_standalone_slot_candidates(
+    *,
+    cluster_program: Mapping[str, Any],
+    object_id: str,
+    relation_plan: Mapping[str, Any] | None,
+    world: Mapping[str, Any],
+    room_model: Mapping[str, Any],
+    grid_mm: int,
+) -> list[dict[str, Any]]:
+    spec = _object_spec(cluster_program, object_id)
+    if spec is None:
+        return []
+    dims = (
+        spec.get("rep_dims_mm") if isinstance(spec.get("rep_dims_mm"), Mapping) else {}
+    )
+    length_mm = max(160, int(dims.get("L") or 0))
+    width_mm = max(160, int(dims.get("W") or 0))
+    allowed_rotations = (
+        spec.get("allowed_rotations")
+        if isinstance(spec.get("allowed_rotations"), Sequence)
+        else [0, 90, 180, 270]
+    )
+    cluster_id = str(cluster_program.get("cluster_id") or "")
+    relation_plan = relation_plan or {}
+    anchor_region_preferences = (
+        relation_plan.get("anchor_region_preferences_by_cluster")
+        if isinstance(
+            relation_plan.get("anchor_region_preferences_by_cluster"), Mapping
+        )
+        else {}
+    )
+    hint = (
+        anchor_region_preferences.get(cluster_id)
+        if isinstance(anchor_region_preferences, Mapping)
+        and isinstance(anchor_region_preferences.get(cluster_id), Mapping)
+        else {}
+    )
+    zone_assignment = str(hint.get("zone_assignment") or "edge_loading_zone")
+    preferred_region_ids = _dedupe_string_sequence(
+        [
+            zone_assignment,
+            *_string_sequence(hint.get("preferred_region_ids")),
+            "edge_loading_zone",
+            "bottom_wall_zone",
+            "top_wall_zone",
+            "left_wall_zone",
+            "right_wall_zone",
+        ]
+    )
+    region_bboxes = [
+        bbox
+        for region_id in preferred_region_ids
+        for bbox in _region_bboxes_from_ref(
+            str(region_id),
+            world["region_index"],
+            relation_plan,
+            room_model,
+        )
+    ]
+    region_bboxes = _dedupe_region_bboxes(region_bboxes)
+    if not region_bboxes:
+        region_bboxes = _anchor_fallback_region_bboxes(
+            world=world,
+            existing_region_bboxes=(),
+        )
+    placement_behavior = {
+        "wall_backing": "preferred",
+        "front_space": "preferred",
+        "pose_flexibility": "high",
+    }
+    front_token = spec.get("front") if isinstance(spec.get("front"), str) else "top"
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, int]] = set()
+    for region_bbox in region_bboxes[:16]:
+        for rot in allowed_rotations:
+            final_rot = int(rot) % 360
+            w_mm, h_mm = _rotate_dims_for_rot(length_mm, width_mm, final_rot)
+            origins = _wall_flush_origin_candidates(
+                region_bbox=region_bbox,
+                room_bbox=world["room_bbox"],
+                zone_assignment=zone_assignment,
+                placement_behavior=placement_behavior,
+                w_mm=w_mm,
+                h_mm=h_mm,
+                grid_mm=grid_mm,
+            )
+            for x, y in origins:
+                rect = (x, y, x + w_mm, y + h_mm)
+                if not _rect_inside_room(rect, world["room_bbox"]):
+                    continue
+                key = (x, y, final_rot)
+                if key in seen:
+                    continue
+                seen.add(key)
+                front_world = _front_vector_from_rotation(front_token, final_rot)
+                desired_fronts = _wall_contact_inward_front_options(
+                    rect=rect,
+                    room_bbox=world["room_bbox"],
+                ) or _near_wall_inward_front_options(
+                    rect=rect,
+                    room_bbox=world["room_bbox"],
+                )
+                desired_front = _best_aligned_required_front(
+                    front_world=front_world,
+                    desired_fronts=desired_fronts,
+                )
+                out.append(
+                    {
+                        "x": x,
+                        "y": y,
+                        "rot": final_rot,
+                        "w": w_mm,
+                        "h": h_mm,
+                        "rect": rect,
+                        "orientation_score": _front_alignment_score(
+                            front_world=front_world,
+                            desired_front=desired_front,
+                        ),
+                        "relative_to": None,
+                        "required_support_relaxed": True,
+                    }
+                )
+    out.sort(
+        key=lambda item: (
+            -float(item.get("orientation_score") or 0.0),
+            item["y"],
+            item["x"],
+            item["rot"],
+        )
+    )
+    return out[:OBJECT_LEVEL_MAX_SUPPORT_SLOT_CANDIDATES]
 
 
 def _support_slot_candidates(
@@ -9523,6 +9984,15 @@ def _verify_object_level_solution(
             if str(row.get("cluster_id") or "").strip()
         }
     )
+    missing_required_objects = _missing_required_object_rows(
+        placed_objects=placed_objects,
+        world=world,
+    )
+    if missing_required_objects:
+        hard_valid = False
+        offending_clusters.extend(
+            str(item.get("cluster_id") or "") for item in missing_required_objects
+        )
     missing_clusters = [
         cluster_id
         for cluster_id in expected_clusters
@@ -9552,10 +10022,15 @@ def _verify_object_level_solution(
             ]
         ),
     )
-    complete = geometry_valid and not missing_clusters
+    complete = geometry_valid and not missing_clusters and not missing_required_objects
     pair_ok = _object_level_primary_pair_ok(placed_objects, relation_plan) and not (
         face_pair_issues
     )
+    interaction_quality = _object_level_interaction_quality(
+        placed_objects=placed_objects,
+        relation_plan=relation_plan,
+    )
+    interaction_quality_score = int(interaction_quality.get("score") or 0)
     critical_issue_count = sum(
         1
         for issue in protected_region_issues
@@ -9611,6 +10086,7 @@ def _verify_object_level_solution(
         "gallery_eligible": gallery_eligible,
         "coverage_ratio": float(len(present_clusters) / coverage_denominator),
         "missing_cluster_ids": missing_clusters,
+        "missing_required_object_ids": missing_required_objects,
         "dropped_trial_cluster_ids": dropped_trial_clusters,
         "present_cluster_ids": present_clusters,
         "offending_clusters": sorted(
@@ -9634,6 +10110,8 @@ def _verify_object_level_solution(
         "forbidden_region_penalty": round(forbidden_region_penalty, 3),
         "soft_issue_count": soft_issue_count,
         "soft_constraint_score": soft_constraint_score,
+        "interaction_quality_score": interaction_quality_score,
+        "interaction_quality": interaction_quality,
         "quality_gate_reasons": quality_gate_reasons,
         "layout_score": int(
             1000
@@ -9647,6 +10125,7 @@ def _verify_object_level_solution(
             - len(orientation_issues) * 30
             - len(functional_geometry_issues) * 90
             - blocking_issue_count * 1200
+            + interaction_quality_score
         ),
     }
 
@@ -9885,7 +10364,15 @@ def _object_level_quality_gate_reasons(
         return []
     reasons: list[str] = []
     if face_pair_issues:
-        reasons.append("required_face_contract_failed")
+        issue_reasons = {
+            str(issue.get("reason") or "").strip()
+            for issue in face_pair_issues
+            if isinstance(issue, Mapping)
+        }
+        if "view_target_contract_failed" in issue_reasons:
+            reasons.append("view_target_contract_failed")
+        if issue_reasons - {"view_target_contract_failed"}:
+            reasons.append("required_face_contract_failed")
     if blocking_protected_region_issues:
         reasons.append("blocking_protected_region_overlap")
     if blocking_forbidden_region_issues:
@@ -10300,6 +10787,7 @@ def _object_level_required_face_pairs(
     required = {
         pair
         for row in _object_level_required_viewing_pairs(relation_plan)
+        if _viewing_pair_relation(row) in MUTUAL_FACE_RELATIONS
         if (
             pair := _normalized_cluster_pair(
                 str(row.get("viewer_cluster_id") or ""),
@@ -10335,8 +10823,8 @@ def _object_level_required_face_pairs(
         secondary = str(layout_intent.get("secondary_cluster_id") or "").strip()
         pair = _normalized_cluster_pair(primary, secondary)
         if focus_mode == "viewing" and pair is not None:
-            alternatives = relations_by_pair.get(pair, {"face_each_other"})
-            if alternatives <= {"face_each_other"}:
+            alternatives = relations_by_pair.get(pair, set())
+            if alternatives and alternatives <= {"face_each_other"}:
                 required.add(pair)
     requirements = relation_plan.get("concept_readiness_requirements")
     if isinstance(requirements, Mapping):
@@ -10357,8 +10845,8 @@ def _object_level_required_face_pairs(
             )
             pair = _normalized_cluster_pair(primary or "", secondary or "")
             if pair is not None:
-                alternatives = relations_by_pair.get(pair, {"face_each_other"})
-                if alternatives <= {"face_each_other"}:
+                alternatives = relations_by_pair.get(pair, set())
+                if alternatives and alternatives <= {"face_each_other"}:
                     required.add(pair)
     return required
 
@@ -10373,7 +10861,7 @@ def _object_level_required_viewing_pairs(
         if not isinstance(row, Mapping):
             continue
         relation = str(row.get("relation") or "").strip().lower()
-        if relation not in {"", "face_each_other"}:
+        if relation not in MUTUAL_FACE_RELATIONS | VIEW_TARGET_RELATIONS:
             continue
         if row.get("required") is False:
             continue
@@ -10395,7 +10883,11 @@ def _object_level_required_viewing_pairs(
                 "target_cluster_id": target_cluster_id,
                 "viewer_object_id": viewer_object_id,
                 "target_object_id": target_object_id,
-                "relation": "face_each_other",
+                "viewer_object_type": str(row.get("viewer_object_type") or "").strip(),
+                "target_object_type": str(row.get("target_object_type") or "").strip(),
+                "relation": "face_each_other"
+                if relation in {"", "mutual_face"}
+                else relation,
             }
         )
     return out
@@ -10588,6 +11080,7 @@ def _object_level_viewing_pair_issues(
     placed_cluster_ids = {cluster_id for cluster_id, _object_id in rows_by_key}
     issues: list[dict[str, Any]] = []
     for pair in object_viewing_pairs:
+        relation = _viewing_pair_relation(pair)
         viewer_key = (
             str(pair.get("viewer_cluster_id") or ""),
             str(pair.get("viewer_object_id") or ""),
@@ -10627,17 +11120,53 @@ def _object_level_viewing_pair_issues(
         right_desired = _vector_between_rect_centers(right_rect, left_rect)
         left_front = _front_tuple(viewer.get("front_world"))
         right_front = _front_tuple(target.get("front_world"))
+        viewer_min_dot = (
+            _view_target_viewer_min_dot(pair, viewer)
+            if relation in VIEW_TARGET_RELATIONS
+            else OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT
+        )
+        target_min_dot = (
+            OBJECT_LEVEL_VIEW_TARGET_TARGET_MIN_DOT
+            if relation in VIEW_TARGET_RELATIONS
+            else OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT
+        )
         left_ok = _front_matches_required_direction(
             front_world=left_front,
             desired_front=left_desired,
-            min_dot=OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT,
+            min_dot=viewer_min_dot,
         )
         right_ok = _front_matches_required_direction(
             front_world=right_front,
             desired_front=right_desired,
-            min_dot=OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT,
+            min_dot=target_min_dot,
         )
         if left_ok and right_ok:
+            continue
+        left_dot = None
+        if left_front is not None and left_desired is not None:
+            left_dot = round(_dot_normalized(left_front, left_desired), 3)
+        right_dot = None
+        if right_front is not None and right_desired is not None:
+            right_dot = round(_dot_normalized(right_front, right_desired), 3)
+        if relation in VIEW_TARGET_RELATIONS:
+            issues.append(
+                {
+                    "a": viewer_key[0],
+                    "b": target_key[0],
+                    "viewer_cluster_id": viewer_key[0],
+                    "target_cluster_id": target_key[0],
+                    "viewer_object_id": viewer_key[1],
+                    "target_object_id": target_key[1],
+                    "relation": relation,
+                    "reason": "view_target_contract_failed",
+                    "viewer_dot": left_dot,
+                    "target_dot": right_dot,
+                    "viewer_min_dot": viewer_min_dot,
+                    "target_min_dot": target_min_dot,
+                    "left_dot": left_dot,
+                    "right_dot": right_dot,
+                }
+            )
             continue
         issues.append(
             {
@@ -10646,15 +11175,219 @@ def _object_level_viewing_pair_issues(
                 "viewer_object_id": viewer_key[1],
                 "target_object_id": target_key[1],
                 "reason": "required_face_each_other_failed",
-                "left_dot": None
-                if left_front is None or left_desired is None
-                else round(_dot_normalized(left_front, left_desired), 3),
-                "right_dot": None
-                if right_front is None or right_desired is None
-                else round(_dot_normalized(right_front, right_desired), 3),
+                "left_dot": left_dot,
+                "right_dot": right_dot,
             }
         )
     return issues
+
+
+def _object_level_interaction_quality(
+    *,
+    placed_objects: Sequence[Mapping[str, Any]],
+    relation_plan: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    viewing_rows = _object_level_view_target_quality_rows(
+        placed_objects=placed_objects,
+        object_viewing_pairs=_object_level_required_viewing_pairs(relation_plan),
+    )
+    workflow_rows = _object_level_workflow_quality_rows(placed_objects)
+    score = sum(int(row.get("score") or 0) for row in viewing_rows)
+    score += sum(int(row.get("score") or 0) for row in workflow_rows)
+    return {
+        "score": int(score),
+        "view_targets": viewing_rows,
+        "workflow_pairs": workflow_rows,
+    }
+
+
+def _object_level_view_target_quality_rows(
+    *,
+    placed_objects: Sequence[Mapping[str, Any]],
+    object_viewing_pairs: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows_by_key = {
+        (
+            str(row.get("cluster_id") or ""),
+            str(row.get("object_id") or ""),
+        ): row
+        for row in placed_objects
+    }
+    quality_rows: list[dict[str, Any]] = []
+    for pair in object_viewing_pairs:
+        relation = _viewing_pair_relation(pair)
+        viewer = rows_by_key.get(
+            (
+                str(pair.get("viewer_cluster_id") or ""),
+                str(pair.get("viewer_object_id") or ""),
+            )
+        )
+        target = rows_by_key.get(
+            (
+                str(pair.get("target_cluster_id") or ""),
+                str(pair.get("target_object_id") or ""),
+            )
+        )
+        if viewer is None or target is None:
+            continue
+        viewer_rect = viewer.get("rect")
+        target_rect = target.get("rect")
+        if not (
+            isinstance(viewer_rect, tuple)
+            and len(viewer_rect) == 4
+            and isinstance(target_rect, tuple)
+            and len(target_rect) == 4
+        ):
+            continue
+        viewer_desired = _vector_between_rect_centers(viewer_rect, target_rect)
+        target_desired = _vector_between_rect_centers(target_rect, viewer_rect)
+        viewer_front = _front_tuple(viewer.get("front_world"))
+        target_front = _front_tuple(target.get("front_world"))
+        if viewer_desired is None or target_desired is None:
+            continue
+        viewer_dot = (
+            _dot_normalized(viewer_front, viewer_desired)
+            if viewer_front is not None
+            else 0.0
+        )
+        target_dot = (
+            _dot_normalized(target_front, target_desired)
+            if target_front is not None
+            else 0.0
+        )
+        viewer_center = _rect_center(viewer_rect)
+        target_center = _rect_center(target_rect)
+        distance = math.hypot(
+            viewer_center[0] - target_center[0],
+            viewer_center[1] - target_center[1],
+        )
+        axis_alignment = max(abs(viewer_desired[0]), abs(viewer_desired[1]))
+        viewer_min_dot = (
+            _view_target_viewer_min_dot(pair, viewer)
+            if relation in VIEW_TARGET_RELATIONS
+            else OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT
+        )
+        target_min_dot = (
+            OBJECT_LEVEL_VIEW_TARGET_TARGET_MIN_DOT
+            if relation in VIEW_TARGET_RELATIONS
+            else OBJECT_LEVEL_REQUIRED_FACE_PAIR_MIN_DOT
+        )
+        score = _interaction_dot_score(viewer_dot, viewer_min_dot, weight=260)
+        score += _interaction_dot_score(target_dot, target_min_dot, weight=260)
+        score += int(round(axis_alignment * 160.0))
+        if (
+            OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM
+            <= distance
+            <= OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MAX_DISTANCE_MM
+        ):
+            score += 120
+        else:
+            score -= min(
+                220,
+                int(
+                    abs(
+                        distance
+                        - (
+                            OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM
+                            if distance
+                            < OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MIN_DISTANCE_MM
+                            else OBJECT_LEVEL_VIEW_TARGET_PREFERRED_MAX_DISTANCE_MM
+                        )
+                    )
+                    / 10.0
+                ),
+            )
+        quality_rows.append(
+            {
+                "viewer_cluster_id": str(pair.get("viewer_cluster_id") or ""),
+                "target_cluster_id": str(pair.get("target_cluster_id") or ""),
+                "viewer_object_id": str(pair.get("viewer_object_id") or ""),
+                "target_object_id": str(pair.get("target_object_id") or ""),
+                "relation": relation,
+                "viewer_dot": round(viewer_dot, 3),
+                "target_dot": round(target_dot, 3),
+                "axis_alignment": round(axis_alignment, 3),
+                "distance_mm": round(distance, 1),
+                "score": int(score),
+            }
+        )
+    return quality_rows
+
+
+def _interaction_dot_score(dot: float, min_dot: float, *, weight: int) -> int:
+    if dot >= min_dot:
+        headroom = max(1.0 - min_dot, 0.01)
+        return int(round(weight * (0.65 + 0.35 * (dot - min_dot) / headroom)))
+    return -int(round(weight * min((min_dot - dot) / max(min_dot, 0.01), 1.0)))
+
+
+def _object_level_workflow_quality_rows(
+    placed_objects: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows_by_cluster: dict[str, list[Mapping[str, Any]]] = {}
+    for row in placed_objects:
+        rows_by_cluster.setdefault(str(row.get("cluster_id") or ""), []).append(row)
+
+    quality_rows: list[dict[str, Any]] = []
+    for cluster_id, rows in rows_by_cluster.items():
+        desks = [row for row in rows if _object_row_is_desk(row)]
+        chairs = [row for row in rows if _object_row_is_work_chair(row)]
+        if not desks or not chairs:
+            continue
+        desk = desks[0]
+        for chair in chairs:
+            chair_rect = chair.get("rect")
+            desk_rect = desk.get("rect")
+            if not (
+                isinstance(chair_rect, tuple)
+                and len(chair_rect) == 4
+                and isinstance(desk_rect, tuple)
+                and len(desk_rect) == 4
+            ):
+                continue
+            desired = _vector_between_rect_centers(chair_rect, desk_rect)
+            chair_front = _front_tuple(chair.get("front_world"))
+            if desired is None or chair_front is None:
+                continue
+            dot = _dot_normalized(chair_front, desired)
+            chair_center = _rect_center(chair_rect)
+            desk_center = _rect_center(desk_rect)
+            distance = math.hypot(
+                chair_center[0] - desk_center[0],
+                chair_center[1] - desk_center[1],
+            )
+            score = _interaction_dot_score(dot, 0.65, weight=220)
+            score += 100 if 450.0 <= distance <= 1300.0 else -80
+            quality_rows.append(
+                {
+                    "cluster_id": cluster_id,
+                    "surface_object_id": str(desk.get("object_id") or ""),
+                    "seat_object_id": str(chair.get("object_id") or ""),
+                    "chair_to_surface_dot": round(dot, 3),
+                    "distance_mm": round(distance, 1),
+                    "score": int(score),
+                }
+            )
+    return quality_rows
+
+
+def _object_row_type_tokens(row: Mapping[str, Any]) -> set[str]:
+    return _object_type_tokens(
+        row.get("object_id"),
+        row.get("category"),
+        row.get("asset_type"),
+        row.get("object_type"),
+    )
+
+
+def _object_row_is_desk(row: Mapping[str, Any]) -> bool:
+    tokens = _object_row_type_tokens(row)
+    return "desk" in tokens and "lamp" not in tokens
+
+
+def _object_row_is_work_chair(row: Mapping[str, Any]) -> bool:
+    tokens = _object_row_type_tokens(row)
+    return bool(tokens & {"chair", "office_chair", "desk_chair"})
 
 
 def _support_edges_by_cluster(
@@ -10863,7 +11596,7 @@ def _object_repair_pool_is_sufficient(
     return bool(verify.get("gallery_eligible"))
 
 
-def _object_level_solver_degradation_report(
+def _macro_cluster_solver_degradation_report(
     *,
     raw_solution_count: int,
     eligible_solutions: Sequence[Mapping[str, Any]],
@@ -11107,6 +11840,7 @@ def _rank_object_level_solution_pool(
             bool((item.get("verify") or {}).get("front_access_ok")),
             bool((item.get("verify") or {}).get("complete")),
             bool((item.get("verify") or {}).get("primary_pair_ok")),
+            int((item.get("verify") or {}).get("interaction_quality_score") or 0),
             int((item.get("verify") or {}).get("soft_constraint_score") or 0),
             -int((item.get("verify") or {}).get("soft_issue_count") or 0),
             float(item.get("score") or 0.0),
@@ -11183,6 +11917,9 @@ def _build_object_level_solution_payload(
         "gallery_eligible": bool(verify.get("gallery_eligible")),
         "coverage_ratio": float(verify.get("coverage_ratio") or 0.0),
         "missing_cluster_ids": list(verify.get("missing_cluster_ids") or []),
+        "missing_required_object_ids": deepcopy(
+            verify.get("missing_required_object_ids") or []
+        ),
         "verify_summary": deepcopy(dict(verify)),
         "dropped_inventory_by_cluster": deepcopy(
             solution.get("dropped_inventory_by_cluster") or {}
@@ -11295,6 +12032,9 @@ def _build_absolute_layout_from_object_solution(
         "gallery_eligible": bool(verify.get("gallery_eligible")),
         "coverage_ratio": float(verify.get("coverage_ratio") or 0.0),
         "missing_cluster_ids": list(verify.get("missing_cluster_ids") or []),
+        "missing_required_object_ids": deepcopy(
+            verify.get("missing_required_object_ids") or []
+        ),
         "notes": notes,
         "solver_debug": {
             "selected_concept_id": _concept_id_from_relation_plan(relation_plan),

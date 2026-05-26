@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any, Literal
+from queue import Queue
+from threading import Thread
+from typing import Any, Literal, NoReturn
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.deps import get_optional_current_user
@@ -40,6 +44,9 @@ from services.user_content_service import (
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = logging.getLogger(__name__)
+
+SnapshotImageQuality = Literal["low", "medium", "high"]
+SnapshotImageSize = Literal["1024x1024", "1024x1536", "1536x1024"]
 
 
 class PipelineRunRequest(BaseModel):
@@ -102,7 +109,9 @@ class SnapshotImagePresetSelection(BaseModel):
 class SnapshotImageEditOperationRequest(BaseModel):
     object_id: str
     object_name: str | None = None
-    operation_type: Literal["prompt", "add", "replace", "recolor"] | None = None
+    operation_type: Literal["prompt", "add", "replace", "recolor", "remove"] | None = (
+        None
+    )
     prompt: str | None = None
     bbox_norm: dict[str, float] | None = None
     replacement_image_data_url: str | None = None
@@ -169,6 +178,8 @@ class SnapshotImageRenderRequest(BaseModel):
         default_factory=list
     )
     edit_source_image_data_url: str | None = None
+    image_quality: SnapshotImageQuality | None = None
+    image_size: SnapshotImageSize | None = None
 
 
 class SnapshotImageRenderResponse(BaseModel):
@@ -556,22 +567,13 @@ def compile_snapshot_prompt_route(
     return SnapshotPromptCompileResponse(compilation=compilation)
 
 
-@router.post("/render-snapshot-image", response_model=SnapshotImageRenderResponse)
-def render_snapshot_image_route(
+def _render_snapshot_image_for_request(
     req: SnapshotImageRenderRequest,
-    current_user: UserAccount | None = Depends(get_optional_current_user),
-    user_content_service: UserContentService = Depends(get_user_content_service),
-) -> SnapshotImageRenderResponse:
-    trace_id = uuid4().hex
-    log_image_flow_event(
-        "snapshot_image.api_input",
-        {
-            "trace_id": trace_id,
-            "route": "/pipeline/render-snapshot-image",
-            "authenticated": current_user is not None,
-            "request": req.model_dump(),
-        },
-    )
+    *,
+    trace_id: str,
+    streamed: bool,
+    stream_event_handler: Callable[[Mapping[str, object]], None] | None = None,
+) -> dict[str, Any]:
     if req.snapshot_payload is None and not req.snapshot_path:
         log_image_flow_event(
             "snapshot_image.api_error",
@@ -586,172 +588,156 @@ def render_snapshot_image_route(
             detail="Provide either snapshot_payload or snapshot_path.",
         )
 
-    render_layout_context = None
-    if current_user is not None:
-        render_layout_context = user_content_service.resolve_render_layout_context(
-            user=current_user,
-            root_layout_id=req.root_layout_id,
-            case_id=req.case_id,
-            option_id=req.option_id,
+    edit_operations = [
+        SnapshotEditOperation(
+            object_id=item.object_id,
+            object_name=item.object_name,
+            operation_type=item.operation_type,
+            prompt=item.prompt,
+            bbox_norm=item.bbox_norm,
+            replacement_image_data_url=item.replacement_image_data_url,
+            target_color=item.target_color,
         )
-        if render_layout_context is None:
+        for item in req.edit_operations
+    ]
+    locked_geometry_references = [
+        SnapshotLockedGeometryReference(
+            object_id=item.object_id,
+            object_name=item.object_name,
+            image_data_url=item.image_data_url,
+            source=item.source,
+            screen_bbox_px=item.screen_bbox_px,
+        )
+        for item in req.locked_geometry_references
+    ]
+    locked_geometry_atlases = [
+        SnapshotLockedGeometryAtlas(
+            atlas_index=atlas.atlas_index,
+            image_data_url=atlas.image_data_url,
+            source=atlas.source,
+            objects=[
+                SnapshotLockedGeometryAtlasObject(
+                    object_id=item.object_id,
+                    object_name=item.object_name,
+                    screen_bbox_px=item.screen_bbox_px,
+                    atlas_index=item.atlas_index,
+                    cell_index=item.cell_index,
+                    cell_label=item.cell_label,
+                    cell_bbox_norm=item.cell_bbox_norm,
+                )
+                for item in atlas.objects
+            ],
+        )
+        for atlas in req.locked_geometry_atlases
+    ]
+    preset_selection = req.preset_selection.model_dump()
+    if req.snapshot_payload is not None:
+        if not req.snapshot_image_data_url:
             log_image_flow_event(
-                "snapshot_image.layout_context_error",
+                "snapshot_image.api_error",
                 {
                     "trace_id": trace_id,
-                    "status_code": 404,
-                    "root_layout_id": req.root_layout_id,
-                    "case_id": req.case_id,
-                    "option_id": req.option_id,
-                    "error_message": "Render layout option not found.",
-                },
-            )
-            raise HTTPException(
-                status_code=404,
-                detail="Render layout option not found.",
-            )
-
-    try:
-        edit_operations = [
-            SnapshotEditOperation(
-                object_id=item.object_id,
-                object_name=item.object_name,
-                operation_type=item.operation_type,
-                prompt=item.prompt,
-                bbox_norm=item.bbox_norm,
-                replacement_image_data_url=item.replacement_image_data_url,
-                target_color=item.target_color,
-            )
-            for item in req.edit_operations
-        ]
-        locked_geometry_references = [
-            SnapshotLockedGeometryReference(
-                object_id=item.object_id,
-                object_name=item.object_name,
-                image_data_url=item.image_data_url,
-                source=item.source,
-                screen_bbox_px=item.screen_bbox_px,
-            )
-            for item in req.locked_geometry_references
-        ]
-        locked_geometry_atlases = [
-            SnapshotLockedGeometryAtlas(
-                atlas_index=atlas.atlas_index,
-                image_data_url=atlas.image_data_url,
-                source=atlas.source,
-                objects=[
-                    SnapshotLockedGeometryAtlasObject(
-                        object_id=item.object_id,
-                        object_name=item.object_name,
-                        screen_bbox_px=item.screen_bbox_px,
-                        atlas_index=item.atlas_index,
-                        cell_index=item.cell_index,
-                        cell_label=item.cell_label,
-                        cell_bbox_norm=item.cell_bbox_norm,
-                    )
-                    for item in atlas.objects
-                ],
-            )
-            for atlas in req.locked_geometry_atlases
-        ]
-        preset_selection = req.preset_selection.model_dump()
-        if req.snapshot_payload is not None:
-            if not req.snapshot_image_data_url:
-                log_image_flow_event(
-                    "snapshot_image.api_error",
-                    {
-                        "trace_id": trace_id,
-                        "status_code": 400,
-                        "error_message": (
-                            "Provide snapshot_image_data_url when rendering from "
-                            "snapshot_payload."
-                        ),
-                    },
-                )
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
+                    "status_code": 400,
+                    "error_message": (
                         "Provide snapshot_image_data_url when rendering from "
                         "snapshot_payload."
                     ),
-                )
-            render = render_snapshot_image(
-                req.snapshot_payload,
-                snapshot_image_data_url=req.snapshot_image_data_url,
-                depth_map_image_data_url=req.depth_map_image_data_url,
-                edge_map_image_data_url=req.edge_map_image_data_url,
-                segmentation_map_image_data_url=req.segmentation_map_image_data_url,
-                layout_reference_image_data_url=req.layout_reference_image_data_url,
-                annotated_reference_image_data_url=(
-                    req.annotated_reference_image_data_url
-                ),
-                scene_reference_image_data_url=req.scene_reference_image_data_url,
-                scene_reference_mode=req.scene_reference_mode,
-                user_prompt=req.user_prompt,
-                render_mode=req.render_mode,
-                preset_selection=preset_selection,
-                edit_operations=edit_operations,
-                locked_geometry_references=locked_geometry_references,
-                locked_geometry_atlases=locked_geometry_atlases,
-                edit_source_image_data_url=req.edit_source_image_data_url,
-                trace_id=trace_id,
+                },
             )
-        else:
-            render = render_snapshot_image_from_path(
-                req.snapshot_path or "",
-                snapshot_image_data_url=req.snapshot_image_data_url,
-                depth_map_image_data_url=req.depth_map_image_data_url,
-                edge_map_image_data_url=req.edge_map_image_data_url,
-                segmentation_map_image_data_url=req.segmentation_map_image_data_url,
-                layout_reference_image_data_url=req.layout_reference_image_data_url,
-                annotated_reference_image_data_url=(
-                    req.annotated_reference_image_data_url
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Provide snapshot_image_data_url when rendering from "
+                    "snapshot_payload."
                 ),
-                scene_reference_image_data_url=req.scene_reference_image_data_url,
-                scene_reference_mode=req.scene_reference_mode,
-                user_prompt=req.user_prompt,
-                render_mode=req.render_mode,
-                preset_selection=preset_selection,
-                edit_operations=edit_operations,
-                locked_geometry_references=locked_geometry_references,
-                locked_geometry_atlases=locked_geometry_atlases,
-                edit_source_image_data_url=req.edit_source_image_data_url,
-                trace_id=trace_id,
             )
-    except FileNotFoundError as exc:
-        log_image_flow_event(
-            "snapshot_image.api_error",
-            {
-                "trace_id": trace_id,
-                "status_code": 404,
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            },
+        return render_snapshot_image(
+            req.snapshot_payload,
+            snapshot_image_data_url=req.snapshot_image_data_url,
+            depth_map_image_data_url=req.depth_map_image_data_url,
+            edge_map_image_data_url=req.edge_map_image_data_url,
+            segmentation_map_image_data_url=req.segmentation_map_image_data_url,
+            layout_reference_image_data_url=req.layout_reference_image_data_url,
+            annotated_reference_image_data_url=req.annotated_reference_image_data_url,
+            scene_reference_image_data_url=req.scene_reference_image_data_url,
+            scene_reference_mode=req.scene_reference_mode,
+            user_prompt=req.user_prompt,
+            render_mode=req.render_mode,
+            preset_selection=preset_selection,
+            edit_operations=edit_operations,
+            locked_geometry_references=locked_geometry_references,
+            locked_geometry_atlases=locked_geometry_atlases,
+            edit_source_image_data_url=req.edit_source_image_data_url,
+            image_quality=req.image_quality,
+            image_size=req.image_size,
+            streamed=streamed,
+            stream_event_handler=stream_event_handler,
+            trace_id=trace_id,
         )
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        log_image_flow_event(
-            "snapshot_image.api_error",
-            {
-                "trace_id": trace_id,
-                "status_code": 400,
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            },
-        )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        log_image_flow_event(
-            "snapshot_image.api_error",
-            {
-                "trace_id": trace_id,
-                "status_code": 502,
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            },
-        )
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return render_snapshot_image_from_path(
+        req.snapshot_path or "",
+        snapshot_image_data_url=req.snapshot_image_data_url,
+        depth_map_image_data_url=req.depth_map_image_data_url,
+        edge_map_image_data_url=req.edge_map_image_data_url,
+        segmentation_map_image_data_url=req.segmentation_map_image_data_url,
+        layout_reference_image_data_url=req.layout_reference_image_data_url,
+        annotated_reference_image_data_url=req.annotated_reference_image_data_url,
+        scene_reference_image_data_url=req.scene_reference_image_data_url,
+        scene_reference_mode=req.scene_reference_mode,
+        user_prompt=req.user_prompt,
+        render_mode=req.render_mode,
+        preset_selection=preset_selection,
+        edit_operations=edit_operations,
+        locked_geometry_references=locked_geometry_references,
+        locked_geometry_atlases=locked_geometry_atlases,
+        edit_source_image_data_url=req.edit_source_image_data_url,
+        image_quality=req.image_quality,
+        image_size=req.image_size,
+        streamed=streamed,
+        stream_event_handler=stream_event_handler,
+        trace_id=trace_id,
+    )
 
+
+def _resolve_render_layout_context_or_raise(
+    *,
+    req: SnapshotImageRenderRequest,
+    current_user: UserAccount | None,
+    user_content_service: UserContentService,
+    trace_id: str,
+) -> Any | None:
+    if current_user is None:
+        return None
+    render_layout_context = user_content_service.resolve_render_layout_context(
+        user=current_user,
+        root_layout_id=req.root_layout_id,
+        case_id=req.case_id,
+        option_id=req.option_id,
+    )
+    if render_layout_context is not None:
+        return render_layout_context
+    log_image_flow_event(
+        "snapshot_image.layout_context_error",
+        {
+            "trace_id": trace_id,
+            "status_code": 404,
+            "root_layout_id": req.root_layout_id,
+            "case_id": req.case_id,
+            "option_id": req.option_id,
+            "error_message": "Render layout option not found.",
+        },
+    )
+    raise HTTPException(status_code=404, detail="Render layout option not found.")
+
+
+def _save_snapshot_render_for_request(
+    *,
+    render: dict[str, Any],
+    current_user: UserAccount | None,
+    render_layout_context: Any | None,
+    user_content_service: UserContentService,
+    trace_id: str,
+) -> dict[str, Any] | None:
     saved_render: dict[str, Any] | None = None
     if current_user is not None:
         if render_layout_context is None:
@@ -818,11 +804,29 @@ def render_snapshot_image_route(
                     ),
                     "validation": metadata_payload.get("validation"),
                     "retry_count": render["image"].get("retry_count"),
+                    "usage": render["image"].get("usage"),
+                    "partial_image_count": render["image"].get("partial_image_count"),
+                    "image_quality_requested": render["request"].get(
+                        "image_quality_requested"
+                    ),
+                    "image_size_requested": render["request"].get(
+                        "image_size_requested"
+                    ),
+                    "stream_partial_images": render["request"].get(
+                        "stream_partial_images"
+                    ),
+                    "streamed": render["request"].get("streamed"),
                     "layout_reference_used": bool(
                         render["request"]["layout_reference_used"]
                     ),
                     "annotated_reference_used": bool(
                         render["request"]["annotated_reference_used"]
+                    ),
+                    "edit_region_guide_used": bool(
+                        render["request"].get("edit_region_guide_used", False)
+                    ),
+                    "camera_transfer_reference_used": bool(
+                        render["request"].get("camera_transfer_reference_used", False)
                     ),
                     "scene_reference_mode": str(
                         render["request"].get("scene_reference_mode", "none")
@@ -877,7 +881,179 @@ def render_snapshot_image_route(
             )
             saved_render = None
 
+    return saved_render
+
+
+def _raise_snapshot_render_http_exception(trace_id: str, exc: Exception) -> NoReturn:
+    if isinstance(exc, FileNotFoundError):
+        status_code = 404
+    elif isinstance(exc, ValueError):
+        status_code = 400
+    elif isinstance(exc, RuntimeError):
+        status_code = 502
+    else:
+        status_code = 500
+    log_image_flow_event(
+        "snapshot_image.api_error",
+        {
+            "trace_id": trace_id,
+            "status_code": status_code,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        },
+    )
+    raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@router.post("/render-snapshot-image", response_model=SnapshotImageRenderResponse)
+def render_snapshot_image_route(
+    req: SnapshotImageRenderRequest,
+    current_user: UserAccount | None = Depends(get_optional_current_user),
+    user_content_service: UserContentService = Depends(get_user_content_service),
+) -> SnapshotImageRenderResponse:
+    trace_id = uuid4().hex
+    log_image_flow_event(
+        "snapshot_image.api_input",
+        {
+            "trace_id": trace_id,
+            "route": "/pipeline/render-snapshot-image",
+            "authenticated": current_user is not None,
+            "request": req.model_dump(),
+        },
+    )
+    render_layout_context = _resolve_render_layout_context_or_raise(
+        req=req,
+        current_user=current_user,
+        user_content_service=user_content_service,
+        trace_id=trace_id,
+    )
+    try:
+        render = _render_snapshot_image_for_request(
+            req,
+            trace_id=trace_id,
+            streamed=False,
+        )
+    except HTTPException:
+        raise
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        _raise_snapshot_render_http_exception(trace_id, exc)
+
+    saved_render = _save_snapshot_render_for_request(
+        render=render,
+        current_user=current_user,
+        render_layout_context=render_layout_context,
+        user_content_service=user_content_service,
+        trace_id=trace_id,
+    )
     return SnapshotImageRenderResponse(render=render, saved_render=saved_render)
+
+
+def _encode_sse_event(event_name: str, payload: Mapping[str, Any]) -> str:
+    return (
+        f"event: {event_name}\n"
+        f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+    )
+
+
+@router.post("/render-snapshot-image/stream")
+def render_snapshot_image_stream_route(
+    req: SnapshotImageRenderRequest,
+    current_user: UserAccount | None = Depends(get_optional_current_user),
+    user_content_service: UserContentService = Depends(get_user_content_service),
+) -> StreamingResponse:
+    trace_id = uuid4().hex
+    log_image_flow_event(
+        "snapshot_image.api_input",
+        {
+            "trace_id": trace_id,
+            "route": "/pipeline/render-snapshot-image/stream",
+            "authenticated": current_user is not None,
+            "request": req.model_dump(),
+        },
+    )
+    event_queue: Queue[dict[str, Any] | None] = Queue()
+
+    def enqueue(event_name: str, payload: Mapping[str, Any]) -> None:
+        event_queue.put({"event": event_name, "data": dict(payload)})
+
+    def forward_renderer_event(event: Mapping[str, object]) -> None:
+        event_name = str(event.get("type") or "status")
+        payload = {key: value for key, value in event.items() if key != "type"}
+        enqueue(event_name, payload)
+
+    def worker() -> None:
+        try:
+            enqueue("status", {"message": "Preparing image render.", "attempt": None})
+            render_layout_context = _resolve_render_layout_context_or_raise(
+                req=req,
+                current_user=current_user,
+                user_content_service=user_content_service,
+                trace_id=trace_id,
+            )
+            render = _render_snapshot_image_for_request(
+                req,
+                trace_id=trace_id,
+                streamed=True,
+                stream_event_handler=forward_renderer_event,
+            )
+            saved_render = _save_snapshot_render_for_request(
+                render=render,
+                current_user=current_user,
+                render_layout_context=render_layout_context,
+                user_content_service=user_content_service,
+                trace_id=trace_id,
+            )
+            enqueue(
+                "completed",
+                SnapshotImageRenderResponse(
+                    render=render,
+                    saved_render=saved_render,
+                ).model_dump(),
+            )
+        except HTTPException as exc:
+            enqueue("error", {"message": str(exc.detail)})
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            log_image_flow_event(
+                "snapshot_image.api_error",
+                {
+                    "trace_id": trace_id,
+                    "route": "/pipeline/render-snapshot-image/stream",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
+            enqueue("error", {"message": str(exc)})
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Snapshot image stream failed: %s", exc)
+            log_image_flow_event(
+                "snapshot_image.api_error",
+                {
+                    "trace_id": trace_id,
+                    "route": "/pipeline/render-snapshot-image/stream",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
+            enqueue("error", {"message": str(exc)})
+        finally:
+            event_queue.put(None)
+
+    def event_stream():
+        while True:
+            item = event_queue.get()
+            if item is None:
+                break
+            yield _encode_sse_event(
+                str(item["event"]),
+                item["data"] if isinstance(item["data"], dict) else {},
+            )
+
+    Thread(target=worker, daemon=True).start()
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/render-presets", response_model=SnapshotImagePresetsResponse)

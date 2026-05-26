@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -10,20 +9,7 @@ from typing import Any
 
 from clients.llm_client import get_llm_client
 
-try:
-    from config.llm_config import TextLLMConfig
-except Exception:  # pragma: no cover
-    from config.gemini_config import GeminiConfig
-
-    class TextLLMConfig:
-        PROVIDER = "gemini"
-        STRICT_SINGLE_TEXT_MODEL = str(
-            getattr(GeminiConfig, "STRICT_SINGLE_TEXT_MODEL", "") or ""
-        ).strip()
-
-        @classmethod
-        def primary_model_name(cls) -> str:
-            return ""
+from config.llm_config import TextLLMConfig
 
 
 logger = logging.getLogger(__name__)
@@ -217,14 +203,7 @@ _STYLE_POLICY_REPAIR_PROMPT = (
 )
 
 _RESPONSE_MIME_TYPE = "application/json"
-_STYLE_POLICY_REQUIRE_LLM_ENV = "TKNT_STYLE_POLICY_REQUIRE_LLM"
 _STYLE_POLICY_MAX_TOKENS = 2000
-_STYLE_POLICY_MODEL_NAMES: tuple[str, ...] = (
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-)
 _STYLE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("japandi", ("japandi", "wabi", "zen", "japanese", "japan")),
     ("industrial", ("industrial", "loft", "concrete", "steel", "brick")),
@@ -380,7 +359,7 @@ def compile_style_policy(
     use_llm: bool = True,
     model_name: str | None = None,
 ) -> dict[str, Any]:
-    require_llm = _style_policy_requires_llm()
+    require_llm = bool(use_llm)
     llm_seed: dict[str, Any] = {}
     if use_llm and brief_text.strip():
         llm_seed = _try_llm_style_policy_seed(
@@ -722,28 +701,8 @@ def _deterministic_style_policy_seed(brief_text: str) -> dict[str, str]:
     return {"style_name": "balanced"}
 
 
-def _style_policy_requires_llm() -> bool:
-    return os.getenv(_STYLE_POLICY_REQUIRE_LLM_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
 def _record_llm_retry(*, stage: str, model_name: str, reason: str) -> None:
-    if getattr(TextLLMConfig, "PROVIDER", "") != "gemini":
-        return
-    try:
-        from clients.gemini_client import GeminiClient
-
-        GeminiClient.record_retry_event(
-            stage=stage,
-            model_name=model_name,
-            reason=reason,
-        )
-    except Exception:
-        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+    _ = (stage, model_name, reason)
 
 
 def _style_policy_model_attempt_order(
@@ -758,18 +717,9 @@ def _style_policy_model_attempt_order(
     if callable(get_model_name):
         helper_model_name = str(get_model_name("helper")).strip()
     requested_model_name = str(model_name or helper_model_name).strip()
-    sequence = (
-        list(_STYLE_POLICY_MODEL_NAMES) if TextLLMConfig.PROVIDER == "gemini" else []
-    )
     if not requested_model_name:
-        return sequence or [TextLLMConfig.primary_model_name()]
-    if requested_model_name in sequence:
-        start_index = sequence.index(requested_model_name)
-        return sequence[start_index:] + sequence[:start_index]
-    return [
-        requested_model_name,
-        *[name for name in sequence if name != requested_model_name],
-    ]
+        return [TextLLMConfig.primary_model_name()]
+    return [requested_model_name]
 
 
 def _is_retryable_model_unavailable_error(exc: Exception) -> bool:

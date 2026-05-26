@@ -8,6 +8,7 @@ from layout.room_profiles.base import normalize_profile_token
 
 BEDROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
     "bed": ("bed", "queen bed", "king bed", "single bed", "double bed"),
+    "bean_bag": ("bean bag", "beanbag", "pouf"),
     "bedside_lamp": ("bedside lamp", "nightstand lamp"),
     "nightstand": ("nightstand", "night stand", "bedside table"),
     "wardrobe": ("wardrobe", "closet", "armoire"),
@@ -26,6 +27,7 @@ BEDROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
 
 LIVING_ROOM_LEGACY_ALIASES: dict[str, tuple[str, ...]] = {
     "armchair": ("armchair", "arm chair", "lounge chair", "reading chair"),
+    "bean_bag": ("bean bag", "beanbag", "pouf"),
     "bookshelf": ("bookshelf", "book shelf", "bookcase", "shelf"),
     "ceiling_light": ("ceiling lamp", "ceiling light", "overhead light"),
     "chair": ("chair", "desk chair", "office chair", "vanity chair"),
@@ -53,6 +55,7 @@ BEDROOM_ANCHOR_OBJECTS = frozenset({"bed", "desk", "wardrobe"})
 BEDROOM_SUPPORT_OBJECTS = frozenset(
     {
         "bedside_lamp",
+        "bean_bag",
         "bookshelf",
         "chair",
         "desk_lamp",
@@ -63,7 +66,7 @@ BEDROOM_SUPPORT_OBJECTS = frozenset(
         "side_table",
     }
 )
-BEDROOM_SEATING_OBJECTS = frozenset({"chair"})
+BEDROOM_SEATING_OBJECTS = frozenset({"bean_bag", "chair"})
 BEDROOM_SURFACE_OBJECTS = frozenset({"desk", "dresser", "nightstand", "side_table"})
 BEDROOM_LIGHTING_OBJECTS = frozenset(
     {"bedside_lamp", "ceiling_light", "desk_lamp", "floor_lamp"}
@@ -73,13 +76,14 @@ BEDROOM_STORAGE_OBJECTS = frozenset({"bookshelf", "dresser", "wardrobe"})
 BEDROOM_WALL_BACKED_OBJECTS = frozenset(
     {"bed", "bookshelf", "desk", "dresser", "wardrobe"}
 )
-BEDROOM_FLOATING_OBJECTS = frozenset({"chair", "rug"})
+BEDROOM_FLOATING_OBJECTS = frozenset({"bean_bag", "chair", "rug"})
 BEDROOM_MOUNTED_OBJECTS = frozenset({"ceiling_light", "mirror", "wall_art"})
 
 LIVING_ROOM_ANCHOR_OBJECTS = frozenset({"sofa", "tv_console"})
 LIVING_ROOM_SUPPORT_OBJECTS = frozenset(
     {
         "armchair",
+        "bean_bag",
         "bookshelf",
         "chair",
         "coffee_table",
@@ -93,7 +97,9 @@ LIVING_ROOM_SUPPORT_OBJECTS = frozenset(
         "tv",
     }
 )
-LIVING_ROOM_SEATING_OBJECTS = frozenset({"armchair", "chair", "ottoman", "sofa"})
+LIVING_ROOM_SEATING_OBJECTS = frozenset(
+    {"armchair", "bean_bag", "chair", "ottoman", "sofa"}
+)
 LIVING_ROOM_SURFACE_OBJECTS = frozenset(
     {"coffee_table", "console_table", "media_shelf", "side_table", "tv_console"}
 )
@@ -106,6 +112,7 @@ LIVING_ROOM_WALL_BACKED_OBJECTS = frozenset(
 LIVING_ROOM_FLOATING_OBJECTS = frozenset(
     {
         "armchair",
+        "bean_bag",
         "chair",
         "coffee_table",
         "ottoman",
@@ -180,6 +187,13 @@ _BEDROOM_SIZE_PROFILES: dict[str, dict[str, Any]] = {
             "L": {"L": 0.60, "W": 0.60, "A": 0.36},
         }
     },
+    "bean_bag": {
+        "rep_dims_m": {
+            "S": {"L": 0.65, "W": 0.65, "A": 0.42},
+            "M": {"L": 0.80, "W": 0.80, "A": 0.64},
+            "L": {"L": 1.00, "W": 0.90, "A": 0.90},
+        }
+    },
     "bookshelf": {
         "rep_dims_m": {
             "S": {"L": 0.55, "W": 0.30, "A": 0.17},
@@ -202,6 +216,13 @@ _LIVING_ROOM_SIZE_PROFILES: dict[str, dict[str, Any]] = {
             "S": {"L": 0.70, "W": 0.70, "A": 0.49},
             "M": {"L": 0.85, "W": 0.85, "A": 0.72},
             "L": {"L": 1.00, "W": 0.95, "A": 0.95},
+        }
+    },
+    "bean_bag": {
+        "rep_dims_m": {
+            "S": {"L": 0.65, "W": 0.65, "A": 0.42},
+            "M": {"L": 0.85, "W": 0.85, "A": 0.72},
+            "L": {"L": 1.05, "W": 0.95, "A": 1.00},
         }
     },
     "coffee_table": {

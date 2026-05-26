@@ -5,7 +5,9 @@ import os
 import sys
 import types
 import unittest
+from copy import deepcopy
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -35,9 +37,9 @@ _STUBBED_MODULE_NAMES = [
     "agent.cluster_composer",
     "agent.cluster_forge",
     "agent.cluster_placer",
-    "agent.cluster_relation_planner",
     "agent.phase2_controller",
     "agent.room_interpreter",
+    "agent.seed_concept_generator",
     "agent.solver.solver",
     "agent.stylist",
     "agent.tier_count_director",
@@ -63,18 +65,22 @@ _stub_module(
 )
 _stub_module("agent.cluster_forge", ClusterForge=object)
 _stub_module("agent.cluster_placer", build_phase2_payload=lambda **kwargs: kwargs)
-_stub_module("agent.cluster_relation_planner", ClusterRelationPlanner=object)
 _stub_module(
     "agent.phase2_controller",
     Phase2Controller=object,
     build_phase2_preview_candidate=lambda **kwargs: {},
 )
 _stub_module("agent.room_interpreter", RoomInterpreter=object)
+_stub_module(
+    "agent.seed_concept_generator",
+    SeedConceptGenerator=object,
+    solver_plan_from_concept=lambda **kwargs: {},
+)
 _stub_module("agent.solver.solver", MacroClusterSolver=object)
 _stub_module(
     "agent.stylist",
     Stylist=object,
-    stylist_model_name_for_variant=lambda variant_index: "gemma-4-31b-it",
+    stylist_model_name_for_variant=lambda variant_index: "gpt-5.4-mini",
 )
 _stub_module("agent.tier_count_director", TierCountDirector=object)
 _stub_module("agent.visual_relation_bundle_planner", VisualRelationBundlePlanner=object)
@@ -184,8 +190,8 @@ _stub_module(
         ),
     },
     build_seed_variant_briefs=lambda target_count: [
-        _FakeBrief("seed_stable", "gemma-4-31b-it"),
-        _FakeBrief("seed_open_center", "gemini-3.1-flash-lite-preview"),
+        _FakeBrief("seed_stable", "gpt-5.4-mini"),
+        _FakeBrief("seed_open_center", "gpt-5.4-mini"),
     ][: max(1, int(target_count))],
 )
 
@@ -196,6 +202,176 @@ orchestrator = _load_module(
 
 for _module_name in _STUBBED_MODULE_NAMES:
     sys.modules.pop(_module_name, None)
+
+
+def _repair_relation_plan() -> dict[str, object]:
+    return {
+        "notes": [],
+        "anchor_region_preferences_by_cluster": {
+            "sleep_core": {
+                "zone_assignment": "right_wall_zone",
+                "preferred_region_ids": [
+                    "right_wall_zone",
+                    "quiet_private_deep_zone",
+                    "bottom_wall_zone",
+                ],
+                "forbidden_region_ids": ["door_1_entry_clearance"],
+                "preferred_wall_side": "right_wall",
+                "anchor_strength": "strong",
+                "center_usage": "primary",
+                "placement_bias": "wall_backed",
+                "placement_behavior": {
+                    "wall_backing": "required",
+                    "pose_flexibility": "low",
+                },
+            },
+            "work_study": {
+                "zone_assignment": "right_wall_zone",
+                "preferred_region_ids": [
+                    "right_wall_zone",
+                    "edge_loading_zone",
+                    "bottom_wall_zone",
+                    "window_side_zone",
+                ],
+                "forbidden_region_ids": [
+                    "door_1_entry_clearance",
+                    "entry_to_center_corridor",
+                ],
+                "preferred_wall_side": "right_wall",
+                "anchor_strength": "strong",
+                "center_usage": "none",
+                "placement_bias": "wall_backed",
+                "placement_behavior": {
+                    "wall_backing": "required",
+                    "pose_flexibility": "low",
+                },
+            },
+        },
+        "macro_concept": {
+            "cluster_zone_plan": [
+                {"cluster_id": "sleep_core", "zone_assignment": "right_wall_zone"},
+                {"cluster_id": "work_study", "zone_assignment": "right_wall_zone"},
+            ],
+            "critical_object_orientations": [
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "desk",
+                    "target_region": "right_wall_zone",
+                }
+            ],
+        },
+        "object_orientations": [
+            {
+                "cluster_id": "work_study",
+                "object_id": "desk",
+                "target_region": "right_wall_zone",
+            }
+        ],
+        "macro_constraints": {
+            "protected_topology": [{"region": "door_1_entry_clearance"}],
+            "anchor_region_constraints": [
+                {
+                    "cluster_id": "work_study",
+                    "zone_assignment": "right_wall_zone",
+                    "forbidden_region_ids": [
+                        "door_1_entry_clearance",
+                        "entry_to_center_corridor",
+                    ],
+                }
+            ],
+        },
+        "object_solver_policy": {
+            "protected_ids_by_cluster": {"work_study": ["desk", "chair"]},
+            "droppable_ids_by_cluster": {"work_study": []},
+        },
+    }
+
+
+def _repair_merged_output() -> dict[str, object]:
+    return {
+        "clusters": [
+            {
+                "cluster_id": "work_study",
+                "members": ["desk", "chair"],
+                "anchors": ["desk"],
+                "cluster_rules": {
+                    "anchor_first_policy": {
+                        "dominant_anchor_candidates": ["desk"],
+                        "protected_ids": ["desk", "chair"],
+                        "droppable_ids": [],
+                    },
+                    "tier_count_hints": {
+                        "object_hints": [
+                            {"object_type": "desk", "min_keep": 1},
+                            {"object_type": "chair", "min_keep": 0},
+                        ]
+                    },
+                },
+            }
+        ]
+    }
+
+
+def _unsat_solver_output(
+    *,
+    reasons: list[str],
+    offenders: list[str],
+    raw_solution_count: int,
+) -> dict[str, object]:
+    return {
+        "status": "UNSAT",
+        "offending_clusters": offenders,
+        "solver_debug": {
+            "raw_solution_count": raw_solution_count,
+            "anchor_candidate_counts": {"sleep_core": 6, "work_study": 36},
+        },
+        "best_partial": {
+            "verify_summary": {
+                "quality_gate_reasons": reasons,
+                "offending_clusters": offenders,
+                "blocking_functional_geometry_issues": [
+                    {"cluster_id": offender, "reason": reasons[0]}
+                    for offender in offenders
+                ],
+            }
+        },
+    }
+
+
+def _ok_object_solver_output() -> dict[str, object]:
+    return {
+        "status": "OK",
+        "hard_valid": True,
+        "geometry_valid": True,
+        "complete": True,
+        "gallery_eligible": True,
+        "coverage_ratio": 1.0,
+        "absolute_layout": {
+            "status": "OK",
+            "clusters": [{"cluster_id": "work_study"}],
+            "objects": [],
+        },
+        "verify_summary": {
+            "layout_score": 100,
+            "missing_cluster_ids": [],
+        },
+    }
+
+
+class _FakeObjectLevelSolver:
+    def __init__(self, outputs: list[dict[str, object]]) -> None:
+        self.outputs = list(outputs)
+        self.calls: list[dict[str, object]] = []
+
+    def generate_object_layout(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.outputs:
+            return self.outputs.pop(0)
+        return _unsat_solver_output(
+            reasons=["view_corridor_blocked"],
+            offenders=["work_study"],
+            raw_solution_count=192,
+        )
 
 
 class OrchestratorArchitectureTest(unittest.TestCase):
@@ -270,6 +446,253 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             orchestrator.select_distinct_final_gallery_candidates = original_selector
 
         self.assertEqual(selected, [])
+
+    def test_seed_retry_triggers_when_solver_gallery_diversity_collapses(self) -> None:
+        collapsed_summary = {
+            "returned_count": 2,
+            "macro_distinct_candidate_count": 1,
+            "visual_family_distinct_candidate_count": 2,
+            "fallback_near_distinct_count": 0,
+        }
+        healthy_summary = {
+            "returned_count": 5,
+            "macro_distinct_candidate_count": 5,
+            "visual_family_distinct_candidate_count": 5,
+            "fallback_near_distinct_count": 0,
+        }
+
+        self.assertTrue(
+            orchestrator._should_retry_seed_concepts(
+                collapsed_summary,
+                target_final_count=5,
+            )
+        )
+        self.assertFalse(
+            orchestrator._should_retry_seed_concepts(
+                healthy_summary,
+                target_final_count=5,
+            )
+        )
+
+    def test_seed_retry_feedback_includes_projected_physical_signatures(self) -> None:
+        feedback = orchestrator._seed_retry_feedback_from_selection(
+            seed_relation_plans={
+                "concepts": [
+                    {
+                        "concept_id": "concept_01",
+                        "concept_family": "zoned",
+                        "projected_physical_signature": "main:left|media:right",
+                    }
+                ]
+            },
+            candidates=[
+                {
+                    "source": "concept:concept_01",
+                    "macro_layout_signature": "macro_a",
+                }
+            ],
+            selected=[],
+            selection_summary={
+                "returned_count": 0,
+                "candidate_count": 1,
+                "macro_distinct_candidate_count": 1,
+                "visual_family_distinct_candidate_count": 1,
+                "fallback_near_distinct_count": 0,
+                "collapsed_macro_layouts": [],
+                "collapsed_visual_families": [],
+                "top_quality_gate_reasons": {"view_corridor_blocked": 2},
+            },
+            target_final_count=5,
+        )
+
+        self.assertEqual(
+            feedback["retry_reason"], "insufficient_distinct_solver_candidates"
+        )
+        self.assertEqual(
+            feedback["used_projected_physical_signatures"],
+            ["main:left|media:right"],
+        )
+        self.assertEqual(feedback["used_macro_layout_signatures"], ["macro_a"])
+
+    def test_run_case_uses_deterministic_seed_and_skips_llm_retry(self) -> None:
+        class _FakeModelOutput:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def model_dump(self) -> dict[str, object]:
+                return deepcopy(self._payload)
+
+        class _FakeRoomInterpreter:
+            def generate(self, *_args: object, **_kwargs: object) -> _FakeModelOutput:
+                return _FakeModelOutput(
+                    {
+                        "room": {
+                            "room_id": "room_1",
+                            "polygon_ccw": [
+                                {"x": 0, "y": 0},
+                                {"x": 6000, "y": 0},
+                                {"x": 6000, "y": 4000},
+                                {"x": 0, "y": 4000},
+                            ],
+                        },
+                        "meta": {"room_type": "bedroom"},
+                        "notes": ["Place a bedroom with media and study furniture."],
+                    }
+                )
+
+        class _FakeClusterForge:
+            def generate(self, *_args: object, **_kwargs: object) -> _FakeModelOutput:
+                return _FakeModelOutput({"clusters": []})
+
+        class _FakeTierCountDirector:
+            def generate(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+                return {"decisions": []}
+
+        class _FakeStylist:
+            def compile_style_policy(
+                self, *_args: object, **_kwargs: object
+            ) -> dict[str, object]:
+                return {}
+
+        class _FakeSeedConceptGenerator:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+                concept_generators.append(self)
+
+            def generate_bundle(
+                self, **kwargs: object
+            ) -> dict[str, object]:
+                self.calls.append(dict(kwargs))
+                uses_llm = bool(kwargs.get("use_llm", True))
+                return {
+                    "status": "OK",
+                    "room_type": "bedroom",
+                    "controller": "llm_guided_seed_concept_generator"
+                    if uses_llm
+                    else "deterministic_seed_concept_generator",
+                    "settings": {"llm_guided": uses_llm},
+                    "concepts": [
+                        {
+                            "concept_id": "concept_01",
+                            "concept_family": "focal_axis",
+                            "cluster_zone_plan": [],
+                        }
+                    ],
+                }
+
+        concept_generators: list[_FakeSeedConceptGenerator] = []
+        replacements = {
+            "RoomInterpreter": _FakeRoomInterpreter,
+            "ClusterForge": _FakeClusterForge,
+            "TierCountDirector": _FakeTierCountDirector,
+            "SeedConceptGenerator": _FakeSeedConceptGenerator,
+            "Stylist": _FakeStylist,
+            "_build_runtime_solver": lambda: object(),
+            "prepare_input_payload_for_manual_placements": lambda payload: (
+                payload,
+                None,
+            ),
+            "merge_cluster_outputs": lambda _cluster_output, _tier_output: {
+                "clusters": []
+            },
+            "_run_visual_relation_planner_experiment": lambda **_kwargs: {},
+            "_visual_relation_v2_must_stop": lambda _experiment: False,
+            "_visual_relation_candidate_bundles": lambda _experiment: [],
+            "_solve_seed_concept_pool": lambda **_kwargs: [],
+            "_should_retry_seed_concepts": lambda *_args, **_kwargs: True,
+        }
+        originals = {
+            name: getattr(orchestrator, name) for name in replacements
+        }
+        for name, replacement in replacements.items():
+            setattr(orchestrator, name, replacement)
+        try:
+            with TemporaryDirectory() as tmp_dir:
+                result = orchestrator.run_case(
+                    input_payload={
+                        "user_input": {
+                            "room_type": "bedroom",
+                            "description": "bed, desk, chair, wardrobe, tv console",
+                        }
+                    },
+                    user_id="user_1",
+                    cases_root=tmp_dir,
+                    case_id="case_1",
+                )
+        finally:
+            for name, original in originals.items():
+                setattr(orchestrator, name, original)
+
+        self.assertEqual(
+            result["error"],
+            "object-level solver could not produce any feasible anchor-first layouts",
+        )
+        self.assertEqual(len(concept_generators), 1)
+        generator = concept_generators[0]
+        calls = generator.calls
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0]["use_llm"], False)
+
+    def test_semantic_cluster_member_dedupe_drops_duplicate_support_cluster(
+        self,
+    ) -> None:
+        payload = {
+            "clusters": [
+                {
+                    "cluster_id": "main_seating",
+                    "priority": "core",
+                    "layout_role": "primary",
+                    "members": ["sofa", "floor_lamp"],
+                    "anchors": ["sofa"],
+                },
+                {
+                    "cluster_id": "lighting_support",
+                    "priority": "support",
+                    "layout_role": "secondary",
+                    "members": ["floor_lamp"],
+                    "anchors": ["floor_lamp"],
+                },
+            ],
+            "semantic_layout_program": {
+                "active_clusters": [
+                    {
+                        "cluster_id": "main_seating",
+                        "required_bundles": [
+                            {
+                                "bundle_id": "main",
+                                "objects": [
+                                    {"object_type": "sofa"},
+                                    {"object_type": "floor_lamp"},
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "cluster_id": "lighting_support",
+                        "required_bundles": [
+                            {
+                                "bundle_id": "lighting",
+                                "objects": [{"object_type": "floor_lamp"}],
+                            }
+                        ],
+                    },
+                ]
+            },
+            "notes": [],
+        }
+
+        cleaned = orchestrator._validate_semantic_cluster_unique_members(payload)
+
+        self.assertEqual(len(cleaned["clusters"]), 1)
+        self.assertEqual(cleaned["clusters"][0]["cluster_id"], "main_seating")
+        active = cleaned["semantic_layout_program"]["active_clusters"]
+        self.assertEqual([row["cluster_id"] for row in active], ["main_seating"])
+        self.assertTrue(
+            any(
+                "Removed duplicate member floor_lamp" in note
+                for note in cleaned["notes"]
+            )
+        )
 
     def test_fast_layout_mode_caps_attempt_budgets(self) -> None:
         previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
@@ -468,7 +891,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
     def test_plan_seed_variant_bundles_no_longer_requires_solver_output(self) -> None:
         calls: list[dict[str, object]] = []
 
-        class _DummyRelationPlanner:
+        class _DummyConceptGenerator:
             def generate_bundle(self, **kwargs):
                 calls.append(kwargs)
                 return {
@@ -522,7 +945,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             bundle=bundle,
             room_output=room_output,
             guidance_text="living room",
-            relation_planner=_DummyRelationPlanner(),
+            concept_generator=_DummyConceptGenerator(),
             target_count=2,
         )
 
@@ -587,6 +1010,368 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             solved_bundle["solver_relation_plan"],
             bundle["relation_plan"],
         )
+
+    def test_concept_repair_raw_zero_builds_zone_spread_without_topology_change(
+        self,
+    ) -> None:
+        relation_plan = _repair_relation_plan()
+        original_relation_plan = deepcopy(relation_plan)
+
+        attempts = orchestrator._build_concept_repair_attempts(
+            concept={"concept_id": "concept_01"},
+            relation_plan=relation_plan,
+            merged_output=_repair_merged_output(),
+            solver_output=_unsat_solver_output(
+                reasons=["layout_incomplete"],
+                offenders=["work_study"],
+                raw_solution_count=0,
+            ),
+        )
+
+        self.assertGreaterEqual(len(attempts), 1)
+        self.assertEqual(attempts[0].repair_id, "zone_spread")
+        self.assertEqual(relation_plan, original_relation_plan)
+        self.assertEqual(
+            attempts[0].relation_plan["macro_constraints"]["protected_topology"],
+            original_relation_plan["macro_constraints"]["protected_topology"],
+        )
+        repaired_work = attempts[0].relation_plan[
+            "anchor_region_preferences_by_cluster"
+        ]["work_study"]
+        self.assertNotEqual(repaired_work["zone_assignment"], "right_wall_zone")
+        self.assertEqual(repaired_work["preferred_wall_side"], "")
+
+    def test_concept_repair_functional_gate_relaxes_only_offending_cluster(
+        self,
+    ) -> None:
+        relation_plan = _repair_relation_plan()
+        relation_plan["anchor_region_preferences_by_cluster"]["sleep_core"][
+            "zone_assignment"
+        ] = "quiet_private_deep_zone"
+        relation_plan["anchor_region_preferences_by_cluster"]["sleep_core"][
+            "preferred_wall_side"
+        ] = ""
+
+        attempts = orchestrator._build_concept_repair_attempts(
+            concept={"concept_id": "concept_01"},
+            relation_plan=relation_plan,
+            merged_output={"clusters": []},
+            solver_output=_unsat_solver_output(
+                reasons=["view_corridor_blocked"],
+                offenders=["work_study"],
+                raw_solution_count=192,
+            ),
+        )
+
+        functional = next(
+            attempt for attempt in attempts if attempt.repair_id == "functional_gate"
+        )
+        repaired_prefs = functional.relation_plan[
+            "anchor_region_preferences_by_cluster"
+        ]
+        self.assertEqual(
+            repaired_prefs["sleep_core"]["zone_assignment"],
+            "quiet_private_deep_zone",
+        )
+        self.assertEqual(
+            repaired_prefs["work_study"]["zone_assignment"],
+            "edge_loading_zone",
+        )
+        self.assertEqual(
+            functional.relation_plan["object_orientations"][0]["target_region"],
+            "edge_loading_zone",
+        )
+        self.assertIn(
+            "door_1_entry_clearance",
+            repaired_prefs["work_study"]["forbidden_region_ids"],
+        )
+
+    def test_support_droppable_repair_keeps_dominant_anchor_protected(self) -> None:
+        merged_output = _repair_merged_output()
+        relation_plan = _repair_relation_plan()
+        concept: dict[str, object] = {"object_solver_policy": {}}
+
+        changed = orchestrator._apply_support_droppable_repair(
+            merged_output=merged_output,
+            relation_plan=relation_plan,
+            concept=concept,
+        )
+
+        self.assertTrue(changed)
+        policy = merged_output["clusters"][0]["cluster_rules"]["anchor_first_policy"]
+        self.assertEqual(policy["protected_ids"], ["desk"])
+        self.assertEqual(policy["droppable_ids"], ["chair"])
+        relation_policy = relation_plan["object_solver_policy"]
+        self.assertEqual(
+            relation_policy["protected_ids_by_cluster"]["work_study"],
+            ["desk"],
+        )
+        self.assertEqual(
+            relation_policy["droppable_ids_by_cluster"]["work_study"],
+            ["chair"],
+        )
+
+    def test_support_droppable_repair_keeps_hard_requested_support_protected(
+        self,
+    ) -> None:
+        merged_output = _repair_merged_output()
+        cluster = merged_output["clusters"][0]
+        cluster["decisions"] = [
+            {"object_type": "desk", "min_keep": 1},
+            {
+                "object_type": "chair",
+                "min_keep": 1,
+                "request_contract_intent": "must_keep",
+            },
+        ]
+        cluster["object_program"] = {
+            "required_object_ids": ["desk", "chair"],
+            "protected_ids": ["desk", "chair"],
+            "droppable_ids": [],
+        }
+        relation_plan = _repair_relation_plan()
+        concept: dict[str, object] = {"object_solver_policy": {}}
+
+        changed = orchestrator._apply_support_droppable_repair(
+            merged_output=merged_output,
+            relation_plan=relation_plan,
+            concept=concept,
+        )
+
+        self.assertFalse(changed)
+        policy = cluster["cluster_rules"]["anchor_first_policy"]
+        self.assertEqual(policy["protected_ids"], ["desk", "chair"])
+        self.assertEqual(policy["droppable_ids"], [])
+        relation_policy = relation_plan["object_solver_policy"]
+        self.assertEqual(
+            relation_policy["protected_ids_by_cluster"]["work_study"],
+            ["desk", "chair"],
+        )
+        self.assertEqual(
+            relation_policy["droppable_ids_by_cluster"]["work_study"],
+            [],
+        )
+
+    def test_required_support_relaxation_removes_bookshelf_from_protected_only(
+        self,
+    ) -> None:
+        merged_output = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "members": ["wardrobe", "bookshelf"],
+                    "decisions": [
+                        {"object_type": "wardrobe", "min_keep": 1},
+                        {
+                            "object_type": "bookshelf",
+                            "min_keep": 1,
+                            "request_contract_intent": "must_keep",
+                        },
+                    ],
+                    "cluster_rules": {
+                        "anchor_first_policy": {
+                            "protected_ids": ["wardrobe", "bookshelf"],
+                            "droppable_ids": ["bookshelf"],
+                        }
+                    },
+                    "object_program": {
+                        "members": ["wardrobe", "bookshelf"],
+                        "required_object_ids": ["wardrobe", "bookshelf"],
+                        "required_support_ids": ["bookshelf"],
+                        "protected_ids": ["wardrobe", "bookshelf"],
+                        "droppable_ids": ["bookshelf"],
+                        "object_specs_by_id": {
+                            "bookshelf": {"required_support": True}
+                        },
+                    },
+                }
+            ]
+        }
+        relation_plan = {
+            "object_solver_policy": {
+                "protected_ids_by_cluster": {
+                    "storage_core": ["wardrobe", "bookshelf"]
+                },
+                "droppable_ids_by_cluster": {"storage_core": ["bookshelf"]},
+            }
+        }
+        concept: dict[str, object] = {"object_solver_policy": {}}
+
+        changed = orchestrator._apply_required_support_relaxation(
+            merged_output=merged_output,
+            relation_plan=relation_plan,
+            concept=concept,
+        )
+
+        self.assertTrue(changed)
+        object_program = merged_output["clusters"][0]["object_program"]
+        self.assertEqual(object_program["protected_ids"], ["wardrobe"])
+        self.assertEqual(object_program["droppable_ids"], [])
+        self.assertEqual(object_program["required_support_ids"], ["bookshelf"])
+        policy = relation_plan["object_solver_policy"]
+        self.assertEqual(
+            policy["protected_ids_by_cluster"]["storage_core"],
+            ["wardrobe"],
+        )
+        self.assertEqual(
+            policy["required_support_ids_by_cluster"]["storage_core"],
+            ["bookshelf"],
+        )
+
+    def test_storage_front_token_repair_only_updates_offending_storage(self) -> None:
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "object_specs_by_id": {"wardrobe": {"front": "top"}},
+                    },
+                    "cluster_rules": {
+                        "facing": {"wardrobe": {"front": "top"}},
+                    },
+                },
+                {
+                    "cluster_id": "sleep_core",
+                    "anchors": ["bed"],
+                    "object_program": {
+                        "dominant_anchor_id": "bed",
+                        "object_specs_by_id": {"bed": {"front": "top"}},
+                    },
+                    "cluster_rules": {
+                        "facing": {"bed": {"front": "top"}},
+                    },
+                },
+            ]
+        }
+
+        changed = orchestrator._apply_storage_front_token_repair(
+            merged_output=merged_output,
+            diagnostics={"offending_clusters": ["storage_core"]},
+        )
+
+        self.assertTrue(changed)
+        clusters = merged_output["clusters"]
+        storage = clusters[0]
+        sleep = clusters[1]
+        self.assertEqual(
+            storage["object_program"]["object_specs_by_id"]["wardrobe"]["front"],
+            "left",
+        )
+        self.assertEqual(
+            storage["cluster_rules"]["facing"]["wardrobe"]["front"],
+            "left",
+        )
+        self.assertEqual(
+            sleep["object_program"]["object_specs_by_id"]["bed"]["front"],
+            "top",
+        )
+
+    def test_object_level_variant_retry_uses_repair_when_initial_unsat(self) -> None:
+        solver = _FakeObjectLevelSolver(
+            [
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=0,
+                ),
+                _ok_object_solver_output(),
+            ]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "daylight"},
+            relation_plan=_repair_relation_plan(),
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=_repair_merged_output(),
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+        bundles = solve_result.bundles
+
+        self.assertEqual(len(bundles), 1)
+        self.assertTrue(solve_result.failure_diagnostics)
+        self.assertEqual(len(solver.calls), 2)
+        self.assertTrue(bundles[0]["concept_repair_applied"])
+        self.assertEqual(bundles[0]["concept_repair_attempt"], "zone_spread")
+        self.assertTrue(bundles[0]["solver_output"]["concept_repair_applied"])
+        repaired_relation = solver.calls[1]["relation_plan_json"]
+        self.assertNotEqual(
+            repaired_relation["anchor_region_preferences_by_cluster"]["work_study"][
+                "zone_assignment"
+            ],
+            "right_wall_zone",
+        )
+
+    def test_object_level_variant_ok_does_not_call_repair(self) -> None:
+        solver = _FakeObjectLevelSolver([_ok_object_solver_output()])
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "daylight"},
+            relation_plan=_repair_relation_plan(),
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=_repair_merged_output(),
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+        bundles = solve_result.bundles
+
+        self.assertEqual(len(bundles), 1)
+        self.assertEqual(solve_result.failure_diagnostics, [])
+        self.assertEqual(len(solver.calls), 1)
+        self.assertNotIn("concept_repair_applied", bundles[0])
+
+    def test_object_level_variant_returns_empty_when_all_repairs_fail(self) -> None:
+        solver = _FakeObjectLevelSolver(
+            [
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=0,
+                ),
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=192,
+                ),
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=192,
+                ),
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=192,
+                ),
+            ]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "daylight"},
+            relation_plan=_repair_relation_plan(),
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=_repair_merged_output(),
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+
+        self.assertEqual(solve_result.bundles, [])
+        self.assertTrue(solve_result.failure_diagnostics)
+        self.assertLessEqual(len(solver.calls), 4)
 
 
 if __name__ == "__main__":

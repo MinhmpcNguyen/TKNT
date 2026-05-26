@@ -2883,6 +2883,8 @@ def _score_size_tier(
             and hinted_preferred is None
         ):
             preferred = "L"
+        elif hinted_preferred is None and after_ratio > 0.72:
+            preferred = "S"
 
     dominance = 1.0 if tier == preferred else 0.35
     if hinted_preferred is not None:
@@ -4665,7 +4667,7 @@ def _record_llm_retry(*, client: object, stage: str, reason: str) -> None:
     try:
         recorder(stage=stage, model_name=model_name, reason=reason)
     except Exception:
-        logger.debug("Failed to record Gemini retry event.", exc_info=True)
+        logger.debug("Failed to record LLM retry event.", exc_info=True)
 
 
 def _tool_output_has_error(tool_output: dict[str, Any]) -> bool:

@@ -13,7 +13,6 @@ services:
     azure: false
     api_version: 2024-08-01-preview
     api_key: <replace-with-your-openai-api-key>
-    base_url: ${OPENAI_BASE_URL}
     models:
       primary:
         name: gpt-5.4-mini
@@ -60,86 +59,6 @@ services:
         name: gpt-5.4-mini
       judge:
         name: gpt-5.4-mini
-  ollama:
-    enabled: false
-    api_key: <replace-with-your-ollama-api-key-or-placeholder>
-    base_url: http://localhost:11434/v1
-    models:
-      primary:
-        name: gemma3:27b
-      helper:
-        name: gemma3:27b
-      embedding:
-        name: nomic-embed-text
-  mistral:
-    enabled: false
-    api_key: <replace-with-your-mistral-api-key>
-    base_url: http://localhost:11434/v1
-    models:
-      primary:
-        name: mistral:instruct
-      helper:
-        name: mistral:instruct
-      embedding:
-        name: nomic-embed-text
-  gemini:
-    enabled: false
-    api_key: <replace-with-your-gemini-api-key>
-    base_url: https://generativelanguage.googleapis.com/v1beta
-    models:
-      primary:
-        name: gemini-3-flash-preview
-      helper:
-        name: gemini-3.1-flash-lite-preview
-      embedding:
-        name: gemini-embedding-001
-    agent_models:
-      forge:
-        name: gemini-3-flash-preview
-      planner:
-        name: gemini-3-flash-preview
-      planner_adaptive_room_rule_primary:
-        name: gemini-3-flash-preview
-      planner_adaptive_room_rule_fallback_primary:
-        name: gemini-3.1-flash-lite-preview
-      planner_adaptive_room_rule_fallback_secondary:
-        name: gemini-2.5-flash-lite
-      planner_adaptive_candidate_overrides_primary:
-        name: gemini-3.1-flash-lite-preview
-      planner_adaptive_candidate_overrides_fallback_primary:
-        name: gemini-2.5-flash-lite
-      planner_adaptive_candidate_overrides_fallback_secondary:
-        name: gemini-3-flash-preview
-      planner_adaptive_cluster_semantics_primary:
-        name: gemini-3.1-flash-lite-preview
-      planner_adaptive_cluster_semantics_fallback_primary:
-        name: gemini-3-flash-preview
-      planner_adaptive_cluster_semantics_fallback_secondary:
-        name: gemini-2.5-flash-lite
-      relation_planner_macro_concept_guidance_primary:
-        name: gemini-3-flash-preview
-      relation_planner_macro_concept_guidance_fallback_primary:
-        name: gemini-3.1-flash-lite-preview
-      relation_planner_macro_concept_guidance_fallback_secondary:
-        name: gemini-2.5-flash-lite
-      placer:
-        name: gemma-3-27b-it
-      placer_fallback_primary:
-        name: gemini-2.5-flash
-      placer_fallback_helper:
-        name: gemini-2.5-flash-lite
-      stylist:
-        name: gemini-3-flash-preview
-      judge:
-        name: gemini-3.1-flash-lite-preview
-  gemini_image:
-    enabled: true
-    api_key: <replace-with-your-gemini-image-api-key>
-    base_url: https://generativelanguage.googleapis.com/v1beta
-    model: gemini-3.1-flash-image-preview
-    image_size: 1K
-    max_output_tokens: <replace-with-your-value>
-    include_layout_2d_reference: false
 presets:
   lights:
     daylight_1:

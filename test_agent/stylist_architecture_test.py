@@ -187,18 +187,18 @@ _deterministic_layout = importlib.import_module("stylist.deterministic_layout")
 Stylist = _stylist.Stylist
 
 
-class _GeminiStyleConfig:
-    PROVIDER = "gemini"
+class _OpenAIStyleConfig:
+    PROVIDER = "openai"
     STRICT_SINGLE_TEXT_MODEL = ""
 
     @classmethod
     def agent_model(cls, key: str) -> str | None:
         _ = key
-        return None
+        return "gpt-5.4-mini"
 
     @classmethod
     def primary_model_name(cls) -> str:
-        return ""
+        return "gpt-5.4-mini"
 
 
 def _sample_layout() -> dict[str, object]:
@@ -352,50 +352,45 @@ class StylistArchitectureTest(unittest.TestCase):
             layout_json=_sample_layout(),
             user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
             tenant_id="demo_tenant",
-            model_name="gemma-4-31b-it",
+            model_name="gpt-5.4-mini",
         )
 
-        self.assertEqual(LAST_CHAT_KWARGS.get("model_name"), "gemma-4-31b-it")
+        self.assertEqual(LAST_CHAT_KWARGS.get("model_name"), "gpt-5.4-mini")
 
-    def test_variant_five_wraps_back_to_gemma_four(self) -> None:
-        with mock.patch.object(_stylist, "TextLLMConfig", _GeminiStyleConfig):
+    def test_variant_uses_configured_openai_model(self) -> None:
+        with mock.patch.object(_stylist, "TextLLMConfig", _OpenAIStyleConfig):
             self.assertEqual(
                 _stylist.stylist_model_name_for_variant(5),
-                "gemma-4-31b-it",
+                "gpt-5.4-mini",
             )
 
-    def test_generate_style_plan_retries_next_model_on_503_unavailable(self) -> None:
+    def test_generate_style_plan_falls_back_on_503_unavailable(self) -> None:
         CHAT_COMPLETION_OUTCOMES.extend(
             [
                 RuntimeError(
                     "Server error '503 Service Unavailable' for url "
-                    "'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' "
-                    'Gemini response body: {"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'
+                    "'https://api.openai.com/v1/chat/completions' "
+                    'OpenAI response body: {"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'
                 ),
-                _default_style_plan_payload(),
             ]
         )
 
-        with mock.patch.object(_stylist, "TextLLMConfig", _GeminiStyleConfig):
+        with mock.patch.object(_stylist, "TextLLMConfig", _OpenAIStyleConfig):
             style_plan = Stylist().generate_style_plan(
                 layout_json=_sample_layout(),
                 user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
                 tenant_id="demo_tenant",
-                model_name="gemini-2.5-flash",
+                model_name="gpt-5.4-mini",
             )
 
-        self.assertEqual(len(CHAT_COMPLETION_CALLS), 2)
+        self.assertEqual(len(CHAT_COMPLETION_CALLS), 1)
         self.assertEqual(
             [call.get("model_name") for call in CHAT_COMPLETION_CALLS],
             [
-                "gemini-2.5-flash",
-                "gemma-4-31b-it",
+                "gpt-5.4-mini",
             ],
         )
-        self.assertEqual(
-            style_plan["room_surfaces"]["wall_color_hex"],
-            "#EDE3D6",
-        )
+        self.assertEqual(style_plan, {})
 
     def test_generate_style_plan_retries_next_model_on_invalid_json(self) -> None:
         CHAT_COMPLETION_OUTCOMES.extend(
@@ -409,15 +404,15 @@ class StylistArchitectureTest(unittest.TestCase):
             layout_json=_sample_layout(),
             user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
             tenant_id="demo_tenant",
-            model_name="gemma-4-31b-it",
+            model_name="gpt-5.4-mini",
         )
 
         self.assertEqual(len(CHAT_COMPLETION_CALLS), 2)
         self.assertEqual(
             [call.get("model_name") for call in CHAT_COMPLETION_CALLS],
             [
-                "gemma-4-31b-it",
-                "gemma-4-31b-it",
+                "gpt-5.4-mini",
+                "gpt-5.4-mini",
             ],
         )
         self.assertEqual(
@@ -448,7 +443,7 @@ class StylistArchitectureTest(unittest.TestCase):
             layout_json=_sample_layout(),
             user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
             tenant_id="demo_tenant",
-            model_name="gemma-4-31b-it",
+            model_name="gpt-5.4-mini",
         )
 
         self.assertEqual(len(CHAT_COMPLETION_CALLS), 1)

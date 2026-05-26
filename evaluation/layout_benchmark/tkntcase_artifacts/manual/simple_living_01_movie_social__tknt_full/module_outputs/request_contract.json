@@ -10,7 +10,7 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a coffee table",
-      "reason": "Explicitly requested and required by the main seating bundle.",
+      "reason": "Directly requested support piece for the seating arrangement.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
       "requested": true,
@@ -30,7 +30,7 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a rug",
-      "reason": "Explicitly requested decor/textile element for the living room.",
+      "reason": "Explicitly requested floor textile for the room.",
       "confidence": 0.98,
       "placement_participation": "textile_overlay",
       "requested": true,
@@ -49,8 +49,8 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "Include a sofa facing a TV console",
-      "reason": "Directly requested as a core seating anchor and explicitly required by the seating bundle.",
+      "evidence": "include a sofa",
+      "reason": "Directly requested seating anchor for the living room.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
       "requested": true,
@@ -69,8 +69,8 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "a TV console",
-      "reason": "Directly requested as the media anchor for the movie area.",
+      "evidence": "facing a TV console",
+      "reason": "Explicitly requested media anchor for the movie area.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
       "requested": true,
@@ -90,7 +90,7 @@
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "one or two armchairs if they fit",
-      "reason": "Requested as a fit-dependent target with a lower bound of one and preferred upper count of two.",
+      "reason": "Desired additional seating, with a fit-dependent range.",
       "confidence": 0.97,
       "placement_participation": "floor_blocking",
       "requested": true,
@@ -110,7 +110,7 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "ample lighting",
-      "reason": "Lighting is explicitly requested; floor lamp is the available lighting object and is viable rather than mandatory.",
+      "reason": "Lighting is requested as a room requirement; floor lamp is a viable lighting object from the available program types.",
       "confidence": 0.84,
       "placement_participation": "floor_blocking",
       "requested": true,
@@ -123,35 +123,15 @@
       "mount_region_type": null
     },
     {
-      "object_type": "bookshelf",
-      "intent": "optional_if_surplus",
-      "min_keep": 0,
-      "target_count": 1,
-      "preferred_count": 1,
-      "max_keep": 1,
-      "evidence": "modern functional",
-      "reason": "Not explicitly requested; only a possible support item if space allows.",
-      "confidence": 0.2,
-      "placement_participation": "floor_blocking",
-      "requested": true,
-      "inventory_available": true,
-      "available_in_program": true,
-      "solver_participation": "soft_solver_object",
-      "blocks_floor_area": true,
-      "can_overlap_floor_objects": false,
-      "host_object_type": null,
-      "mount_region_type": null
-    },
-    {
       "object_type": "media_shelf",
-      "intent": "optional_if_surplus",
+      "intent": "target_if_viable",
       "min_keep": 0,
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "movie area",
-      "reason": "Supports the media zone but is not explicitly named in the brief, so it is only a surplus option.",
-      "confidence": 0.55,
+      "evidence": "large screen and surround sound",
+      "reason": "Supports the designated movie area as a media storage/display element, but is not explicitly named.",
+      "confidence": 0.62,
       "placement_participation": "floor_blocking",
       "requested": true,
       "inventory_available": true,
@@ -171,24 +151,24 @@
         "coffee_table",
         "armchair"
       ],
-      "intent": "core seating arrangement",
+      "intent": "core seating composition",
       "priority": "core",
-      "drop_policy": "preserve sofa and coffee table first; reduce armchairs before core anchors"
+      "drop_policy": "preserve sofa and coffee table first; reduce armchairs if space is tight"
     },
     {
-      "group_id": "media_zone",
+      "group_id": "movie_area",
       "members": [
         "tv_console",
-        "sofa"
+        "media_shelf"
       ],
-      "intent": "face seating toward media anchor",
+      "intent": "media wall composition",
       "priority": "core",
-      "drop_policy": "keep tv_console and sofa; other media supports may drop first"
+      "drop_policy": "preserve tv_console; drop media_shelf first if surplus is limited"
     }
   ],
   "notes": [
-    "No explicit request for curtains, mirrors, or ceiling lights.",
-    "Surround sound and large screen were mentioned, but no matching object types were provided in the allowed object lists.",
+    "No explicit curtains, mirrors, ceiling lights, or wall-mounted decor were requested.",
+    "The brief emphasizes keeping the room easy to move through and prefers an open center.",
     "Request contract was normalized before tier-count enforcement."
   ]
 }
