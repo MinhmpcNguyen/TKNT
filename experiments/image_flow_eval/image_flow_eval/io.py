@@ -4,7 +4,6 @@ import base64
 import csv
 import json
 import mimetypes
-import shlex
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, cast
@@ -28,9 +27,8 @@ _DEFAULT_METRICS: tuple[str, ...] = (
     "psnr",
     "ssim",
     "nrmse",
-    "lpips",
-    "clip",
 )
+_VALID_METRICS: set[str] = {"blank", "visual", "visual_diff", "psnr", "ssim", "nrmse"}
 _VALID_VARIANT_MODES: set[str] = {
     "baseline",
     "no_layout_reference",
@@ -38,7 +36,7 @@ _VALID_VARIANT_MODES: set[str] = {
     "no_preservation_prompt",
     "no_reference_images",
 }
-_VALID_PROVIDERS: set[str] = {"evaluate_only", "tknt_snapshot", "command"}
+_VALID_PROVIDERS: set[str] = {"evaluate_only", "tknt_snapshot"}
 _VALID_ALIGN_MODES: set[str] = {"strict", "resize_to_reference"}
 
 
@@ -48,18 +46,16 @@ def load_manifest(path: str | Path) -> ManifestConfig:
     base_dir = manifest_path.parent
     defaults = _expect_mapping(payload.get("defaults", {}), context="defaults")
 
-    metrics = tuple(_string_sequence(defaults.get("metrics"), fallback=_DEFAULT_METRICS))
+    metrics = tuple(_metric_sequence(defaults.get("metrics")))
     thresholds = _float_mapping(defaults.get("thresholds", {}))
     visual_delta_threshold = _int_value(
         defaults.get("visual_delta_threshold"),
         fallback=8,
     )
-    align_mode = _align_mode(_string_value(defaults.get("align_mode"), "resize_to_reference"))
-    output_dir = _optional_path(base_dir, payload.get("output_dir"))
-    fid_reference_images = tuple(
-        _path(base_dir, item) for item in _string_sequence(payload.get("fid_reference_images"))
+    align_mode = _align_mode(
+        _string_value(defaults.get("align_mode"), "resize_to_reference")
     )
-
+    output_dir = _optional_path(base_dir, payload.get("output_dir"))
     cases = tuple(
         _parse_case(base_dir, item)
         for item in _mapping_sequence(payload.get("cases"), context="cases")
@@ -71,7 +67,6 @@ def load_manifest(path: str | Path) -> ManifestConfig:
         thresholds=thresholds,
         visual_delta_threshold=visual_delta_threshold,
         align_mode=align_mode,
-        fid_reference_images=fid_reference_images,
         cases=cases,
     )
 
@@ -80,7 +75,9 @@ def read_json_file(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_json_file(path: Path, payload: Mapping[str, JSONValue] | Sequence[JSONValue]) -> None:
+def write_json_file(
+    path: Path, payload: Mapping[str, JSONValue] | Sequence[JSONValue]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
@@ -140,7 +137,9 @@ def _parse_case(base_dir: Path, value: Mapping[str, object]) -> CaseConfig:
     case_id = _required_string(value, "id", context="case")
     variants = tuple(
         _parse_variant(base_dir, item)
-        for item in _mapping_sequence(value.get("variants", []), context=f"{case_id}.variants")
+        for item in _mapping_sequence(
+            value.get("variants", []), context=f"{case_id}.variants"
+        )
     )
     if not variants:
         variants = (
@@ -157,14 +156,19 @@ def _parse_case(base_dir: Path, value: Mapping[str, object]) -> CaseConfig:
         reference_image=_optional_path(base_dir, value.get("reference_image")),
         target_image=_optional_path(base_dir, value.get("target_image")),
         mask_image=_optional_path(base_dir, value.get("mask_image")),
-        target_caption=_optional_string(value.get("target_caption")),
         render_prompt=_optional_string(value.get("render_prompt")),
         edit_prompt=_optional_string(value.get("edit_prompt")),
         snapshot_payload=_optional_path(base_dir, value.get("snapshot_payload")),
         snapshot_image=_optional_path(base_dir, value.get("snapshot_image")),
-        layout_reference_image=_optional_path(base_dir, value.get("layout_reference_image")),
-        annotated_reference_image=_optional_path(base_dir, value.get("annotated_reference_image")),
-        scene_reference_image=_optional_path(base_dir, value.get("scene_reference_image")),
+        layout_reference_image=_optional_path(
+            base_dir, value.get("layout_reference_image")
+        ),
+        annotated_reference_image=_optional_path(
+            base_dir, value.get("annotated_reference_image")
+        ),
+        scene_reference_image=_optional_path(
+            base_dir, value.get("scene_reference_image")
+        ),
         edit_operations=tuple(
             _parse_edit_operation(base_dir, item)
             for item in _mapping_sequence(
@@ -183,18 +187,18 @@ def _parse_variant(base_dir: Path, value: Mapping[str, object]) -> VariantConfig
         mode_raw = "baseline"
     provider_raw = _optional_string(value.get("provider"))
     provider = _provider_name(provider_raw) if provider_raw else None
-    command = _optional_command(value.get("command"))
     return VariantConfig(
         id=variant_id,
         mode=cast(VariantMode, mode_raw),
         provider=provider,
         output_image=_optional_path(base_dir, value.get("output_image")),
-        command=command,
         prompt=_optional_string(value.get("prompt")),
     )
 
 
-def _parse_edit_operation(base_dir: Path, value: Mapping[str, object]) -> EditOperationConfig:
+def _parse_edit_operation(
+    base_dir: Path, value: Mapping[str, object]
+) -> EditOperationConfig:
     bbox = value.get("bbox_norm")
     return EditOperationConfig(
         object_id=_required_string(value, "object_id", context="edit_operation"),
@@ -239,21 +243,19 @@ def _string_sequence(value: object, fallback: Sequence[str] = ()) -> list[str]:
     return [str(item) for item in value]
 
 
+def _metric_sequence(value: object) -> list[str]:
+    metrics = _string_sequence(value, fallback=_DEFAULT_METRICS)
+    unknown = sorted(set(metrics) - _VALID_METRICS)
+    if unknown:
+        raise ValueError(f"Unknown image eval metrics: {', '.join(unknown)}.")
+    return metrics
+
+
 def _float_mapping(value: object) -> dict[str, float]:
     if value is None:
         return {}
     payload = _expect_mapping(value, context="thresholds")
     return {key: _float_value(item, field=key) for key, item in payload.items()}
-
-
-def _optional_command(value: object) -> tuple[str, ...] | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return tuple(shlex.split(value))
-    if isinstance(value, list):
-        return tuple(str(item) for item in value)
-    raise ValueError("Variant command must be a string or list of strings.")
 
 
 def _optional_operation_type(

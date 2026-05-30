@@ -132,6 +132,16 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
         self.assertEqual(payload["status"], "OK")
         self.assertEqual(payload["room"]["room_id"], "room_1")
         self.assertEqual(len(payload["room"]["polygon_ccw"]), 4)
+        self.assertEqual(payload["room"]["wall_thickness_mm"], 100)
+        self.assertEqual(
+            payload["room"]["wall_thickness_by_wall_id"],
+            {
+                "wall_1": 100,
+                "wall_2": 100,
+                "wall_3": 100,
+                "wall_4": 100,
+            },
+        )
 
         doors = payload["openings"]["doors"]
         self.assertEqual(len(doors), 1)
@@ -176,9 +186,55 @@ class RoomInterpreterArchitectureTest(unittest.TestCase):
             payload["quality_meta"]["settings"]["window_clearance_mm"],
             150,
         )
+        self.assertEqual(
+            payload["quality_meta"]["settings"]["default_wall_thickness_mm"],
+            100,
+        )
+        wall_nodes = payload["topology"]["wall_graph"]["nodes"]
+        self.assertTrue(all(node["thickness_mm"] == 100 for node in wall_nodes))
 
         self.assertGreaterEqual(len(payload["notes"]), 2)
         self.assertTrue(any("japandi" in note.lower() for note in payload["notes"]))
+
+    def test_generate_preserves_explicit_wall_thickness_zero(self) -> None:
+        payload = _sample_input()
+        floorplan = payload["floorplan_geometry"]
+        self.assertIsInstance(floorplan, dict)
+        if not isinstance(floorplan, dict):
+            raise AssertionError("sample floorplan must be a dict")
+        floorplan["walls"] = [
+            {
+                "wall_id": "wall_1",
+                "p1_mm": {"x": 0, "y": 0},
+                "p2_mm": {"x": 6000, "y": 0},
+                "thickness_mm": 0,
+            },
+            {
+                "wall_id": "wall_2",
+                "p1_mm": {"x": 6000, "y": 0},
+                "p2_mm": {"x": 6000, "y": 4000},
+                "thickness_mm": 120,
+            },
+            {
+                "wall_id": "wall_3",
+                "p1_mm": {"x": 6000, "y": 4000},
+                "p2_mm": {"x": 0, "y": 4000},
+                "thickness_mm": 120,
+            },
+            {
+                "wall_id": "wall_4",
+                "p1_mm": {"x": 0, "y": 4000},
+                "p2_mm": {"x": 0, "y": 0},
+                "thickness_mm": 120,
+            },
+        ]
+
+        data = RoomInterpreter().generate(payload).model_dump()
+
+        self.assertEqual(data["room"]["wall_thickness_by_wall_id"]["wall_1"], 0)
+        wall_nodes = data["topology"]["wall_graph"]["nodes"]
+        self.assertEqual(wall_nodes[0]["thickness_mm"], 0)
+        self.assertEqual(wall_nodes[1]["thickness_mm"], 120)
 
     def test_generate_raw_returns_full_room_payload_json(self) -> None:
         raw = RoomInterpreter().generate_raw(_sample_input())

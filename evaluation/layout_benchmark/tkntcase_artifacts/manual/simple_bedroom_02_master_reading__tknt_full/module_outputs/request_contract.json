@@ -10,17 +10,25 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a reading armchair",
-      "reason": "Explicitly requested seating for the reading area.",
-      "confidence": 0.98,
+      "reason": "Explicitly requested reading seating.",
+      "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "armchair",
+        "chair"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "armchair",
+      "fulfilled_by": "armchair"
     },
     {
       "object_type": "bed",
@@ -30,17 +38,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "queen bed as the anchor",
-      "reason": "Directly requested as the primary anchor item for the bedroom.",
+      "reason": "Explicitly requested as the primary anchor for the master bedroom.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "bed"
+      ],
+      "relation_edges": [
+        {
+          "relation": "anchor_of",
+          "target": "room"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "bed",
+      "fulfilled_by": "bed"
     },
     {
       "object_type": "ceiling_light",
@@ -49,18 +70,26 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "and a ceiling lamp",
-      "reason": "explicitly requested in the brief",
-      "confidence": null,
+      "evidence": "a ceiling lamp",
+      "reason": "Explicitly requested lighting fixture.",
+      "confidence": 0.98,
       "placement_participation": "ceiling_attached",
+      "llm_candidates": [
+        "ceiling_light",
+        "flush_mount_light"
+      ],
       "requested": true,
       "inventory_available": false,
-      "available_in_program": false,
+      "available_in_inventory": false,
+      "available_in_program": true,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "ceiling"
+      "mount_region_type": "ceiling",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "floor_lamp",
+      "fulfilled_by": "floor_lamp"
     },
     {
       "object_type": "floor_lamp",
@@ -70,17 +99,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "with a floor lamp",
-      "reason": "Explicitly requested lighting paired with the reading armchair.",
-      "confidence": 0.98,
+      "reason": "Explicitly paired with the reading armchair.",
+      "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "floor_lamp"
+      ],
+      "relation_edges": [
+        {
+          "relation": "supports",
+          "target": "armchair"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "floor_lamp",
+      "fulfilled_by": "floor_lamp"
     },
     {
       "object_type": "rug",
@@ -90,17 +132,23 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a soft rug",
-      "reason": "explicitly requested in the brief",
-      "confidence": null,
+      "reason": "Explicitly requested decor/textile element.",
+      "confidence": 0.97,
       "placement_participation": "textile_overlay",
+      "llm_candidates": [
+        "rug"
+      ],
       "requested": true,
       "inventory_available": false,
+      "available_in_inventory": false,
       "available_in_program": false,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "floor"
+      "mount_region_type": "floor",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "rug"
     },
     {
       "object_type": "wardrobe",
@@ -110,37 +158,57 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a wardrobe",
-      "reason": "Explicitly requested storage item.",
-      "confidence": 0.98,
+      "reason": "Explicit storage requirement in the brief.",
+      "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "wardrobe"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "wardrobe",
+      "fulfilled_by": "wardrobe"
     },
     {
       "object_type": "nightstand",
       "intent": "target_if_viable",
-      "min_keep": 0,
+      "min_keep": 1,
       "target_count": 2,
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "two nightstands if they fit",
-      "reason": "Requested as a preferred pair, but explicitly fit-dependent.",
+      "reason": "Requested as a bounded pair with a lower bound of one and preferred count of two if space allows.",
       "confidence": 0.98,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "nightstand"
+      ],
+      "relation_edges": [
+        {
+          "relation": "flank",
+          "target": "bed"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "nightstand",
+      "fulfilled_by": "nightstand"
     }
   ],
   "groups": [
@@ -150,26 +218,72 @@
         "bed",
         "nightstand"
       ],
-      "intent": "required composition",
+      "intent": "core sleeping composition",
       "priority": "core",
-      "drop_policy": "preserve bed first; reduce nightstands only if needed"
+      "drop_policy": "reduce_nightstand_count first, keep bed"
     },
     {
-      "group_id": "reading_corner_bundle",
+      "group_id": "reading_nook",
       "members": [
         "armchair",
         "floor_lamp"
       ],
-      "intent": "functional pairing",
+      "intent": "reading support pairing",
       "priority": "support",
-      "drop_policy": "keep both if possible; drop lamp before chair if surplus pressure"
+      "drop_policy": "drop floor_lamp before armchair"
     }
   ],
   "notes": [
-    "The brief names a master bedroom with a restful, polished, modern functional layout.",
-    "The room should keep comfortable circulation around the sleeping area.",
-    "Primary focus is the bed back wall.",
+    "No bookshelf, side table, dresser, desk, or other unrequested furniture was added.",
+    "Queen bed interpreted as a bed with queen sizing, not a separate object type.",
     "Request contract was normalized before tier-count enforcement.",
-    "Requested non-functional objects were restored for downstream placement: ceiling_light, rug"
-  ]
+    "Request contract was reconciled against room profile, inventory, and semantic clusters before tier count."
+  ],
+  "reconciliation": {
+    "version": 1,
+    "strategy": "hybrid_llm_rules",
+    "statuses": [
+      {
+        "object_type": "armchair",
+        "status": "fulfilled",
+        "chosen_object_type": "armchair",
+        "fulfilled_by": "armchair"
+      },
+      {
+        "object_type": "bed",
+        "status": "fulfilled",
+        "chosen_object_type": "bed",
+        "fulfilled_by": "bed"
+      },
+      {
+        "object_type": "ceiling_light",
+        "status": "fulfilled",
+        "chosen_object_type": "floor_lamp",
+        "fulfilled_by": "floor_lamp"
+      },
+      {
+        "object_type": "floor_lamp",
+        "status": "fulfilled",
+        "chosen_object_type": "floor_lamp",
+        "fulfilled_by": "floor_lamp"
+      },
+      {
+        "object_type": "rug",
+        "status": "fulfilled",
+        "chosen_object_type": "rug"
+      },
+      {
+        "object_type": "wardrobe",
+        "status": "fulfilled",
+        "chosen_object_type": "wardrobe",
+        "fulfilled_by": "wardrobe"
+      },
+      {
+        "object_type": "nightstand",
+        "status": "fulfilled",
+        "chosen_object_type": "nightstand",
+        "fulfilled_by": "nightstand"
+      }
+    ]
+  }
 }

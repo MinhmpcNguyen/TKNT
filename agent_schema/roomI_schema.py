@@ -49,6 +49,8 @@ class RoomModel(BaseModel):
         default_factory=lambda: BBox(min_x=0, min_y=0, max_x=0, max_y=0)
     )
     ceiling_height_mm: int = 2800
+    wall_thickness_mm: int = 100
+    wall_thickness_by_wall_id: dict[str, int] = Field(default_factory=dict)
 
 
 class DoorOpening(BaseModel):

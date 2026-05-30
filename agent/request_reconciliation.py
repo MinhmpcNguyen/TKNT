@@ -755,17 +755,6 @@ def _dominant_candidates(
     return candidates
 
 
-def _surface_types(room_type: str) -> set[str]:
-    profile = resolve_room_profile(room_type)
-    if profile is None:
-        return {"desk", "table", "coffee_table", "side_table", "nightstand"}
-    return set(profile.surface_objects) | {
-        item
-        for item in ("desk", "table", "coffee_table", "side_table", "nightstand")
-        if profile.canonical_object_type(item) is not None
-    }
-
-
 def _is_surface_object(object_type: str, *, profile: RoomProfile | None) -> bool:
     return (
         bool(profile and object_type in profile.surface_objects)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias, cast
@@ -108,14 +108,6 @@ def evaluate_variant_images(
             )
         )
 
-    if "clip" in metrics:
-        results.append(
-            compute_clip_similarity(
-                image_path=output_image,
-                caption=case.target_caption,
-                thresholds=manifest.thresholds,
-            )
-        )
     return results
 
 
@@ -264,17 +256,6 @@ def compute_pair_metrics(
             )
         )
 
-    if "lpips" in metrics:
-        results.append(
-            compute_lpips(
-                prefix=prefix,
-                reference_rgb=reference_rgb,
-                candidate_rgb=candidate_rgb,
-                selected_mask=selected_mask,
-                thresholds=thresholds,
-                extra_details=pair.details,
-            )
-        )
     return results
 
 
@@ -446,131 +427,6 @@ def compute_ssim(
     )
 
 
-def compute_lpips(
-    *,
-    prefix: str,
-    reference_rgb: UInt8Array,
-    candidate_rgb: UInt8Array,
-    selected_mask: BoolMask | None,
-    thresholds: Mapping[str, float],
-    extra_details: Mapping[str, JSONValue],
-) -> MetricResult:
-    try:
-        import torch
-        from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-    except ImportError:
-        return _skipped(
-            f"{prefix}_lpips",
-            "torchmetrics with LPIPS support is not installed",
-        )
-
-    try:
-        candidate_for_metric = candidate_rgb.copy()
-        if selected_mask is not None:
-            ignored = np.logical_not(selected_mask)
-            candidate_for_metric[ignored] = reference_rgb[ignored]
-        reference_image = _resize_array_for_deep_metric(reference_rgb)
-        candidate_image = _resize_array_for_deep_metric(candidate_for_metric)
-        reference_tensor = _torch_image_tensor(torch, reference_image)
-        candidate_tensor = _torch_image_tensor(torch, candidate_image)
-        metric = LearnedPerceptualImagePatchSimilarity(net_type="alex", normalize=True)
-        value = float(metric(candidate_tensor, reference_tensor).item())
-    except Exception as exc:
-        return _skipped(f"{prefix}_lpips", f"lpips_failed: {exc}")
-
-    threshold = _threshold(thresholds, prefix, "max_lpips")
-    status = _status_for_threshold(value=value, threshold=threshold, direction="max")
-    return MetricResult(
-        name=f"{prefix}_lpips",
-        status=status,
-        value=value,
-        threshold=threshold,
-        direction="max",
-        details={**dict(extra_details), "net_type": "alex"},
-    )
-
-
-def compute_clip_similarity(
-    *,
-    image_path: Path,
-    caption: str | None,
-    thresholds: Mapping[str, float],
-) -> MetricResult:
-    if not caption:
-        return _skipped("clip_similarity", "target_caption_missing")
-    try:
-        import open_clip
-        import torch
-    except ImportError:
-        return _skipped("clip_similarity", "open-clip-torch is not installed")
-
-    try:
-        model, _, preprocess = open_clip.create_model_and_transforms(
-            "ViT-B-32",
-            pretrained="openai",
-        )
-        tokenizer = open_clip.get_tokenizer("ViT-B-32")
-        model.eval()
-        image = preprocess(Image.open(image_path).convert("RGB")).unsqueeze(0)
-        text = tokenizer([caption])
-        with torch.no_grad():
-            image_features = model.encode_image(image)
-            text_features = model.encode_text(text)
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-            value = float((image_features @ text_features.T).item())
-    except Exception as exc:
-        return _skipped("clip_similarity", f"clip_failed: {exc}")
-
-    threshold = thresholds.get("min_clip_score")
-    status = _status_for_threshold(value=value, threshold=threshold, direction="min")
-    return MetricResult(
-        name="clip_similarity",
-        status=status,
-        value=value,
-        threshold=threshold,
-        direction="min",
-        details={"caption": caption},
-    )
-
-
-def compute_fid_score(
-    *,
-    reference_images: Sequence[Path],
-    generated_images: Sequence[Path],
-) -> MetricResult:
-    if not reference_images or not generated_images:
-        return _skipped("fid", "reference_or_generated_set_empty")
-    try:
-        import torch
-        from torchmetrics.image.fid import FrechetInceptionDistance
-    except ImportError:
-        return _skipped("fid", "torchmetrics with FID support is not installed")
-
-    try:
-        metric = FrechetInceptionDistance(feature=2048, normalize=False)
-        for path in reference_images:
-            tensor = _fid_tensor(torch, path)
-            metric.update(tensor, real=True)
-        for path in generated_images:
-            tensor = _fid_tensor(torch, path)
-            metric.update(tensor, real=False)
-        value = float(metric.compute().item())
-    except Exception as exc:
-        return _skipped("fid", f"fid_failed: {exc}")
-    return MetricResult(
-        name="fid",
-        status="warning",
-        value=value,
-        direction="max",
-        details={
-            "reference_count": len(reference_images),
-            "generated_count": len(generated_images),
-            "note": "Lower is better. No default threshold is applied.",
-        },
-    )
-
-
 def summarize_human_ratings(
     *,
     ratings_csv: Path,
@@ -588,7 +444,9 @@ def summarize_human_ratings(
                 {
                     "score_instruction": _optional_float(row.get("score_instruction")),
                     "score_quality": _optional_float(row.get("score_quality")),
-                    "score_preservation": _optional_float(row.get("score_preservation")),
+                    "score_preservation": _optional_float(
+                        row.get("score_preservation")
+                    ),
                     "artifact_severity": _optional_float(row.get("artifact_severity")),
                 }
             )
@@ -701,32 +559,6 @@ def _write_diff_image(
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(enhanced, mode="RGB").save(path)
     return path
-
-
-def _resize_array_for_deep_metric(image: UInt8Array, max_side: int = 512) -> UInt8Array:
-    height, width = image.shape[:2]
-    scale = min(1.0, max_side / float(max(height, width)))
-    if scale >= 1.0:
-        return image
-    resized = Image.fromarray(image, mode="RGB").resize(
-        (max(1, int(width * scale)), max(1, int(height * scale))),
-        Image.Resampling.LANCZOS,
-    )
-    return cast(UInt8Array, np.asarray(resized, dtype=np.uint8))
-
-
-def _torch_image_tensor(torch_module: object, image: UInt8Array) -> object:
-    torch = torch_module
-    array = image.astype(np.float32) / 255.0
-    tensor = torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
-    return tensor
-
-
-def _fid_tensor(torch_module: object, path: Path) -> object:
-    torch = torch_module
-    image = Image.open(path).convert("RGB")
-    array = np.asarray(image, dtype=np.uint8)
-    return torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
 
 
 def _corner_background_rgb(rgb: FloatArray) -> FloatArray:

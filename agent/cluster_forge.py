@@ -1452,11 +1452,6 @@ def _is_media_side_support_like(member: str) -> bool:
     return any(token in key for token in ("media_shelf", "bookshelf", "speaker"))
 
 
-def _is_low_center_surface_like(member: str) -> bool:
-    key = member.lower()
-    return any(token in key for token in ("coffee_table", "ottoman", "bench"))
-
-
 def _is_floor_lamp_like(member: str) -> bool:
     return "floor_lamp" in member.lower()
 

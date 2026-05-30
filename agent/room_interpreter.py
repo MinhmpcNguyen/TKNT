@@ -33,6 +33,7 @@ LLM_TEMPERATURE = 0.1
 LLM_RETRY_MAX = 1
 DEFAULT_DOOR_SWING_RADIUS_MM = 900
 DEFAULT_ROOM_HEIGHT_MM = 2800
+DEFAULT_WALL_THICKNESS_MM = 100
 
 
 class FloatPoint(TypedDict):
@@ -46,6 +47,7 @@ class Wall(TypedDict):
     start_mm: PointDict
     end_mm: PointDict
     length_mm: int
+    thickness_mm: int
     direction: FloatPoint
     inward_normal: FloatPoint
     adjacent_wall_ids: list[str]
@@ -166,7 +168,11 @@ def _build_room_interpreter_payload(
             "floorplan_geometry.room.polygon_mm conflicts with user_input.shape_points; using floorplan geometry."
         )
 
-    walls = _build_wall_graph(sanitized_polygon)
+    wall_thickness_by_segment = _resolve_wall_thickness_by_segment(input_payload)
+    walls = _build_wall_graph(
+        sanitized_polygon,
+        wall_thickness_by_segment=wall_thickness_by_segment,
+    )
     openings_input = _resolve_floorplan_openings(input_payload)
     explicit_doors = _opening_kind_explicitly_provided(input_payload, kind="doors")
     explicit_windows = _opening_kind_explicitly_provided(
@@ -293,6 +299,10 @@ def _build_room_interpreter_payload(
         "principal_axis": principal_axis,
         "bbox_mm": room_bbox,
         "ceiling_height_mm": _resolve_height_mm(input_payload),
+        "wall_thickness_mm": _representative_wall_thickness_mm(walls),
+        "wall_thickness_by_wall_id": {
+            wall["id"]: wall["thickness_mm"] for wall in walls
+        },
     }
     openings = {"doors": doors, "windows": windows}
     meta = {
@@ -407,7 +417,15 @@ def _segments_intersect(
     return o1 != o2 and o3 != o4
 
 
-def _build_wall_graph(points: Sequence[PointDict]) -> list[Wall]:
+PointKey = tuple[int, int]
+WallSegmentKey = tuple[PointKey, PointKey]
+
+
+def _build_wall_graph(
+    points: Sequence[PointDict],
+    *,
+    wall_thickness_by_segment: Mapping[WallSegmentKey, int] | None = None,
+) -> list[Wall]:
     walls: list[Wall] = []
     count = len(points)
     if count < 3:
@@ -419,6 +437,9 @@ def _build_wall_graph(points: Sequence[PointDict]) -> list[Wall]:
         length = math.hypot(dx, dy)
         if length < MIN_WALL_LEN_MM:
             continue
+        thickness_mm = (
+            wall_thickness_by_segment or {}
+        ).get(_wall_segment_key(start, end), DEFAULT_WALL_THICKNESS_MM)
         direction = {"x": dx / length, "y": dy / length}
         wall: Wall = {
             "id": f"wall_{idx + 1}",
@@ -426,6 +447,7 @@ def _build_wall_graph(points: Sequence[PointDict]) -> list[Wall]:
             "start_mm": dict(start),
             "end_mm": dict(end),
             "length_mm": int(round(length)),
+            "thickness_mm": thickness_mm,
             "direction": direction,
             "inward_normal": {"x": -direction["y"], "y": direction["x"]},
             "adjacent_wall_ids": [],
@@ -438,6 +460,57 @@ def _build_wall_graph(points: Sequence[PointDict]) -> list[Wall]:
             walls[(idx + 1) % wall_count]["id"],
         ]
     return walls
+
+
+def _resolve_wall_thickness_by_segment(
+    input_payload: Mapping[str, object],
+) -> dict[WallSegmentKey, int]:
+    floorplan = input_payload.get("floorplan_geometry")
+    if not isinstance(floorplan, Mapping):
+        return {}
+    walls = floorplan.get("walls")
+    if not isinstance(walls, Sequence) or isinstance(walls, str):
+        return {}
+
+    out: dict[WallSegmentKey, int] = {}
+    for row in walls:
+        if not isinstance(row, Mapping):
+            continue
+        segment = _normalize_segment(
+            row.get("segment_mm"),
+            start=row.get("p1_mm") or row.get("start_mm"),
+            end=row.get("p2_mm") or row.get("end_mm"),
+        )
+        if segment is None:
+            continue
+        thickness = _coerce_wall_thickness_mm(row.get("thickness_mm"))
+        if thickness is None:
+            thickness = _coerce_wall_thickness_mm(row.get("wall_thickness_mm"))
+        if thickness is None:
+            thickness = _coerce_wall_thickness_mm(row.get("thickness"))
+        if thickness is None:
+            continue
+        out[_wall_segment_key(segment[0], segment[1])] = thickness
+    return out
+
+
+def _wall_segment_key(start: Mapping[str, int], end: Mapping[str, int]) -> WallSegmentKey:
+    left: PointKey = (int(start["x"]), int(start["y"]))
+    right: PointKey = (int(end["x"]), int(end["y"]))
+    return (left, right) if left <= right else (right, left)
+
+
+def _coerce_wall_thickness_mm(value: object) -> int | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return max(0, int(round(float(value))))
+
+
+def _representative_wall_thickness_mm(walls: Sequence[Wall]) -> int:
+    if not walls:
+        return DEFAULT_WALL_THICKNESS_MM
+    values = sorted(max(0, int(wall["thickness_mm"])) for wall in walls)
+    return values[len(values) // 2]
 
 
 def _normalize_openings_for_kind(
@@ -1273,6 +1346,7 @@ def _build_topology(
                     "start_mm": wall["start_mm"],
                     "end_mm": wall["end_mm"],
                     "length_mm": wall["length_mm"],
+                    "thickness_mm": wall["thickness_mm"],
                     "inward_normal": wall["inward_normal"],
                 }
                 for wall in walls
@@ -2011,6 +2085,7 @@ def _settings_payload() -> dict[str, int | float]:
         "daylight_mid_side_margin_mm": DAYLIGHT_MID_SIDE_MARGIN_MM,
         "min_wall_len_mm": MIN_WALL_LEN_MM,
         "min_usable_wall_len_mm": MIN_USABLE_WALL_LEN_MM,
+        "default_wall_thickness_mm": DEFAULT_WALL_THICKNESS_MM,
         "affordance_field_resolution_mm": AFFORDANCE_FIELD_RESOLUTION_MM,
         "corridor_candidate_max": CORRIDOR_CANDIDATE_MAX,
         "zone_split_max": ZONE_SPLIT_MAX,

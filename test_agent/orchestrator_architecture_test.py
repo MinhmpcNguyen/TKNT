@@ -43,7 +43,6 @@ _STUBBED_MODULE_NAMES = [
     "agent.solver.solver",
     "agent.stylist",
     "agent.tier_count_director",
-    "agent.visual_relation_bundle_planner",
     "agent.visual_relation_object_solver",
     "agent.visual_relation_planner",
     "cluster_composer.merge",
@@ -83,9 +82,12 @@ _stub_module(
     stylist_model_name_for_variant=lambda variant_index: "gpt-5.4-mini",
 )
 _stub_module("agent.tier_count_director", TierCountDirector=object)
-_stub_module("agent.visual_relation_bundle_planner", VisualRelationBundlePlanner=object)
 _stub_module("agent.visual_relation_object_solver", VisualRelationObjectSolver=object)
-_stub_module("agent.visual_relation_planner", VisualRelationPlanner=object)
+_stub_module(
+    "agent.visual_relation_planner",
+    VisualRelationBundlePlanner=object,
+    VisualRelationPlanner=object,
+)
 _stub_module(
     "cluster_composer.merge",
     merge_cluster_outputs=lambda cluster_output, tier_output: {
@@ -147,6 +149,7 @@ _stub_module(
     build_final_gallery_selection_summary=lambda **kwargs: {
         "selected_count": len(kwargs.get("selected") or []),
     },
+    material_macro_layout_signature=lambda _layout: "",
     select_distinct_final_gallery_candidates=lambda **kwargs: kwargs.get("candidates")
     or [],
 )
@@ -317,13 +320,15 @@ def _unsat_solver_output(
     reasons: list[str],
     offenders: list[str],
     raw_solution_count: int,
+    anchor_candidate_counts: dict[str, int] | None = None,
 ) -> dict[str, object]:
+    anchor_counts = anchor_candidate_counts or {"sleep_core": 6, "work_study": 36}
     return {
         "status": "UNSAT",
         "offending_clusters": offenders,
         "solver_debug": {
             "raw_solution_count": raw_solution_count,
-            "anchor_candidate_counts": {"sleep_core": 6, "work_study": 36},
+            "anchor_candidate_counts": anchor_counts,
         },
         "best_partial": {
             "verify_summary": {
@@ -559,9 +564,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
                 self.calls: list[dict[str, object]] = []
                 concept_generators.append(self)
 
-            def generate_bundle(
-                self, **kwargs: object
-            ) -> dict[str, object]:
+            def generate_bundle(self, **kwargs: object) -> dict[str, object]:
                 self.calls.append(dict(kwargs))
                 uses_llm = bool(kwargs.get("use_llm", True))
                 return {
@@ -601,9 +604,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             "_solve_seed_concept_pool": lambda **_kwargs: [],
             "_should_retry_seed_concepts": lambda *_args, **_kwargs: True,
         }
-        originals = {
-            name: getattr(orchestrator, name) for name in replacements
-        }
+        originals = {name: getattr(orchestrator, name) for name in replacements}
         for name, replacement in replacements.items():
             setattr(orchestrator, name, replacement)
         try:
@@ -1041,6 +1042,62 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         self.assertNotEqual(repaired_work["zone_assignment"], "right_wall_zone")
         self.assertEqual(repaired_work["preferred_wall_side"], "")
 
+    def test_zero_anchor_repair_softens_only_primary_corridor_for_offender(
+        self,
+    ) -> None:
+        relation_plan = _repair_relation_plan()
+        relation_plan["macro_constraints"]["protected_topology"] = [
+            {
+                "region": "door_1_entry_clearance",
+                "zone_type": "entry_landing",
+                "enforcement": "hard",
+            },
+            {
+                "region": "door_1_to_room_center_corridor",
+                "zone_type": "primary_circulation_corridor",
+                "enforcement": "hard_soft",
+            },
+        ]
+        merged_output = _repair_merged_output()
+        merged_output["clusters"][0]["cluster_rules"]["zone_claims"] = {
+            "avoid_regions": ["door_1_entry_clearance", "entry_to_center_corridor"]
+        }
+        original_relation_plan = deepcopy(relation_plan)
+
+        attempts = orchestrator._build_concept_repair_attempts(
+            concept={"concept_id": "concept_01"},
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            solver_output=_unsat_solver_output(
+                reasons=["layout_incomplete"],
+                offenders=["work_study"],
+                raw_solution_count=0,
+                anchor_candidate_counts={"sleep_core": 8, "work_study": 0},
+            ),
+        )
+
+        self.assertGreaterEqual(len(attempts), 1)
+        self.assertEqual(attempts[0].repair_id, "primary_corridor_softening")
+        self.assertEqual(relation_plan, original_relation_plan)
+        repaired_plan = attempts[0].relation_plan
+        repaired_work = repaired_plan["anchor_region_preferences_by_cluster"][
+            "work_study"
+        ]
+        self.assertEqual(
+            repaired_work["forbidden_region_ids"],
+            ["door_1_entry_clearance"],
+        )
+        topology = repaired_plan["macro_constraints"]["protected_topology"]
+        self.assertNotIn("softened_for_clusters", topology[0])
+        self.assertEqual(topology[1]["softened_for_clusters"], ["work_study"])
+        repaired_claims = attempts[0].merged_output["clusters"][0]["cluster_rules"][
+            "zone_claims"
+        ]
+        self.assertEqual(
+            repaired_claims["avoid_regions"],
+            ["door_1_entry_clearance"],
+        )
+
     def test_concept_repair_functional_gate_relaxes_only_offending_cluster(
         self,
     ) -> None:
@@ -1180,18 +1237,14 @@ class OrchestratorArchitectureTest(unittest.TestCase):
                         "required_support_ids": ["bookshelf"],
                         "protected_ids": ["wardrobe", "bookshelf"],
                         "droppable_ids": ["bookshelf"],
-                        "object_specs_by_id": {
-                            "bookshelf": {"required_support": True}
-                        },
+                        "object_specs_by_id": {"bookshelf": {"required_support": True}},
                     },
                 }
             ]
         }
         relation_plan = {
             "object_solver_policy": {
-                "protected_ids_by_cluster": {
-                    "storage_core": ["wardrobe", "bookshelf"]
-                },
+                "protected_ids_by_cluster": {"storage_core": ["wardrobe", "bookshelf"]},
                 "droppable_ids_by_cluster": {"storage_core": ["bookshelf"]},
             }
         }

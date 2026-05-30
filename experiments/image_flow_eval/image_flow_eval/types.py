@@ -15,7 +15,7 @@ VariantMode = Literal[
     "no_preservation_prompt",
     "no_reference_images",
 ]
-ProviderName = Literal["evaluate_only", "tknt_snapshot", "command"]
+ProviderName = Literal["evaluate_only", "tknt_snapshot"]
 AlignMode = Literal["strict", "resize_to_reference"]
 MetricStatus = Literal["passed", "failed", "warning", "skipped"]
 MetricDirection = Literal["min", "max", "none"]
@@ -46,7 +46,6 @@ class VariantConfig:
     mode: VariantMode = "baseline"
     provider: ProviderName | None = None
     output_image: Path | None = None
-    command: tuple[str, ...] | None = None
     prompt: str | None = None
 
 
@@ -57,7 +56,6 @@ class CaseConfig:
     reference_image: Path | None = None
     target_image: Path | None = None
     mask_image: Path | None = None
-    target_caption: str | None = None
     render_prompt: str | None = None
     edit_prompt: str | None = None
     snapshot_payload: Path | None = None
@@ -77,7 +75,6 @@ class ManifestConfig:
     thresholds: Mapping[str, float]
     visual_delta_threshold: int
     align_mode: AlignMode
-    fid_reference_images: tuple[Path, ...]
     cases: tuple[CaseConfig, ...]
 
 
@@ -108,4 +105,3 @@ class MetricResult:
             "direction": self.direction,
             "details": dict(self.details or {}),
         }
-

@@ -4,32 +4,26 @@
     "cozy"
   ],
   "layout_policy": {
-    "target_density": "medium",
-    "center_openness_bias": "balanced_to_medium",
-    "wall_loading_bias": "perimeter",
+    "target_density": "balanced_to_medium",
+    "center_openness_bias": "medium",
+    "wall_loading_bias": "focal_balanced",
     "symmetry_bias": "balanced",
     "cluster_spacing_bias": "soft",
-    "clutter_tolerance": "low",
-    "decor_tolerance": "low_to_medium",
+    "clutter_tolerance": "medium",
+    "decor_tolerance": "low_to_balanced",
     "daylight_bias": "medium",
-    "floating_cluster_tolerance": "low",
+    "floating_cluster_tolerance": "low_to_medium",
     "material_weight_bias": "balanced",
     "visual_balance_bias": "calm"
   },
   "cluster_policy_overrides": {
-    "support_optional": {
-      "allow_only_if_space_surplus": true
-    },
-    "decor": {
-      "max_items_per_cluster": 1
-    },
     "lounge_reading": {
       "allow_only_if_space_surplus": true
     }
   },
   "policy_weights": {
     "density_multiplier": 1.06,
-    "optional_utility_bias": -0.45,
+    "optional_utility_bias": 0.0,
     "decor_utility_bias": -0.9,
     "openness_weight": 1.0,
     "symmetry_weight": 1.0,

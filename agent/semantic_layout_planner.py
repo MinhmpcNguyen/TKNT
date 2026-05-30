@@ -148,14 +148,14 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "Keep existing cluster ids when possible. "
             "Add a new cluster only when the brief, affordance, and inventory clearly require it. "
             "Prefer the smallest object program that still covers the room's likely use. "
-            "Set `tier_count_hints` as an executable keep/drop policy for downstream quantity selection, not as abstract commentary."
+            "Set `tier_count_hints` as an executable keep/drop and sizing policy for downstream quantity selection, not as abstract commentary."
         ),
         output_contract=(
             "Top-level keys: `room_rule`, `notes`. "
             "`room_rule` must be a full replacement object, not a patch. "
             "`room_rule` must contain `room_type`, `policy`, `global_program`, and `clusters`. "
             "Each cluster must contain `cluster_id`, `priority`, `activation`, `object_program`, `semantic`, `degradation_hints`, and `tier_count_hints`. "
-            "`tier_count_hints` must be numerically usable by a deterministic tier-count step: preserve only what the room can realistically support, but do not force early drops when real spatial surplus exists. "
+            "`tier_count_hints` must be numerically usable by a deterministic tier-count step: preserve only what the room can realistically support, emit request-aware `preferred_size_tier` priors from brief intent and room scale, but do not force early drops when real spatial surplus exists. "
             "`tier_count_hints.object_hints` should include one entry for every object type named anywhere in that cluster's `object_program`; use cluster-level defaults for neutral object-level hints instead of omitting them. "
             "Use only object types already present in `inventory_summary` or `canonical_room_rule`. "
             "Do not omit a required key just because the value is unchanged."
@@ -181,7 +181,7 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
         task_prompt=(
             "For every cluster, decide the executable object program and the tier-count recommendation for this exact room. "
             "Treat `useful` as whether the cluster should realistically survive deterministic filtering. "
-            "Use `tier_count_hints` to say what should be kept longer, what can drop earlier, and what should survive when the room still has real surplus. "
+            "Use `tier_count_hints` to say what should be kept longer, what can drop earlier, which size tier is preferred by the request, and what should survive when the room still has real surplus. "
             "Base this on the actual room area, affordance headroom, brief priorities, and inventory mix. "
             "Avoid over-pruning small support items when the room still has comfortable surplus."
         ),
@@ -194,6 +194,8 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "`tier_count_hints` is optional: include it only when changing the current room-rule keep/drop policy. "
             "When included, `tier_count_hints` must contain `bundle_class`, `preserve_level`, `keep_if_space_surplus`, `space_surplus_threshold`, `drop_order_bias`, and `object_hints`. "
             "Each object hint must contain `object_type`, `min_keep`, `max_keep`, `keep_if_space_surplus`, `space_surplus_threshold`, `drop_order_bias`, `preserve_level`, and `preferred_size_tier`. "
+            "Use `preferred_size_tier` as a semantic prior from the brief, room scale, and clutter language: compact/student/single-style intent may prefer `S`, neutral rooms may prefer `M`, generous/master/queen-style intent may prefer `M` or `L`. "
+            "Optionally include `size_intent` (`compact`, `standard`, or `generous`) and a short `size_reason` explaining the size prior. "
             "`object_hints` should include one entry for every object type named anywhere in that override's `object_program`; use cluster-level defaults for neutral object-level hints instead of omitting them. "
             "Keep the hints executable and internally consistent: `min_keep <= max_keep` when `max_keep` is present, and `keep_if_space_surplus` should only be true when the room plausibly has usable headroom. "
             "Do not omit a required key just because the value is unchanged."
@@ -295,6 +297,11 @@ _TIER_COUNT_HINT_RESPONSE_SCHEMA: dict[str, object] = {
                     "drop_order_bias": _STRING_SCHEMA,
                     "preserve_level": _STRING_SCHEMA,
                     "preferred_size_tier": _STRING_SCHEMA,
+                    "size_intent": {
+                        "type": "STRING",
+                        "enum": ["compact", "standard", "generous"],
+                    },
+                    "size_reason": _STRING_SCHEMA,
                 },
                 "required": [
                     "object_type",
@@ -1528,17 +1535,6 @@ def _secondary_layout_role_rank(
     if str(cluster.get("priority") or "").strip().lower() == "core":
         return 8
     return 99
-
-
-def _room_rules_for(
-    *,
-    room_type: str,
-    semantic_program_rules: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    return _room_rule_plan_for(
-        room_type=room_type,
-        semantic_program_rules=semantic_program_rules,
-    ).rules
 
 
 def _room_rule_plan_for(
@@ -3021,6 +3017,8 @@ def _sanitize_tier_count_hints(
             "drop_order_bias": drop_order_bias,
             "preserve_level": preserve_level,
             "preferred_size_tier": None,
+            "size_intent": None,
+            "size_reason": None,
         }
 
     out = {
@@ -3064,6 +3062,8 @@ def _sanitize_tier_count_object_hint(
         min_keep = min(min_keep, max_keep)
 
     preferred_size_tier = _tier_count_size_tier(value.get("preferred_size_tier"))
+    size_intent = _tier_count_size_intent(value.get("size_intent"))
+    size_reason = str(value.get("size_reason") or "").strip() or None
     return {
         "object_type": object_type,
         "min_keep": min_keep,
@@ -3084,6 +3084,8 @@ def _sanitize_tier_count_object_hint(
             default=default_preserve_level,
         ),
         "preferred_size_tier": preferred_size_tier,
+        "size_intent": size_intent,
+        "size_reason": size_reason,
     }
 
 
@@ -3111,6 +3113,13 @@ def _tier_count_drop_order_bias(value: Any, *, default: str) -> str:
 def _tier_count_size_tier(value: Any) -> str | None:
     text = str(value or "").strip().upper()
     if text in {"S", "M", "L"}:
+        return text
+    return None
+
+
+def _tier_count_size_intent(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if text in {"compact", "standard", "generous"}:
         return text
     return None
 

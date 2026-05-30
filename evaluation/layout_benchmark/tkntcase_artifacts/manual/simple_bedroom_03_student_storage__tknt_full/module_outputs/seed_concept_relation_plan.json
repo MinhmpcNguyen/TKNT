@@ -4,7 +4,7 @@
   "room_type": "bedroom",
   "planner_kind": "seed_concept_generator",
   "macro_concept": {
-    "concept_id": "concept_03",
+    "concept_id": "concept_01",
     "concept_family": "focal_axis",
     "macro_scenario": {
       "scenario_id": "focal_axis_top_bottom",
@@ -240,26 +240,26 @@
       {
         "cluster_id": "sleep_core",
         "semantic_role": "primary_anchor_zone",
-        "layout_role": "support",
+        "layout_role": "primary",
         "role_kind": "sleep",
         "priority": "core",
         "macro_scenario_id": "focal_axis_top_bottom",
-        "scenario_role": "support",
-        "scenario_locked": false,
-        "zone_assignment": "window_side_zone",
+        "scenario_role": "primary",
+        "scenario_locked": true,
+        "zone_assignment": "top_wall_zone",
         "required_region_ids": [],
         "preferred_region_ids": [
+          "top_wall_zone",
           "quiet_private_deep_zone",
           "window_side_zone",
           "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "forbidden_region_ids": [
-          "center_access_lane",
-          "center_openness_core"
+          "center_access_lane"
         ],
-        "preferred_wall_side": "",
-        "anchor_strength": "medium",
+        "preferred_wall_side": "top_wall",
+        "anchor_strength": "strong",
         "region_candidates": [
           {
             "cluster_id": "sleep_core",
@@ -292,20 +292,21 @@
           }
         ],
         "wall_claim": "strong",
-        "center_usage": "none",
+        "center_usage": "partial",
         "entry_relation": "avoid_direct_entry_conflict",
         "daylight_relation": "neutral",
         "privacy_relation": "privacy_preferred",
         "placement_bias": "wall_backed",
-        "zone_guardrail_notes": [
-          "Reassigned from quiet_private_deep_zone because it overlaps a forbidden region."
-        ],
         "placement_behavior": {
           "wall_backing": "required",
-          "front_space": "preferred",
+          "front_space": "required",
           "daylight_blocking": "neutral",
-          "pose_flexibility": "medium"
-        }
+          "pose_flexibility": "low"
+        },
+        "committed_region_ids": [
+          "top_wall_zone"
+        ],
+        "committed_wall_side": "top_wall"
       },
       {
         "cluster_id": "storage_core",
@@ -362,7 +363,7 @@
             ]
           }
         ],
-        "wall_claim": "strong",
+        "wall_claim": "medium",
         "center_usage": "none",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
@@ -373,30 +374,34 @@
           "front_space": "preferred",
           "daylight_blocking": "neutral",
           "pose_flexibility": "medium"
-        }
+        },
+        "committed_region_ids": [
+          "left_wall_zone"
+        ],
+        "committed_wall_side": "left_wall"
       },
       {
         "cluster_id": "work_study",
         "semantic_role": "support_workflow_zone",
-        "layout_role": "support",
+        "layout_role": "secondary",
         "role_kind": "work",
         "priority": "support",
         "macro_scenario_id": "focal_axis_top_bottom",
-        "scenario_role": "support",
-        "scenario_locked": false,
-        "zone_assignment": "window_side_zone",
+        "scenario_role": "secondary",
+        "scenario_locked": true,
+        "zone_assignment": "bottom_wall_zone",
         "required_region_ids": [],
         "preferred_region_ids": [
+          "bottom_wall_zone",
           "window_side_zone",
           "daylight_biased_zone",
-          "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "forbidden_region_ids": [
           "center_openness_core"
         ],
-        "preferred_wall_side": "",
-        "anchor_strength": "medium",
+        "preferred_wall_side": "bottom_wall",
+        "anchor_strength": "strong",
         "region_candidates": [
           {
             "cluster_id": "work_study",
@@ -437,10 +442,14 @@
         "placement_bias": "wall_backed",
         "placement_behavior": {
           "wall_backing": "required",
-          "front_space": "preferred",
+          "front_space": "required",
           "daylight_blocking": "neutral",
-          "pose_flexibility": "medium"
-        }
+          "pose_flexibility": "low"
+        },
+        "committed_region_ids": [
+          "bottom_wall_zone"
+        ],
+        "committed_wall_side": "bottom_wall"
       }
     ],
     "allowed_variant_families_by_cluster": {
@@ -466,11 +475,13 @@
         "cluster_id": "sleep_core",
         "object_id": "bed",
         "intents": [
-          "back_to_wall"
+          "back_to_wall",
+          "face_cluster",
+          "align_with_focal_axis"
         ],
-        "priority": "medium",
+        "priority": "high",
         "reason": "Critical object orientation emitted by macro concept.",
-        "target_region": "window_side_zone"
+        "target_cluster_id": "work_study"
       },
       {
         "cluster_id": "storage_core",
@@ -487,46 +498,71 @@
         "object_id": "desk",
         "intents": [
           "back_to_wall",
+          "face_cluster",
+          "align_with_focal_axis",
           "front_to_open_space"
         ],
-        "priority": "medium",
+        "priority": "high",
         "reason": "Critical object orientation emitted by macro concept.",
-        "target_region": "window_side_zone"
+        "target_cluster_id": "sleep_core"
       }
     ],
     "object_viewing_pairs": [],
-    "primary_pair_contracts": [],
+    "primary_pair_contracts": [
+      {
+        "pair_type": "opposite_walls",
+        "cluster_a": "sleep_core",
+        "cluster_b": "work_study",
+        "strength": "high",
+        "required": true
+      },
+      {
+        "pair_type": "supports_use_axis",
+        "cluster_a": "sleep_core",
+        "cluster_b": "work_study",
+        "strength": "medium",
+        "required": true
+      }
+    ],
     "anchor_region_preferences_by_cluster": {
       "sleep_core": {
-        "zone_assignment": "window_side_zone",
+        "zone_assignment": "top_wall_zone",
+        "committed_region_ids": [
+          "top_wall_zone"
+        ],
+        "committed_wall_side": "top_wall",
         "required_region_ids": [],
         "forbidden_region_ids": [
-          "center_access_lane",
-          "center_openness_core"
+          "center_access_lane"
         ],
         "preferred_region_ids": [
-          "window_side_zone",
+          "top_wall_zone",
           "quiet_private_deep_zone",
+          "window_side_zone",
           "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "wall_claim": "strong",
-        "center_usage": "none",
-        "preferred_wall_side": "",
-        "anchor_strength": "medium",
-        "scenario_role": "support",
+        "center_usage": "partial",
+        "preferred_wall_side": "top_wall",
+        "anchor_strength": "strong",
+        "scenario_role": "primary",
         "entry_relation": "avoid_direct_entry_conflict",
         "daylight_relation": "neutral",
         "placement_bias": "wall_backed",
         "placement_behavior": {
           "wall_backing": "required",
-          "front_space": "preferred",
+          "front_space": "required",
           "daylight_blocking": "neutral",
-          "pose_flexibility": "medium"
+          "pose_flexibility": "low"
         }
       },
       "storage_core": {
         "zone_assignment": "left_wall_zone",
+        "committed_region_ids": [
+          "left_wall_zone"
+        ],
+        "committed_wall_side": "left_wall",
         "required_region_ids": [],
         "forbidden_region_ids": [
           "center_openness_core",
@@ -538,7 +574,7 @@
           "edge_loading_zone",
           "right_wall_zone"
         ],
-        "wall_claim": "strong",
+        "wall_claim": "medium",
         "center_usage": "none",
         "preferred_wall_side": "",
         "anchor_strength": "medium",
@@ -554,34 +590,53 @@
         }
       },
       "work_study": {
-        "zone_assignment": "window_side_zone",
+        "zone_assignment": "bottom_wall_zone",
+        "committed_region_ids": [
+          "bottom_wall_zone"
+        ],
+        "committed_wall_side": "bottom_wall",
         "required_region_ids": [],
         "forbidden_region_ids": [
           "center_openness_core"
         ],
         "preferred_region_ids": [
+          "bottom_wall_zone",
           "window_side_zone",
           "daylight_biased_zone",
-          "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "wall_claim": "strong",
         "center_usage": "none",
-        "preferred_wall_side": "",
-        "anchor_strength": "medium",
-        "scenario_role": "support",
+        "preferred_wall_side": "bottom_wall",
+        "anchor_strength": "strong",
+        "scenario_role": "secondary",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
         "placement_bias": "wall_backed",
         "placement_behavior": {
           "wall_backing": "required",
-          "front_space": "preferred",
+          "front_space": "required",
           "daylight_blocking": "neutral",
-          "pose_flexibility": "medium"
+          "pose_flexibility": "low"
         }
       }
     },
-    "anchor_pair_contracts": [],
+    "anchor_pair_contracts": [
+      {
+        "pair_type": "opposite_walls",
+        "cluster_a": "sleep_core",
+        "cluster_b": "work_study",
+        "strength": "high",
+        "required": true
+      },
+      {
+        "pair_type": "supports_use_axis",
+        "cluster_a": "sleep_core",
+        "cluster_b": "work_study",
+        "strength": "medium",
+        "required": true
+      }
+    ],
     "object_solver_policy": {
       "placement_mode": "anchor_first_object_level",
       "anchor_stage_first": true,
@@ -590,7 +645,8 @@
       "micro_refine_inside_solver": true,
       "placement_order_by_cluster": {
         "sleep_core": [
-          "bed"
+          "bed",
+          "nightstand"
         ],
         "storage_core": [
           "wardrobe",
@@ -606,8 +662,7 @@
           "bed"
         ],
         "storage_core": [
-          "wardrobe",
-          "bookshelf"
+          "wardrobe"
         ],
         "work_study": [
           "desk",
@@ -615,21 +670,37 @@
         ]
       },
       "droppable_ids_by_cluster": {
-        "sleep_core": [],
+        "sleep_core": [
+          "nightstand"
+        ],
         "storage_core": [],
+        "work_study": []
+      },
+      "required_support_ids_by_cluster": {
+        "sleep_core": [],
+        "storage_core": [
+          "bookshelf"
+        ],
+        "work_study": []
+      },
+      "relaxable_required_ids_by_cluster": {
+        "sleep_core": [],
+        "storage_core": [
+          "bookshelf"
+        ],
         "work_study": []
       }
     },
     "topology_policy": {
       "preserve_entry_landing": true,
       "preserve_primary_corridor": true,
-      "reserve_center_degree": "very_high",
+      "reserve_center_degree": "medium",
       "wall_loading_bias": "focal_wall_first",
-      "daylight_bias": "primary_support_preferred",
+      "daylight_bias": "secondary_cluster_preferred",
       "entry_avoidance_strength": "high",
-      "secondary_zone_placement_bias": "edge_recede",
+      "secondary_zone_placement_bias": "focal_edge",
       "style_name": "balanced",
-      "style_density_target": "balanced_to_medium",
+      "style_density_target": "medium",
       "style_visual_balance": "calm"
     },
     "macro_constraints": {
@@ -650,27 +721,42 @@
         }
       ],
       "cluster_separation_preferences": [],
-      "cluster_alignment_preferences": [],
+      "cluster_alignment_preferences": [
+        {
+          "a": "sleep_core",
+          "b": "work_study",
+          "preference": "focal_face_axis",
+          "priority": "high"
+        }
+      ],
       "anchor_region_constraints": [
         {
           "cluster_id": "sleep_core",
+          "committed_region_ids": [
+            "top_wall_zone"
+          ],
+          "committed_wall_side": "top_wall",
           "required_region_ids": [],
           "preferred_region_ids": [
+            "top_wall_zone",
             "quiet_private_deep_zone",
             "window_side_zone",
             "bottom_wall_zone",
             "edge_loading_zone"
           ],
           "forbidden_region_ids": [
-            "center_access_lane",
-            "center_openness_core"
+            "center_access_lane"
           ],
-          "preferred_wall_side": "",
-          "anchor_strength": "medium",
-          "scenario_role": "support"
+          "preferred_wall_side": "top_wall",
+          "anchor_strength": "strong",
+          "scenario_role": "primary"
         },
         {
           "cluster_id": "storage_core",
+          "committed_region_ids": [
+            "left_wall_zone"
+          ],
+          "committed_wall_side": "left_wall",
           "required_region_ids": [],
           "preferred_region_ids": [
             "left_wall_zone",
@@ -688,19 +774,23 @@
         },
         {
           "cluster_id": "work_study",
+          "committed_region_ids": [
+            "bottom_wall_zone"
+          ],
+          "committed_wall_side": "bottom_wall",
           "required_region_ids": [],
           "preferred_region_ids": [
+            "bottom_wall_zone",
             "window_side_zone",
             "daylight_biased_zone",
-            "bottom_wall_zone",
             "edge_loading_zone"
           ],
           "forbidden_region_ids": [
             "center_openness_core"
           ],
-          "preferred_wall_side": "",
-          "anchor_strength": "medium",
-          "scenario_role": "support"
+          "preferred_wall_side": "bottom_wall",
+          "anchor_strength": "strong",
+          "scenario_role": "secondary"
         }
       ]
     },
@@ -711,17 +801,20 @@
         "dominant_anchor_correct",
         "workflow_preserved"
       ],
-      "required_pair_contracts": [],
+      "required_pair_contracts": [
+        "opposite_walls",
+        "supports_use_axis"
+      ],
       "required_center_preservation": "medium",
       "required_entry_preservation": true
     },
     "variant_bias_weights": {
       "family_match_weight": 1.45,
-      "center_preserve_weight": 1.25,
+      "center_preserve_weight": 1.1,
       "focal_axis_weight": 1.55,
       "entry_clear_weight": 1.45,
       "wall_loading_weight": 1.35,
-      "daylight_alignment_weight": 1.2,
+      "daylight_alignment_weight": 1.05,
       "edge_loading_weight": 1.15,
       "symmetry_weight": 1.35
     },
@@ -733,20 +826,52 @@
     },
     "llm_guided": false,
     "guidance_notes": [],
-    "diversity_signature": "focal_axis|scenario=focal_axis_top_bottom|center=very_high|wall=focal_wall_first|sleep_core:window_side_zone::none:strong,storage_core:left_wall_zone::none:strong,work_study:window_side_zone::none:strong"
+    "material_macro_signature_target": "sleep_core:top_wall_zone|storage_core:left_wall_zone|work_study:bottom_wall_zone",
+    "planned_material_macro_signature": "sleep_core:top_wall_zone|storage_core:left_wall_zone|work_study:bottom_wall_zone",
+    "diversity_signature": "focal_axis|scenario=focal_axis_top_bottom|center=medium|wall=focal_wall_first|sleep_core:top_wall_zone:top_wall:partial:strong,storage_core:left_wall_zone::none:medium,work_study:bottom_wall_zone:bottom_wall:none:strong",
+    "pre_solve_design_softening": {
+      "applied": true,
+      "reason": "dense_requested_floor_objects_design_constraints_softened",
+      "requested_floor_object_count": 5,
+      "safety_policy": "door_landing_and_corridor_constraints_remain_hard",
+      "changes": [
+        {
+          "cluster_id": "sleep_core",
+          "changes": {
+            "wall_backing": "preferred",
+            "front_space": "preferred"
+          }
+        },
+        {
+          "cluster_id": "storage_core",
+          "changes": {
+            "wall_backing": "preferred",
+            "wall_claim": "medium"
+          }
+        },
+        {
+          "cluster_id": "work_study",
+          "changes": {
+            "wall_backing": "preferred",
+            "front_space": "preferred"
+          }
+        }
+      ]
+    }
   },
+  "material_macro_signature_target": "sleep_core:top_wall_zone|storage_core:left_wall_zone|work_study:bottom_wall_zone",
   "cluster_affinities": [
     {
       "cluster_id": "sleep_core",
       "prefer": [
         "wall",
         "recess_or_edge",
-        "far_from_entry"
+        "far_from_entry",
+        "center"
       ],
       "avoid": [
         "entry_blocking",
-        "main_path",
-        "center"
+        "main_path"
       ],
       "priority": "high",
       "reason": "Projection from concept zone assignment."
@@ -762,7 +887,7 @@
         "main_path",
         "center"
       ],
-      "priority": "high",
+      "priority": "medium",
       "reason": "Projection from concept zone assignment."
     },
     {
@@ -789,12 +914,22 @@
         "face_cluster",
         "inward_to_room"
       ],
-      "target_cluster_id": "storage_core",
+      "target_cluster_id": "work_study",
       "priority": "high",
       "reason": "Projection from concept wall/center/focal policy."
     },
     {
       "cluster_id": "storage_core",
+      "intents": [
+        "back_to_wall",
+        "axis_parallel_wall"
+      ],
+      "target_cluster_id": null,
+      "priority": "medium",
+      "reason": "Projection from concept wall/center/focal policy."
+    },
+    {
+      "cluster_id": "work_study",
       "intents": [
         "back_to_wall",
         "axis_parallel_wall",
@@ -804,16 +939,6 @@
       "target_cluster_id": "sleep_core",
       "priority": "high",
       "reason": "Projection from concept wall/center/focal policy."
-    },
-    {
-      "cluster_id": "work_study",
-      "intents": [
-        "back_to_wall",
-        "axis_parallel_wall"
-      ],
-      "target_cluster_id": null,
-      "priority": "medium",
-      "reason": "Projection from concept wall/center/focal policy."
     }
   ],
   "object_orientations": [
@@ -821,11 +946,13 @@
       "cluster_id": "sleep_core",
       "object_id": "bed",
       "intents": [
-        "back_to_wall"
+        "back_to_wall",
+        "face_cluster",
+        "align_with_focal_axis"
       ],
-      "priority": "medium",
+      "priority": "high",
       "reason": "Critical object orientation emitted by macro concept.",
-      "target_region": "window_side_zone"
+      "target_cluster_id": "work_study"
     },
     {
       "cluster_id": "storage_core",
@@ -842,45 +969,55 @@
       "object_id": "desk",
       "intents": [
         "back_to_wall",
+        "face_cluster",
+        "align_with_focal_axis",
         "front_to_open_space"
       ],
-      "priority": "medium",
+      "priority": "high",
       "reason": "Critical object orientation emitted by macro concept.",
-      "target_region": "window_side_zone"
+      "target_cluster_id": "sleep_core"
     }
   ],
   "object_viewing_pairs": [],
   "anchor_region_preferences_by_cluster": {
     "sleep_core": {
-      "zone_assignment": "window_side_zone",
+      "zone_assignment": "top_wall_zone",
+      "committed_region_ids": [
+        "top_wall_zone"
+      ],
+      "committed_wall_side": "top_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "center_access_lane",
-        "center_openness_core"
+        "center_access_lane"
       ],
       "preferred_region_ids": [
-        "window_side_zone",
+        "top_wall_zone",
         "quiet_private_deep_zone",
+        "window_side_zone",
         "bottom_wall_zone",
         "edge_loading_zone"
       ],
       "wall_claim": "strong",
-      "center_usage": "none",
-      "preferred_wall_side": "",
-      "anchor_strength": "medium",
-      "scenario_role": "support",
+      "center_usage": "partial",
+      "preferred_wall_side": "top_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "primary",
       "entry_relation": "avoid_direct_entry_conflict",
       "daylight_relation": "neutral",
       "placement_bias": "wall_backed",
       "placement_behavior": {
         "wall_backing": "required",
-        "front_space": "preferred",
+        "front_space": "required",
         "daylight_blocking": "neutral",
-        "pose_flexibility": "medium"
+        "pose_flexibility": "low"
       }
     },
     "storage_core": {
       "zone_assignment": "left_wall_zone",
+      "committed_region_ids": [
+        "left_wall_zone"
+      ],
+      "committed_wall_side": "left_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
         "center_openness_core",
@@ -892,7 +1029,7 @@
         "edge_loading_zone",
         "right_wall_zone"
       ],
-      "wall_claim": "strong",
+      "wall_claim": "medium",
       "center_usage": "none",
       "preferred_wall_side": "",
       "anchor_strength": "medium",
@@ -908,63 +1045,75 @@
       }
     },
     "work_study": {
-      "zone_assignment": "window_side_zone",
+      "zone_assignment": "bottom_wall_zone",
+      "committed_region_ids": [
+        "bottom_wall_zone"
+      ],
+      "committed_wall_side": "bottom_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
         "center_openness_core"
       ],
       "preferred_region_ids": [
+        "bottom_wall_zone",
         "window_side_zone",
         "daylight_biased_zone",
-        "bottom_wall_zone",
         "edge_loading_zone"
       ],
       "wall_claim": "strong",
       "center_usage": "none",
-      "preferred_wall_side": "",
-      "anchor_strength": "medium",
-      "scenario_role": "support",
+      "preferred_wall_side": "bottom_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "secondary",
       "entry_relation": "neutral",
       "daylight_relation": "neutral",
       "placement_bias": "wall_backed",
       "placement_behavior": {
         "wall_backing": "required",
-        "front_space": "preferred",
+        "front_space": "required",
         "daylight_blocking": "neutral",
-        "pose_flexibility": "medium"
+        "pose_flexibility": "low"
       }
     }
   },
   "anchor_layout_hints_by_cluster": {
     "sleep_core": {
-      "zone_assignment": "window_side_zone",
+      "zone_assignment": "top_wall_zone",
+      "committed_region_ids": [
+        "top_wall_zone"
+      ],
+      "committed_wall_side": "top_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "center_access_lane",
-        "center_openness_core"
+        "center_access_lane"
       ],
       "preferred_region_ids": [
-        "window_side_zone",
+        "top_wall_zone",
         "quiet_private_deep_zone",
+        "window_side_zone",
         "bottom_wall_zone",
         "edge_loading_zone"
       ],
       "role_kind": "sleep",
       "wall_claim": "strong",
-      "center_usage": "none",
-      "preferred_wall_side": "",
-      "anchor_strength": "medium",
-      "scenario_role": "support",
+      "center_usage": "partial",
+      "preferred_wall_side": "top_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "primary",
       "placement_bias": "wall_backed",
       "placement_behavior": {
         "wall_backing": "required",
-        "front_space": "preferred",
+        "front_space": "required",
         "daylight_blocking": "neutral",
-        "pose_flexibility": "medium"
+        "pose_flexibility": "low"
       }
     },
     "storage_core": {
       "zone_assignment": "left_wall_zone",
+      "committed_region_ids": [
+        "left_wall_zone"
+      ],
+      "committed_wall_side": "left_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
         "center_openness_core",
@@ -977,7 +1126,7 @@
         "right_wall_zone"
       ],
       "role_kind": "storage",
-      "wall_claim": "strong",
+      "wall_claim": "medium",
       "center_usage": "none",
       "preferred_wall_side": "",
       "anchor_strength": "medium",
@@ -991,33 +1140,52 @@
       }
     },
     "work_study": {
-      "zone_assignment": "window_side_zone",
+      "zone_assignment": "bottom_wall_zone",
+      "committed_region_ids": [
+        "bottom_wall_zone"
+      ],
+      "committed_wall_side": "bottom_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
         "center_openness_core"
       ],
       "preferred_region_ids": [
+        "bottom_wall_zone",
         "window_side_zone",
         "daylight_biased_zone",
-        "bottom_wall_zone",
         "edge_loading_zone"
       ],
       "role_kind": "work",
       "wall_claim": "strong",
       "center_usage": "none",
-      "preferred_wall_side": "",
-      "anchor_strength": "medium",
-      "scenario_role": "support",
+      "preferred_wall_side": "bottom_wall",
+      "anchor_strength": "strong",
+      "scenario_role": "secondary",
       "placement_bias": "wall_backed",
       "placement_behavior": {
         "wall_backing": "required",
-        "front_space": "preferred",
+        "front_space": "required",
         "daylight_blocking": "neutral",
-        "pose_flexibility": "medium"
+        "pose_flexibility": "low"
       }
     }
   },
-  "anchor_pair_contracts": [],
+  "anchor_pair_contracts": [
+    {
+      "pair_type": "opposite_walls",
+      "cluster_a": "sleep_core",
+      "cluster_b": "work_study",
+      "strength": "high",
+      "required": true
+    },
+    {
+      "pair_type": "supports_use_axis",
+      "cluster_a": "sleep_core",
+      "cluster_b": "work_study",
+      "strength": "medium",
+      "required": true
+    }
+  ],
   "object_solver_policy": {
     "placement_mode": "anchor_first_object_level",
     "anchor_stage_first": true,
@@ -1026,7 +1194,8 @@
     "micro_refine_inside_solver": true,
     "placement_order_by_cluster": {
       "sleep_core": [
-        "bed"
+        "bed",
+        "nightstand"
       ],
       "storage_core": [
         "wardrobe",
@@ -1042,8 +1211,7 @@
         "bed"
       ],
       "storage_core": [
-        "wardrobe",
-        "bookshelf"
+        "wardrobe"
       ],
       "work_study": [
         "desk",
@@ -1051,8 +1219,24 @@
       ]
     },
     "droppable_ids_by_cluster": {
-      "sleep_core": [],
+      "sleep_core": [
+        "nightstand"
+      ],
       "storage_core": [],
+      "work_study": []
+    },
+    "required_support_ids_by_cluster": {
+      "sleep_core": [],
+      "storage_core": [
+        "bookshelf"
+      ],
+      "work_study": []
+    },
+    "relaxable_required_ids_by_cluster": {
+      "sleep_core": [],
+      "storage_core": [
+        "bookshelf"
+      ],
       "work_study": []
     }
   },
@@ -1288,11 +1472,11 @@
   },
   "variant_bias_weights": {
     "family_match_weight": 1.45,
-    "center_preserve_weight": 1.25,
+    "center_preserve_weight": 1.1,
     "focal_axis_weight": 1.55,
     "entry_clear_weight": 1.45,
     "wall_loading_weight": 1.35,
-    "daylight_alignment_weight": 1.2,
+    "daylight_alignment_weight": 1.05,
     "edge_loading_weight": 1.15,
     "symmetry_weight": 1.35
   },
@@ -1303,26 +1487,29 @@
       "dominant_anchor_correct",
       "workflow_preserved"
     ],
-    "required_pair_contracts": [],
+    "required_pair_contracts": [
+      "opposite_walls",
+      "supports_use_axis"
+    ],
     "required_center_preservation": "medium",
     "required_entry_preservation": true
   },
   "cluster_relations": [
     {
       "a": "sleep_core",
-      "b": "storage_core",
+      "b": "work_study",
       "relation": "near",
       "priority": "high",
-      "reason": "Projection from primary_pair_contract=face_each_other."
+      "reason": "Projection from primary_pair_contract=opposite_walls."
     }
   ],
   "cluster_directional_relations": [
     {
       "a": "sleep_core",
-      "b": "storage_core",
-      "relation": "face_each_other",
+      "b": "work_study",
+      "relation": "access_faces_other",
       "priority": "high",
-      "reason": "Projection from primary_pair_contract=face_each_other."
+      "reason": "Projection from primary_pair_contract=supports_use_axis."
     }
   ],
   "circulation_plan": {
@@ -1332,9 +1519,9 @@
   "layout_intent_profile": {
     "focus_mode": "viewing",
     "primary_cluster_id": "sleep_core",
-    "secondary_cluster_id": "storage_core",
-    "circulation_priority": "high",
-    "center_open_preference": "high",
+    "secondary_cluster_id": "work_study",
+    "circulation_priority": "medium",
+    "center_open_preference": "medium",
     "support_cluster_behavior": "balanced",
     "distribution_mode": "focal_grouped"
   },

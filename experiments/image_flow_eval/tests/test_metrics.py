@@ -52,7 +52,9 @@ class ImageMetricTest(unittest.TestCase):
 
             self.assertEqual(result.status, "passed")
             self.assertEqual(result.value, 0.0)
-            self.assertTrue((output_dir / "case" / "baseline" / "reference_diff.png").exists())
+            self.assertTrue(
+                (output_dir / "case" / "baseline" / "reference_diff.png").exists()
+            )
 
     def test_masked_inside_change_preserves_outside_psnr(self) -> None:
         reference = np.zeros((4, 4, 3), dtype=np.uint8)

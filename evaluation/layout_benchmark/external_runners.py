@@ -124,7 +124,11 @@ def run_external_case(
                         else:
                             payload["runtime_s"] = elapsed_s
                             payload["exit_code"] = completed.returncode
-                            payload["model"] = model or DEFAULT_MODEL
+                            payload["model"] = _external_model_label(
+                                system_id,
+                                env,
+                                model,
+                            )
                             payload["attempt_count"] = attempt_number
                             payload["retry_count"] = attempt_number - 1
                             if attempts:
@@ -183,7 +187,7 @@ def run_external_case(
                 "runtime_s": last_attempt.get("runtime_s", 0.0),
                 "stderr_preview": _string(last_attempt.get("stderr_preview")),
                 "objects": [],
-                "model": model or DEFAULT_MODEL,
+                "model": _external_model_label(system_id, env, model),
                 "attempt_count": attempt_number,
                 "retry_count": attempt_number - 1,
                 "attempts": attempts,
@@ -232,7 +236,7 @@ def _external_command(
     locked_model = model or DEFAULT_MODEL
     if system_id == "idesign_openai":
         env["IDESIGN_USE_OPENAI"] = "true"
-        env["IDESIGN_OPENAI_MODEL"] = locked_model
+        env["IDESIGN_OPENAI_MODEL"] = env.get("IDESIGN_OPENAI_MODEL") or locked_model
         cwd = REPO_ROOT / "other_systems" / "IDesign"
         return (
             [
@@ -254,13 +258,15 @@ def _external_command(
 
     if system_id == "flairgpt_openai":
         env["FLAIRGPT_USE_OPENAI"] = "true"
-        env["FLAIRGPT_OPENAI_MODEL"] = locked_model
+        env["FLAIRGPT_OPENAI_MODEL"] = env.get("FLAIRGPT_OPENAI_MODEL") or locked_model
+        if not env.get("OPENAI_API_KEY") and env.get("FLAIRGPT_OPENAI_API_KEY"):
+            env["OPENAI_API_KEY"] = env["FLAIRGPT_OPENAI_API_KEY"]
         cwd = REPO_ROOT / "other_systems" / "FlairGPT" / "Scene_Synthesis"
         return (
             [
                 _python_executable("FLAIRGPT_PYTHON", "FLAIRGPT_ENV_PREFIX")
                 or sys.executable,
-                str(cwd / "scene_synthesis.py"),
+                str(cwd / "run_notebook_benchmark_case.py"),
                 "--scene-descriptor",
                 _case_description(benchmark_case),
                 "--output-json",
@@ -273,6 +279,19 @@ def _external_command(
         )
 
     raise ValueError(f"Unsupported external system: {system_id}")
+
+
+def _external_model_label(
+    system_id: str,
+    env: Mapping[str, str],
+    model: str,
+) -> str:
+    system_id = _canonical_system_id(system_id)
+    if system_id == "idesign_openai":
+        return env.get("IDESIGN_OPENAI_MODEL") or model or DEFAULT_MODEL
+    if system_id == "flairgpt_openai":
+        return env.get("FLAIRGPT_OPENAI_MODEL") or model or DEFAULT_MODEL
+    return model or DEFAULT_MODEL
 
 
 def _canonical_system_id(system_id: str) -> str:

@@ -9,6 +9,7 @@ import { UserInputPanel } from './components/UserInputPanel';
 import { Toolbar } from './components/Toolbar';
 import { LayoutVariantsGallery } from './components/LayoutVariantsGallery';
 import { ThreeDPreviewPanel } from './components/ThreeDPreviewPanel';
+import { isEvalHooksEnabled } from './evalHooks';
 import { useEditorStore } from './store';
 import sampleFloorplan from './sample_floorplan.json';
 
@@ -26,11 +27,13 @@ export const App: React.FC = () => {
     setSavedLayouts,
     setSavedRenders,
     appendRunLog,
+    setViewMode,
     viewMode,
     layoutVariants,
     variantPickerOpen,
     selectedSavedRenderId,
   } = useEditorStore();
+  const evalHooksEnabled = isEvalHooksEnabled();
   const [bootError, setBootError] = useState<string | null>(null);
   const [leftDockOpen, setLeftDockOpen] = useState(true);
   const [rightDockOpen, setRightDockOpen] = useState(true);
@@ -44,6 +47,36 @@ export const App: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
+      if (evalHooksEnabled) {
+        setAuthSession('__tknt_eval__', {
+          id: 'eval_user',
+          email: 'eval@local',
+          display_name: 'Eval User',
+          tenant_id: tenantId,
+        });
+        setAuthResolved(true);
+        setInventory([]);
+        setSavedLayouts([]);
+        setSavedRenders([]);
+        setViewMode('3d');
+        try {
+          const items = await fetchInventory(tenantId);
+          if (cancelled) {
+            return;
+          }
+          setInventory(items);
+          appendRunLog(`Loaded eval inventory: ${items.length} items`);
+        } catch (loadError) {
+          if (cancelled) {
+            return;
+          }
+          const message =
+            loadError instanceof Error ? loadError.message : 'unknown error';
+          setInventory([]);
+          appendRunLog(`Eval inventory load failed: ${message}`);
+        }
+        return;
+      }
       try {
         const user = await getCurrentUser();
         if (cancelled) {
@@ -69,9 +102,23 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [clearAuthSession, setAuthResolved, setAuthSession]);
+  }, [
+    clearAuthSession,
+    evalHooksEnabled,
+    appendRunLog,
+    setAuthResolved,
+    setAuthSession,
+    setInventory,
+    setSavedLayouts,
+    setSavedRenders,
+    setViewMode,
+    tenantId,
+  ]);
 
   useEffect(() => {
+    if (evalHooksEnabled) {
+      return;
+    }
     if (!currentUser) {
       return;
     }
@@ -115,6 +162,7 @@ export const App: React.FC = () => {
     setSavedLayouts,
     setSavedRenders,
     tenantId,
+    evalHooksEnabled,
   ]);
 
   useEffect(() => {

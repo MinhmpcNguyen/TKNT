@@ -231,8 +231,13 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             concept["macro_scenario"]["scenario_id"] for concept in concepts
         }
         self.assertEqual(len(scenario_ids), 5)
+        planned_material_signatures = {
+            concept["planned_material_macro_signature"] for concept in concepts
+        }
+        self.assertGreaterEqual(len(planned_material_signatures), 3)
         for concept in concepts:
             self.assertIn("macro_scenario", concept)
+            self.assertIn("material_macro_signature_target", concept)
             self.assertIn("anchor_region_preferences_by_cluster", concept)
             self.assertIn("anchor_pair_contracts", concept)
             allowed = concept["allowed_variant_families_by_cluster"]
@@ -283,6 +288,14 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             anchor_hints = concept["anchor_region_preferences_by_cluster"]
             for cluster_id in ("main_seating", "media"):
                 self.assertFalse(anchor_hints[cluster_id]["required_region_ids"])
+                self.assertEqual(
+                    anchor_hints[cluster_id]["committed_region_ids"],
+                    [core_rows[cluster_id]["zone_assignment"]],
+                )
+                self.assertEqual(
+                    anchor_hints[cluster_id]["committed_wall_side"],
+                    core_rows[cluster_id]["committed_wall_side"],
+                )
                 self.assertIn(
                     core_rows[cluster_id]["zone_assignment"],
                     anchor_hints[cluster_id]["preferred_region_ids"],
@@ -305,6 +318,17 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
                 "preferred_region_ids"
             ]
+        )
+        first_main_row = next(
+            row
+            for row in concepts[0]["cluster_zone_plan"]
+            if row["cluster_id"] == "main_seating"
+        )
+        self.assertEqual(
+            solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
+                "committed_region_ids"
+            ],
+            first_main_row["committed_region_ids"],
         )
         self.assertFalse(
             solver_plan["anchor_layout_hints_by_cluster"]["main_seating"][
@@ -392,6 +416,10 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             )
             self.assertEqual(sleep_row["role_kind"], "sleep")
             self.assertFalse(sleep_row["required_region_ids"])
+            self.assertEqual(
+                sleep_row["committed_region_ids"],
+                [sleep_row["zone_assignment"]],
+            )
             self.assertIn(
                 sleep_row["zone_assignment"],
                 sleep_row["preferred_region_ids"],
@@ -419,6 +447,16 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
     ) -> None:
         room_model = _bedroom_room_model()
         clusters = _bedroom_media_clusters()
+        request_contract = clusters["request_contract"]
+        assert isinstance(request_contract, dict)
+        objects = request_contract["objects"]
+        assert isinstance(objects, list)
+        objects[0] = {
+            "object_type": "bed",
+            "intent": "must_keep",
+            "evidence": "bed faces the tv console",
+            "relation_edges": [{"relation": "face", "target": "tv_console"}],
+        }
 
         bundle = SeedConceptGenerator().generate_bundle(
             room_model_json=room_model,
@@ -442,8 +480,8 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
                     "relation": "view_target",
                     "required": True,
                     "priority": "high",
-                    "source": "request_contract_group",
-                    "evidence": "media_pair composition tv must remain oriented to bed",
+                    "source": "request_contract_relation_edge",
+                    "evidence": "bed faces the tv console",
                 }
             ],
         )
@@ -479,7 +517,7 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             ],
         )
 
-    def test_bed_and_tv_default_to_view_target_without_explicit_relation(
+    def test_bed_and_tv_without_explicit_relation_does_not_create_view_target(
         self,
     ) -> None:
         room_model = _bedroom_room_model()
@@ -495,17 +533,22 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             use_llm=False,
         )
 
-        pair = bundle["concepts"][0]["object_viewing_pairs"][0]
-        self.assertEqual(pair["viewer_object_id"], "bed")
-        self.assertEqual(pair["target_object_id"], "tv_console")
-        self.assertEqual(pair["relation"], "view_target")
-        self.assertEqual(pair["source"], "affordance_default")
+        self.assertEqual(bundle["concepts"][0]["object_viewing_pairs"], [])
 
     def test_support_layout_role_does_not_block_bedroom_primary_secondary_inference(
         self,
     ) -> None:
         room_model = _bedroom_room_model()
         clusters = _bedroom_media_clusters()
+        request_contract = clusters["request_contract"]
+        assert isinstance(request_contract, dict)
+        objects = request_contract["objects"]
+        assert isinstance(objects, list)
+        objects[0] = {
+            "object_type": "bed",
+            "intent": "must_keep",
+            "relation_edges": [{"relation": "face", "target": "tv_console"}],
+        }
         clusters["semantic_layout_program"] = {
             "active_clusters": [
                 {
@@ -547,7 +590,7 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             "view_target",
         )
 
-    def test_request_contract_object_evidence_can_create_viewing_pair(self) -> None:
+    def test_request_contract_relation_edge_can_create_viewing_pair(self) -> None:
         room_model = _bedroom_room_model()
         clusters = _bedroom_media_clusters()
         request_contract = clusters["request_contract"]
@@ -560,6 +603,7 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             "intent": "must_keep",
             "evidence": "A tv should face the bed",
             "reason": "TV support is required to satisfy the facing relationship.",
+            "relation_edges": [{"relation": "faces", "target": "bed"}],
         }
 
         bundle = SeedConceptGenerator().generate_bundle(
@@ -573,7 +617,52 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
         self.assertEqual(pair["viewer_object_id"], "bed")
         self.assertEqual(pair["target_object_id"], "tv_console")
         self.assertEqual(pair["relation"], "view_target")
-        self.assertEqual(pair["source"], "request_contract_object")
+        self.assertEqual(pair["source"], "request_contract_relation_edge")
+
+    def test_prose_evidence_does_not_create_passive_support_viewing_pair(
+        self,
+    ) -> None:
+        room_model = _room_model()
+        clusters = _clusters()
+        cluster_rows = clusters["clusters"]
+        assert isinstance(cluster_rows, list)
+        main_seating = cluster_rows[0]
+        assert isinstance(main_seating, dict)
+        main_seating["members"] = ["sofa", "coffee_table"]
+        main_seating["anchors"] = ["sofa"]
+        clusters["request_contract"] = {
+            "objects": [
+                {
+                    "object_type": "sofa",
+                    "intent": "must_keep",
+                    "evidence": "sofa facing a tv console",
+                    "relation_edges": [{"relation": "facing", "target": "tv_console"}],
+                },
+                {
+                    "object_type": "coffee_table",
+                    "intent": "must_keep",
+                    "evidence": "include a sofa facing a TV console, a coffee table, a rug",
+                },
+                {"object_type": "tv_console", "intent": "must_keep"},
+            ],
+            "groups": [],
+        }
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=1,
+            use_llm=False,
+        )
+
+        pairs = bundle["concepts"][0]["object_viewing_pairs"]
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["viewer_object_id"], "sofa")
+        self.assertEqual(pairs[0]["target_object_id"], "tv_console")
+        self.assertNotIn(
+            "coffee_table",
+            {str(pair.get("viewer_object_id")) for pair in pairs},
+        )
 
     def test_living_profile_traits_do_not_relabel_seed_clusters_as_kitchen(
         self,

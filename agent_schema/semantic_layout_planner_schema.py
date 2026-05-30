@@ -17,6 +17,7 @@ DropOrderBias = Literal[
     "drop_last",
 ]
 SizeTier = Literal["S", "M", "L"]
+SizeIntent = Literal["compact", "standard", "generous"]
 ObjectRole = Literal[
     "dominant_anchor",
     "workflow_anchor",
@@ -98,6 +99,8 @@ class TierCountObjectHint(BaseModel):
     drop_order_bias: DropOrderBias = "neutral"
     preserve_level: PreserveLevel = "medium"
     preferred_size_tier: SizeTier | None = None
+    size_intent: SizeIntent | None = None
+    size_reason: str | None = None
 
 
 class TierCountHints(BaseModel):

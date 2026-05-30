@@ -47,7 +47,14 @@
       "max_x": 3000,
       "max_y": 4000
     },
-    "ceiling_height_mm": 2600
+    "ceiling_height_mm": 2600,
+    "wall_thickness_mm": 100,
+    "wall_thickness_by_wall_id": {
+      "wall_1": 100,
+      "wall_2": 100,
+      "wall_3": 100,
+      "wall_4": 100
+    }
   },
   "openings": {
     "doors": [],
@@ -418,6 +425,7 @@
             "y": 0
           },
           "length_mm": 3000,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -0.0,
             "y": 1.0
@@ -434,6 +442,7 @@
             "y": 4000
           },
           "length_mm": 4000,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -1.0,
             "y": 0.0
@@ -450,6 +459,7 @@
             "y": 4000
           },
           "length_mm": 3000,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -0.0,
             "y": -1.0
@@ -466,6 +476,7 @@
             "y": 0
           },
           "length_mm": 4000,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": 1.0,
             "y": 0.0
@@ -578,27 +589,27 @@
       "cluster_id": "sleep_core",
       "object_id": "bed",
       "category": "bed",
-      "x": 1050,
-      "y": 0,
+      "x": 550,
+      "y": 50,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 1910,
       "h": 1690,
       "rect": [
-        1050,
-        0,
-        2960,
-        1690
+        550,
+        50,
+        2460,
+        1740
       ],
       "bbox": {
-        "min_x": 1050,
-        "min_y": 0,
-        "max_x": 2960,
-        "max_y": 1690
+        "min_x": 550,
+        "min_y": 50,
+        "max_x": 2460,
+        "max_y": 1740
       },
       "center": {
-        "x": 2005,
-        "y": 845
+        "x": 1505,
+        "y": 895
       },
       "front_token": "top",
       "front_world": {
@@ -609,33 +620,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "storage_core",
       "object_id": "wardrobe",
       "category": "wardrobe",
-      "x": 600,
-      "y": 3400,
+      "x": 1100,
+      "y": 3350,
       "rot": 180,
       "rotation_ccw": 180,
-      "w": 1750,
-      "h": 510,
+      "w": 810,
+      "h": 600,
       "rect": [
-        600,
-        3400,
-        2350,
-        3910
+        1100,
+        3350,
+        1910,
+        3950
       ],
       "bbox": {
-        "min_x": 600,
-        "min_y": 3400,
-        "max_x": 2350,
-        "max_y": 3910
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
       },
       "center": {
-        "x": 1475,
-        "y": 3655
+        "x": 1505,
+        "y": 3650
       },
       "front_token": "top",
       "front_world": {
@@ -646,33 +662,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "work_study",
       "object_id": "desk",
       "category": "desk",
-      "x": 100,
-      "y": 1500,
+      "x": 50,
+      "y": 1750,
       "rot": 90,
       "rotation_ccw": 90,
       "w": 510,
       "h": 980,
       "rect": [
-        100,
-        1500,
-        610,
-        2480
+        50,
+        1750,
+        560,
+        2730
       ],
       "bbox": {
-        "min_x": 100,
-        "min_y": 1500,
-        "max_x": 610,
-        "max_y": 2480
+        "min_x": 50,
+        "min_y": 1750,
+        "max_x": 560,
+        "max_y": 2730
       },
       "center": {
-        "x": 355,
-        "y": 1990
+        "x": 305,
+        "y": 2240
       },
       "front_token": "top",
       "front_world": {
@@ -683,33 +704,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "sleep_core",
       "object_id": "nightstand",
       "category": "nightstand",
-      "x": 500,
-      "y": 650,
+      "x": 2500,
+      "y": 700,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 430,
       "h": 350,
       "rect": [
-        500,
-        650,
-        930,
-        1000
+        2500,
+        700,
+        2930,
+        1050
       ],
       "bbox": {
-        "min_x": 500,
-        "min_y": 650,
-        "max_x": 930,
-        "max_y": 1000
+        "min_x": 2500,
+        "min_y": 700,
+        "max_x": 2930,
+        "max_y": 1050
       },
       "center": {
-        "x": 715,
-        "y": 825
+        "x": 2715,
+        "y": 875
       },
       "front_token": "top",
       "front_world": {
@@ -720,6 +746,11 @@
       "relative_to": "bed",
       "role": "support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "soft_solver_object",
       "requires_front_access": false
     },
     {
@@ -727,26 +758,26 @@
       "object_id": "chair",
       "category": "chair",
       "x": 300,
-      "y": 1000,
+      "y": 2800,
       "rot": 270,
       "rotation_ccw": 270,
       "w": 450,
       "h": 450,
       "rect": [
         300,
-        1000,
+        2800,
         750,
-        1450
+        3250
       ],
       "bbox": {
         "min_x": 300,
-        "min_y": 1000,
+        "min_y": 2800,
         "max_x": 750,
-        "max_y": 1450
+        "max_y": 3250
       },
       "center": {
         "x": 525,
-        "y": 1225
+        "y": 3025
       },
       "front_token": "top",
       "front_world": {
@@ -757,6 +788,11 @@
       "relative_to": "desk",
       "role": "secondary_support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
@@ -820,27 +856,27 @@
       "cluster_id": "sleep_core",
       "object_id": "bed",
       "category": "bed",
-      "x": 1050,
-      "y": 0,
+      "x": 550,
+      "y": 50,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 1910,
       "h": 1690,
       "rect": [
-        1050,
-        0,
-        2960,
-        1690
+        550,
+        50,
+        2460,
+        1740
       ],
       "bbox": {
-        "min_x": 1050,
-        "min_y": 0,
-        "max_x": 2960,
-        "max_y": 1690
+        "min_x": 550,
+        "min_y": 50,
+        "max_x": 2460,
+        "max_y": 1740
       },
       "center": {
-        "x": 2005,
-        "y": 845
+        "x": 1505,
+        "y": 895
       },
       "front_token": "top",
       "front_world": {
@@ -851,33 +887,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "storage_core",
       "object_id": "wardrobe",
       "category": "wardrobe",
-      "x": 600,
-      "y": 3400,
+      "x": 1100,
+      "y": 3350,
       "rot": 180,
       "rotation_ccw": 180,
-      "w": 1750,
-      "h": 510,
+      "w": 810,
+      "h": 600,
       "rect": [
-        600,
-        3400,
-        2350,
-        3910
+        1100,
+        3350,
+        1910,
+        3950
       ],
       "bbox": {
-        "min_x": 600,
-        "min_y": 3400,
-        "max_x": 2350,
-        "max_y": 3910
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
       },
       "center": {
-        "x": 1475,
-        "y": 3655
+        "x": 1505,
+        "y": 3650
       },
       "front_token": "top",
       "front_world": {
@@ -888,33 +929,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "work_study",
       "object_id": "desk",
       "category": "desk",
-      "x": 100,
-      "y": 1500,
+      "x": 50,
+      "y": 1750,
       "rot": 90,
       "rotation_ccw": 90,
       "w": 510,
       "h": 980,
       "rect": [
-        100,
-        1500,
-        610,
-        2480
+        50,
+        1750,
+        560,
+        2730
       ],
       "bbox": {
-        "min_x": 100,
-        "min_y": 1500,
-        "max_x": 610,
-        "max_y": 2480
+        "min_x": 50,
+        "min_y": 1750,
+        "max_x": 560,
+        "max_y": 2730
       },
       "center": {
-        "x": 355,
-        "y": 1990
+        "x": 305,
+        "y": 2240
       },
       "front_token": "top",
       "front_world": {
@@ -925,33 +971,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "sleep_core",
       "object_id": "nightstand",
       "category": "nightstand",
-      "x": 500,
-      "y": 650,
+      "x": 2500,
+      "y": 700,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 430,
       "h": 350,
       "rect": [
-        500,
-        650,
-        930,
-        1000
+        2500,
+        700,
+        2930,
+        1050
       ],
       "bbox": {
-        "min_x": 500,
-        "min_y": 650,
-        "max_x": 930,
-        "max_y": 1000
+        "min_x": 2500,
+        "min_y": 700,
+        "max_x": 2930,
+        "max_y": 1050
       },
       "center": {
-        "x": 715,
-        "y": 825
+        "x": 2715,
+        "y": 875
       },
       "front_token": "top",
       "front_world": {
@@ -962,6 +1013,11 @@
       "relative_to": "bed",
       "role": "support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "soft_solver_object",
       "requires_front_access": false
     },
     {
@@ -969,26 +1025,26 @@
       "object_id": "chair",
       "category": "chair",
       "x": 300,
-      "y": 1000,
+      "y": 2800,
       "rot": 270,
       "rotation_ccw": 270,
       "w": 450,
       "h": 450,
       "rect": [
         300,
-        1000,
+        2800,
         750,
-        1450
+        3250
       ],
       "bbox": {
         "min_x": 300,
-        "min_y": 1000,
+        "min_y": 2800,
         "max_x": 750,
-        "max_y": 1450
+        "max_y": 3250
       },
       "center": {
         "x": 525,
-        "y": 1225
+        "y": 3025
       },
       "front_token": "top",
       "front_world": {
@@ -999,6 +1055,11 @@
       "relative_to": "desk",
       "role": "secondary_support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     }
   ],
@@ -1007,27 +1068,27 @@
       "cluster_id": "sleep_core",
       "object_id": "bed",
       "category": "bed",
-      "x": 1050,
-      "y": 0,
+      "x": 550,
+      "y": 50,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 1910,
       "h": 1690,
       "rect": [
-        1050,
-        0,
-        2960,
-        1690
+        550,
+        50,
+        2460,
+        1740
       ],
       "bbox": {
-        "min_x": 1050,
-        "min_y": 0,
-        "max_x": 2960,
-        "max_y": 1690
+        "min_x": 550,
+        "min_y": 50,
+        "max_x": 2460,
+        "max_y": 1740
       },
       "center": {
-        "x": 2005,
-        "y": 845
+        "x": 1505,
+        "y": 895
       },
       "front_token": "top",
       "front_world": {
@@ -1038,33 +1099,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "storage_core",
       "object_id": "wardrobe",
       "category": "wardrobe",
-      "x": 600,
-      "y": 3400,
+      "x": 1100,
+      "y": 3350,
       "rot": 180,
       "rotation_ccw": 180,
-      "w": 1750,
-      "h": 510,
+      "w": 810,
+      "h": 600,
       "rect": [
-        600,
-        3400,
-        2350,
-        3910
+        1100,
+        3350,
+        1910,
+        3950
       ],
       "bbox": {
-        "min_x": 600,
-        "min_y": 3400,
-        "max_x": 2350,
-        "max_y": 3910
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
       },
       "center": {
-        "x": 1475,
-        "y": 3655
+        "x": 1505,
+        "y": 3650
       },
       "front_token": "top",
       "front_world": {
@@ -1075,33 +1141,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "work_study",
       "object_id": "desk",
       "category": "desk",
-      "x": 100,
-      "y": 1500,
+      "x": 50,
+      "y": 1750,
       "rot": 90,
       "rotation_ccw": 90,
       "w": 510,
       "h": 980,
       "rect": [
-        100,
-        1500,
-        610,
-        2480
+        50,
+        1750,
+        560,
+        2730
       ],
       "bbox": {
-        "min_x": 100,
-        "min_y": 1500,
-        "max_x": 610,
-        "max_y": 2480
+        "min_x": 50,
+        "min_y": 1750,
+        "max_x": 560,
+        "max_y": 2730
       },
       "center": {
-        "x": 355,
-        "y": 1990
+        "x": 305,
+        "y": 2240
       },
       "front_token": "top",
       "front_world": {
@@ -1112,33 +1183,38 @@
       "relative_to": null,
       "role": "dominant_anchor",
       "priority": "anchor",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     },
     {
       "cluster_id": "sleep_core",
       "object_id": "nightstand",
       "category": "nightstand",
-      "x": 500,
-      "y": 650,
+      "x": 2500,
+      "y": 700,
       "rot": 0,
       "rotation_ccw": 0,
       "w": 430,
       "h": 350,
       "rect": [
-        500,
-        650,
-        930,
-        1000
+        2500,
+        700,
+        2930,
+        1050
       ],
       "bbox": {
-        "min_x": 500,
-        "min_y": 650,
-        "max_x": 930,
-        "max_y": 1000
+        "min_x": 2500,
+        "min_y": 700,
+        "max_x": 2930,
+        "max_y": 1050
       },
       "center": {
-        "x": 715,
-        "y": 825
+        "x": 2715,
+        "y": 875
       },
       "front_token": "top",
       "front_world": {
@@ -1149,6 +1225,11 @@
       "relative_to": "bed",
       "role": "support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "soft_solver_object",
       "requires_front_access": false
     },
     {
@@ -1156,26 +1237,26 @@
       "object_id": "chair",
       "category": "chair",
       "x": 300,
-      "y": 1000,
+      "y": 2800,
       "rot": 270,
       "rotation_ccw": 270,
       "w": 450,
       "h": 450,
       "rect": [
         300,
-        1000,
+        2800,
         750,
-        1450
+        3250
       ],
       "bbox": {
         "min_x": 300,
-        "min_y": 1000,
+        "min_y": 2800,
         "max_x": 750,
-        "max_y": 1450
+        "max_y": 3250
       },
       "center": {
         "x": 525,
-        "y": 1225
+        "y": 3025
       },
       "front_token": "top",
       "front_world": {
@@ -1186,6 +1267,11 @@
       "relative_to": "desk",
       "role": "secondary_support",
       "priority": "primary",
+      "blocks_floor_area": true,
+      "collision_layer": null,
+      "place_on": null,
+      "placement_participation": "floor_blocking",
+      "solver_participation": "hard_solver_object",
       "requires_front_access": true
     }
   ],
@@ -1198,10 +1284,10 @@
       ],
       "dominant_anchor_id": "bed",
       "bbox": {
-        "min_x": 500,
-        "min_y": 0,
-        "max_x": 2960,
-        "max_y": 1690
+        "min_x": 550,
+        "min_y": 50,
+        "max_x": 2930,
+        "max_y": 1740
       }
     },
     {
@@ -1211,10 +1297,10 @@
       ],
       "dominant_anchor_id": "wardrobe",
       "bbox": {
-        "min_x": 600,
-        "min_y": 3400,
-        "max_x": 2350,
-        "max_y": 3910
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
       }
     },
     {
@@ -1225,10 +1311,10 @@
       ],
       "dominant_anchor_id": "desk",
       "bbox": {
-        "min_x": 100,
-        "min_y": 1000,
+        "min_x": 50,
+        "min_y": 1750,
         "max_x": 750,
-        "max_y": 2480
+        "max_y": 3250
       }
     }
   ],
@@ -1241,10 +1327,10 @@
       ],
       "dominant_anchor_id": "bed",
       "bbox": {
-        "min_x": 500,
-        "min_y": 0,
-        "max_x": 2960,
-        "max_y": 1690
+        "min_x": 550,
+        "min_y": 50,
+        "max_x": 2930,
+        "max_y": 1740
       }
     },
     {
@@ -1254,10 +1340,10 @@
       ],
       "dominant_anchor_id": "wardrobe",
       "bbox": {
-        "min_x": 600,
-        "min_y": 3400,
-        "max_x": 2350,
-        "max_y": 3910
+        "min_x": 1100,
+        "min_y": 3350,
+        "max_x": 1910,
+        "max_y": 3950
       }
     },
     {
@@ -1268,10 +1354,10 @@
       ],
       "dominant_anchor_id": "desk",
       "bbox": {
-        "min_x": 100,
-        "min_y": 1000,
+        "min_x": 50,
+        "min_y": 1750,
         "max_x": 750,
-        "max_y": 2480
+        "max_y": 3250
       }
     }
   ],
@@ -1292,12 +1378,14 @@
   "gallery_eligible": true,
   "coverage_ratio": 1.0,
   "missing_cluster_ids": [],
+  "missing_required_object_ids": [],
   "notes": [
     "Absolute layout was emitted directly by the object-level solver.",
-    "Cluster local composition and phase-2 repair were bypassed in this flow."
+    "Cluster local composition and phase-2 repair were bypassed in this flow.",
+    "Backend geometry guardrail repaired polygon bounds and overlap before styling."
   ],
   "solver_debug": {
-    "selected_concept_id": "concept_03",
+    "selected_concept_id": "concept_01",
     "dropped_inventory_by_cluster": {},
     "verify_summary": {
       "geometry_valid": true,
@@ -1306,6 +1394,7 @@
       "gallery_eligible": true,
       "coverage_ratio": 1.0,
       "missing_cluster_ids": [],
+      "missing_required_object_ids": [],
       "dropped_trial_cluster_ids": [],
       "present_cluster_ids": [
         "sleep_core",
@@ -1319,14 +1408,14 @@
           "cluster_id": "work_study",
           "object_id": "chair",
           "reason": "face_base",
-          "dot": 0.217,
+          "dot": 0.27,
           "front_world": {
             "dx": -1.0,
             "dy": 0.0
           },
           "desired_front_world": {
-            "dx": -0.217,
-            "dy": 0.976
+            "dx": -0.27,
+            "dy": -0.963
           }
         }
       ],
@@ -1335,6 +1424,7 @@
       "blocking_protected_region_issues": [],
       "forbidden_region_issues": [],
       "blocking_forbidden_region_issues": [],
+      "wall_inset_violations": [],
       "functional_geometry_issues": [],
       "blocking_functional_geometry_issues": [],
       "face_pair_issues": [],
@@ -1344,23 +1434,114 @@
       "front_access_ok": true,
       "protected_region_penalty": 0.0,
       "forbidden_region_penalty": 0.0,
-      "soft_issue_count": 1,
+      "soft_issue_count": 2,
       "soft_constraint_score": 9,
-      "quality_gate_reasons": [],
-      "layout_score": 2440,
-      "geometry_repair": {
-        "status": "clean",
-        "moved_objects": [],
-        "total_shift_mm": 0,
-        "penalty": 0
+      "interaction_quality_score": -29,
+      "interaction_quality": {
+        "score": -29,
+        "view_targets": [],
+        "workflow_pairs": [
+          {
+            "cluster_id": "work_study",
+            "surface_object_id": "desk",
+            "seat_object_id": "chair",
+            "chair_to_surface_dot": 0.27,
+            "distance_mm": 815.2,
+            "score": -29
+          }
+        ]
       },
-      "geometry_repair_penalty": 0
+      "quality_gate_reasons": [],
+      "raw_room_bbox": [
+        0,
+        0,
+        3000,
+        4000
+      ],
+      "placement_room_bbox": [
+        50,
+        50,
+        2950,
+        3950
+      ],
+      "wall_insets_by_side": {
+        "top": 50,
+        "right": 50,
+        "bottom": 50,
+        "left": 50
+      },
+      "layout_score": 2141,
+      "geometry_repair": {
+        "status": "repaired",
+        "moved_objects": [
+          {
+            "cluster_id": "work_study",
+            "object_id": "desk",
+            "from_rect": [
+              100,
+              1750,
+              610,
+              2730
+            ],
+            "to_rect": [
+              50,
+              1750,
+              560,
+              2730
+            ],
+            "shift_mm": 50.0,
+            "reason": "polygon_oob_or_overlap_guardrail"
+          }
+        ],
+        "total_shift_mm": 50.0,
+        "penalty": 270
+      },
+      "geometry_repair_penalty": 270
     },
     "geometry_repair": {
-      "status": "clean",
-      "moved_objects": [],
-      "total_shift_mm": 0,
-      "penalty": 0
+      "status": "repaired",
+      "moved_objects": [
+        {
+          "cluster_id": "work_study",
+          "object_id": "desk",
+          "from_rect": [
+            100,
+            1750,
+            610,
+            2730
+          ],
+          "to_rect": [
+            50,
+            1750,
+            560,
+            2730
+          ],
+          "shift_mm": 50.0,
+          "reason": "polygon_oob_or_overlap_guardrail"
+        }
+      ],
+      "total_shift_mm": 50.0,
+      "penalty": 270
+    },
+    "geometry": {
+      "raw_room_bbox": [
+        0,
+        0,
+        3000,
+        4000
+      ],
+      "placement_room_bbox": [
+        50,
+        50,
+        2950,
+        3950
+      ],
+      "wall_insets_by_side": {
+        "top": 50,
+        "right": 50,
+        "bottom": 50,
+        "left": 50
+      }
     }
   },
   "geometry_valid": true

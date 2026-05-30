@@ -759,6 +759,8 @@ def _bundles_from_semantic_cluster(
                             ),
                             "drop_order_bias": str(object_hint["drop_order_bias"]),
                             "preferred_size_tier": object_hint["preferred_size_tier"],
+                            "size_intent": object_hint.get("size_intent"),
+                            "size_reason": object_hint.get("size_reason"),
                             "preserve_level": str(object_hint["preserve_level"]),
                         },
                         request_contract=request_contract,
@@ -1647,6 +1649,8 @@ def _cluster_tier_count_hints(
                 "preferred_size_tier": _tier_count_size_tier(
                     item.get("preferred_size_tier")
                 ),
+                "size_intent": _tier_count_size_intent(item.get("size_intent")),
+                "size_reason": str(item.get("size_reason") or "").strip() or None,
             }
 
     return {
@@ -1696,6 +1700,8 @@ def _tier_count_object_hint(
                 cluster_hints.get("preserve_level") if cluster_hints else "medium"
             ),
             "preferred_size_tier": None,
+            "size_intent": None,
+            "size_reason": None,
         },
         cluster_hints=cluster_hints,
     )
@@ -1796,6 +1802,13 @@ def _tier_count_drop_order_bias(value: Any, *, default: str) -> str:
 def _tier_count_size_tier(value: Any) -> str | None:
     text = str(value or "").strip().upper()
     if text in {"S", "M", "L"}:
+        return text
+    return None
+
+
+def _tier_count_size_intent(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if text in {"compact", "standard", "generous"}:
         return text
     return None
 
@@ -2005,6 +2018,8 @@ def _select_inventory_decision_program(
                 "preferred_size_tier": _tier_count_size_tier(
                     obj.get("preferred_size_tier")
                 ),
+                "size_intent": _tier_count_size_intent(obj.get("size_intent")),
+                "size_reason": str(obj.get("size_reason") or "").strip() or None,
                 "request_contract_intent": str(
                     obj.get("request_contract_intent") or ""
                 ),
@@ -2062,6 +2077,8 @@ def _select_inventory_decision_program(
                 "preferred_size_tier": _tier_count_size_tier(
                     obj.get("preferred_size_tier")
                 ),
+                "size_intent": _tier_count_size_intent(obj.get("size_intent")),
+                "size_reason": str(obj.get("size_reason") or "").strip() or None,
                 "request_contract_intent": str(
                     obj.get("request_contract_intent") or ""
                 ),
@@ -2852,8 +2869,6 @@ def _score_size_tier(
     furnishing_mode: str,
 ) -> float:
     role = str(obj.get("role") or "support")
-    object_type = str(obj.get("object_type") or "")
-    base_type = str(obj.get("base_type") or _profile_category_for_member(object_type))
     footprint_m2 = _footprint_for_object(
         obj=obj,
         quantity=quantity,
@@ -2865,33 +2880,41 @@ def _score_size_tier(
 
     preferred = "M" if role in {"dominant_anchor", "workflow_anchor"} else "S"
     hinted_preferred = _tier_count_size_tier(obj.get("preferred_size_tier"))
+    size_intent = _tier_count_size_intent(obj.get("size_intent"))
     if hinted_preferred is not None:
         preferred = hinted_preferred
+    elif size_intent == "compact":
+        preferred = "S"
+    elif size_intent == "standard":
+        preferred = "M"
+    elif size_intent == "generous":
+        preferred = (
+            "L"
+            if role in {"dominant_anchor", "workflow_anchor"}
+            and room_scale == "large"
+            and furnishing_mode == "generous"
+            else "M"
+        )
     if (
         role == "dominant_anchor"
         and room_scale == "large"
         and furnishing_mode == "generous"
         and hinted_preferred is None
+        and size_intent is None
     ):
         preferred = "L"
-    if base_type == "bed":
-        preferred = "M"
-        if (
-            room_scale == "large"
-            and furnishing_mode == "generous"
-            and after_ratio < 0.72
-            and hinted_preferred is None
-        ):
-            preferred = "L"
-        elif hinted_preferred is None and after_ratio > 0.72:
-            preferred = "S"
 
-    dominance = 1.0 if tier == preferred else 0.35
+    dominance = 1.0 if tier == preferred else 0.2
     if hinted_preferred is not None:
         if tier == hinted_preferred:
-            dominance += 0.45
+            dominance += 0.65
         else:
-            dominance -= 0.25
+            dominance -= 0.2
+    elif size_intent is not None:
+        if tier == preferred:
+            dominance += 0.35
+        else:
+            dominance -= 0.1
     if (
         role not in {"dominant_anchor", "workflow_anchor"}
         and tier == "L"
@@ -2903,9 +2926,19 @@ def _score_size_tier(
     if tier == "M" and after_ratio > 0.95:
         dominance -= 0.7
 
-    fit = 1.2 if after_ratio <= 0.72 else 0.3 if after_ratio <= 1.0 else -1.2
+    tier_index = float({"S": 0, "M": 1, "L": 2}.get(tier, 1))
+    footprint_share = footprint_m2 / clutter_budget
+    fit_pressure = 0.0
+    if after_ratio > 0.72:
+        fit_pressure -= (after_ratio - 0.72) * (1.4 + tier_index * 0.65)
+    if footprint_share > 0.28:
+        fit_pressure -= (footprint_share - 0.28) * (1.2 + tier_index * 0.35)
+    if after_ratio > 1.0:
+        fit_pressure -= (after_ratio - 1.0) * (3.0 + tier_index)
+
+    fit = 1.2 if after_ratio <= 0.68 else 0.4 if after_ratio <= 0.9 else -0.4
     naturalness = {"S": 0.18, "M": 0.12, "L": -0.18}.get(tier, 0.0)
-    return utility_score * 0.12 + dominance + fit + naturalness
+    return utility_score * 0.12 + dominance + fit + fit_pressure + naturalness
 
 
 def _available_tiers_for_object(
@@ -3167,17 +3200,6 @@ def _is_core_object(obj: dict[str, Any], bundle: dict[str, Any]) -> bool:
     if semantic_support_role == "frontal_support":
         return True
     return bool(obj.get("required")) or role in {"dominant_anchor", "workflow_anchor"}
-
-
-def _bundle_contains_base_type(bundle: dict[str, Any], base_type: str) -> bool:
-    return any(
-        str(
-            obj.get("base_type")
-            or _profile_category_for_member(str(obj.get("object_type") or ""))
-        )
-        == base_type
-        for obj in _bundle_objects(bundle)
-    )
 
 
 def _positive_int(value: Any, *, default: int) -> int:
@@ -3713,71 +3735,6 @@ def _enrich_profiles_for_required_types(
         if profile_size is not None:
             profiles.setdefault(alias, profile_size)
             profiles[member] = profile_size
-
-
-def _select_next_budget_decisions(
-    *,
-    current_decisions: list[dict[str, Any]],
-    budget_out: dict[str, Any],
-) -> list[dict[str, Any]] | None:
-    recommended_decisions = budget_out.get("recommended_decisions")
-    if (
-        isinstance(recommended_decisions, list)
-        and recommended_decisions != current_decisions
-    ):
-        return recommended_decisions
-
-    details = budget_out.get("decision_footprint_details")
-    if not isinstance(details, list):
-        return None
-
-    detail_by_key: dict[tuple[str, str], dict[str, Any]] = {}
-    for row in details:
-        if not isinstance(row, dict):
-            continue
-        cluster_id = row.get("cluster_id")
-        category = row.get("category")
-        if not isinstance(cluster_id, str) or not cluster_id:
-            continue
-        if not isinstance(category, str) or not category:
-            continue
-        detail_by_key[(cluster_id, category)] = row
-
-    changed = False
-    next_decisions: list[dict[str, Any]] = []
-    for decision in current_decisions:
-        if not isinstance(decision, dict):
-            continue
-        cluster_id = decision.get("cluster_id")
-        category = decision.get("category")
-        key = (
-            str(cluster_id or ""),
-            str(category or decision.get("object_type") or ""),
-        )
-        row = detail_by_key.get(key)
-        if row is None:
-            next_decisions.append(dict(decision))
-            continue
-
-        updated = dict(decision)
-        recommended_quantity = row.get("recommended_quantity")
-        recommended_size_tier = row.get("recommended_size_tier")
-
-        if isinstance(
-            recommended_quantity, int
-        ) and recommended_quantity != updated.get("quantity"):
-            updated["quantity"] = recommended_quantity
-            changed = True
-
-        if isinstance(recommended_size_tier, str):
-            normalized_tier = recommended_size_tier.upper()
-            if normalized_tier != updated.get("size_tier"):
-                updated["size_tier"] = normalized_tier
-                changed = True
-
-        next_decisions.append(updated)
-
-    return next_decisions if changed else None
 
 
 def _norm_key(value: str | None) -> str:

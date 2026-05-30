@@ -25,6 +25,7 @@ import {
   type BillingChargeKind,
 } from '../billing';
 import { BillingPaymentModal } from './BillingPaymentModal';
+import { isEvalHooksEnabled } from '../evalHooks';
 import { useEditorStore } from '../store';
 import {
   DesignPlanV1,
@@ -91,6 +92,17 @@ type ResolvedRenderObject = RenderObject & {
   inventoryResolution: InventoryPreviewResolution;
 };
 
+type OnTopSupportAnchor = {
+  centerXmm: number;
+  centerYmm: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  topHeightMm: number;
+  type: string;
+};
+
 type ObjectVisualDiagnostic = {
   objectId: string;
   label: string;
@@ -137,6 +149,46 @@ type CameraPreset = {
     z: number;
   };
 };
+type EvalLayoutPayload = {
+  caseId?: string | null;
+  variantId?: string | null;
+  floorplan: FloorplanGeometry;
+  design?: DesignPlanV1 | null;
+  styledResult?: Record<string, unknown> | null;
+  userInput?: Record<string, unknown> | null;
+};
+type EvalCaptureResult = {
+  snapshotArtifact: ThreeSnapshotArtifact;
+  cleanSnapshotImageDataUrl: string;
+};
+type EvalBridge = {
+  loadLayout: (payload: EvalLayoutPayload) => Promise<{ status: 'ok' }>;
+  waitForReady: (timeoutMs?: number) => Promise<{
+    status: 'ready';
+    cameraPresetCount: number;
+  }>;
+  listCameraPresets: () => CameraPreset[];
+  applyCameraPreset: (presetId: string) => Promise<CameraPreset>;
+  captureSnapshot: () => Promise<EvalCaptureResult>;
+  getState: () => {
+    cameraPresetCount: number;
+    containerSize: { width: number; height: number } | null;
+    error: string | null;
+    hasCamera: boolean;
+    hasContainer: boolean;
+    inventoryCount: number;
+    isSceneLoading: boolean;
+    glbLoadedCount: number;
+    hasRenderer: boolean;
+    hasScene: boolean;
+    hasRenderState: boolean;
+    objectCount: number;
+    pendingGlbCount: number;
+    proxyObjectCount: number;
+    activeCameraPresetId: string | null;
+    viewMode: string;
+  };
+};
 type OrbitControlLike = {
   minDistance: number;
   maxDistance: number;
@@ -179,10 +231,98 @@ function defaultHeightMm(type: string): number {
   if (t.includes('ceiling_light') || t.includes('pendant_light') || t.includes('track_light'))
     return 200;
   if (t.includes('air_conditioner')) return 250;
+  if (t.includes('bedside_lamp') || t.includes('table_lamp') || t.includes('desk_lamp'))
+    return 420;
+  if (t.includes('nightstand')) return 550;
   if (t.includes('lamp')) return 1400;
   if (t.includes('chair')) return 900;
   if (t.includes('table')) return 500;
   return 800;
+}
+
+function buildOnTopSupportAnchors(
+  objects: ResolvedRenderObject[],
+  heightById: Map<string, number>
+): Map<string, OnTopSupportAnchor> {
+  const anchors = new Map<string, OnTopSupportAnchor>();
+  for (const object of objects) {
+    const { minX, minY, maxX, maxY } = object.bbox;
+    if (![minX, minY, maxX, maxY].every(Number.isFinite)) {
+      continue;
+    }
+    anchors.set(object.id, {
+      centerXmm: (minX + maxX) / 2,
+      centerYmm: (minY + maxY) / 2,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      topHeightMm: heightById.get(object.id) ?? defaultHeightMm(object.type),
+      type: object.type,
+    });
+  }
+  return anchors;
+}
+
+function resolveOnTopPlanPosition(params: {
+  objectType: string;
+  support: OnTopSupportAnchor;
+  currentXmm: number;
+  currentYmm: number;
+  widthMm: number;
+  depthMm: number;
+}): { xMm: number; yMm: number } {
+  const { objectType, support, currentXmm, currentYmm, widthMm, depthMm } = params;
+  if (isSmallTableLampOnSupport(objectType, support.type)) {
+    return { xMm: support.centerXmm, yMm: support.centerYmm };
+  }
+  if (pointInsideSupportFootprint(currentXmm, currentYmm, support)) {
+    return { xMm: currentXmm, yMm: currentYmm };
+  }
+  return {
+    xMm: clampToSupportCenterRange(currentXmm, support.minX, support.maxX, widthMm),
+    yMm: clampToSupportCenterRange(currentYmm, support.minY, support.maxY, depthMm),
+  };
+}
+
+function isSmallTableLampOnSupport(objectType: string, supportType: string): boolean {
+  const objectKey = objectType.toLowerCase();
+  const supportKey = supportType.toLowerCase();
+  return (
+    (objectKey.includes('bedside_lamp') ||
+      objectKey.includes('table_lamp') ||
+      objectKey.includes('desk_lamp')) &&
+    (supportKey.includes('nightstand') || supportKey.includes('side_table'))
+  );
+}
+
+function pointInsideSupportFootprint(
+  xMm: number,
+  yMm: number,
+  support: OnTopSupportAnchor
+): boolean {
+  return (
+    xMm >= support.minX &&
+    xMm <= support.maxX &&
+    yMm >= support.minY &&
+    yMm <= support.maxY
+  );
+}
+
+function clampToSupportCenterRange(
+  valueMm: number,
+  minMm: number,
+  maxMm: number,
+  objectSizeMm: number
+): number {
+  const supportCenter = (minMm + maxMm) / 2;
+  const halfSize = Math.max(0, Number(objectSizeMm)) / 2;
+  const minCenter = minMm + halfSize;
+  const maxCenter = maxMm - halfSize;
+  if (minCenter > maxCenter) {
+    return supportCenter;
+  }
+  return clamp(valueMm, minCenter, maxCenter);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1044,6 +1184,111 @@ function buildOpeningFallbackModelDescriptor(
   };
 }
 
+const PUBLIC_PREVIEW_GLB_BY_STYLE: Record<string, Record<string, string>> = {
+  japandi: {
+    armchair: 'armchair_009.glb',
+    bed: 'bed_001.glb',
+    bookshelf: 'bookshelf_012.glb',
+    ceiling_lamp: 'pendant_light_003.glb',
+    coffee_table: 'coffee_table_007.glb',
+    console_table: 'console_table_004.glb',
+    curtain: 'curtain_012.glb',
+    desk: 'desk_003.glb',
+    desk_lamp: 'desk_lamp_005.glb',
+    dresser: 'dresser_008.glb',
+    floor_lamp: 'floor_lamp_001.glb',
+    media_shelf: 'media_shelf_002.glb',
+    nightstand: 'nightstand_004.glb',
+    pendant_light: 'pendant_light_003.glb',
+    rug: 'rug_003.glb',
+    sectional_sofa: 'sectional_sofa_007_826c727451b441358e780d4651b2627e.glb',
+    side_table: 'side_table_005.glb',
+    sofa: 'sofa_008.glb',
+    storage_cabinet: 'storage_cabinet_004.glb',
+    table_lamp: 'table_lamp_005.glb',
+    tv_console: 'tv_console_001_6c201e05c42543ecb1418747261f4572.glb',
+    wardrobe: 'wardrobe_004.glb',
+  },
+  modern: {
+    armchair: 'armchair_008.glb',
+    bed: 'bed_001.glb',
+    bookshelf: 'bookshelf_or_storage_001.glb',
+    ceiling_lamp: 'ceiling_light_006.glb',
+    coffee_table: 'coffee_table_007.glb',
+    console_table: 'console_table_004.glb',
+    curtain: 'curtain_or_blinds_001.glb',
+    desk: 'desk_003.glb',
+    dresser: 'dresser_002.glb',
+    floor_lamp: 'floor_lamp_001.glb',
+    media_shelf: 'media_shelf_002.glb',
+    nightstand: 'nightstand_002.glb',
+    rug: 'rug_002.glb',
+    sectional_sofa: 'sectional_sofa_007_9c8a08539617486e81c6d390ffbb7a63.glb',
+    side_table: 'side_table_008.glb',
+    sofa: 'sofa_008.glb',
+    storage_cabinet: 'storage_cabinet_002.glb',
+    table_lamp: 'table_lamp_006.glb',
+    tv_console: 'tv_console_006.glb',
+    wardrobe: 'wardrobe_004.glb',
+  },
+};
+
+function resolvePublicPreviewStyle(value: string | null | undefined): string {
+  const normalized = canonicalizeInventoryStyle(value) ?? '';
+  if (normalized.includes('japandi')) {
+    return 'japandi';
+  }
+  return 'modern';
+}
+
+function normalizePublicPreviewObjectType(value: string | null | undefined): string {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (normalized === 'ceiling_light' || normalized === 'main_lighting') {
+    return 'ceiling_lamp';
+  }
+  if (normalized === 'tv' || normalized === 'media_console') {
+    return 'tv_console';
+  }
+  if (normalized === 'bookcase') {
+    return 'bookshelf';
+  }
+  if (normalized === 'bedside_table') {
+    return 'nightstand';
+  }
+  return normalized;
+}
+
+function buildObjectFallbackModelDescriptor(
+  objectType: string | null | undefined,
+  preferredStyle: string | null | undefined
+): InventoryModelDescriptor | null {
+  const objectKey = normalizePublicPreviewObjectType(objectType);
+  const preferredStyleKey = resolvePublicPreviewStyle(preferredStyle);
+  const styleKey =
+    PUBLIC_PREVIEW_GLB_BY_STYLE[preferredStyleKey]?.[objectKey] !== undefined
+      ? preferredStyleKey
+      : 'modern';
+  const fileName = PUBLIC_PREVIEW_GLB_BY_STYLE[styleKey]?.[objectKey] ?? null;
+  if (!fileName) {
+    return null;
+  }
+  return {
+    url: `/assets/inventory_models/demo_tenant/${styleKey}/${fileName}`,
+    source: 'public_inventory_model_fallback',
+    fit: 'contain',
+    scale: 1,
+    rotationDeg: 0,
+    rotationXDeg: 0,
+    rotationZDeg: 0,
+    previewCalibration: null,
+    previewOverride: null,
+  };
+}
+
 function buildSnapshotFileStem(variantId: string | null, capturedAt: string): string {
   const normalizedDate = capturedAt.replace(/[:.]/g, '-');
   return `layout-3d-${sanitizeSnapshotFileSegment(variantId)}-${normalizedDate}`;
@@ -1114,6 +1359,17 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
+}
+
+function resolveSnapshotCapturePixelRatio(params: {
+  previousPixelRatio: number | null;
+}): number {
+  const screenPixelRatio = Math.max(
+    1,
+    Number(window.devicePixelRatio) || 0,
+    Number(params.previousPixelRatio) || 0
+  );
+  return Math.min(screenPixelRatio, MAX_RENDERER_PIXEL_RATIO);
 }
 
 type TemporaryVisibilityRecord = {
@@ -2745,12 +3001,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
     selectPlacement,
     setActiveRootLayoutId,
     setActiveLayoutCaseId,
+    setCaseId,
     selectSavedRender,
     updatePlacement,
     removePlacement,
     setFloorplan,
     setDesign,
     setStyledResult,
+    updateUserInput,
     clearLayoutVariants,
     upsertSavedRender,
     appendRunLog,
@@ -2835,6 +3093,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const [isThreeSceneLoading, setIsThreeSceneLoading] = useState(false);
   const [cameraPresets, setCameraPresets] = useState<CameraPreset[]>([]);
   const [activeCameraPresetId, setActiveCameraPresetId] = useState<string | null>(null);
+  const cameraPresetsRef = useRef<CameraPreset[]>([]);
+  const glbStatusRef = useRef({
+    glbLoadedCount: 0,
+    objectCount: 0,
+    pendingGlbCount: 0,
+    proxyObjectCount: 0,
+  });
+  const inventoryCountRef = useRef(0);
+  const isThreeSceneLoadingRef = useRef(false);
   const lastAppliedCameraPresetIdRef = useRef<string | null>(null);
   const applyingCameraPresetRef = useRef(false);
   const userCameraInteractionRef = useRef(false);
@@ -2877,6 +3144,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
       : streamPreviewPhase === 'final'
         ? 'Final received'
         : 'Source preview';
+
+  useEffect(() => {
+    cameraPresetsRef.current = cameraPresets;
+  }, [cameraPresets]);
+
+  useEffect(() => {
+    isThreeSceneLoadingRef.current = isThreeSceneLoading;
+  }, [isThreeSceneLoading]);
 
   const finishPendingBillingPayment = useCallback((completed: boolean): void => {
     const resolver = pendingBillingResolverRef.current;
@@ -3252,7 +3527,25 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const pendingGlbCount = glbObjects.filter(
     (item) => item.status === 'glb_loading'
   ).length;
+  const glbLoadedCount = glbObjects.filter(
+    (item) => item.status === 'glb_loaded'
+  ).length;
+  const proxyObjectCount = proxyObjects.length;
   const showThreeLoadingOverlay = isThreeSceneLoading || pendingGlbCount > 0;
+
+  useEffect(() => {
+    glbStatusRef.current = {
+      glbLoadedCount,
+      objectCount: resolvedObjects.length,
+      pendingGlbCount,
+      proxyObjectCount,
+    };
+  }, [glbLoadedCount, pendingGlbCount, proxyObjectCount, resolvedObjects.length]);
+
+  useEffect(() => {
+    inventoryCountRef.current = inventory.length;
+  }, [inventory.length]);
+
   const midHeightCameraPresets = useMemo(
     () => cameraPresets.filter((preset) => preset.group === 'mid'),
     [cameraPresets]
@@ -3656,12 +3949,19 @@ export const ThreeDPreviewPanel: React.FC = () => {
     const nextDiagnostics = Object.fromEntries(
       resolvedObjects.map((obj) => {
         const modelResolution = obj.inventoryResolution.modelResolution;
+        const fallbackDescriptor = buildObjectFallbackModelDescriptor(
+          obj.type,
+          userInput.style
+        );
         let status: ObjectVisualDiagnostic['status'] = 'proxy_no_inventory_match';
         let reason = obj.inventoryResolution.reason;
         if (obj.inventoryResolution.item) {
           if (obj.inventoryResolution.glbEligible && modelResolution?.descriptor) {
             status = 'glb_loading';
             reason = obj.inventoryResolution.glbReason;
+          } else if (fallbackDescriptor) {
+            status = 'glb_loading';
+            reason = `Using public GLB fallback for "${obj.type}" because the matched inventory item is not GLB-ready.`;
           } else if (modelResolution?.descriptor) {
             status = 'proxy_low_confidence_match';
             reason = obj.inventoryResolution.glbReason;
@@ -3669,6 +3969,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
             status = 'proxy_no_model_descriptor';
             reason = modelResolution?.reason ?? 'Matched inventory asset has no GLB metadata.';
           }
+        } else if (fallbackDescriptor) {
+          status = 'glb_loading';
+          reason = `Using public GLB fallback for "${obj.type}".`;
         }
         return [
           obj.id,
@@ -3678,9 +3981,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
             rawAssetId: obj.rawAssetId ?? obj.assetId ?? null,
             resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
             reintroduced: Boolean(obj.reintroduced),
-            modelUrl: modelResolution?.descriptor?.url ?? null,
+            modelUrl: modelResolution?.descriptor?.url ?? fallbackDescriptor?.url ?? null,
             previewRotationOffsetDeg: null,
-            finalDescriptorRotationDeg: modelResolution?.descriptor?.rotationDeg ?? null,
+            finalDescriptorRotationDeg:
+              modelResolution?.descriptor?.rotationDeg ??
+              fallbackDescriptor?.rotationDeg ??
+              null,
             status,
             reason,
           } satisfies ObjectVisualDiagnostic,
@@ -3688,7 +3994,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
       })
     );
     setObjectVisualDiagnostics(nextDiagnostics);
-  }, [resolvedObjects]);
+  }, [resolvedObjects, userInput.style]);
 
   function handleApplyCameraPreset(preset: CameraPreset): void {
     const camera = cameraRef.current;
@@ -3794,17 +4100,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
       1,
       Math.round(viewportRect?.height || renderer.domElement.clientHeight || 1)
     );
-    const targetPixelRatio = Math.min(
-      window.devicePixelRatio || previousPixelRatio || 1,
-      MAX_RENDERER_PIXEL_RATIO
-    );
+    const targetPixelRatio = resolveSnapshotCapturePixelRatio({
+      previousPixelRatio,
+    });
 
     try {
       const rotatorGroup = rotatorGroupRef.current;
       if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
         hideNode(hiddenNodes, rotatorGroup);
       }
-      hiddenNodes.push(...hideAiSnapshotHelperNodes(scene));
 
       if (typeof renderer.setPixelRatio === 'function') {
         renderer.setPixelRatio(targetPixelRatio);
@@ -3850,6 +4154,144 @@ export const ThreeDPreviewPanel: React.FC = () => {
       cleanSnapshotImageDataUrl: sourceImageDataUrl,
     }));
   }
+
+  useEffect(() => {
+    const evalWindow = window as Window & { __TKNT_EVAL__?: EvalBridge };
+    if (!isEvalHooksEnabled()) {
+      delete evalWindow.__TKNT_EVAL__;
+      return;
+    }
+
+    const buildEvalState = () => {
+      const containerRect = containerRef.current?.getBoundingClientRect() ?? null;
+      const glbStatus = glbStatusRef.current;
+      return {
+        cameraPresetCount: cameraPresetsRef.current.length,
+        containerSize: containerRect
+          ? {
+              width: Math.round(containerRect.width),
+              height: Math.round(containerRect.height),
+            }
+          : null,
+        error,
+        hasCamera: Boolean(cameraRef.current),
+        hasContainer: Boolean(containerRef.current),
+        inventoryCount: inventoryCountRef.current,
+        hasRenderer: Boolean(rendererRef.current),
+        hasRenderState: Boolean(renderStateRef.current),
+        hasScene: Boolean(sceneRef.current),
+        isSceneLoading: isThreeSceneLoadingRef.current,
+        glbLoadedCount: glbStatus.glbLoadedCount,
+        objectCount: glbStatus.objectCount,
+        pendingGlbCount: glbStatus.pendingGlbCount,
+        proxyObjectCount: glbStatus.proxyObjectCount,
+        activeCameraPresetId,
+        viewMode,
+      };
+    };
+
+    const waitForReady = async (timeoutMs = 30000) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt <= timeoutMs) {
+        const cameraPresetCount = cameraPresetsRef.current.length;
+        const glbStatus = glbStatusRef.current;
+        const ready =
+          viewMode === '3d' &&
+          !isThreeSceneLoadingRef.current &&
+          Boolean(rendererRef.current) &&
+          Boolean(sceneRef.current) &&
+          Boolean(cameraRef.current) &&
+          Boolean(renderStateRef.current) &&
+          glbStatus.pendingGlbCount === 0 &&
+          (glbStatus.objectCount === 0 || glbStatus.glbLoadedCount > 0) &&
+          cameraPresetCount > 0;
+        if (ready) {
+          return {
+            status: 'ready' as const,
+            cameraPresetCount,
+          };
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+      }
+      throw new Error(
+        `3D eval bridge timed out while waiting for the scene. Last state: ${JSON.stringify(
+          buildEvalState()
+        )}`
+      );
+    };
+
+    const bridge: EvalBridge = {
+      async loadLayout(payload) {
+        if (!payload || !payload.floorplan) {
+          throw new Error('Eval layout payload must include floorplan.');
+        }
+        const floorplanPayload = JSON.parse(
+          JSON.stringify(payload.floorplan)
+        ) as FloorplanGeometry;
+        const designPayload = payload.design
+          ? (JSON.parse(JSON.stringify(payload.design)) as DesignPlanV1)
+          : {
+              floorplan_geometry: floorplanPayload,
+              placements: [],
+            };
+        clearLayoutVariants();
+        selectSavedRender(null);
+        setActiveRootLayoutId(null);
+        setActiveLayoutCaseId(payload.caseId ?? null);
+        setCaseId(payload.caseId ?? null);
+        lastAppliedCameraPresetIdRef.current = null;
+        setActiveCameraPresetId(null);
+        setRenderedSnapshotImage(null);
+        setLastRenderedSnapshot(null);
+        setLastRenderedSnapshotImageDataUrl(null);
+        if (payload.userInput && typeof payload.userInput === 'object') {
+          updateUserInput(payload.userInput as Partial<typeof userInput>);
+        }
+        setFloorplan(floorplanPayload);
+        setDesign(designPayload);
+        setStyledResult(
+          payload.styledResult
+            ? JSON.parse(JSON.stringify(payload.styledResult))
+            : null
+        );
+        await waitForNextPaint();
+        await waitForNextPaint();
+        await waitForReady(30000);
+        return { status: 'ok' };
+      },
+      waitForReady,
+      listCameraPresets() {
+        return JSON.parse(JSON.stringify(cameraPresetsRef.current)) as CameraPreset[];
+      },
+      async applyCameraPreset(presetId) {
+        await waitForReady(30000);
+        const preset =
+          cameraPresetsRef.current.find((candidate) => candidate.id === presetId) ??
+          null;
+        if (!preset) {
+          throw new Error(`Unknown camera preset: ${presetId}`);
+        }
+        handleApplyCameraPreset(preset);
+        await waitForNextPaint();
+        await waitForNextPaint();
+        return JSON.parse(JSON.stringify(preset)) as CameraPreset;
+      },
+      async captureSnapshot() {
+        await waitForReady(30000);
+        return captureCurrentViewportSnapshot();
+      },
+      getState() {
+        return buildEvalState();
+      },
+    };
+
+    evalWindow.__TKNT_EVAL__ = bridge;
+    return () => {
+      if (evalWindow.__TKNT_EVAL__ === bridge) {
+        delete evalWindow.__TKNT_EVAL__;
+      }
+    };
+  });
 
   async function captureCurrentAiSnapshot(): Promise<{
     snapshotArtifact: ThreeSnapshotArtifact;
@@ -4939,6 +5381,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             defaultHeightMm(obj.type);
           heightById.set(obj.id, hMm);
         }
+        const supportAnchorById = buildOnTopSupportAnchors(resolvedObjects, heightById);
 
         const objectGroup = new THREE.Group();
         scene.add(objectGroup);
@@ -5290,8 +5733,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
           }
 
           let baseY = 0;
-          if (method === 'on_top' && typeof targetId === 'string' && heightById.has(targetId)) {
-            baseY = (heightById.get(targetId) ?? 0) * MM_TO_M + 0.004;
+          const supportAnchor =
+            method === 'on_top' && typeof targetId === 'string'
+              ? supportAnchorById.get(targetId) ?? null
+              : null;
+          if (supportAnchor) {
+            baseY = supportAnchor.topHeightMm * MM_TO_M + 0.004;
           } else if (method === 'hang_on') {
             if (isCeiling) {
               baseY = wallHeight - hM;
@@ -5302,6 +5749,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           let pxMm = cxMm;
           let pyMm = cyMm;
+          if (supportAnchor) {
+            const onTopPosition = resolveOnTopPlanPosition({
+              objectType: obj.type,
+              support: supportAnchor,
+              currentXmm: pxMm,
+              currentYmm: pyMm,
+              widthMm: wMm,
+              depthMm: dMm,
+            });
+            pxMm = onTopPosition.xMm;
+            pyMm = onTopPosition.yMm;
+          }
           // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
           // Prefer the same explicit front metadata that drives the 2D white marker.
           let rotY = resolvePlanObjectYawRad({
@@ -5387,9 +5846,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
               : null,
           });
 
-          const modelDescriptor = obj.inventoryResolution.glbEligible
+          const inventoryModelDescriptor = obj.inventoryResolution.glbEligible
             ? obj.inventoryResolution.modelResolution?.descriptor ?? null
             : null;
+          const fallbackModelDescriptor = buildObjectFallbackModelDescriptor(
+            obj.type,
+            userInput.style
+          );
+          const modelDescriptor = inventoryModelDescriptor ?? fallbackModelDescriptor;
+          const isFallbackModelDescriptor =
+            modelDescriptor !== null && modelDescriptor === fallbackModelDescriptor;
           const preserveGeneratedMeshShape = isUserGeneratedPreviewItem(
             obj.inventoryResolution.item
           );
@@ -5463,11 +5929,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
                       previewOverride.applied?.rotationDegOffset ?? 0,
                     finalDescriptorRotationDeg: descriptorForPanel.rotationDeg,
                     status: 'glb_loaded',
-                    reason: previewOverride.applied
-                      ? `Loaded GLB with preview override for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
-                      : needsSectionalFacingFallback
-                        ? `Loaded GLB with sectional sofa panel facing fallback for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
-                      : `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
+                    reason: isFallbackModelDescriptor
+                      ? `Loaded public fallback GLB for "${obj.type}".`
+                      : previewOverride.applied
+                        ? `Loaded GLB with preview override for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
+                        : needsSectionalFacingFallback
+                          ? `Loaded GLB with sectional sofa panel facing fallback for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`
+                          : `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
                   },
                 }));
                 const previousChildren = [...objectRoot.children];

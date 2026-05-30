@@ -4,7 +4,7 @@ import unittest
 from collections.abc import Mapping
 
 from agent.seed_concept_generator import solver_plan_from_concept
-from agent.visual_relation_bundle_planner import VisualRelationBundlePlanner
+from agent.visual_relation_planner import VisualRelationBundlePlanner
 
 
 _IMAGE_DATA_URL = "data:image/png;base64,iVBORw0KGgo="
@@ -84,7 +84,9 @@ class VisualRelationBundlePlannerTest(unittest.TestCase):
 
         self.assertEqual(result.model_name, "gpt-5.4-mini")
         self.assertEqual(client.calls[0]["image_data_url"], _IMAGE_DATA_URL)
-        self.assertEqual(result.bundle["controller"], "visual_llm_macro_concept_generator")
+        self.assertEqual(
+            result.bundle["controller"], "visual_llm_macro_concept_generator"
+        )
         concepts = result.bundle["concepts"]
         self.assertTrue(concepts)
         self.assertEqual(concepts[0]["concept_family"], "zoned")

@@ -61,8 +61,12 @@ export function preparePipelineResultLayouts(params: {
     baseStyledPayload,
     baseAbsoluteLayout,
   );
-  const shiftedStyledResult = shiftStyledLayout(
+  const mergedBaseStyledPayload = mergeAbsoluteObjectsIntoStyledResult(
     enrichedBaseStyledPayload,
+    baseAbsoluteLayout,
+  );
+  const shiftedStyledResult = shiftStyledLayout(
+    mergedBaseStyledPayload,
     shiftDx,
     shiftDy,
   );
@@ -123,8 +127,17 @@ function prepareLayoutVariant(params: {
       ? variant.absolute_layout
       : {};
   const enrichedStyledResult = enrichRotationCcw(rawStyledResult, rawAbsoluteLayout);
-  const shiftedStyledResult = shiftStyledLayout(
+  const mergedStyledResult = mergeAbsoluteObjectsIntoStyledResult(
     enrichedStyledResult,
+    rawAbsoluteLayout,
+  );
+  const shiftedStyledResult = shiftStyledLayout(
+    mergedStyledResult,
+    shiftDx,
+    shiftDy,
+  );
+  const shiftedAbsoluteLayout = shiftAbsoluteLayout(
+    rawAbsoluteLayout,
     shiftDx,
     shiftDy,
   );
@@ -157,10 +170,10 @@ function prepareLayoutVariant(params: {
           .map((item: unknown) => String(item ?? '').trim())
           .filter(Boolean)
       : [],
-    absolute_layout: rawAbsoluteLayout,
+    absolute_layout: shiftedAbsoluteLayout,
     styled_result: shiftedStyledResult,
     design: buildDesignFromStyledLayout(shiftedStyledResult, styledFloorplan),
-    cluster_previews: buildClusterPreviewsFromAbsoluteLayout(rawAbsoluteLayout),
+    cluster_previews: buildClusterPreviewsFromAbsoluteLayout(shiftedAbsoluteLayout),
   };
 }
 
@@ -392,6 +405,267 @@ function shiftStyledLayout(
     room: shiftedRoom,
     objects: shiftedObjects,
   };
+}
+
+function mergeAbsoluteObjectsIntoStyledResult(
+  styledPayload: any,
+  absoluteLayoutPayload: any,
+): any {
+  if (!styledPayload || typeof styledPayload !== 'object') {
+    return styledPayload;
+  }
+
+  const absoluteObjects = Array.isArray(absoluteLayoutPayload?.objects)
+    ? absoluteLayoutPayload.objects
+    : [];
+  if (absoluteObjects.length === 0) {
+    return styledPayload;
+  }
+
+  const styledObjects = Array.isArray(styledPayload.objects)
+    ? styledPayload.objects
+    : [];
+  const styledByKey = new Map<string, Record<string, unknown>>();
+  for (const objectRow of styledObjects) {
+    if (!isRecordValue(objectRow)) {
+      continue;
+    }
+    const key = getLayoutObjectKey(objectRow);
+    if (key) {
+      styledByKey.set(key, objectRow);
+    }
+  }
+
+  const mergedObjects: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < absoluteObjects.length; index += 1) {
+    const absoluteRow = absoluteObjects[index];
+    if (!isRecordValue(absoluteRow)) {
+      continue;
+    }
+    const key = getLayoutObjectKey(absoluteRow);
+    const styledRow = key ? styledByKey.get(key) ?? null : null;
+    mergedObjects.push(mergeAbsoluteObjectRow(absoluteRow, styledRow, index));
+  }
+
+  const seenKeys = new Set(
+    mergedObjects
+      .map((objectRow) => getLayoutObjectKey(objectRow))
+      .filter((value): value is string => Boolean(value)),
+  );
+  for (const styledRow of styledObjects) {
+    if (!isRecordValue(styledRow)) {
+      continue;
+    }
+    const key = getLayoutObjectKey(styledRow);
+    if (key && !seenKeys.has(key)) {
+      mergedObjects.push(styledRow);
+    }
+  }
+
+  return {
+    ...styledPayload,
+    objects: mergedObjects,
+  };
+}
+
+function mergeAbsoluteObjectRow(
+  absoluteRow: Record<string, unknown>,
+  styledRow: Record<string, unknown> | null,
+  index: number,
+): Record<string, unknown> {
+  const instanceId =
+    readString(absoluteRow.instance_id) ??
+    readString(styledRow?.instance_id) ??
+    readString(absoluteRow.object_id) ??
+    readString(styledRow?.object_id) ??
+    readString(absoluteRow.id) ??
+    readString(styledRow?.id) ??
+    `obj_${index}`;
+  const objectType =
+    readString(absoluteRow.object_type) ??
+    readString(styledRow?.object_type) ??
+    readString(absoluteRow.category) ??
+    readString(styledRow?.category) ??
+    'item';
+
+  return {
+    ...(styledRow ?? {}),
+    ...absoluteRow,
+    instance_id: instanceId,
+    object_type: objectType,
+    color_hex: absoluteRow.color_hex ?? styledRow?.color_hex ?? null,
+    material: absoluteRow.material ?? styledRow?.material ?? null,
+    place_on: absoluteRow.place_on ?? styledRow?.place_on ?? null,
+    rotation_ccw:
+      absoluteRow.rotation_ccw ??
+      absoluteRow.rot ??
+      styledRow?.rotation_ccw ??
+      styledRow?.rotation_deg ??
+      0,
+    front_world: absoluteRow.front_world ?? styledRow?.front_world ?? null,
+    front_side_world:
+      absoluteRow.front_side_world ?? styledRow?.front_side_world ?? null,
+    axis_world: absoluteRow.axis_world ?? styledRow?.axis_world ?? null,
+    bbox: absoluteRow.bbox ?? styledRow?.bbox ?? null,
+    collision_layer: absoluteRow.collision_layer ?? styledRow?.collision_layer ?? null,
+  };
+}
+
+function shiftAbsoluteLayout(
+  absoluteLayoutPayload: any,
+  shiftDx: number,
+  shiftDy: number,
+): Record<string, unknown> {
+  if (!isRecordValue(absoluteLayoutPayload)) {
+    return {};
+  }
+  if (shiftDx === 0 && shiftDy === 0) {
+    return absoluteLayoutPayload;
+  }
+
+  const output: Record<string, unknown> = { ...absoluteLayoutPayload };
+  output.room = shiftAbsoluteRoom(output.room, shiftDx, shiftDy);
+  output.openings = shiftOpeningCollections(output.openings, shiftDx, shiftDy);
+  for (const key of ['objects', 'placements', 'object_placements']) {
+    const rows = output[key];
+    if (Array.isArray(rows)) {
+      output[key] = rows.map((row) => shiftAbsoluteObjectRow(row, shiftDx, shiftDy));
+    }
+  }
+  return output;
+}
+
+function shiftAbsoluteRoom(value: unknown, shiftDx: number, shiftDy: number): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    polygon_ccw: shiftPointArray(value.polygon_ccw, shiftDx, shiftDy),
+    polygon_mm: shiftPointArray(value.polygon_mm, shiftDx, shiftDy),
+    centroid_mm: shiftPointRecord(value.centroid_mm, shiftDx, shiftDy),
+    bbox_mm: shiftBboxRecord(value.bbox_mm, shiftDx, shiftDy),
+    openings: shiftOpeningCollections(value.openings, shiftDx, shiftDy),
+  };
+}
+
+function shiftOpeningCollections(
+  value: unknown,
+  shiftDx: number,
+  shiftDy: number,
+): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  const output: Record<string, unknown> = { ...value };
+  for (const key of ['doors', 'windows']) {
+    const rows = output[key];
+    if (Array.isArray(rows)) {
+      output[key] = rows.map((row) => shiftOpeningRow(row, shiftDx, shiftDy));
+    }
+  }
+  return output;
+}
+
+function shiftOpeningRow(value: unknown, shiftDx: number, shiftDy: number): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    segment_mm: shiftPointArray(value.segment_mm, shiftDx, shiftDy),
+    start_mm: shiftPointRecord(value.start_mm, shiftDx, shiftDy),
+    end_mm: shiftPointRecord(value.end_mm, shiftDx, shiftDy),
+  };
+}
+
+function shiftAbsoluteObjectRow(
+  value: unknown,
+  shiftDx: number,
+  shiftDy: number,
+): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  const output: Record<string, unknown> = {
+    ...value,
+    bbox: shiftBboxRecord(value.bbox, shiftDx, shiftDy),
+    center: shiftPointRecord(value.center, shiftDx, shiftDy),
+    position_mm: shiftPointRecord(value.position_mm, shiftDx, shiftDy),
+    polygon_ccw: shiftPointArray(value.polygon_ccw, shiftDx, shiftDy),
+    polygon_mm: shiftPointArray(value.polygon_mm, shiftDx, shiftDy),
+  };
+  if (Object.prototype.hasOwnProperty.call(value, 'x')) {
+    output.x = shiftCoordinate(value.x, shiftDx);
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'y')) {
+    output.y = shiftCoordinate(value.y, shiftDy);
+  }
+  if (Array.isArray(value.rect) && value.rect.length >= 4) {
+    output.rect = value.rect.map((item, index) =>
+      index % 2 === 0
+        ? shiftCoordinate(item, shiftDx)
+        : shiftCoordinate(item, shiftDy),
+    );
+  }
+  return output;
+}
+
+function shiftPointArray(value: unknown, shiftDx: number, shiftDy: number): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((point) => shiftPointRecord(point, shiftDx, shiftDy));
+}
+
+function shiftPointRecord(value: unknown, shiftDx: number, shiftDy: number): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    x: shiftCoordinate(value.x, shiftDx),
+    y: shiftCoordinate(value.y, shiftDy),
+  };
+}
+
+function shiftBboxRecord(value: unknown, shiftDx: number, shiftDy: number): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  const output: Record<string, unknown> = { ...value };
+  for (const key of ['min_x', 'max_x', 'minX', 'maxX']) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      output[key] = shiftCoordinate(value[key], shiftDx);
+    }
+  }
+  for (const key of ['min_y', 'max_y', 'minY', 'maxY']) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      output[key] = shiftCoordinate(value[key], shiftDy);
+    }
+  }
+  return output;
+}
+
+function shiftCoordinate(value: unknown, delta: number): unknown {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue - delta : value;
+}
+
+function getLayoutObjectKey(objectRow: Record<string, unknown>): string | null {
+  return (
+    readString(objectRow.instance_id) ??
+    readString(objectRow.object_id) ??
+    readString(objectRow.id)
+  );
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function buildDesignFromStyledLayout(
@@ -697,10 +971,10 @@ function enrichRotationCcw(styledPayload: any, absoluteLayoutPayload: any): any 
         objectRow.instance_id ?? objectRow.id ?? '',
       ).trim();
       const bbox = objectRow.bbox;
-      const orientationPayload =
-        (instanceId && byId.get(instanceId)) ??
-        byBbox.get(bboxKey(bbox) ?? '') ??
-        null;
+      const bboxOrientationPayload = byBbox.get(bboxKey(bbox) ?? '') ?? null;
+      const orientationPayload: Record<string, unknown> | null = instanceId
+        ? byId.get(instanceId) ?? bboxOrientationPayload
+        : bboxOrientationPayload;
       const nextRotation = Number(
         orientationPayload?.rotation_ccw ?? getObjectRotationCcw(objectRow),
       );

@@ -133,6 +133,10 @@ def select_distinct_final_gallery_candidates(
     return selected[:target_count]
 
 
+def material_macro_layout_signature(layout: dict[str, Any]) -> str:
+    return _macro_layout_signature(layout)
+
+
 def _accept_gallery_candidate(
     *,
     candidate: _VariantCandidate,
@@ -149,6 +153,7 @@ def _accept_gallery_candidate(
 ) -> None:
     raw["state_signature"] = candidate.state_signature
     raw["macro_layout_signature"] = candidate.macro_layout_signature
+    raw["actual_macro_layout_signature"] = candidate.macro_layout_signature
     raw["visual_family_signature"] = candidate.visual_family_signature
     raw["concept_signature"] = candidate.concept_signature
     raw["anchor_signature"] = candidate.anchor_signature
@@ -375,6 +380,16 @@ def build_final_gallery_selection_summary(
     selected_macro_signatures = set(selected_macro_counts)
     candidate_visual_family_signatures = set(candidate_visual_family_counts)
     selected_visual_family_signatures = set(selected_visual_family_counts)
+    planned_material_counts = _raw_signature_counts(
+        candidates,
+        "planned_material_macro_signature",
+    )
+    selected_planned_material_counts = _raw_signature_counts(
+        selected,
+        "planned_material_macro_signature",
+    )
+    actual_material_counts = _raw_actual_macro_signature_counts(candidates)
+    selected_actual_material_counts = _raw_actual_macro_signature_counts(selected)
     hard_valid_candidate_count = sum(1 for row in candidate_rows if row.hard_valid)
     gallery_eligible_candidate_count = sum(
         1 for row in candidate_rows if row.gallery_eligible
@@ -409,6 +424,9 @@ def build_final_gallery_selection_summary(
         for raw in selected
         if str(raw.get("gallery_selection_mode") or "") == "fallback_near_distinct"
     )
+    macro_concept_collapsed_to_fallback_count = sum(
+        1 for raw in candidates if bool(raw.get("macro_concept_collapsed_to_fallback"))
+    )
     notes: list[str] = []
     requested = max(0, int(requested_count))
     if fallback_near_distinct_count:
@@ -426,6 +444,16 @@ def build_final_gallery_selection_summary(
         notes.append(
             "Final gallery diversity is degraded because selected options collapse "
             "to too few material macro layouts."
+        )
+    if len(planned_material_counts) > len(actual_material_counts):
+        notes.append(
+            "Seed planned more material macro signatures than the solver realized; "
+            "inspect planned_material_macro_signature versus actual_macro_layout_signature."
+        )
+    if macro_concept_collapsed_to_fallback_count:
+        notes.append(
+            "Some concepts missed their committed anchor target and collapsed to a "
+            "previous fallback macro layout."
         )
     if not selected_rows and candidate_rows and eligible_candidate_count == 0:
         notes.append(
@@ -458,6 +486,12 @@ def build_final_gallery_selection_summary(
         "top_quality_gate_reasons": _top_quality_gate_reasons(candidates),
         "macro_distinct_candidate_count": len(candidate_macro_signatures),
         "macro_distinct_returned_count": len(selected_macro_signatures),
+        "planned_material_macro_distinct_candidate_count": len(planned_material_counts),
+        "planned_material_macro_distinct_returned_count": len(
+            selected_planned_material_counts
+        ),
+        "actual_macro_distinct_candidate_count": len(actual_material_counts),
+        "actual_macro_distinct_returned_count": len(selected_actual_material_counts),
         "material_macro_target_count": material_macro_target,
         "diversity_degraded": diversity_degraded,
         "visual_family_distinct_candidate_count": len(
@@ -465,6 +499,11 @@ def build_final_gallery_selection_summary(
         ),
         "visual_family_distinct_returned_count": len(selected_visual_family_signatures),
         "fallback_near_distinct_count": fallback_near_distinct_count,
+        "macro_concept_collapsed_to_fallback_count": (
+            macro_concept_collapsed_to_fallback_count
+        ),
+        "planned_material_macro_signature_counts": planned_material_counts,
+        "actual_macro_layout_signature_counts": actual_material_counts,
         "collapsed_macro_layouts": collapsed_macro_layouts,
         "collapsed_visual_families": collapsed_visual_families,
         "notes": notes,
@@ -515,6 +554,29 @@ def _macro_signature_counts(
             counts.get(row.macro_layout_signature, 0) + 1
         )
     return counts
+
+
+def _raw_signature_counts(
+    rows: list[dict[str, Any]],
+    key: str,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        signature = str(row.get(key) or "").strip()
+        if not signature:
+            continue
+        counts[signature] = counts.get(signature, 0) + 1
+    return counts
+
+
+def _raw_actual_macro_signature_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts = _raw_signature_counts(rows, "actual_macro_layout_signature")
+    if counts:
+        return counts
+    candidate_rows = [
+        candidate for row in rows if (candidate := _coerce_candidate(row)) is not None
+    ]
+    return _macro_signature_counts(candidate_rows)
 
 
 def _visual_family_signature_counts(
@@ -947,9 +1009,39 @@ def _macro_layout_signature(layout: dict[str, Any]) -> str:
         center_x = (box["min_x"] + box["max_x"]) / 2.0
         center_y = (box["min_y"] + box["max_y"]) / 2.0
         rows.append(
-            f"{cluster_id}:{_bucket(center_x, min_x, width)}{_bucket(center_y, min_y, height)}"
+            f"{cluster_id}:{_bucket(center_x, min_x, width)}"
+            f"{_bucket(center_y, min_y, height)}:"
+            f"{_macro_box_wall_zone(box, (min_x, min_y, max_x, max_y))}"
         )
     return "|".join(rows)
+
+
+def _macro_box_wall_zone(
+    box: dict[str, int],
+    bounds: tuple[int, int, int, int],
+) -> str:
+    min_x, min_y, max_x, max_y = bounds
+    width = max(1, max_x - min_x)
+    height = max(1, max_y - min_y)
+    threshold_x = max(350, int(round(width * 0.08)))
+    threshold_y = max(350, int(round(height * 0.08)))
+    sides: list[str] = []
+    if box["min_x"] - min_x <= threshold_x:
+        sides.append("left")
+    if max_x - box["max_x"] <= threshold_x:
+        sides.append("right")
+    if box["min_y"] - min_y <= threshold_y:
+        sides.append("top")
+    if max_y - box["max_y"] <= threshold_y:
+        sides.append("bottom")
+    if len(sides) >= 2:
+        vertical = next((side for side in sides if side in {"top", "bottom"}), "")
+        horizontal = next((side for side in sides if side in {"left", "right"}), "")
+        if vertical and horizontal:
+            return f"{vertical}_{horizontal}"
+    if sides:
+        return sides[0]
+    return "center"
 
 
 def _visual_family_signature(layout: dict[str, Any]) -> str:

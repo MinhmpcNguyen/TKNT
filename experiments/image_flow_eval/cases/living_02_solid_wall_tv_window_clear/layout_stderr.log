@@ -1,0 +1,14 @@
+2026-05-29 14:30:36,528 | INFO | config | Configuration loaded and validated successfully: /Users/Yuki/TKNT/app-config.yaml
+2026-05-29 14:30:36,528 | INFO | config | Configuration loaded and validated successfully.
+2026-05-29 14:30:36,528 | INFO | config | Application configuration loaded from /Users/Yuki/TKNT/config/../app-config.yaml
+2026-05-29 14:30:39,816 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:30:39,828 | INFO | agent.semantic_layout_planner | SemanticLayoutPlanner adaptive LLM mode enabled.
+2026-05-29 14:30:48,305 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:30:55,334 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:31:00,038 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:31:05,576 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:31:05,588 | INFO | pipeline.orchestrator | Cluster forge primary produced 3 cluster(s).
+2026-05-29 14:31:05,588 | INFO | pipeline.orchestrator | Cluster forge primary cluster main_seating [living]: members=['sofa', 'coffee_table', 'armchair', 'side_table', 'floor_lamp'] anchors=['sofa']
+2026-05-29 14:31:05,588 | INFO | pipeline.orchestrator | Cluster forge primary cluster media [living]: members=['tv_console', 'media_shelf'] anchors=['tv_console']
+2026-05-29 14:31:05,588 | INFO | pipeline.orchestrator | Cluster forge primary cluster storage_display_support [work]: members=['console_table'] anchors=['console_table']
+2026-05-29 14:31:05,594 | INFO | agent.tier_count_director | TierCount utility mode: available_area_m2=13.79 room_scale=medium furnishing_mode=minimal

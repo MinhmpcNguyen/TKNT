@@ -280,15 +280,15 @@
         },
         "layout_role": "primary",
         "degradation_ladder": [
-          "reduce_armchairs",
-          "drop_side_table",
-          "drop_floor_lamp"
+          "remove_one_armchair",
+          "remove_side_table",
+          "remove_floor_lamp"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.28,
+          "space_surplus_threshold": 0.35,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -296,50 +296,60 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.22,
+              "space_surplus_threshold": 0.35,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "Medium coffee table best supports conversation while preserving open center in a 19.76 m2 living room."
             },
             {
               "object_type": "armchair",
               "min_keep": 1,
               "max_keep": 2,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.3,
+              "space_surplus_threshold": 0.4,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "S",
+              "size_intent": "standard",
+              "size_reason": "One or two compact armchairs fit the social seating brief without overloading circulation."
             },
             {
               "object_type": "side_table",
-              "min_keep": 0,
-              "max_keep": 1,
+              "min_keep": 1,
+              "max_keep": 2,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.4,
+              "space_surplus_threshold": 0.45,
               "drop_order_bias": "neutral",
               "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Small side tables are useful but should yield before primary seating if space tightens."
             },
             {
               "object_type": "floor_lamp",
-              "min_keep": 0,
+              "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.38,
+              "space_surplus_threshold": 0.45,
               "drop_order_bias": "neutral",
               "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "A slim floor lamp adds function with minimal footprint and should survive when surplus exists."
             },
             {
               "object_type": "sofa",
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.18,
+              "space_surplus_threshold": 0.3,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "A standard sofa is the primary social anchor and suits the room scale better than an oversized sectional."
             }
           ]
         },
@@ -359,10 +369,7 @@
             "sofa",
             "coffee_table"
           ],
-          "droppable_ids": [
-            "side_table",
-            "floor_lamp"
-          ],
+          "droppable_ids": [],
           "support_chain": [
             {
               "object_id": "floor_lamp",
@@ -526,15 +533,16 @@
           "privacy_affinity": "none",
           "floating_allowed": false
         },
-        "layout_role": "primary",
+        "layout_role": "support",
         "degradation_ladder": [
-          "drop_media_shelf"
+          "drop_media_shelf",
+          "reduce_console_width"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.2,
+          "space_surplus_threshold": 0.3,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -542,20 +550,24 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.15,
+              "space_surplus_threshold": 0.25,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "A medium TV console balances media function with the room's open-center and conversation-first priorities."
             },
             {
               "object_type": "media_shelf",
               "min_keep": 0,
               "max_keep": 1,
-              "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.45,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.6,
               "drop_order_bias": "neutral",
-              "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preserve_level": "medium",
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Extra media storage is optional and should only remain when the room has comfortable surplus."
             }
           ]
         },
@@ -673,18 +685,20 @@
           "bundle_class": "strong_support",
           "preserve_level": "medium",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.62,
+          "space_surplus_threshold": 0.55,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
               "object_type": "bookshelf",
               "min_keep": 0,
               "max_keep": 1,
-              "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.7,
-              "drop_order_bias": "neutral",
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.65,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Bookshelves are useful only if the room has real surplus after seating and media are placed."
             }
           ]
         },
@@ -796,17 +810,34 @@
           "preferred_count": 2,
           "max_keep": 2,
           "evidence": "one or two armchairs",
-          "reason": "Explicit bounded range; keep at least one and prefer two if space allows.",
+          "reason": "Explicitly requested social seating support with a bounded range.",
           "confidence": 0.98,
           "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "armchair"
+          ],
+          "relation_edges": [
+            {
+              "relation": "group_with",
+              "target": "sofa"
+            },
+            {
+              "relation": "group_with",
+              "target": "coffee_table"
+            }
+          ],
           "requested": true,
           "inventory_available": true,
+          "available_in_inventory": true,
           "available_in_program": true,
           "solver_participation": "hard_solver_object",
           "blocks_floor_area": true,
           "can_overlap_floor_objects": false,
           "host_object_type": null,
-          "mount_region_type": null
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "armchair",
+          "fulfilled_by": "armchair"
         },
         {
           "object_type": "coffee_table",
@@ -816,17 +847,24 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "a coffee table",
-          "reason": "Directly requested support piece for the social seating group.",
+          "reason": "Explicitly requested and supports the conversation-first seating arrangement.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "coffee_table"
+          ],
           "requested": true,
           "inventory_available": true,
+          "available_in_inventory": true,
           "available_in_program": true,
           "solver_participation": "hard_solver_object",
           "blocks_floor_area": true,
           "can_overlap_floor_objects": false,
           "host_object_type": null,
-          "mount_region_type": null
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "coffee_table",
+          "fulfilled_by": "coffee_table"
         },
         {
           "object_type": "rug",
@@ -836,17 +874,33 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "a rug",
-          "reason": "Directly requested decor/textile element for the room composition.",
+          "reason": "Explicitly requested decor/floor object; should be preserved as a textile layer under the seating group.",
           "confidence": 0.98,
           "placement_participation": "textile_overlay",
+          "llm_candidates": [
+            "rug"
+          ],
+          "relation_edges": [
+            {
+              "relation": "under",
+              "target": "sofa"
+            },
+            {
+              "relation": "under",
+              "target": "coffee_table"
+            }
+          ],
           "requested": true,
           "inventory_available": false,
+          "available_in_inventory": false,
           "available_in_program": false,
           "solver_participation": "post_solver_accessory",
           "blocks_floor_area": false,
           "can_overlap_floor_objects": true,
           "host_object_type": null,
-          "mount_region_type": "floor"
+          "mount_region_type": "floor",
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "rug"
         },
         {
           "object_type": "sofa",
@@ -856,17 +910,24 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "Include a sofa",
-          "reason": "Directly requested as a core seating anchor for the living room.",
+          "reason": "Explicitly requested as the primary seating anchor for conversation-first hosting.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "sofa"
+          ],
           "requested": true,
           "inventory_available": true,
+          "available_in_inventory": true,
           "available_in_program": true,
           "solver_participation": "hard_solver_object",
           "blocks_floor_area": true,
           "can_overlap_floor_objects": false,
           "host_object_type": null,
-          "mount_region_type": null
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "sofa",
+          "fulfilled_by": "sofa"
         },
         {
           "object_type": "tv_console",
@@ -876,17 +937,115 @@
           "preferred_count": 1,
           "max_keep": 1,
           "evidence": "a tv console",
-          "reason": "Directly requested media anchor for the movie area.",
+          "reason": "Explicitly requested media anchor for the movie area and likely primary focus.",
           "confidence": 0.99,
           "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "tv_console",
+            "media_shelf",
+            "console_table"
+          ],
+          "relation_edges": [
+            {
+              "relation": "face",
+              "target": "sofa"
+            }
+          ],
           "requested": true,
           "inventory_available": true,
+          "available_in_inventory": true,
           "available_in_program": true,
           "solver_participation": "hard_solver_object",
           "blocks_floor_area": true,
           "can_overlap_floor_objects": false,
           "host_object_type": null,
-          "mount_region_type": null
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "tv_console",
+          "fulfilled_by": "tv_console"
+        },
+        {
+          "object_type": "floor_lamp",
+          "intent": "optional_if_surplus",
+          "min_keep": 0,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "movie area",
+          "reason": "Not explicitly named in the brief, but supported by the compiled seating bundle as a lighting support item if space allows.",
+          "confidence": 0.72,
+          "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "floor_lamp"
+          ],
+          "requested": true,
+          "inventory_available": true,
+          "available_in_inventory": true,
+          "available_in_program": true,
+          "solver_participation": "soft_solver_object",
+          "blocks_floor_area": true,
+          "can_overlap_floor_objects": false,
+          "host_object_type": null,
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "floor_lamp",
+          "fulfilled_by": "floor_lamp"
+        },
+        {
+          "object_type": "media_shelf",
+          "intent": "optional_if_surplus",
+          "min_keep": 0,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 1,
+          "evidence": "movie area",
+          "reason": "Not explicitly requested; only a possible support for media storage if surplus exists.",
+          "confidence": 0.55,
+          "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "media_shelf",
+            "bookshelf"
+          ],
+          "requested": true,
+          "inventory_available": true,
+          "available_in_inventory": true,
+          "available_in_program": true,
+          "solver_participation": "soft_solver_object",
+          "blocks_floor_area": true,
+          "can_overlap_floor_objects": false,
+          "host_object_type": null,
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "media_shelf",
+          "fulfilled_by": "media_shelf"
+        },
+        {
+          "object_type": "side_table",
+          "intent": "optional_if_surplus",
+          "min_keep": 0,
+          "target_count": 1,
+          "preferred_count": 1,
+          "max_keep": 2,
+          "evidence": "social seating group",
+          "reason": "Not explicitly named in the brief, but supported by the compiled seating bundle as a secondary support item if space allows.",
+          "confidence": 0.74,
+          "placement_participation": "floor_blocking",
+          "llm_candidates": [
+            "side_table",
+            "console_table"
+          ],
+          "requested": true,
+          "inventory_available": true,
+          "available_in_inventory": true,
+          "available_in_program": true,
+          "solver_participation": "soft_solver_object",
+          "blocks_floor_area": true,
+          "can_overlap_floor_objects": false,
+          "host_object_type": null,
+          "mount_region_type": null,
+          "request_reconciliation_status": "fulfilled",
+          "chosen_object_type": "side_table",
+          "fulfilled_by": "side_table"
         }
       ],
       "groups": [
@@ -895,18 +1054,74 @@
           "members": [
             "sofa",
             "coffee_table",
-            "armchair"
+            "armchair",
+            "side_table",
+            "floor_lamp"
           ],
-          "intent": "required_composition",
+          "intent": "must_keep",
           "priority": "core",
-          "drop_policy": "preserve_sofa_and_coffee_table_first_reduce_armchairs_last"
+          "drop_policy": "shrink_optional_support"
         }
       ],
       "notes": [
-        "Soft hints noted but not converted to hard requirements: prefer_daylit_work_zone, prefer_open_center, likely_primary_focus=media_wall.",
-        "The brief asks for conversation-first layout with a movie area that still feels natural.",
-        "Request contract was normalized before tier-count enforcement."
-      ]
+        "Soft hints prefer_daylit_work_zone, prefer_open_center, and likely_primary_focus=media_wall were treated as layout guidance, not explicit objects.",
+        "No bookshelf, storage cabinet, or pet bed was explicitly requested, so they were not added as required objects.",
+        "Request contract was normalized before tier-count enforcement.",
+        "Request contract was reconciled against room profile, inventory, and semantic clusters before tier count."
+      ],
+      "reconciliation": {
+        "version": 1,
+        "strategy": "hybrid_llm_rules",
+        "statuses": [
+          {
+            "object_type": "armchair",
+            "status": "fulfilled",
+            "chosen_object_type": "armchair",
+            "fulfilled_by": "armchair"
+          },
+          {
+            "object_type": "coffee_table",
+            "status": "fulfilled",
+            "chosen_object_type": "coffee_table",
+            "fulfilled_by": "coffee_table"
+          },
+          {
+            "object_type": "rug",
+            "status": "fulfilled",
+            "chosen_object_type": "rug"
+          },
+          {
+            "object_type": "sofa",
+            "status": "fulfilled",
+            "chosen_object_type": "sofa",
+            "fulfilled_by": "sofa"
+          },
+          {
+            "object_type": "tv_console",
+            "status": "fulfilled",
+            "chosen_object_type": "tv_console",
+            "fulfilled_by": "tv_console"
+          },
+          {
+            "object_type": "floor_lamp",
+            "status": "fulfilled",
+            "chosen_object_type": "floor_lamp",
+            "fulfilled_by": "floor_lamp"
+          },
+          {
+            "object_type": "media_shelf",
+            "status": "fulfilled",
+            "chosen_object_type": "media_shelf",
+            "fulfilled_by": "media_shelf"
+          },
+          {
+            "object_type": "side_table",
+            "status": "fulfilled",
+            "chosen_object_type": "side_table",
+            "fulfilled_by": "side_table"
+          }
+        ]
+      }
     },
     "profile_rule_trace": {
       "engine": "room_profile_registry",
@@ -1307,6 +1522,25 @@
         }
       ]
     },
+    "role_normalization": {
+      "controller": "deterministic_role_sanitizer",
+      "applied": false,
+      "reason": "roles_already_authoritative",
+      "room_type": "living_room",
+      "primary_cluster_id": "main_seating",
+      "secondary_cluster_id": "storage_display_support",
+      "raw_layout_roles": {
+        "main_seating": "primary",
+        "media": "support",
+        "storage_display_support": "secondary"
+      },
+      "normalized_layout_roles": {
+        "main_seating": "primary",
+        "media": "support",
+        "storage_display_support": "secondary"
+      },
+      "changes": []
+    },
     "active_clusters": [
       {
         "cluster_id": "main_seating",
@@ -1372,15 +1606,15 @@
         },
         "relation_intents": [],
         "degradation_ladder": [
-          "reduce_armchairs",
-          "drop_side_table",
-          "drop_floor_lamp"
+          "remove_one_armchair",
+          "remove_side_table",
+          "remove_floor_lamp"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.28,
+          "space_surplus_threshold": 0.35,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -1388,50 +1622,60 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.22,
+              "space_surplus_threshold": 0.35,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "Medium coffee table best supports conversation while preserving open center in a 19.76 m2 living room."
             },
             {
               "object_type": "armchair",
               "min_keep": 1,
               "max_keep": 2,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.3,
+              "space_surplus_threshold": 0.4,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "S",
+              "size_intent": "standard",
+              "size_reason": "One or two compact armchairs fit the social seating brief without overloading circulation."
             },
             {
               "object_type": "side_table",
-              "min_keep": 0,
-              "max_keep": 1,
+              "min_keep": 1,
+              "max_keep": 2,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.4,
+              "space_surplus_threshold": 0.45,
               "drop_order_bias": "neutral",
               "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Small side tables are useful but should yield before primary seating if space tightens."
             },
             {
               "object_type": "floor_lamp",
-              "min_keep": 0,
+              "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.38,
+              "space_surplus_threshold": 0.45,
               "drop_order_bias": "neutral",
               "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "A slim floor lamp adds function with minimal footprint and should survive when surplus exists."
             },
             {
               "object_type": "sofa",
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.18,
+              "space_surplus_threshold": 0.3,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "A standard sofa is the primary social anchor and suits the room scale better than an oversized sectional."
             }
           ]
         },
@@ -1446,10 +1690,10 @@
       },
       {
         "cluster_id": "media",
-        "layout_role": "primary",
+        "layout_role": "support",
         "priority": "core",
         "activation_reason": "required by compiled semantic rule and supported by inventory",
-        "semantic_role": "media_focus_zone",
+        "semantic_role": "media_focus_core",
         "dominant_anchor_candidates": [
           "tv_console"
         ],
@@ -1490,13 +1734,14 @@
         },
         "relation_intents": [],
         "degradation_ladder": [
-          "drop_media_shelf"
+          "drop_media_shelf",
+          "reduce_console_width"
         ],
         "tier_count_hints": {
           "bundle_class": "indispensable",
           "preserve_level": "highest",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.2,
+          "space_surplus_threshold": 0.3,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
@@ -1504,20 +1749,24 @@
               "min_keep": 1,
               "max_keep": 1,
               "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.15,
+              "space_surplus_threshold": 0.25,
               "drop_order_bias": "neutral",
               "preserve_level": "highest",
-              "preferred_size_tier": "M"
+              "preferred_size_tier": "M",
+              "size_intent": "standard",
+              "size_reason": "A medium TV console balances media function with the room's open-center and conversation-first priorities."
             },
             {
               "object_type": "media_shelf",
               "min_keep": 0,
               "max_keep": 1,
-              "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.45,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.6,
               "drop_order_bias": "neutral",
-              "preserve_level": "high",
-              "preferred_size_tier": "S"
+              "preserve_level": "medium",
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Extra media storage is optional and should only remain when the room has comfortable surplus."
             }
           ]
         },
@@ -1535,7 +1784,7 @@
         "layout_role": "secondary",
         "priority": "support",
         "activation_reason": "activated because brief or room capacity makes this support cluster useful",
-        "semantic_role": "perimeter_storage_display",
+        "semantic_role": "storage_display_buffer",
         "dominant_anchor_candidates": [
           "bookshelf"
         ],
@@ -1579,18 +1828,20 @@
           "bundle_class": "strong_support",
           "preserve_level": "medium",
           "keep_if_space_surplus": true,
-          "space_surplus_threshold": 0.62,
+          "space_surplus_threshold": 0.55,
           "drop_order_bias": "neutral",
           "object_hints": [
             {
               "object_type": "bookshelf",
               "min_keep": 0,
               "max_keep": 1,
-              "keep_if_space_surplus": true,
-              "space_surplus_threshold": 0.7,
-              "drop_order_bias": "neutral",
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold": 0.65,
+              "drop_order_bias": "drop_first",
               "preserve_level": "medium",
-              "preferred_size_tier": "S"
+              "preferred_size_tier": "S",
+              "size_intent": "compact",
+              "size_reason": "Bookshelves are useful only if the room has real surplus after seating and media are placed."
             }
           ]
         },
@@ -1606,7 +1857,7 @@
     ],
     "global_layout_intent": {
       "primary_focus": "living",
-      "space_character": "social_balanced_functional",
+      "space_character": "hosting_guests_social_first_with_natural_media_area",
       "prefer_open_center": true,
       "prefer_core_before_support": true,
       "prefer_clear_primary_circulation": true,
@@ -1651,11 +1902,11 @@
     },
     "selection_constraints": {
       "dominant_anchor_required": [
-        "sofa",
-        "tv_console"
+        "tv_console",
+        "sofa"
       ],
       "dominant_workflow_required": [
-        "conversation_first",
+        "conversation_group",
         "media_viewing"
       ],
       "group_caps": [],
@@ -1673,8 +1924,8 @@
         "media_bundle"
       ],
       "never_drop_first": [
-        "sofa",
-        "tv_console"
+        "tv_console",
+        "sofa"
       ]
     },
     "quality_targets": {
@@ -1687,19 +1938,22 @@
     "conflicts": [],
     "confidence": 0.86,
     "notes": [
-      "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
-      "Kept canonical cluster ids and reduced to the smallest guest-hosting program: sofa/armchair seating, coffee table, side table, floor lamp, and TV console.",
-      "Support storage remains optional and should only survive if the deterministic tier step finds real surplus after preserving open center circulation.",
-      "Room is moderately sized with strong center-openness and media-wall priority, so core seating and TV console should survive deterministic filtering.",
-      "Support storage can survive only when surplus is clearly comfortable; keep small pieces longer than bulky ones.",
-      "No entry logic is present and pet support is not requested, so those items should generally drop early.",
-      "No daylight regions provided; daylight affinity mapped to wall-adjacent placement only.",
-      "Center openness preserved for conversation-first layout and circulation.",
-      "Media and seating are paired as the main functional relationship.",
-      "Request contract LLM mode enabled via TKNT_REQUEST_CONTRACT_LLM; deterministic validation remains active.",
+      "Adaptive semantic LLM mode is the default runtime path; deterministic stage fallbacks are disabled.",
+      "Kept canonical cluster ids and reduced the program to the requested social seating plus media wall core.",
+      "No new cluster added because the brief does not clearly require one beyond existing support clusters.",
+      "Tier hints favor one sofa or sectional, one to two armchairs, one coffee table, one side table, one floor lamp, and a single TV console, with optional support items only if spatial surplus remains.",
+      "Room is a moderate 19.76 m2 living room with strong open-center and media-wall priorities, so core seating and TV console should survive first.",
+      "Prefer a standard sofa over a sectional to protect circulation and guest conversation space.",
+      "Support storage is optional and should only persist when surplus remains after core social layout is satisfied.",
+      "No explicit pet or entry function is requested, so those support items should be dropped early.",
+      "Open center and circulation must remain clear.",
+      "Media and seating should be paired as the main social axis.",
+      "Storage is optional and should not block wall focal surfaces or the center lane.",
+      "Request contract LLM mode is the default runtime path; deterministic validation remains active.",
       "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
       "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
       "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+      "Hybrid request reconciliation completed before tier count.",
       "Request contract attached before tier count so explicit functional objects are protected from silent pruning."
     ]
   },
@@ -1767,19 +2021,22 @@
     ]
   },
   "notes": [
-    "Adaptive semantic LLM mode enabled via TKNT_SEMANTIC_ADAPTIVE_LLM; deterministic stage fallbacks are disabled.",
-    "Kept canonical cluster ids and reduced to the smallest guest-hosting program: sofa/armchair seating, coffee table, side table, floor lamp, and TV console.",
-    "Support storage remains optional and should only survive if the deterministic tier step finds real surplus after preserving open center circulation.",
-    "Room is moderately sized with strong center-openness and media-wall priority, so core seating and TV console should survive deterministic filtering.",
-    "Support storage can survive only when surplus is clearly comfortable; keep small pieces longer than bulky ones.",
-    "No entry logic is present and pet support is not requested, so those items should generally drop early.",
-    "No daylight regions provided; daylight affinity mapped to wall-adjacent placement only.",
-    "Center openness preserved for conversation-first layout and circulation.",
-    "Media and seating are paired as the main functional relationship.",
-    "Request contract LLM mode enabled via TKNT_REQUEST_CONTRACT_LLM; deterministic validation remains active.",
+    "Adaptive semantic LLM mode is the default runtime path; deterministic stage fallbacks are disabled.",
+    "Kept canonical cluster ids and reduced the program to the requested social seating plus media wall core.",
+    "No new cluster added because the brief does not clearly require one beyond existing support clusters.",
+    "Tier hints favor one sofa or sectional, one to two armchairs, one coffee table, one side table, one floor lamp, and a single TV console, with optional support items only if spatial surplus remains.",
+    "Room is a moderate 19.76 m2 living room with strong open-center and media-wall priorities, so core seating and TV console should survive first.",
+    "Prefer a standard sofa over a sectional to protect circulation and guest conversation space.",
+    "Support storage is optional and should only persist when surplus remains after core social layout is satisfied.",
+    "No explicit pet or entry function is requested, so those support items should be dropped early.",
+    "Open center and circulation must remain clear.",
+    "Media and seating should be paired as the main social axis.",
+    "Storage is optional and should not block wall focal surfaces or the center lane.",
+    "Request contract LLM mode is the default runtime path; deterministic validation remains active.",
     "SemanticLayoutPlanner used the room profile registry as the canonical rule source.",
     "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
     "Style policy compiled before layout planning; downstream geometry treats it as bias, not a hard override.",
+    "Hybrid request reconciliation completed before tier count.",
     "Request contract attached before tier count so explicit functional objects are protected from silent pruning.",
     "Cluster main_seating: relaxed wall attachment for core social cluster to allow floating exploration."
   ],

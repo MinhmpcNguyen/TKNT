@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal
 
@@ -95,9 +96,6 @@ _GUIDED_TOPOLOGY_POLICY_ALLOWED_VALUES: dict[str, frozenset[str]] = {
     ),
 }
 _FIT_CHECKED_REQUIRED_REGION_IDS: frozenset[str] = frozenset()
-_VIEW_TARGET_VIEWER_TYPES: frozenset[str] = frozenset(
-    {"bed", "sofa", "sectional_sofa", "armchair", "chair", "lounge_chair"}
-)
 _VIEW_TARGET_VIEWER_PRIORITY: tuple[str, ...] = (
     "bed",
     "sofa",
@@ -116,8 +114,20 @@ _VIEW_TARGET_TARGET_PRIORITY: tuple[str, ...] = (
     "display",
 )
 _VIEWING_TARGET_OBJECT_TYPES: frozenset[str] = frozenset(_VIEW_TARGET_TARGET_PRIORITY)
-_VIEWING_RELATION_TOKENS: frozenset[str] = frozenset(
-    {"face", "facing", "view", "viewing", "watch", "oriented", "toward"}
+_VIEWING_VIEWER_OBJECT_TYPES: frozenset[str] = frozenset(_VIEW_TARGET_VIEWER_PRIORITY)
+_VIEWING_RELATION_EDGE_TOKENS: frozenset[str] = frozenset(
+    {
+        "face",
+        "faces",
+        "facing",
+        "oriented",
+        "toward",
+        "view",
+        "viewing",
+        "view_target",
+        "watch",
+        "watching",
+    }
 )
 _ENTRY_SUPPORT_OBJECT_TOKENS: frozenset[str] = frozenset(
     {
@@ -175,7 +185,10 @@ _MACRO_CONCEPT_GUIDANCE_SPEC = _MacroConceptGuidanceSpec(
         "`secondary_zone_placement_bias`. Region fields may be either a macro "
         "region id string or an object with `zone_assignment`, "
         "`preferred_wall_side`, and `center_usage`. Use only provided macro "
-        "region ids. Never assign any cluster to `keep_open_center`."
+        "region ids. Never assign any cluster to `keep_open_center`. Choose "
+        "physically distinct primary/secondary/support regions so Seed can emit "
+        "`material_macro_signature_target` and committed anchor targets for the "
+        "solver."
     ),
     repair_prompt=(
         "Return exactly one valid JSON object with top-level keys "
@@ -812,10 +825,6 @@ def _object_viewing_pairs_from_request_contract(
         for row in contract_objects
         if (object_type := _clean_str(row.get("object_type"))) is not None
     ]
-    object_intents_by_type = {
-        str(row.get("object_type") or ""): str(row.get("intent") or "")
-        for row in contract_objects
-    }
     out: list[dict[str, object]] = []
 
     def add_pair(
@@ -865,66 +874,93 @@ def _object_viewing_pairs_from_request_contract(
         if key not in existing_keys:
             out.append(row)
 
-    for group in _sequence_or_empty(contract.get("groups")):
-        if not isinstance(group, Mapping):
-            continue
-        members = [
-            member
-            for member in _string_list(group.get("members"))
-            if member in object_types
-        ]
-        if len(members) < 2:
-            continue
-        text = _normalized_relation_text(
-            group.get("group_id"),
-            group.get("intent"),
-            group.get("drop_policy"),
-        )
-        if not _text_has_viewing_relation(text):
-            continue
-        targets = [member for member in members if _is_viewing_target_type(member)]
-        viewers = [member for member in members if member not in targets]
-        if not targets or not viewers:
-            continue
-        required = _group_requires_viewing_pair(group, object_intents_by_type)
-        for target_type in targets:
-            for viewer_type in viewers:
-                add_pair(
-                    viewer_type=viewer_type,
-                    target_type=target_type,
-                    evidence=text,
-                    required=required,
-                    source="request_contract_group",
-                )
-
     for row in contract_objects:
         source_type = _clean_str(row.get("object_type"))
         if source_type is None:
             continue
-        text = _normalized_relation_text(row.get("evidence"), row.get("reason"))
-        if not _text_has_viewing_relation(text):
-            continue
-        for other_type in object_types:
-            if other_type == source_type or not _text_mentions_object_type(
-                text, other_type
+        for edge in _sequence_or_empty(row.get("relation_edges")):
+            if not isinstance(edge, Mapping):
+                continue
+            relation = _viewing_relation_from_edge(edge.get("relation"))
+            target_type = _clean_str(
+                edge.get("target") or edge.get("target_object_type")
+            )
+            if (
+                relation is None
+                or target_type is None
+                or target_type not in object_types
             ):
                 continue
-            source_is_target = _is_viewing_target_type(source_type)
-            other_is_target = _is_viewing_target_type(other_type)
-            if source_is_target == other_is_target:
-                continue
-            add_pair(
-                viewer_type=other_type if source_is_target else source_type,
-                target_type=source_type if source_is_target else other_type,
-                evidence=text,
-                required=_contract_object_requires_pair(row),
-                source="request_contract_object",
+            pair_types = _viewing_pair_types_from_relation_edge(
+                source_type=source_type,
+                target_type=target_type,
             )
-    _add_affordance_view_target_pair(
-        add_pair=add_pair,
-        cluster_programs=cluster_programs,
-    )
+            if pair_types is None:
+                continue
+            viewer_type, normalized_target_type = pair_types
+            add_pair(
+                viewer_type=viewer_type,
+                target_type=normalized_target_type,
+                evidence=_relation_edge_evidence(
+                    source_type=source_type,
+                    relation=relation,
+                    target_type=target_type,
+                    row=row,
+                ),
+                required=_contract_object_requires_pair(row),
+                source="request_contract_relation_edge",
+                relation=relation,
+            )
     return out
+
+
+def _viewing_relation_from_edge(value: object) -> str | None:
+    relation = _normalized_object_token(value)
+    if not relation:
+        return None
+    tokens = {token for token in relation.split("_") if token}
+    if (
+        relation in _VIEWING_RELATION_EDGE_TOKENS
+        or tokens & _VIEWING_RELATION_EDGE_TOKENS
+    ):
+        return "view_target"
+    return None
+
+
+def _viewing_pair_types_from_relation_edge(
+    *,
+    source_type: str,
+    target_type: str,
+) -> tuple[str, str] | None:
+    if _is_viewing_viewer_type(source_type) and _is_viewing_target_type(target_type):
+        return source_type, target_type
+    if _is_viewing_target_type(source_type) and _is_viewing_viewer_type(target_type):
+        return target_type, source_type
+    return None
+
+
+def _relation_edge_evidence(
+    *,
+    source_type: str,
+    relation: str,
+    target_type: str,
+    row: Mapping[str, object],
+) -> str:
+    evidence = _clean_str(row.get("evidence"))
+    if evidence is not None:
+        return evidence
+    reason = _clean_str(row.get("reason"))
+    if reason is not None:
+        return reason
+    return f"relation_edges: {source_type} {relation} {target_type}"
+
+
+def _is_viewing_viewer_type(object_type: str) -> bool:
+    normalized = _normalized_object_token(object_type)
+    parts = set(normalized.split("_"))
+    if normalized in _VIEWING_VIEWER_OBJECT_TYPES:
+        return True
+    return bool(parts & _VIEWING_VIEWER_OBJECT_TYPES)
 
 
 def _cluster_object_ref_for_type(
@@ -958,80 +994,6 @@ def _is_viewing_target_type(object_type: str) -> bool:
     )
 
 
-def _is_view_target_viewer_type(object_type: str) -> bool:
-    normalized = _normalized_object_token(object_type)
-    parts = set(normalized.split("_"))
-    return normalized in _VIEW_TARGET_VIEWER_TYPES or bool(
-        parts & _VIEW_TARGET_VIEWER_TYPES
-    )
-
-
-def _add_affordance_view_target_pair(
-    *,
-    add_pair: Callable[..., None],
-    cluster_programs: Sequence[ClusterProgram],
-) -> None:
-    viewer_type = _first_present_object_type(
-        cluster_programs=cluster_programs,
-        ordered_types=_VIEW_TARGET_VIEWER_PRIORITY,
-    )
-    target_type = _first_present_object_type(
-        cluster_programs=cluster_programs,
-        ordered_types=_VIEW_TARGET_TARGET_PRIORITY,
-    )
-    if viewer_type is None or target_type is None:
-        return
-    add_pair(
-        viewer_type=viewer_type,
-        target_type=target_type,
-        evidence="default viewer-target affordance",
-        required=True,
-        source="affordance_default",
-        relation="view_target",
-    )
-
-
-def _first_present_object_type(
-    *,
-    cluster_programs: Sequence[ClusterProgram],
-    ordered_types: Sequence[str],
-) -> str | None:
-    for object_type in ordered_types:
-        if _cluster_object_ref_for_type(cluster_programs, object_type) is not None:
-            return object_type
-    return None
-
-
-def _normalized_relation_text(*values: object) -> str:
-    return " ".join(str(value or "").strip().lower() for value in values if value)
-
-
-def _text_has_viewing_relation(text: str) -> bool:
-    tokens = {
-        token.strip(".,;:()[]{}")
-        for token in text.replace("-", " ").replace("_", " ").split()
-    }
-    return bool(tokens & _VIEWING_RELATION_TOKENS)
-
-
-def _text_mentions_object_type(text: str, object_type: str) -> bool:
-    normalized_object = _normalized_object_token(object_type)
-    text_tokens = {
-        token.strip(".,;:()[]{}")
-        for token in str(text or "")
-        .strip()
-        .lower()
-        .replace("-", " ")
-        .replace("_", " ")
-        .replace("/", " ")
-        .split()
-    }
-    object_parts = [part for part in normalized_object.split("_") if part]
-    if object_parts and all(part in text_tokens for part in object_parts):
-        return True
-    return any(part in text_tokens for part in object_parts if len(part) >= 3)
-
-
 def _normalized_object_token(value: object) -> str:
     return (
         str(value or "")
@@ -1040,20 +1002,6 @@ def _normalized_object_token(value: object) -> str:
         .replace("-", "_")
         .replace("/", "_")
         .replace(" ", "_")
-    )
-
-
-def _group_requires_viewing_pair(
-    group: Mapping[str, object],
-    object_intents_by_type: Mapping[str, str],
-) -> bool:
-    priority = str(group.get("priority") or "").strip().lower()
-    if priority in {"core", "high", "critical", "required"}:
-        return True
-    return any(
-        str(object_intents_by_type.get(member) or "")
-        in {"must_keep", "must_try", "required"}
-        for member in _string_list(group.get("members"))
     )
 
 
@@ -1993,6 +1941,7 @@ def _instantiate_concept_families(
             cluster_zone_plan=cluster_zone_plan,
             cluster_programs=cluster_programs,
         )
+        cluster_zone_plan = _apply_material_macro_commitments(cluster_zone_plan)
         macro_constraints = _macro_constraints_for_concept(
             family=family,
             scenario=scenario,
@@ -2063,6 +2012,12 @@ def _instantiate_concept_families(
             ),
             "llm_guided": bool(family_guidance),
             "guidance_notes": list(_string_list(family_guidance.get("notes"))),
+            "material_macro_signature_target": _material_macro_signature_target(
+                cluster_zone_plan
+            ),
+            "planned_material_macro_signature": _material_macro_signature_target(
+                cluster_zone_plan
+            ),
             "diversity_signature": _diversity_signature(
                 family=family,
                 cluster_zone_plan=cluster_zone_plan,
@@ -2730,6 +2685,38 @@ def _apply_zone_assignment_to_row(
     )
 
 
+def _apply_material_macro_commitments(
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    rows = [dict(row) for row in cluster_zone_plan]
+    for row in rows:
+        row["committed_region_ids"] = _committed_region_ids_for_row(row)
+        row["committed_wall_side"] = _committed_wall_side_for_row(row)
+    return rows
+
+
+def _committed_region_ids_for_row(row: Mapping[str, object]) -> list[str]:
+    committed: list[str] = []
+    zone_assignment = _clean_str(row.get("zone_assignment"))
+    if zone_assignment is not None and zone_assignment != "keep_open_center":
+        committed.append(zone_assignment)
+    for region_id in _string_list(row.get("required_region_ids")):
+        if region_id != "keep_open_center":
+            committed.append(region_id)
+    return _uniq(committed)
+
+
+def _committed_wall_side_for_row(row: Mapping[str, object]) -> str:
+    wall_side = _clean_str(row.get("committed_wall_side"))
+    if wall_side is not None:
+        return wall_side
+    wall_side = _clean_str(row.get("preferred_wall_side"))
+    if wall_side is not None:
+        return wall_side
+    zone_assignment = _clean_str(row.get("zone_assignment"))
+    return _preferred_wall_side_for_zone(zone_assignment or "")
+
+
 def _preferred_wall_side_for_zone(zone_assignment: str) -> str:
     token = zone_assignment.strip().lower()
     if "window" in token or "daylight" in token:
@@ -3004,6 +2991,8 @@ def _macro_constraints_for_concept(
     anchor_region_constraints = [
         {
             "cluster_id": str(row.get("cluster_id")),
+            "committed_region_ids": _committed_region_ids_for_row(row),
+            "committed_wall_side": _committed_wall_side_for_row(row),
             "required_region_ids": list(
                 _sequence_or_empty(row.get("required_region_ids"))
             ),
@@ -3220,6 +3209,8 @@ def _anchor_region_preferences_by_cluster(
             continue
         out[cluster_id] = {
             "zone_assignment": str(row.get("zone_assignment") or ""),
+            "committed_region_ids": _committed_region_ids_for_row(row),
+            "committed_wall_side": _committed_wall_side_for_row(row),
             "required_region_ids": list(_string_list(row.get("required_region_ids"))),
             "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
             "preferred_region_ids": _preferred_region_ids_for_row(row),
@@ -3255,6 +3246,31 @@ def _ensure_placement_behavior_by_cluster(
     return out
 
 
+def _anchor_region_preferences_for_solver(
+    preferences_by_cluster: Mapping[str, object],
+    *,
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    out = _anchor_region_preferences_by_cluster(cluster_zone_plan=cluster_zone_plan)
+    for cluster_id, raw_row in preferences_by_cluster.items():
+        if not isinstance(raw_row, Mapping):
+            continue
+        target = out.setdefault(str(cluster_id), {})
+        for key, value in raw_row.items():
+            target.setdefault(str(key), deepcopy(value))
+    for row in cluster_zone_plan:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        target = out.setdefault(cluster_id, {})
+        fresh = _anchor_region_preferences_by_cluster(cluster_zone_plan=[row]).get(
+            cluster_id,
+            {},
+        )
+        target.update(fresh)
+    return out
+
+
 def _anchor_layout_hints_by_cluster(
     *,
     cluster_zone_plan: Sequence[Mapping[str, object]],
@@ -3266,6 +3282,8 @@ def _anchor_layout_hints_by_cluster(
             continue
         out[cluster_id] = {
             "zone_assignment": str(row.get("zone_assignment") or ""),
+            "committed_region_ids": _committed_region_ids_for_row(row),
+            "committed_wall_side": _committed_wall_side_for_row(row),
             "required_region_ids": list(_string_list(row.get("required_region_ids"))),
             "forbidden_region_ids": list(_string_list(row.get("forbidden_region_ids"))),
             "preferred_region_ids": _preferred_region_ids_for_row(row),
@@ -3742,6 +3760,7 @@ def _concept_to_solver_plan(
         if isinstance(row, Mapping)
     ]
     cluster_zone_plan = _apply_placement_behavior_contracts(cluster_zone_plan)
+    cluster_zone_plan = _apply_material_macro_commitments(cluster_zone_plan)
     primary_cluster_id = _primary_from_concept(cluster_zone_plan)
     secondary_cluster_id = _secondary_from_concept(
         cluster_zone_plan, primary_cluster_id
@@ -3827,8 +3846,14 @@ def _concept_to_solver_plan(
         key: value for key, value in concept.items() if key != "solver_relation_plan"
     }
     macro_concept_payload["cluster_zone_plan"] = cluster_zone_plan
-    anchor_region_preferences = _ensure_placement_behavior_by_cluster(
-        dict(_mapping_or_empty(concept.get("anchor_region_preferences_by_cluster"))),
+    macro_concept_payload["material_macro_signature_target"] = (
+        _material_macro_signature_target(cluster_zone_plan)
+    )
+    macro_concept_payload["planned_material_macro_signature"] = macro_concept_payload[
+        "material_macro_signature_target"
+    ]
+    anchor_region_preferences = _anchor_region_preferences_for_solver(
+        _mapping_or_empty(concept.get("anchor_region_preferences_by_cluster")),
         cluster_zone_plan=cluster_zone_plan,
     )
     return {
@@ -3837,6 +3862,9 @@ def _concept_to_solver_plan(
         "room_type": room_type,
         "planner_kind": "seed_concept_generator",
         "macro_concept": macro_concept_payload,
+        "material_macro_signature_target": macro_concept_payload[
+            "material_macro_signature_target"
+        ],
         "cluster_affinities": _dedupe_by_cluster(affinities),
         "cluster_orientations": _dedupe_by_cluster(orientations),
         "object_orientations": _concept_object_orientations_for_solver(concept),
@@ -4672,6 +4700,55 @@ def _diversity_signature(
         f"center={topology_policy.get('reserve_center_degree')}|"
         f"wall={topology_policy.get('wall_loading_bias')}|{assignments}"
     )
+
+
+def _material_macro_signature_target(
+    cluster_zone_plan: Sequence[Mapping[str, object]],
+) -> str:
+    rows = [
+        row
+        for row in cluster_zone_plan
+        if _row_participates_in_material_macro_signature(row)
+    ]
+    if not rows:
+        rows = [row for row in cluster_zone_plan if isinstance(row, Mapping)]
+    signature_rows: list[str] = []
+    for row in rows:
+        cluster_id = _clean_str(row.get("cluster_id"))
+        if cluster_id is None:
+            continue
+        region_ids = _committed_region_ids_for_row(row)
+        region = region_ids[0] if region_ids else _clean_str(row.get("zone_assignment"))
+        if region is None:
+            continue
+        wall_side = _committed_wall_side_for_row(row)
+        target = _material_macro_target_token(region=region, wall_side=wall_side)
+        signature_rows.append(f"{cluster_id}:{target}")
+    signature_rows.sort()
+    return "|".join(signature_rows)
+
+
+def _row_participates_in_material_macro_signature(row: Mapping[str, object]) -> bool:
+    if str(row.get("priority") or "").strip() == "core":
+        return True
+    if str(row.get("scenario_role") or "").strip() in {"primary", "secondary"}:
+        return True
+    return str(row.get("anchor_strength") or "").strip().lower() in {
+        "hard",
+        "strong",
+    }
+
+
+def _material_macro_target_token(*, region: str, wall_side: str) -> str:
+    token = region.strip()
+    wall = wall_side.strip()
+    if not token or not wall or wall == "center":
+        return token
+    if wall in token or _physical_region_class(token) == wall:
+        return token
+    if _physical_region_class(token) in {"private_deep", "edge_service", "focal_wall"}:
+        return f"{token}@{wall}"
+    return token
 
 
 def _validate_guided_concept_diversity(

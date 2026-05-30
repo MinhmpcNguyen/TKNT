@@ -110,6 +110,7 @@ _VISUAL_STORAGE_OBJECT_TOKENS = frozenset(
 )
 
 DEFAULT_GRID_MM = 50
+DEFAULT_WALL_THICKNESS_MM = 100
 DEFAULT_MAX_CONCEPTS = 5
 DEFAULT_MAX_VARIANTS_PER_CLUSTER = 6
 DEFAULT_MAX_POSE_CANDIDATES_PER_VARIANT = 40
@@ -529,14 +530,6 @@ def _concept_id_from_relation_plan(relation_plan: Mapping[str, Any] | None) -> s
         if value:
             return value
     return "concept_01"
-
-
-def _concept_prior_score(relation_plan: Mapping[str, Any] | None) -> float:
-    concept = _concept_from_relation_plan(relation_plan)
-    value = _as_float(concept.get("concept_score_prior"), 0.78)
-    if value > 1.0:
-        value /= 100.0
-    return _clamp_score(value)
 
 
 def _center_openness_strength(relation_plan: Mapping[str, Any] | None) -> str:
@@ -3130,111 +3123,6 @@ def _expand_problem_clusters(
     return new_map
 
 
-def _solve_one_round(
-    *,
-    tools: Any,
-    room_model: Any,
-    clusters_outlines: Any,
-    relation_plan: Any,
-    grid_mm: int,
-    candidates_by_cluster: dict[str, list[Candidate]],
-    cluster_order: Sequence[str],
-    variant_payload_lookup: dict[str, dict[str, dict[str, Any]]],
-    time_limit_s: float,
-    num_workers: int,
-    candidate_bonus_by_key: Mapping[tuple[str, str, int, int, int], int] | None = None,
-) -> tuple[
-    list[dict[str, Any]], list[dict[str, str]], dict[str, Candidate], dict[str, Any]
-]:
-    candidate_geoms = _build_candidate_geometries(
-        tools,
-        variant_payload_lookup=variant_payload_lookup,
-        candidates_by_cluster=candidates_by_cluster,
-    )
-    incompatible, pair_bonus = _build_pair_terms(
-        tools,
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        relation_plan=relation_plan,
-        grid_mm=grid_mm,
-        candidates_by_cluster=candidates_by_cluster,
-        candidate_geoms=candidate_geoms,
-        cluster_order=cluster_order,
-    )
-
-    model = cp_model.CpModel()
-    xvars: dict[tuple[str, int], cp_model.IntVar] = {}
-    ordered_pick_vars: list[cp_model.IntVar] = []
-    for cid in _ordered_cluster_ids(candidates_by_cluster, cluster_order=cluster_order):
-        cands = candidates_by_cluster[cid]
-        vars_for_cluster = []
-        for i, cand in enumerate(cands):
-            var = model.NewBoolVar(f"pick[{cid},{i}]")
-            xvars[(cid, i)] = var
-            vars_for_cluster.append(var)
-        model.AddExactlyOne(vars_for_cluster)
-        ordered_pick_vars.extend(vars_for_cluster)
-
-    for a_key, b_key in sorted(incompatible):
-        model.Add(xvars[a_key] + xvars[b_key] <= 1)
-
-    objective_terms: list[Any] = []
-    for cid in _ordered_cluster_ids(candidates_by_cluster, cluster_order=cluster_order):
-        cands = candidates_by_cluster[cid]
-        for i, cand in enumerate(cands):
-            objective_terms.append(
-                _candidate_effective_score(cand, candidate_bonus_by_key)
-                * xvars[(cid, i)]
-            )
-
-    for (a_key, b_key), bonus in pair_bonus.items():
-        za = xvars[a_key]
-        zb = xvars[b_key]
-        z = model.NewBoolVar(f"pair[{a_key[0]},{a_key[1]}|{b_key[0]},{b_key[1]}]")
-        model.Add(z <= za)
-        model.Add(z <= zb)
-        model.Add(z >= za + zb - 1)
-        objective_terms.append(int(bonus) * z)
-
-    model.Maximize(sum(objective_terms))
-
-    add_decision_strategy = getattr(model, "AddDecisionStrategy", None)
-    choose_first = getattr(cp_model, "CHOOSE_FIRST", None)
-    select_max_value = getattr(cp_model, "SELECT_MAX_VALUE", None)
-    if (
-        callable(add_decision_strategy)
-        and choose_first is not None
-        and select_max_value is not None
-        and ordered_pick_vars
-    ):
-        add_decision_strategy(ordered_pick_vars, choose_first, select_max_value)
-
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(time_limit_s)
-    solver.parameters.num_search_workers = int(max(1, num_workers))
-    solver.parameters.random_seed = 42
-
-    status = solver.Solve(model)
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        raise RuntimeError("CP-SAT did not find a feasible assignment over the set")
-
-    transforms, selected_variants, chosen = _selected_from_solver(
-        candidates_by_cluster,
-        xvars,
-        solver,
-    )
-    verify = _verify_complete(
-        tools,
-        room_model=room_model,
-        clusters_outlines=clusters_outlines,
-        relation_plan=relation_plan,
-        grid_mm=grid_mm,
-        cluster_transforms=transforms,
-        selected_variants=selected_variants,
-    )
-    return transforms, selected_variants, chosen, verify
-
-
 def _solve_solution_pool_one_round(
     *,
     tools: Any,
@@ -3907,24 +3795,6 @@ def _rank_solution_records(records: Sequence[dict[str, Any]]) -> list[dict[str, 
         clean["solution_id"] = f"sol_{len(out) + 1:02d}"
         out.append(clean)
     return out
-
-
-def _best_solution_debug_record(
-    records: Sequence[dict[str, Any]],
-) -> tuple[dict[str, Any] | None, dict[str, Candidate]]:
-    if not records:
-        return None, {}
-    ranked = sorted(
-        records,
-        key=lambda item: tuple(item.get("_rank_key") or ()),
-        reverse=True,
-    )
-    best = ranked[0]
-    verify_raw = best.get("_verify")
-    chosen_raw = best.get("_chosen")
-    verify = verify_raw if isinstance(verify_raw, dict) else None
-    chosen = chosen_raw if isinstance(chosen_raw, dict) else {}
-    return verify, chosen
 
 
 def solve_layout(
@@ -5155,6 +5025,28 @@ def solve_object_level_layout(
         )
         for cluster_id in anchor_order
     }
+    anchor_preflight_by_cluster = (
+        world.get("_anchor_candidate_preflight_by_cluster")
+        if isinstance(world.get("_anchor_candidate_preflight_by_cluster"), Mapping)
+        else {}
+    )
+    anchor_reject_reason_counts = (
+        world.get("_anchor_reject_reason_counts")
+        if isinstance(world.get("_anchor_reject_reason_counts"), Mapping)
+        else {}
+    )
+    anchor_candidate_diagnostics_by_cluster = {
+        cluster_id: _anchor_candidate_generation_diagnostics(
+            rows,
+            preflight=anchor_preflight_by_cluster.get(cluster_id)
+            if isinstance(anchor_preflight_by_cluster, Mapping)
+            else {},
+            reject_reason_counts=anchor_reject_reason_counts.get(cluster_id)
+            if isinstance(anchor_reject_reason_counts, Mapping)
+            else {},
+        )
+        for cluster_id, rows in anchor_candidates_by_cluster.items()
+    }
     if any(
         not rows
         for cluster_id, rows in anchor_candidates_by_cluster.items()
@@ -5188,7 +5080,22 @@ def solve_object_level_layout(
             "solver_debug": {
                 "anchor_candidate_counts": {
                     k: len(v) for k, v in anchor_candidates_by_cluster.items()
-                }
+                },
+                "anchor_candidate_diagnostics_by_cluster": (
+                    anchor_candidate_diagnostics_by_cluster
+                ),
+                "auto_window_forbidden_regions_by_cluster": (
+                    world.get("auto_window_forbidden_regions_by_cluster") or {}
+                ),
+                "auto_window_forbidden_regions_by_object": (
+                    world.get("auto_window_forbidden_regions_by_object") or {}
+                ),
+                "geometry": _object_solver_geometry_diagnostics(world),
+                "wall_inner_face_reject_reason_counts": (
+                    _wall_inner_face_reject_reason_counts(
+                        anchor_candidate_diagnostics_by_cluster
+                    )
+                ),
             },
         }
 
@@ -5203,6 +5110,20 @@ def solve_object_level_layout(
         )
     )
     if not anchor_solutions:
+        fallback_retry = _retry_object_level_layout_with_committed_fallback(
+            room_model=room_model,
+            merged_clusters=merged_clusters,
+            relation_plan=relation_plan,
+            cluster_constraints=cluster_constraints,
+            grid_mm=grid_mm,
+            max_rounds=max_rounds,
+            anchor_candidate_diagnostics_by_cluster=(
+                anchor_candidate_diagnostics_by_cluster
+            ),
+            strict_failure_reason="no_compatible_anchor_set",
+        )
+        if fallback_retry is not None:
+            return fallback_retry
         return {
             "status": "UNSAT",
             "solver_kind": "object_level_anchor_first",
@@ -5224,6 +5145,21 @@ def solve_object_level_layout(
                 "anchor_candidate_counts": {
                     k: len(v) for k, v in anchor_candidates_by_cluster.items()
                 },
+                "anchor_candidate_diagnostics_by_cluster": (
+                    anchor_candidate_diagnostics_by_cluster
+                ),
+                "auto_window_forbidden_regions_by_cluster": (
+                    world.get("auto_window_forbidden_regions_by_cluster") or {}
+                ),
+                "auto_window_forbidden_regions_by_object": (
+                    world.get("auto_window_forbidden_regions_by_object") or {}
+                ),
+                "geometry": _object_solver_geometry_diagnostics(world),
+                "wall_inner_face_reject_reason_counts": (
+                    _wall_inner_face_reject_reason_counts(
+                        anchor_candidate_diagnostics_by_cluster
+                    )
+                ),
                 "anchor_order": list(anchor_order),
             },
         }
@@ -5303,6 +5239,20 @@ def solve_object_level_layout(
     ]
     best_solution = ranked_pool[0] if ranked_pool else None
     if best_solution is None:
+        fallback_retry = _retry_object_level_layout_with_committed_fallback(
+            room_model=room_model,
+            merged_clusters=merged_clusters,
+            relation_plan=relation_plan,
+            cluster_constraints=cluster_constraints,
+            grid_mm=grid_mm,
+            max_rounds=max_rounds,
+            anchor_candidate_diagnostics_by_cluster=(
+                anchor_candidate_diagnostics_by_cluster
+            ),
+            strict_failure_reason="no_publishable_committed_solution",
+        )
+        if fallback_retry is not None:
+            return fallback_retry
         partial_solutions = [
             _build_object_level_solution_payload(
                 solution=item,
@@ -5353,6 +5303,21 @@ def solve_object_level_layout(
                 "anchor_candidate_counts": {
                     k: len(v) for k, v in anchor_candidates_by_cluster.items()
                 },
+                "anchor_candidate_diagnostics_by_cluster": (
+                    anchor_candidate_diagnostics_by_cluster
+                ),
+                "auto_window_forbidden_regions_by_cluster": (
+                    world.get("auto_window_forbidden_regions_by_cluster") or {}
+                ),
+                "auto_window_forbidden_regions_by_object": (
+                    world.get("auto_window_forbidden_regions_by_object") or {}
+                ),
+                "geometry": _object_solver_geometry_diagnostics(world),
+                "wall_inner_face_reject_reason_counts": (
+                    _wall_inner_face_reject_reason_counts(
+                        anchor_candidate_diagnostics_by_cluster
+                    )
+                ),
                 "anchor_order": anchor_order,
                 "raw_solution_count": len(raw_solution_pool),
                 "candidate_solution_count": len(solution_pool),
@@ -5412,6 +5377,21 @@ def solve_object_level_layout(
             "anchor_candidate_counts": {
                 k: len(v) for k, v in anchor_candidates_by_cluster.items()
             },
+            "anchor_candidate_diagnostics_by_cluster": (
+                anchor_candidate_diagnostics_by_cluster
+            ),
+            "auto_window_forbidden_regions_by_cluster": (
+                world.get("auto_window_forbidden_regions_by_cluster") or {}
+            ),
+            "auto_window_forbidden_regions_by_object": (
+                world.get("auto_window_forbidden_regions_by_object") or {}
+            ),
+            "geometry": _object_solver_geometry_diagnostics(world),
+            "wall_inner_face_reject_reason_counts": (
+                _wall_inner_face_reject_reason_counts(
+                    anchor_candidate_diagnostics_by_cluster
+                )
+            ),
             "anchor_order": anchor_order,
             "object_count": len(best_solution.get("placed_objects") or []),
             "candidate_solution_count": len(solution_pool),
@@ -5423,6 +5403,73 @@ def solve_object_level_layout(
             "Local support placement now enumerates multiple non-overlapping arrangements before ranking them.",
         ],
     }
+
+
+def _retry_object_level_layout_with_committed_fallback(
+    *,
+    room_model: dict[str, Any],
+    merged_clusters: dict[str, Any],
+    relation_plan: dict[str, Any] | None,
+    cluster_constraints: dict[str, Any] | None,
+    grid_mm: int,
+    max_rounds: int,
+    anchor_candidate_diagnostics_by_cluster: Mapping[str, Any],
+    strict_failure_reason: str,
+) -> dict[str, Any] | None:
+    if _relation_plan_allows_committed_fallback(relation_plan):
+        return None
+    if not _committed_anchor_fallback_retry_is_needed(
+        anchor_candidate_diagnostics_by_cluster
+    ):
+        return None
+    retry_plan = deepcopy(relation_plan) if isinstance(relation_plan, dict) else {}
+    retry_plan["_allow_committed_fallback_after_strict_fail"] = True
+    retry_result = solve_object_level_layout(
+        room_model=room_model,
+        merged_clusters=merged_clusters,
+        relation_plan=retry_plan,
+        cluster_constraints=cluster_constraints,
+        grid_mm=grid_mm,
+        max_rounds=max_rounds,
+    )
+    if str(retry_result.get("status") or "").upper() != "OK":
+        return None
+    retry_result["committed_anchor_fallback_retry_applied"] = True
+    retry_result["committed_anchor_strict_failure_reason"] = strict_failure_reason
+    retry_result["notes"] = [
+        *[str(note) for note in retry_result.get("notes", []) if str(note).strip()],
+        (
+            "Strict committed material macro solve failed; broad preferred regions "
+            "were enabled for this retry and are marked in candidate diagnostics."
+        ),
+    ]
+    solver_debug = retry_result.setdefault("solver_debug", {})
+    if isinstance(solver_debug, dict):
+        solver_debug["committed_anchor_fallback_retry_applied"] = True
+        solver_debug["committed_anchor_strict_failure_reason"] = strict_failure_reason
+        solver_debug["strict_anchor_candidate_diagnostics_by_cluster"] = deepcopy(
+            dict(anchor_candidate_diagnostics_by_cluster)
+        )
+    return retry_result
+
+
+def _committed_anchor_fallback_retry_is_needed(
+    anchor_candidate_diagnostics_by_cluster: Mapping[str, Any],
+) -> bool:
+    for row in anchor_candidate_diagnostics_by_cluster.values():
+        if not isinstance(row, Mapping):
+            continue
+        committed_regions = row.get("committed_region_ids")
+        if not committed_regions:
+            continue
+        try:
+            committed_count = int(row.get("committed_candidate_count") or 0)
+            fallback_count = int(row.get("fallback_candidate_count") or 0)
+        except (TypeError, ValueError):
+            continue
+        if committed_count > 0 and fallback_count == 0:
+            return True
+    return False
 
 
 def _build_object_solver_world(
@@ -5564,8 +5611,24 @@ def _build_object_solver_world(
     protected_regions = _collect_protected_regions(
         room_model, relation_plan, region_index
     )
+    cluster_forbidden_regions = _collect_cluster_forbidden_regions(
+        clusters_by_id, room_model, relation_plan, region_index
+    )
     room_bbox = _object_solver_room_bbox(room_model)
     room_polygon = _object_solver_room_polygon(room_model)
+    wall_inner_faces = _object_solver_wall_inner_faces(
+        room_model,
+        room_bbox,
+        room_polygon,
+    )
+    wall_insets_by_side = _object_solver_wall_insets_by_side(
+        wall_inner_faces,
+        room_bbox,
+    )
+    placement_room_bbox = _object_solver_placement_room_bbox(
+        room_bbox,
+        wall_insets_by_side,
+    )
     room_polygon_edges = tuple(
         (room_polygon[index], room_polygon[(index + 1) % len(room_polygon)])
         for index in range(len(room_polygon))
@@ -5576,6 +5639,10 @@ def _build_object_solver_world(
         "grid_mm": max(25, int(grid_mm)),
         "region_index": region_index,
         "room_bbox": room_bbox,
+        "raw_room_bbox": room_bbox,
+        "placement_room_bbox": placement_room_bbox,
+        "wall_insets_by_side": wall_insets_by_side,
+        "wall_inner_faces": wall_inner_faces,
         "room_polygon": room_polygon,
         "room_polygon_edges": room_polygon_edges,
         "room_polygon_is_axis_aligned_rectangle": _room_polygon_is_axis_aligned_rectangle(
@@ -5583,13 +5650,86 @@ def _build_object_solver_world(
             room_bbox,
         ),
         "protected_regions": protected_regions,
-        "cluster_forbidden_regions": _collect_cluster_forbidden_regions(
-            clusters_by_id, room_model, relation_plan, region_index
+        "cluster_forbidden_regions": cluster_forbidden_regions,
+        "auto_window_forbidden_regions_by_cluster": (
+            _auto_window_forbidden_regions_by_cluster(cluster_forbidden_regions)
         ),
+        "auto_window_forbidden_regions_by_object": (
+            _auto_window_forbidden_regions_by_object(cluster_forbidden_regions)
+        ),
+        "_anchor_candidate_preflight_by_cluster": {},
+        "_anchor_reject_reason_counts": {},
         "_object_blocking_region_cache": {},
         "_object_forbidden_region_cache": {},
         "_rect_inside_room_footprint_cache": {},
     }
+
+
+def _auto_window_forbidden_regions_by_cluster(
+    forbidden_regions: Sequence[Mapping[str, Any]],
+) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for row in forbidden_regions:
+        if str(row.get("source") or "").startswith("auto_") and not str(
+            row.get("object_id") or ""
+        ).strip():
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            region_id = str(row.get("region_id") or "").strip()
+            if cluster_id and region_id:
+                out.setdefault(cluster_id, []).append(region_id)
+    return {key: sorted(set(value)) for key, value in out.items()}
+
+
+def _auto_window_forbidden_regions_by_object(
+    forbidden_regions: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, list[str]]]:
+    out: dict[str, dict[str, list[str]]] = {}
+    for row in forbidden_regions:
+        if not str(row.get("source") or "").startswith("auto_"):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        object_id = str(row.get("object_id") or "").strip()
+        region_id = str(row.get("region_id") or "").strip()
+        if cluster_id and object_id and region_id:
+            out.setdefault(cluster_id, {}).setdefault(object_id, []).append(region_id)
+    return {
+        cluster_id: {
+            object_id: sorted(set(region_ids))
+            for object_id, region_ids in object_rows.items()
+        }
+        for cluster_id, object_rows in out.items()
+    }
+
+
+def _object_solver_geometry_diagnostics(world: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "raw_room_bbox": list(world.get("raw_room_bbox") or world.get("room_bbox") or []),
+        "placement_room_bbox": list(world.get("placement_room_bbox") or []),
+        "wall_insets_by_side": dict(world.get("wall_insets_by_side") or {}),
+    }
+
+
+def _wall_inner_face_reject_reason_counts(
+    anchor_candidate_diagnostics_by_cluster: Mapping[str, Any],
+) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for cluster_id, diagnostics in anchor_candidate_diagnostics_by_cluster.items():
+        if not isinstance(diagnostics, Mapping):
+            continue
+        counts = diagnostics.get("anchor_reject_reason_counts")
+        if not isinstance(counts, Mapping):
+            continue
+        total = 0
+        for reason, count in counts.items():
+            if "wall_inner_face" not in str(reason):
+                continue
+            try:
+                total += int(count)
+            except (TypeError, ValueError):
+                continue
+        if total:
+            out[str(cluster_id)] = total
+    return out
 
 
 def _object_level_anchor_cluster_order(
@@ -5861,6 +6001,9 @@ def _collect_protected_regions(
                 "violation_severity": str(row.get("violation_severity") or "advisory"),
                 "zone_type": str(row.get("zone_type") or ""),
                 "applies_to": [str(item) for item in applies_to if str(item).strip()],
+                "softened_for_clusters": _string_sequence(
+                    row.get("softened_for_clusters") or row.get("relaxed_for_clusters")
+                ),
             }
         )
     return protected_rows
@@ -5897,6 +6040,7 @@ def _cluster_forbidden_region_policy_from_protected_row(
         "enforcement": str(row.get("enforcement") or "soft"),
         "violation_severity": str(row.get("violation_severity") or "advisory"),
         "zone_type": str(row.get("zone_type") or "cluster_forbidden_region"),
+        "softened_for_clusters": _string_sequence(row.get("softened_for_clusters")),
     }
 
 
@@ -5923,9 +6067,11 @@ def _default_cluster_forbidden_region_policy_for_cluster(
             "violation_severity": "advisory",
             "zone_type": "conceptual_center_access_lane",
         }
+    if _region_id_is_window_clearance(region_id):
+        return _default_cluster_forbidden_region_policy()
     if (
-        _region_id_is_daylight_clearance(region_id)
-        and _cluster_max_height_mm(cluster_program)
+        _region_id_is_daylight_quality_region(region_id)
+        and _cluster_core_max_height_mm(cluster_program)
         <= OBJECT_LEVEL_LOW_HEIGHT_DAYLIGHT_SOFT_MAX_MM
     ):
         return {
@@ -5933,14 +6079,19 @@ def _default_cluster_forbidden_region_policy_for_cluster(
             "priority": "medium",
             "enforcement": "soft",
             "violation_severity": "advisory",
-            "zone_type": "daylight_clearance_soft",
+            "zone_type": "daylight_quality_soft",
         }
     return _default_cluster_forbidden_region_policy()
 
 
-def _region_id_is_daylight_clearance(region_id: str) -> bool:
+def _region_id_is_window_clearance(region_id: str) -> bool:
     token = region_id.strip().lower()
-    return "window" in token or "daylight" in token
+    return "window" in token and "clearance" in token
+
+
+def _region_id_is_daylight_quality_region(region_id: str) -> bool:
+    token = region_id.strip().lower()
+    return "daylight" in token and not _region_id_is_window_clearance(region_id)
 
 
 def _cluster_max_height_mm(cluster_program: Mapping[str, Any]) -> int:
@@ -5951,6 +6102,44 @@ def _cluster_max_height_mm(cluster_program: Mapping[str, Any]) -> int:
             continue
         heights.append(_object_spec_height_mm(spec))
     return max(heights, default=0)
+
+
+def _cluster_core_max_height_mm(cluster_program: Mapping[str, Any]) -> int:
+    specs = _object_specs_by_id(cluster_program)
+    object_program = (
+        cluster_program.get("object_program")
+        if isinstance(cluster_program.get("object_program"), Mapping)
+        else {}
+    )
+    protected_ids = set(_string_sequence(object_program.get("protected_ids")))
+    required_ids = set(_string_sequence(object_program.get("required_object_ids")))
+    anchor_ids = set(_string_sequence(object_program.get("anchors")))
+    core_ids = set(protected_ids)
+    core_ids.update(required_ids)
+    core_ids.update(anchor_ids)
+    dominant_anchor_id = str(object_program.get("dominant_anchor_id") or "").strip()
+    if dominant_anchor_id:
+        core_ids.add(dominant_anchor_id)
+    droppable_ids = set(_string_sequence(object_program.get("droppable_ids")))
+    heights: list[int] = []
+    for object_id, spec in specs.items():
+        if not isinstance(spec, Mapping):
+            continue
+        key = str(object_id or spec.get("object_id") or "").strip()
+        if key not in core_ids:
+            continue
+        if (
+            key in droppable_ids
+            and key not in protected_ids
+            and key not in required_ids
+            and key not in anchor_ids
+            and key != dominant_anchor_id
+        ):
+            continue
+        heights.append(_object_spec_height_mm(spec))
+    if heights:
+        return max(heights)
+    return _cluster_max_height_mm(cluster_program)
 
 
 def _object_specs_by_id(cluster_program: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -6027,37 +6216,53 @@ def _object_spec_blocks_window_by_height(
     return _object_spec_is_visual_storage_like(object_id, spec)
 
 
-def _window_blocking_region_ids_from_index(
+def _object_spec_blocks_window_clearance(object_id: str, spec: Mapping[str, Any]) -> bool:
+    return not _object_spec_is_window_treatment(object_id, spec)
+
+
+def _window_clearance_region_ids_from_index(
     region_index: Mapping[str, tuple[int, int, int, int]],
 ) -> list[str]:
-    clearance_ids: list[str] = []
-    daylight_ids: list[str] = []
+    region_ids: list[str] = []
     for raw_region_id in region_index:
         region_id = str(raw_region_id or "").strip()
         if not region_id:
             continue
-        token = region_id.lower()
-        if "window" in token and "clearance" in token:
-            clearance_ids.append(region_id)
-        elif _region_id_is_daylight_clearance(region_id):
-            daylight_ids.append(region_id)
-    return sorted({*clearance_ids, *daylight_ids})
+        if _region_id_is_window_clearance(region_id):
+            region_ids.append(region_id)
+    return sorted(set(region_ids))
 
 
-def _auto_window_blocking_region_ids_for_cluster(
-    *,
-    cluster_program: Mapping[str, Any],
+def _daylight_quality_region_ids_from_index(
     region_index: Mapping[str, tuple[int, int, int, int]],
 ) -> list[str]:
-    if (
-        _cluster_max_height_mm(cluster_program)
-        <= OBJECT_LEVEL_LOW_HEIGHT_DAYLIGHT_SOFT_MAX_MM
-    ):
-        return []
+    region_ids: list[str] = []
+    for raw_region_id in region_index:
+        region_id = str(raw_region_id or "").strip()
+        if not region_id:
+            continue
+        if _region_id_is_daylight_quality_region(region_id):
+            region_ids.append(region_id)
+    return sorted(set(region_ids))
+
+
+def _auto_window_blocking_region_ids_for_object(
+    *,
+    cluster_program: Mapping[str, Any],
+    object_id: str,
+    region_index: Mapping[str, tuple[int, int, int, int]],
+) -> list[str]:
     if _cluster_is_window_treatment_only(cluster_program):
         return []
-
-    return _window_blocking_region_ids_from_index(region_index)
+    spec = _object_spec(cluster_program, object_id)
+    if not isinstance(spec, Mapping):
+        return []
+    region_ids: list[str] = []
+    if _object_spec_blocks_window_clearance(object_id, spec):
+        region_ids.extend(_window_clearance_region_ids_from_index(region_index))
+    if _object_spec_blocks_window_by_height(object_id, spec):
+        region_ids.extend(_daylight_quality_region_ids_from_index(region_index))
+    return sorted(set(region_ids))
 
 
 def _auto_window_blocking_region_ids_by_object_for_cluster(
@@ -6065,13 +6270,7 @@ def _auto_window_blocking_region_ids_by_object_for_cluster(
     cluster_program: Mapping[str, Any],
     region_index: Mapping[str, tuple[int, int, int, int]],
 ) -> dict[str, list[str]]:
-    if (
-        _cluster_max_height_mm(cluster_program)
-        > OBJECT_LEVEL_LOW_HEIGHT_DAYLIGHT_SOFT_MAX_MM
-    ):
-        return {}
-    region_ids = _window_blocking_region_ids_from_index(region_index)
-    if not region_ids or _cluster_is_window_treatment_only(cluster_program):
+    if _cluster_is_window_treatment_only(cluster_program):
         return {}
     out: dict[str, list[str]] = {}
     for raw_object_id, spec in _object_specs_by_id(cluster_program).items():
@@ -6080,7 +6279,12 @@ def _auto_window_blocking_region_ids_by_object_for_cluster(
         object_id = str(raw_object_id or spec.get("object_id") or "").strip()
         if not object_id:
             continue
-        if _object_spec_blocks_window_by_height(object_id, spec):
+        region_ids = _auto_window_blocking_region_ids_for_object(
+            cluster_program=cluster_program,
+            object_id=object_id,
+            region_index=region_index,
+        )
+        if region_ids:
             out[object_id] = region_ids
     return out
 
@@ -6130,6 +6334,7 @@ def _cluster_forbidden_region_policy(
     *,
     region_id: str,
     bbox: tuple[int, int, int, int],
+    cluster_id: str,
     cluster_program: Mapping[str, Any],
     protected_policy_by_ref: Mapping[
         tuple[str, tuple[int, int, int, int]], Mapping[str, Any]
@@ -6144,7 +6349,15 @@ def _cluster_forbidden_region_policy(
             region_id=region_id,
             cluster_program=cluster_program,
         )
-    return {
+    return _protected_region_policy_for_cluster(protected_policy, cluster_id=cluster_id)
+
+
+def _protected_region_policy_for_cluster(
+    protected_policy: Mapping[str, Any],
+    *,
+    cluster_id: str,
+) -> dict[str, Any]:
+    policy = {
         "max_overlap_ratio": float(protected_policy.get("max_overlap_ratio") or 0.0),
         "priority": str(protected_policy.get("priority") or "medium"),
         "enforcement": str(protected_policy.get("enforcement") or "soft"),
@@ -6155,6 +6368,14 @@ def _cluster_forbidden_region_policy(
             protected_policy.get("zone_type") or "cluster_forbidden_region"
         ),
     }
+    softened_for_clusters = set(
+        _string_sequence(protected_policy.get("softened_for_clusters"))
+    )
+    if cluster_id and cluster_id in softened_for_clusters:
+        policy["priority"] = "medium"
+        policy["enforcement"] = "soft"
+        policy["violation_severity"] = "advisory"
+    return policy
 
 
 def _collect_cluster_forbidden_regions(
@@ -6200,10 +6421,6 @@ def _collect_cluster_forbidden_regions(
                     if isinstance(hint, Mapping)
                     else []
                 ),
-                *_auto_window_blocking_region_ids_for_cluster(
-                    cluster_program=cluster_program,
-                    region_index=region_index,
-                ),
             ]
         )
         for region_id in region_ids:
@@ -6217,6 +6434,7 @@ def _collect_cluster_forbidden_regions(
                 policy = _cluster_forbidden_region_policy(
                     region_id=region_id,
                     bbox=bbox,
+                    cluster_id=cluster_id,
                     cluster_program=cluster_program,
                     protected_policy_by_ref=protected_policy_by_ref,
                     protected_policy_by_bbox=protected_policy_by_bbox,
@@ -6248,10 +6466,34 @@ def _collect_cluster_forbidden_regions(
                             "object_id": object_id,
                             "region_id": region_id,
                             "bbox": bbox,
-                            **_default_cluster_forbidden_region_policy(),
+                            **_default_auto_window_forbidden_region_policy(region_id),
+                            "source": _auto_window_forbidden_region_source(region_id),
                         }
                     )
     return rows
+
+
+def _default_auto_window_forbidden_region_policy(region_id: str) -> dict[str, Any]:
+    if _region_id_is_daylight_quality_region(region_id):
+        return {
+            "max_overlap_ratio": 0.0,
+            "priority": "high",
+            "enforcement": "hard",
+            "violation_severity": "blocking",
+            "zone_type": "daylight_quality_blocking",
+        }
+    return {
+        **_default_cluster_forbidden_region_policy(),
+        "zone_type": "window_clearance",
+    }
+
+
+def _auto_window_forbidden_region_source(region_id: str) -> str:
+    if _region_id_is_daylight_quality_region(region_id):
+        return "auto_daylight_quality"
+    if _region_id_is_window_clearance(region_id):
+        return "auto_window_clearance"
+    return "auto_window"
 
 
 def _cluster_forbidden_hint_rows(
@@ -6389,6 +6631,225 @@ def _room_polygon_is_axis_aligned_rectangle(
         (max_x, max_y),
         (min_x, max_y),
     }
+
+
+def _object_solver_wall_inner_faces(
+    room_model: Mapping[str, Any],
+    room_bbox: tuple[int, int, int, int],
+    room_polygon: Sequence[tuple[float, float]],
+) -> tuple[dict[str, Any], ...]:
+    room = room_model.get("room") if isinstance(room_model.get("room"), Mapping) else {}
+    default_thickness = _coerce_nonnegative_int(
+        room.get("wall_thickness_mm") if isinstance(room, Mapping) else None
+    )
+    if default_thickness is None:
+        default_thickness = DEFAULT_WALL_THICKNESS_MM
+    thickness_by_wall_id = (
+        room.get("wall_thickness_by_wall_id")
+        if isinstance(room, Mapping)
+        and isinstance(room.get("wall_thickness_by_wall_id"), Mapping)
+        else {}
+    )
+    topology = (
+        room_model.get("topology")
+        if isinstance(room_model.get("topology"), Mapping)
+        else {}
+    )
+    wall_graph = (
+        topology.get("wall_graph")
+        if isinstance(topology, Mapping) and isinstance(topology.get("wall_graph"), Mapping)
+        else {}
+    )
+    nodes = (
+        wall_graph.get("nodes")
+        if isinstance(wall_graph, Mapping)
+        and isinstance(wall_graph.get("nodes"), Sequence)
+        and not isinstance(wall_graph.get("nodes"), str)
+        else []
+    )
+    faces: list[dict[str, Any]] = []
+    for index, row in enumerate(nodes, start=1):
+        if not isinstance(row, Mapping):
+            continue
+        start = _point_tuple_from_mapping(row.get("start_mm") or row.get("p1_mm"))
+        end = _point_tuple_from_mapping(row.get("end_mm") or row.get("p2_mm"))
+        if start is None or end is None:
+            continue
+        wall_id = str(row.get("id") or row.get("wall_id") or f"wall_{index}")
+        thickness = _coerce_nonnegative_int(row.get("thickness_mm"))
+        if thickness is None:
+            thickness = _coerce_nonnegative_int(thickness_by_wall_id.get(wall_id))
+        if thickness is None:
+            thickness = default_thickness
+        normal = _normal_tuple_from_mapping(row.get("inward_normal"))
+        faces.extend(
+            _wall_inner_face_from_segment(
+                wall_id=wall_id,
+                start=start,
+                end=end,
+                inward_normal=normal,
+                thickness_mm=thickness,
+            )
+        )
+    if faces:
+        return tuple(faces)
+
+    if len(room_polygon) >= 3:
+        for index, start in enumerate(room_polygon):
+            end = room_polygon[(index + 1) % len(room_polygon)]
+            faces.extend(
+                _wall_inner_face_from_segment(
+                    wall_id=f"wall_{index + 1}",
+                    start=(float(start[0]), float(start[1])),
+                    end=(float(end[0]), float(end[1])),
+                    inward_normal=None,
+                    thickness_mm=default_thickness,
+                )
+            )
+    elif room_bbox[2] > room_bbox[0] and room_bbox[3] > room_bbox[1]:
+        min_x, min_y, max_x, max_y = room_bbox
+        bbox_edges = (
+            ((min_x, min_y), (max_x, min_y)),
+            ((max_x, min_y), (max_x, max_y)),
+            ((max_x, max_y), (min_x, max_y)),
+            ((min_x, max_y), (min_x, min_y)),
+        )
+        for index, (start, end) in enumerate(bbox_edges, start=1):
+            faces.extend(
+                _wall_inner_face_from_segment(
+                    wall_id=f"wall_{index}",
+                    start=(float(start[0]), float(start[1])),
+                    end=(float(end[0]), float(end[1])),
+                    inward_normal=None,
+                    thickness_mm=default_thickness,
+                )
+            )
+    return tuple(faces)
+
+
+def _wall_inner_face_from_segment(
+    *,
+    wall_id: str,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    inward_normal: tuple[float, float] | None,
+    thickness_mm: int,
+) -> list[dict[str, Any]]:
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+        return []
+    tangent = (dx / length, dy / length)
+    normal = inward_normal if inward_normal is not None else (-tangent[1], tangent[0])
+    normal_len = math.hypot(normal[0], normal[1])
+    if normal_len < 1e-6:
+        normal = (-tangent[1], tangent[0])
+        normal_len = 1.0
+    normalized_normal = (normal[0] / normal_len, normal[1] / normal_len)
+    return [
+        {
+            "wall_id": wall_id,
+            "start": start,
+            "end": end,
+            "length_mm": length,
+            "tangent": tangent,
+            "inward_normal": normalized_normal,
+            "thickness_mm": max(0, int(thickness_mm)),
+            "inset_mm": max(0.0, float(thickness_mm) / 2.0),
+        }
+    ]
+
+
+def _object_solver_wall_insets_by_side(
+    wall_inner_faces: Sequence[Mapping[str, Any]],
+    room_bbox: tuple[int, int, int, int],
+) -> dict[str, int]:
+    min_x, min_y, max_x, max_y = room_bbox
+    insets = {"top": 0, "right": 0, "bottom": 0, "left": 0}
+    tolerance = 5.0
+    for face in wall_inner_faces:
+        start = face.get("start")
+        end = face.get("end")
+        normal = face.get("inward_normal")
+        if (
+            not isinstance(start, Sequence)
+            or isinstance(start, str)
+            or len(start) != 2
+            or not isinstance(end, Sequence)
+            or isinstance(end, str)
+            or len(end) != 2
+            or not isinstance(normal, Sequence)
+            or isinstance(normal, str)
+            or len(normal) != 2
+        ):
+            continue
+        try:
+            sx, sy = float(start[0]), float(start[1])
+            ex, ey = float(end[0]), float(end[1])
+            nx, ny = float(normal[0]), float(normal[1])
+            inset = int(round(float(face.get("inset_mm") or 0.0)))
+        except (TypeError, ValueError):
+            continue
+        if inset <= 0:
+            continue
+        if abs(sy - min_y) <= tolerance and abs(ey - min_y) <= tolerance and ny > 0.5:
+            insets["top"] = max(insets["top"], inset)
+        elif (
+            abs(sx - max_x) <= tolerance
+            and abs(ex - max_x) <= tolerance
+            and nx < -0.5
+        ):
+            insets["right"] = max(insets["right"], inset)
+        elif (
+            abs(sy - max_y) <= tolerance
+            and abs(ey - max_y) <= tolerance
+            and ny < -0.5
+        ):
+            insets["bottom"] = max(insets["bottom"], inset)
+        elif (
+            abs(sx - min_x) <= tolerance
+            and abs(ex - min_x) <= tolerance
+            and nx > 0.5
+        ):
+            insets["left"] = max(insets["left"], inset)
+    return insets
+
+
+def _object_solver_placement_room_bbox(
+    room_bbox: tuple[int, int, int, int],
+    wall_insets_by_side: Mapping[str, int],
+) -> tuple[int, int, int, int]:
+    min_x, min_y, max_x, max_y = room_bbox
+    left = max(0, int(wall_insets_by_side.get("left") or 0))
+    top = max(0, int(wall_insets_by_side.get("top") or 0))
+    right = max(0, int(wall_insets_by_side.get("right") or 0))
+    bottom = max(0, int(wall_insets_by_side.get("bottom") or 0))
+    return (min_x + left, min_y + top, max_x - right, max_y - bottom)
+
+
+def _point_tuple_from_mapping(value: Any) -> tuple[float, float] | None:
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        return (float(value.get("x")), float(value.get("y")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _normal_tuple_from_mapping(value: Any) -> tuple[float, float] | None:
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        return (float(value.get("x")), float(value.get("y")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_nonnegative_int(value: Any) -> int | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return max(0, int(round(float(value))))
 
 
 def _room_id(room_model: Mapping[str, Any]) -> str:
@@ -6712,15 +7173,30 @@ def _generate_anchor_pose_candidates(
     )
     zone_assignment = str(hint.get("zone_assignment") or "")
     required_region_ids = _string_sequence(hint.get("required_region_ids"))
+    auto_window_forbidden_region_ids = _auto_window_blocking_region_ids_for_object(
+        cluster_program=cluster_program,
+        object_id=anchor_id,
+        region_index=world["region_index"],
+    )
     forbidden_region_ids = _dedupe_string_sequence(
         [
             *_string_sequence(hint.get("forbidden_region_ids")),
-            *_auto_window_blocking_region_ids_for_cluster(
-                cluster_program=cluster_program,
-                region_index=world["region_index"],
-            ),
+            *auto_window_forbidden_region_ids,
         ]
     )
+    committed_region_ids = _dedupe_string_sequence(
+        [
+            *_string_sequence(hint.get("committed_region_ids")),
+            *_string_sequence(region_preference.get("committed_region_ids")),
+        ]
+    )
+    if not committed_region_ids and zone_assignment:
+        committed_region_ids = [zone_assignment]
+    committed_region_ids = [
+        region_id
+        for region_id in committed_region_ids
+        if region_id and region_id != "keep_open_center"
+    ]
     preferred_region_ids = _string_sequence(hint.get("preferred_region_ids"))
     preferred_region_ids = _dedupe_string_sequence(
         [
@@ -6737,7 +7213,22 @@ def _generate_anchor_pose_candidates(
         ]
     )
     preferred_wall_side = str(hint.get("preferred_wall_side") or "").strip()
+    committed_wall_side = str(
+        hint.get("committed_wall_side")
+        or region_preference.get("committed_wall_side")
+        or preferred_wall_side
+    ).strip()
     anchor_strength = str(hint.get("anchor_strength") or "medium").strip().lower()
+    committed_fallback_relaxed = _relation_plan_allows_committed_fallback(relation_plan)
+    committed_region_bboxes = [
+        bbox
+        for region_id in committed_region_ids
+        if region_id
+        for bbox in _region_bboxes_from_ref(
+            str(region_id), world["region_index"], relation_plan, room_model
+        )
+    ]
+    committed_region_bboxes = _dedupe_region_bboxes(committed_region_bboxes)
     region_bboxes = [
         bbox
         for region_id in preferred_region_ids
@@ -6747,8 +7238,9 @@ def _generate_anchor_pose_candidates(
         )
     ]
     region_bboxes = _dedupe_region_bboxes(region_bboxes)
+    placement_room_bbox = _object_solver_fit_room_bbox(world)
     if not region_bboxes:
-        region_bboxes = [world["room_bbox"]]
+        region_bboxes = [placement_room_bbox]
     forbidden_region_bboxes = [
         bbox
         for region_id in forbidden_region_ids
@@ -6783,12 +7275,47 @@ def _generate_anchor_pose_candidates(
     )
     candidates: list[dict[str, Any]] = []
     seen: set[tuple[int, int, int]] = set()
+    reject_reason_counts: dict[str, int] = {}
+
+    if isinstance(world, dict):
+        preflight_by_cluster = world.setdefault("_anchor_candidate_preflight_by_cluster", {})
+        if isinstance(preflight_by_cluster, dict):
+            preflight_by_cluster[cluster_id] = {
+                "committed_region_ids": list(committed_region_ids),
+                "committed_wall_side": committed_wall_side,
+                "auto_window_forbidden_region_ids": list(
+                    auto_window_forbidden_region_ids
+                ),
+                "forbidden_region_ids": list(forbidden_region_ids),
+                "preferred_region_ids": list(preferred_region_ids),
+            }
+
+    def record_reject(reason: str) -> None:
+        if not reason:
+            return
+        reject_reason_counts[reason] = reject_reason_counts.get(reason, 0) + 1
+
+    def record_forbidden_reject(
+        rect: tuple[int, int, int, int],
+        forbidden_rows: Sequence[Mapping[str, Any]],
+    ) -> None:
+        labels = _anchor_forbidden_reject_reason_labels(
+            rect=rect,
+            forbidden_regions=forbidden_rows,
+        )
+        if not labels:
+            record_reject("forbidden_overlap")
+            return
+        for label in labels:
+            record_reject(f"forbidden_overlap:{label}")
 
     def add_candidates_for_regions(
         candidate_region_bboxes: Sequence[tuple[int, int, int, int]],
         *,
         search_stage: str,
         score_adjustment: float,
+        stage_preferred_wall_side: str,
+        committed_region_missed: bool = False,
     ) -> None:
         for region_bbox in candidate_region_bboxes[:12]:
             min_x, min_y, max_x, max_y = region_bbox
@@ -6799,8 +7326,9 @@ def _generate_anchor_pose_candidates(
                 if (
                     w_mm >= region_width
                     and h_mm >= region_height
-                    and region_bbox != world["room_bbox"]
+                    and region_bbox not in {world["room_bbox"], placement_room_bbox}
                 ):
+                    record_reject("too_large_for_region")
                     continue
                 anchor_kind = _anchor_kind_for_candidate(
                     zone_assignment=zone_assignment,
@@ -6809,7 +7337,7 @@ def _generate_anchor_pose_candidates(
                 )
                 origin_positions = _wall_flush_origin_candidates(
                     region_bbox=region_bbox,
-                    room_bbox=world["room_bbox"],
+                    room_bbox=placement_room_bbox,
                     zone_assignment=zone_assignment,
                     placement_behavior=placement_behavior,
                     w_mm=w_mm,
@@ -6823,7 +7351,7 @@ def _generate_anchor_pose_candidates(
                     origin_positions.extend(
                         _entry_wall_flank_origin_candidates(
                             entry_bbox=region_bbox,
-                            room_bbox=world["room_bbox"],
+                            room_bbox=placement_room_bbox,
                             w_mm=w_mm,
                             h_mm=h_mm,
                             grid_mm=grid_mm,
@@ -6831,7 +7359,7 @@ def _generate_anchor_pose_candidates(
                     )
                 centers = _candidate_centers_for_region(
                     region_bbox=region_bbox,
-                    room_bbox=world["room_bbox"],
+                    room_bbox=placement_room_bbox,
                     zone_assignment=zone_assignment,
                     role_kind=str(
                         hint.get("role_kind") or cluster_program.get("tag") or ""
@@ -6845,19 +7373,38 @@ def _generate_anchor_pose_candidates(
                         y=int(round(cy - h_mm / 2.0)),
                         w_mm=w_mm,
                         h_mm=h_mm,
-                        room_bbox=world["room_bbox"],
+                        room_bbox=placement_room_bbox,
                         grid_mm=grid_mm,
                     )
                     for cx, cy in centers
                 )
                 for x, y in origin_positions:
                     rect = (x, y, x + w_mm, y + h_mm)
-                    if not _rect_inside_room(rect, world["room_bbox"]):
+                    probe_row = {
+                        "cluster_id": cluster_id,
+                        "object_id": anchor_id,
+                        "blocks_floor_area": spec.get("blocks_floor_area", True),
+                        "collision_layer": spec.get("collision_layer"),
+                        "place_on": spec.get("place_on"),
+                        "placement_participation": spec.get(
+                            "placement_participation"
+                        ),
+                        "solver_participation": spec.get("solver_participation"),
+                    }
+                    if not _rect_inside_room_footprint(rect, world, row=probe_row):
+                        record_reject(
+                            _rect_room_footprint_reject_reason(
+                                rect=rect,
+                                world=world,
+                                row=probe_row,
+                            )
+                        )
                         continue
                     if _anchor_forbidden_overlap_exceeds_limit(
                         rect=rect,
                         forbidden_regions=forbidden_regions,
                     ):
+                        record_forbidden_reject(rect, forbidden_regions)
                         continue
                     key = (x, y, int(rot) % 360)
                     if key in seen:
@@ -6873,14 +7420,14 @@ def _generate_anchor_pose_candidates(
                         cluster_id=cluster_id,
                         object_id=anchor_id,
                         rect=rect,
-                        room_bbox=world["room_bbox"],
+                        room_bbox=placement_room_bbox,
                         relation_plan=relation_plan,
                         anchor_kind=anchor_kind,
                         placement_behavior=placement_behavior,
                     )
                     near_wall_fronts = _near_wall_inward_front_options(
                         rect=rect,
-                        room_bbox=world["room_bbox"],
+                        room_bbox=placement_room_bbox,
                     )
                     if (
                         requires_near_wall_inward
@@ -6890,6 +7437,7 @@ def _generate_anchor_pose_candidates(
                             desired_fronts=near_wall_fronts,
                         )
                     ):
+                        record_reject("near_wall_front_mismatch")
                         continue
                     orientation_score = _front_alignment_score(
                         front_world=front_world,
@@ -6909,13 +7457,36 @@ def _generate_anchor_pose_candidates(
                             "dx": front_world[0],
                             "dy": front_world[1],
                         },
+                        "blocks_floor_area": spec.get("blocks_floor_area", True),
+                        "collision_layer": spec.get("collision_layer"),
+                        "place_on": deepcopy(spec.get("place_on"))
+                        if isinstance(spec.get("place_on"), Mapping)
+                        else None,
+                        "placement_participation": spec.get(
+                            "placement_participation"
+                        ),
+                        "solver_participation": spec.get("solver_participation"),
                         "desired_front_world": None
                         if desired_front is None
                         else {"dx": desired_front[0], "dy": desired_front[1]},
                         "orientation_score": orientation_score,
                         "search_stage": search_stage,
+                        "committed_region_ids": list(committed_region_ids),
+                        "committed_wall_side": committed_wall_side,
+                        "fallback_preferred_region_ids": list(preferred_region_ids),
+                        "committed_region_missed": committed_region_missed,
+                        "committed_region_relaxed_after_strict_fail": (
+                            committed_fallback_relaxed
+                        ),
                     }
                     if not _object_rect_is_usable(rect, (), world, row=candidate):
+                        record_reject(
+                            _object_rect_unusable_reject_reason(
+                                rect=rect,
+                                world=world,
+                                row=candidate,
+                            )
+                        )
                         continue
                     candidate["candidate_score"] = (
                         _anchor_candidate_score(
@@ -6924,7 +7495,7 @@ def _generate_anchor_pose_candidates(
                             region_bbox=region_bbox,
                             zone_assignment=zone_assignment,
                             anchor_kind=anchor_kind,
-                            preferred_wall_side=preferred_wall_side,
+                            preferred_wall_side=stage_preferred_wall_side,
                             anchor_strength=anchor_strength,
                             placement_behavior=placement_behavior,
                             forbidden_regions=forbidden_regions,
@@ -6937,11 +7508,41 @@ def _generate_anchor_pose_candidates(
                     )
                     candidates.append(candidate)
 
-    add_candidates_for_regions(
-        region_bboxes,
-        search_stage="planned_regions",
-        score_adjustment=0.0,
-    )
+    committed_candidate_count = 0
+    if committed_region_bboxes:
+        add_candidates_for_regions(
+            committed_region_bboxes,
+            search_stage="committed_regions",
+            score_adjustment=650.0
+            if _anchor_should_prefer_committed_only(
+                anchor_strength=anchor_strength,
+                hint=hint,
+                region_preference=region_preference,
+                cluster_program=cluster_program,
+                anchor_id=anchor_id,
+            )
+            else 250.0,
+            stage_preferred_wall_side=committed_wall_side or preferred_wall_side,
+        )
+        committed_candidate_count = len(candidates)
+    committed_only = _anchor_should_prefer_committed_only(
+        anchor_strength=anchor_strength,
+        hint=hint,
+        region_preference=region_preference,
+        cluster_program=cluster_program,
+        anchor_id=anchor_id,
+    ) and not _relation_plan_allows_committed_fallback(relation_plan)
+    if not candidates or not committed_only:
+        add_candidates_for_regions(
+            region_bboxes,
+            search_stage="fallback_preferred_regions"
+            if committed_region_bboxes
+            else "planned_regions",
+            score_adjustment=-350.0 if committed_region_bboxes else 0.0,
+            stage_preferred_wall_side=preferred_wall_side,
+            committed_region_missed=bool(committed_region_bboxes)
+            and committed_candidate_count == 0,
+        )
     if not candidates:
         add_candidates_for_regions(
             _anchor_fallback_region_bboxes(
@@ -6950,7 +7551,20 @@ def _generate_anchor_pose_candidates(
             ),
             search_stage="expanded_wall_fallback",
             score_adjustment=-900.0,
+            stage_preferred_wall_side=preferred_wall_side,
+            committed_region_missed=bool(committed_region_bboxes),
         )
+    fallback_candidate_count = sum(
+        1
+        for item in candidates
+        if str(item.get("search_stage") or "")
+        in {"fallback_preferred_regions", "expanded_wall_fallback"}
+    )
+    for candidate in candidates:
+        candidate["committed_candidate_count"] = committed_candidate_count
+        candidate["fallback_candidate_count"] = fallback_candidate_count
+        if committed_region_bboxes and committed_candidate_count == 0:
+            candidate["committed_region_missed"] = True
     candidates.sort(
         key=lambda item: (
             -float(item.get("candidate_score") or 0.0),
@@ -6959,7 +7573,104 @@ def _generate_anchor_pose_candidates(
             item["rot"],
         )
     )
+    if isinstance(world, dict):
+        reject_counts_by_cluster = world.setdefault("_anchor_reject_reason_counts", {})
+        if isinstance(reject_counts_by_cluster, dict):
+            reject_counts_by_cluster[cluster_id] = dict(sorted(reject_reason_counts.items()))
     return candidates[:OBJECT_LEVEL_MAX_ANCHOR_CANDIDATES_PER_CLUSTER]
+
+
+def _anchor_should_prefer_committed_only(
+    *,
+    anchor_strength: str,
+    hint: Mapping[str, Any],
+    region_preference: Mapping[str, Any],
+    cluster_program: Mapping[str, Any],
+    anchor_id: str,
+) -> bool:
+    strength = anchor_strength.strip().lower()
+    if strength in {"hard", "strong"}:
+        return True
+    scenario_role = str(
+        hint.get("scenario_role") or region_preference.get("scenario_role") or ""
+    ).strip()
+    if scenario_role in {"primary", "secondary"}:
+        return True
+    spec = _object_spec(cluster_program, anchor_id)
+    if not isinstance(spec, Mapping):
+        return False
+    return str(spec.get("preserve_level") or "").strip() in {
+        "highest",
+        "critical",
+    } or bool(spec.get("protected"))
+
+
+def _relation_plan_allows_committed_fallback(
+    relation_plan: Mapping[str, Any] | None,
+) -> bool:
+    if not isinstance(relation_plan, Mapping):
+        return False
+    return bool(
+        relation_plan.get("_allow_committed_fallback_after_strict_fail")
+        or relation_plan.get("allow_committed_fallback_after_strict_fail")
+    )
+
+
+def _anchor_candidate_generation_diagnostics(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    preflight: Mapping[str, Any] | None = None,
+    reject_reason_counts: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    stage_counts: dict[str, int] = {}
+    preflight = preflight if isinstance(preflight, Mapping) else {}
+    committed_region_ids: list[str] = _string_sequence(
+        preflight.get("committed_region_ids")
+    )
+    committed_wall_side = str(preflight.get("committed_wall_side") or "").strip()
+    committed_region_missed = False
+    committed_region_relaxed_after_strict_fail = False
+    for row in rows:
+        stage = str(row.get("search_stage") or "").strip()
+        if stage:
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+        if not committed_region_ids:
+            committed_region_ids = _string_sequence(row.get("committed_region_ids"))
+        if not committed_wall_side:
+            committed_wall_side = str(row.get("committed_wall_side") or "").strip()
+        committed_region_missed = committed_region_missed or bool(
+            row.get("committed_region_missed")
+        )
+        committed_region_relaxed_after_strict_fail = (
+            committed_region_relaxed_after_strict_fail
+            or bool(row.get("committed_region_relaxed_after_strict_fail"))
+        )
+    committed_count = stage_counts.get("committed_regions", 0)
+    fallback_count = stage_counts.get(
+        "fallback_preferred_regions", 0
+    ) + stage_counts.get(
+        "expanded_wall_fallback",
+        0,
+    )
+    return {
+        "candidate_count": len(rows),
+        "committed_candidate_count": committed_count,
+        "fallback_candidate_count": fallback_count,
+        "committed_region_missed": committed_region_missed
+        or (bool(committed_region_ids) and committed_count == 0 and fallback_count > 0),
+        "committed_region_relaxed_after_strict_fail": (
+            committed_region_relaxed_after_strict_fail
+        ),
+        "committed_region_ids": committed_region_ids,
+        "committed_wall_side": committed_wall_side,
+        "auto_window_forbidden_region_ids": _string_sequence(
+            preflight.get("auto_window_forbidden_region_ids")
+        ),
+        "forbidden_region_ids": _string_sequence(preflight.get("forbidden_region_ids")),
+        "preferred_region_ids": _string_sequence(preflight.get("preferred_region_ids")),
+        "anchor_reject_reason_counts": dict(reject_reason_counts or {}),
+        "search_stage_counts": stage_counts,
+    }
 
 
 def _entry_reference_bboxes_for_anchor(
@@ -7059,7 +7770,9 @@ def _anchor_fallback_region_bboxes(
     fallback_bboxes = _dedupe_region_bboxes([item[2] for item in scored])
     if fallback_bboxes:
         return fallback_bboxes
-    room_bbox = _rect_tuple(world.get("room_bbox"))
+    room_bbox = _rect_tuple(world.get("placement_room_bbox")) or _rect_tuple(
+        world.get("room_bbox")
+    )
     return [] if room_bbox is None else [room_bbox]
 
 
@@ -7474,6 +8187,43 @@ def _anchor_forbidden_overlap_exceeds_limit(
         _forbidden_region_rejects_anchor_candidate(rect=rect, forbidden=forbidden)
         for forbidden in forbidden_regions
     )
+
+
+def _anchor_forbidden_reject_reason_labels(
+    *,
+    rect: tuple[int, int, int, int],
+    forbidden_regions: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    labels: list[str] = []
+    for forbidden in forbidden_regions:
+        if not _forbidden_region_rejects_anchor_candidate(
+            rect=rect,
+            forbidden=forbidden,
+        ):
+            continue
+        labels.append(_forbidden_region_reason_label(forbidden))
+    return sorted(set(labels))
+
+
+def _forbidden_region_reason_label(forbidden: Mapping[str, Any]) -> str:
+    region_id = str(forbidden.get("region_id") or "").strip()
+    zone_type = str(forbidden.get("zone_type") or "").strip()
+    if _region_id_is_window_clearance(region_id) or zone_type == "window_clearance":
+        return "window_clearance"
+    if (
+        _region_id_is_daylight_quality_region(region_id)
+        or zone_type == "daylight_quality_blocking"
+    ):
+        return "daylight_quality"
+    if "corridor" in region_id or "corridor" in zone_type:
+        return "primary_circulation_corridor"
+    if "entry" in region_id or "entry" in zone_type:
+        return "entry_clearance"
+    if region_id:
+        return region_id
+    if zone_type:
+        return zone_type
+    return "cluster_forbidden_region"
 
 
 def _forbidden_region_rejects_anchor_candidate(
@@ -8183,10 +8933,6 @@ def _dot_for_anchor_front(
     return _dot_normalized(front, desired_front)
 
 
-def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
-    return ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0)
-
-
 def _scenario_anchor_pair_score(
     *,
     primary_anchor: Mapping[str, Any],
@@ -8428,8 +9174,6 @@ def _place_support_objects_for_solution(
         repair_slots: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
         for slot in slots:
             rect = slot["rect"]
-            if not _rect_inside_room(rect, world["room_bbox"]):
-                continue
             if any(_rects_overlap(rect, occ) for occ in occupied):
                 continue
             materialized = _materialize_object_row(
@@ -8440,6 +9184,8 @@ def _place_support_objects_for_solution(
                 slot["rot"],
                 relative_to=slot.get("relative_to", base_id),
             )
+            if not _rect_inside_room_footprint(rect, world, row=materialized):
+                continue
             slot_is_clean = _object_rect_is_usable(
                 rect,
                 occupied,
@@ -8674,7 +9420,7 @@ def _best_object_geometry_repair_rect(
     ):
         return original_rect
 
-    room_bbox = world["room_bbox"]
+    room_bbox = _object_solver_fit_room_bbox(world, row=row)
     width = original_rect[2] - original_rect[0]
     height = original_rect[3] - original_rect[1]
     if width <= 0 or height <= 0:
@@ -8771,7 +9517,7 @@ def _object_rect_is_usable(
     row: Mapping[str, Any] | None = None,
     front_access_rows: Sequence[Mapping[str, Any]] = (),
 ) -> bool:
-    if not _rect_inside_room_footprint(rect, world):
+    if not _rect_inside_room_footprint(rect, world, row=row):
         return False
     if any(_rects_overlap(rect, occupied) for occupied in occupied_rects):
         return False
@@ -8829,6 +9575,55 @@ def _object_rect_is_usable(
     if blocking_cache is not None:
         blocking_cache[cache_key] = blocked
     return not blocked
+
+
+def _object_rect_unusable_reject_reason(
+    *,
+    rect: tuple[int, int, int, int],
+    world: Mapping[str, Any],
+    row: Mapping[str, Any],
+) -> str:
+    candidate = dict(row)
+    candidate["rect"] = rect
+    protected_regions = (
+        world.get("protected_regions")
+        if isinstance(world.get("protected_regions"), Sequence)
+        else []
+    )
+    protected_issues = _object_level_protected_region_issues(
+        placed_objects=[candidate],
+        protected_regions=protected_regions,
+    )
+    if any(_protected_region_issue_is_blocking(issue) for issue in protected_issues):
+        return "object_rect_not_usable:protected_region"
+    forbidden_regions = (
+        world.get("cluster_forbidden_regions")
+        if isinstance(world.get("cluster_forbidden_regions"), Sequence)
+        else []
+    )
+    forbidden_issues = _object_level_cluster_forbidden_region_issues(
+        placed_objects=[candidate],
+        forbidden_regions=forbidden_regions,
+    )
+    blocking_forbidden = [
+        issue
+        for issue in forbidden_issues
+        if _forbidden_region_issue_blocks_geometry(issue)
+    ]
+    if blocking_forbidden:
+        region_id = str(blocking_forbidden[0].get("region_id") or "")
+        zone_type = str(blocking_forbidden[0].get("zone_type") or "")
+        return f"object_rect_not_usable:{_forbidden_region_reason_label({'region_id': region_id, 'zone_type': zone_type})}"
+    footprint_reason = _rect_room_footprint_reject_reason(
+        rect=rect,
+        world=world,
+        row=row,
+    )
+    if footprint_reason == "wall_inner_face":
+        return "object_rect_not_usable:wall_inner_face"
+    if footprint_reason != "outside_room":
+        return f"object_rect_not_usable:{footprint_reason}"
+    return "object_rect_not_usable"
 
 
 def _rect_blocks_front_access_rows(
@@ -9424,13 +10219,14 @@ def _required_support_standalone_slot_candidates(
     front_token = spec.get("front") if isinstance(spec.get("front"), str) else "top"
     out: list[dict[str, Any]] = []
     seen: set[tuple[int, int, int]] = set()
+    placement_room_bbox = _object_solver_fit_room_bbox(world)
     for region_bbox in region_bboxes[:16]:
         for rot in allowed_rotations:
             final_rot = int(rot) % 360
             w_mm, h_mm = _rotate_dims_for_rot(length_mm, width_mm, final_rot)
             origins = _wall_flush_origin_candidates(
                 region_bbox=region_bbox,
-                room_bbox=world["room_bbox"],
+                room_bbox=placement_room_bbox,
                 zone_assignment=zone_assignment,
                 placement_behavior=placement_behavior,
                 w_mm=w_mm,
@@ -9439,7 +10235,16 @@ def _required_support_standalone_slot_candidates(
             )
             for x, y in origins:
                 rect = (x, y, x + w_mm, y + h_mm)
-                if not _rect_inside_room(rect, world["room_bbox"]):
+                probe_row = {
+                    "cluster_id": cluster_id,
+                    "object_id": object_id,
+                    "blocks_floor_area": spec.get("blocks_floor_area", True),
+                    "collision_layer": spec.get("collision_layer"),
+                    "place_on": spec.get("place_on"),
+                    "placement_participation": spec.get("placement_participation"),
+                    "solver_participation": spec.get("solver_participation"),
+                }
+                if not _rect_inside_room_footprint(rect, world, row=probe_row):
                     continue
                 key = (x, y, final_rot)
                 if key in seen:
@@ -9448,10 +10253,10 @@ def _required_support_standalone_slot_candidates(
                 front_world = _front_vector_from_rotation(front_token, final_rot)
                 desired_fronts = _wall_contact_inward_front_options(
                     rect=rect,
-                    room_bbox=world["room_bbox"],
+                    room_bbox=placement_room_bbox,
                 ) or _near_wall_inward_front_options(
                     rect=rect,
-                    room_bbox=world["room_bbox"],
+                    room_bbox=placement_room_bbox,
                 )
                 desired_front = _best_aligned_required_front(
                     front_world=front_world,
@@ -9469,6 +10274,15 @@ def _required_support_standalone_slot_candidates(
                             front_world=front_world,
                             desired_front=desired_front,
                         ),
+                        "blocks_floor_area": spec.get("blocks_floor_area", True),
+                        "collision_layer": spec.get("collision_layer"),
+                        "place_on": deepcopy(spec.get("place_on"))
+                        if isinstance(spec.get("place_on"), Mapping)
+                        else None,
+                        "placement_participation": spec.get(
+                            "placement_participation"
+                        ),
+                        "solver_participation": spec.get("solver_participation"),
                         "relative_to": None,
                         "required_support_relaxed": True,
                     }
@@ -9799,6 +10613,13 @@ def _materialize_object_row(
         "relative_to": relative_to,
         "role": str(spec.get("role") or ""),
         "priority": str(spec.get("priority") or ""),
+        "blocks_floor_area": spec.get("blocks_floor_area") is not False,
+        "collision_layer": spec.get("collision_layer"),
+        "place_on": deepcopy(spec.get("place_on"))
+        if isinstance(spec.get("place_on"), Mapping)
+        else None,
+        "placement_participation": spec.get("placement_participation"),
+        "solver_participation": spec.get("solver_participation"),
         "requires_front_access": _object_requires_front_access(
             cluster_program, object_id
         ),
@@ -9880,6 +10701,11 @@ def _verify_object_level_solution(
         placed_objects=placed_objects,
         forbidden_regions=forbidden_regions,
     )
+    wall_inset_violations = [
+        issue
+        for row in placed_objects
+        for issue in _object_level_wall_inset_violations(row=row, world=world)
+    ]
     blocking_protected_region_issues = [
         issue
         for issue in protected_region_issues
@@ -9912,7 +10738,7 @@ def _verify_object_level_solution(
         rect = row.get("rect")
         if not isinstance(rect, tuple) or len(rect) != 4:
             continue
-        if not _rect_inside_room_footprint(rect, world):
+        if not _rect_inside_room_footprint(rect, world, row=row):
             geometry_valid = False
             hard_valid = False
             offending_clusters.append(str(row.get("cluster_id") or ""))
@@ -10039,6 +10865,7 @@ def _verify_object_level_solution(
     blocking_issue_count = (
         len(blocking_protected_region_issues)
         + len(blocking_forbidden_region_issues)
+        + len(wall_inset_violations)
         + len(blocking_orientation_issues)
         + len(face_pair_issues)
         + len(blocking_functional_geometry_issues)
@@ -10076,6 +10903,7 @@ def _verify_object_level_solution(
         face_pair_issues=face_pair_issues,
         blocking_protected_region_issues=blocking_protected_region_issues,
         blocking_forbidden_region_issues=blocking_forbidden_region_issues,
+        wall_inset_violations=wall_inset_violations,
         blocking_orientation_issues=blocking_orientation_issues,
         blocking_functional_geometry_issues=blocking_functional_geometry_issues,
     )
@@ -10099,6 +10927,7 @@ def _verify_object_level_solution(
         "blocking_protected_region_issues": blocking_protected_region_issues,
         "forbidden_region_issues": forbidden_region_issues,
         "blocking_forbidden_region_issues": blocking_forbidden_region_issues,
+        "wall_inset_violations": wall_inset_violations,
         "functional_geometry_issues": functional_geometry_issues,
         "blocking_functional_geometry_issues": blocking_functional_geometry_issues,
         "face_pair_issues": face_pair_issues,
@@ -10113,6 +10942,9 @@ def _verify_object_level_solution(
         "interaction_quality_score": interaction_quality_score,
         "interaction_quality": interaction_quality,
         "quality_gate_reasons": quality_gate_reasons,
+        "raw_room_bbox": list(world.get("raw_room_bbox") or world.get("room_bbox") or []),
+        "placement_room_bbox": list(world.get("placement_room_bbox") or []),
+        "wall_insets_by_side": dict(world.get("wall_insets_by_side") or {}),
         "layout_score": int(
             1000
             + len(placed_objects) * 40
@@ -10163,6 +10995,7 @@ def _object_level_protected_region_issues(
         rect = row.get("rect")
         if not isinstance(rect, tuple) or len(rect) != 4:
             continue
+        cluster_id = str(row.get("cluster_id") or "")
         for protected in protected_regions:
             bbox = protected.get("bbox")
             if not isinstance(bbox, tuple) or len(bbox) != 4:
@@ -10174,23 +11007,27 @@ def _object_level_protected_region_issues(
                 and str(row.get("anchor_kind") or "").strip().lower() == "center"
             ):
                 continue
+            policy = _protected_region_policy_for_cluster(
+                protected,
+                cluster_id=cluster_id,
+            )
             ratio = _rect_overlap_ratio(rect, bbox)
-            max_overlap = float(protected.get("max_overlap_ratio") or 0.0)
+            max_overlap = float(policy.get("max_overlap_ratio") or 0.0)
             if ratio <= max_overlap + 1e-9:
                 continue
             overlap_area = _rect_overlap_area(rect, bbox)
             excess_overlap_ratio = max(0.0, ratio - max_overlap)
-            priority = str(protected.get("priority") or "medium").strip().lower()
-            enforcement = str(protected.get("enforcement") or "soft").strip().lower()
+            priority = str(policy.get("priority") or "medium").strip().lower()
+            enforcement = str(policy.get("enforcement") or "soft").strip().lower()
             violation_severity = (
-                str(protected.get("violation_severity") or "advisory").strip().lower()
+                str(policy.get("violation_severity") or "advisory").strip().lower()
             )
             issues.append(
                 {
-                    "cluster_id": str(row.get("cluster_id") or ""),
+                    "cluster_id": cluster_id,
                     "object_id": str(row.get("object_id") or ""),
                     "region_id": str(protected.get("region_id") or ""),
-                    "zone_type": str(protected.get("zone_type") or ""),
+                    "zone_type": str(policy.get("zone_type") or ""),
                     "priority": priority,
                     "enforcement": enforcement,
                     "violation_severity": violation_severity,
@@ -10263,6 +11100,45 @@ def _object_level_cluster_forbidden_region_issues(
                 }
             )
     return issues
+
+
+def _object_level_wall_inset_violations(
+    *,
+    row: Mapping[str, Any],
+    world: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    if not _row_uses_wall_inset(row):
+        return []
+    rect = _rect_tuple(row.get("rect"))
+    raw_bbox = _rect_tuple(world.get("room_bbox"))
+    placement_bbox = _rect_tuple(world.get("placement_room_bbox"))
+    if rect is None or raw_bbox is None or placement_bbox is None:
+        return []
+    if not _rect_inside_room(rect, raw_bbox):
+        return []
+    violated_sides: list[str] = []
+    if rect[0] < placement_bbox[0]:
+        violated_sides.append("left")
+    if rect[1] < placement_bbox[1]:
+        violated_sides.append("top")
+    if rect[2] > placement_bbox[2]:
+        violated_sides.append("right")
+    if rect[3] > placement_bbox[3]:
+        violated_sides.append("bottom")
+    if not violated_sides and _rect_respects_wall_inner_faces(rect, world):
+        return []
+    return [
+        {
+            "cluster_id": str(row.get("cluster_id") or ""),
+            "object_id": str(row.get("object_id") or ""),
+            "reason": "wall_inner_face_overlap",
+            "violation_severity": "blocking",
+            "rect": list(rect),
+            "raw_room_bbox": list(raw_bbox),
+            "placement_room_bbox": list(placement_bbox),
+            "violated_sides": violated_sides,
+        }
+    ]
 
 
 def _object_level_protected_region_issue_count(
@@ -10357,6 +11233,7 @@ def _object_level_quality_gate_reasons(
     face_pair_issues: Sequence[Mapping[str, Any]],
     blocking_protected_region_issues: Sequence[Mapping[str, Any]],
     blocking_forbidden_region_issues: Sequence[Mapping[str, Any]],
+    wall_inset_violations: Sequence[Mapping[str, Any]] = (),
     blocking_orientation_issues: Sequence[Mapping[str, Any]],
     blocking_functional_geometry_issues: Sequence[Mapping[str, Any]],
 ) -> list[str]:
@@ -10377,6 +11254,8 @@ def _object_level_quality_gate_reasons(
         reasons.append("blocking_protected_region_overlap")
     if blocking_forbidden_region_issues:
         reasons.append("blocking_forbidden_region_overlap")
+    if wall_inset_violations:
+        reasons.append("wall_inner_face_overlap")
     if blocking_orientation_issues:
         reasons.append("front_inward_contract_failed")
     for issue in blocking_functional_geometry_issues:
@@ -10396,7 +11275,7 @@ def _object_level_functional_geometry_issues(
     world: Mapping[str, Any],
     relation_plan: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    room_bbox = world["room_bbox"]
+    room_bbox = _object_solver_fit_room_bbox(world)
     rows = [row for row in placed_objects if isinstance(row, Mapping)]
     issues: list[dict[str, Any]] = []
 
@@ -10663,7 +11542,7 @@ def _object_level_orientation_issues(
     for row in placed_objects:
         by_cluster.setdefault(str(row.get("cluster_id") or ""), []).append(row)
     support_edges = _support_edges_by_cluster(world)
-    room_bbox = world["room_bbox"]
+    room_bbox = _object_solver_fit_room_bbox(world)
     issues: list[dict[str, Any]] = []
     for row in placed_objects:
         cluster_id = str(row.get("cluster_id") or "")
@@ -10891,114 +11770,6 @@ def _object_level_required_viewing_pairs(
             }
         )
     return out
-
-
-def _relation_plan_requires_legible_primary_pair(
-    *,
-    relation_plan: Mapping[str, Any],
-    primary: str,
-    secondary: str,
-) -> bool:
-    if not primary or not secondary:
-        return False
-    if _pair_has_mutual_face_cluster_orientation(
-        relation_plan=relation_plan,
-        primary=primary,
-        secondary=secondary,
-    ):
-        return True
-    if _pair_has_high_priority_alignment_preference(
-        relation_plan=relation_plan,
-        primary=primary,
-        secondary=secondary,
-    ):
-        return True
-    requirements = relation_plan.get("concept_readiness_requirements")
-    if isinstance(requirements, Mapping):
-        required_contracts = _normalized_text_set(
-            requirements.get("required_pair_contracts")
-        )
-        if required_contracts & {
-            "buffered_support",
-            "legible_primary_pair",
-            "focal_face_axis",
-        }:
-            return True
-    return _pair_tokens_include_media(primary, secondary)
-
-
-def _pair_has_mutual_face_cluster_orientation(
-    *,
-    relation_plan: Mapping[str, Any],
-    primary: str,
-    secondary: str,
-) -> bool:
-    forward = False
-    backward = False
-    for row in relation_plan.get("cluster_orientations") or []:
-        if not isinstance(row, Mapping):
-            continue
-        cluster_id = str(row.get("cluster_id") or "").strip()
-        target_cluster_id = str(row.get("target_cluster_id") or "").strip()
-        intents = _normalized_text_set(row.get("intents"))
-        priority = str(row.get("priority") or "").strip().lower()
-        if "face_cluster" not in intents or priority not in {"high", "critical"}:
-            continue
-        if cluster_id == primary and target_cluster_id == secondary:
-            forward = True
-        if cluster_id == secondary and target_cluster_id == primary:
-            backward = True
-    return forward and backward
-
-
-def _pair_has_high_priority_alignment_preference(
-    *,
-    relation_plan: Mapping[str, Any],
-    primary: str,
-    secondary: str,
-) -> bool:
-    concept = _concept_from_relation_plan(relation_plan)
-    macro_constraints = (
-        concept.get("macro_constraints") if isinstance(concept, Mapping) else {}
-    )
-    alignment_rows = []
-    if isinstance(macro_constraints, Mapping):
-        rows = macro_constraints.get("cluster_alignment_preferences")
-        if isinstance(rows, Sequence) and not isinstance(rows, str):
-            alignment_rows.extend(rows)
-    rows = relation_plan.get("cluster_alignment_preferences")
-    if isinstance(rows, Sequence) and not isinstance(rows, str):
-        alignment_rows.extend(rows)
-    pair = _normalized_cluster_pair(primary, secondary)
-    if pair is None:
-        return False
-    for row in alignment_rows:
-        if not isinstance(row, Mapping):
-            continue
-        candidate_pair = _normalized_cluster_pair(
-            str(row.get("a") or ""),
-            str(row.get("b") or ""),
-        )
-        if candidate_pair != pair:
-            continue
-        preference = str(row.get("preference") or "").strip().lower()
-        priority = str(row.get("priority") or "").strip().lower()
-        if priority in {"high", "critical"} and preference in {
-            "legible_primary_pair",
-            "focal_face_axis",
-        }:
-            return True
-    return False
-
-
-def _pair_tokens_include_media(primary: str, secondary: str) -> bool:
-    tokens = {
-        part
-        for value in (primary, secondary)
-        for part in str(value or "").strip().lower().replace("-", "_").split("_")
-        if part
-    }
-    return bool(tokens & {"media", "tv", "television", "console"})
 
 
 def _object_level_face_pair_issues(
@@ -11619,6 +12390,11 @@ def _macro_cluster_solver_degradation_report(
         if isinstance(solution.get("verify"), Mapping)
         and bool(solution["verify"].get("gallery_eligible"))
     )
+    zero_anchor_candidate_clusters = sorted(
+        cluster_id
+        for cluster_id, count in anchor_candidate_counts.items()
+        if int(count) <= 0
+    )
     return {
         "status": status,
         "attempts": [
@@ -11686,6 +12462,7 @@ def _macro_cluster_solver_degradation_report(
         "blocking_objects": _object_level_blocking_object_summary(all_solutions),
         "dropped_inventory": dropped_summary,
         "anchor_candidate_counts": dict(anchor_candidate_counts),
+        "zero_anchor_candidate_clusters": zero_anchor_candidate_clusters,
         "anchor_order": list(anchor_order),
     }
 
@@ -12043,6 +12820,7 @@ def _build_absolute_layout_from_object_solution(
             ),
             "verify_summary": deepcopy(verify),
             "geometry_repair": deepcopy(solution.get("geometry_repair") or {}),
+            "geometry": _object_solver_geometry_diagnostics(world),
         },
     }
 
@@ -12064,10 +12842,15 @@ def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
 
 
 def _rect_inside_room_footprint(
-    rect: tuple[int, int, int, int], world: Mapping[str, Any]
+    rect: tuple[int, int, int, int],
+    world: Mapping[str, Any],
+    *,
+    row: Mapping[str, Any] | None = None,
 ) -> bool:
-    if not _rect_inside_room(rect, world["room_bbox"]):
+    fit_bbox = _object_solver_fit_room_bbox(world, row=row)
+    if not _rect_inside_room(rect, fit_bbox):
         return False
+    uses_wall_inset = _row_uses_wall_inset(row)
     if bool(world.get("room_polygon_is_axis_aligned_rectangle")):
         return True
     footprint_cache = (
@@ -12075,8 +12858,9 @@ def _rect_inside_room_footprint(
         if isinstance(world.get("_rect_inside_room_footprint_cache"), dict)
         else None
     )
-    if footprint_cache is not None and rect in footprint_cache:
-        return bool(footprint_cache[rect])
+    cache_key = (rect, uses_wall_inset)
+    if footprint_cache is not None and cache_key in footprint_cache:
+        return bool(footprint_cache[cache_key])
     polygon = world.get("room_polygon")
     if (
         not isinstance(polygon, Sequence)
@@ -12099,9 +12883,145 @@ def _rect_inside_room_footprint(
         else ()
     )
     result = _rect_inside_polygon_with_edges(rect, points, polygon_edges)
+    if result and uses_wall_inset:
+        result = _rect_respects_wall_inner_faces(rect, world)
     if footprint_cache is not None:
-        footprint_cache[rect] = result
+        footprint_cache[cache_key] = result
     return result
+
+
+def _object_solver_fit_room_bbox(
+    world: Mapping[str, Any],
+    *,
+    row: Mapping[str, Any] | None = None,
+) -> tuple[int, int, int, int]:
+    if _row_uses_wall_inset(row):
+        placement_bbox = _rect_tuple(world.get("placement_room_bbox"))
+        if placement_bbox is not None:
+            return placement_bbox
+    raw_bbox = _rect_tuple(world.get("room_bbox"))
+    return raw_bbox if raw_bbox is not None else (0, 0, 0, 0)
+
+
+def _row_uses_wall_inset(row: Mapping[str, Any] | None) -> bool:
+    if row is None:
+        return True
+    if row.get("blocks_floor_area") is False:
+        return False
+    collision_layer = str(row.get("collision_layer") or "").strip().lower()
+    if collision_layer in {"annotation", "ceiling", "opening", "visual", "wall"}:
+        return False
+    place_on = row.get("place_on")
+    if isinstance(place_on, Mapping):
+        method = str(place_on.get("method") or "").strip().lower()
+        if method in {
+            "attach_to",
+            "attach_to_wall",
+            "hang_on",
+            "mount_on",
+            "on_ceiling",
+            "on_door",
+            "on_wall",
+            "on_window",
+        }:
+            return False
+    placement_participation = str(
+        row.get("placement_participation") or ""
+    ).strip().lower()
+    if placement_participation in {
+        "ceiling_mounted",
+        "decorative_non_blocking",
+        "non_floor",
+        "opening_attached",
+        "visual_only",
+        "wall_mounted",
+    }:
+        return False
+    solver_participation = str(row.get("solver_participation") or "").strip().lower()
+    if solver_participation in {"decorative_only", "non_solver_object", "visual_only"}:
+        return False
+    return True
+
+
+def _rect_respects_wall_inner_faces(
+    rect: tuple[int, int, int, int],
+    world: Mapping[str, Any],
+) -> bool:
+    faces = world.get("wall_inner_faces")
+    if not isinstance(faces, Sequence) or isinstance(faces, str):
+        return True
+    for point in _rect_probe_points(rect):
+        for face in faces:
+            if not isinstance(face, Mapping):
+                continue
+            if _point_violates_wall_inner_face(point, face):
+                return False
+    return True
+
+
+def _point_violates_wall_inner_face(
+    point: tuple[float, float],
+    face: Mapping[str, Any],
+) -> bool:
+    start = face.get("start")
+    tangent = face.get("tangent")
+    normal = face.get("inward_normal")
+    if (
+        not isinstance(start, Sequence)
+        or isinstance(start, str)
+        or len(start) != 2
+        or not isinstance(tangent, Sequence)
+        or isinstance(tangent, str)
+        or len(tangent) != 2
+        or not isinstance(normal, Sequence)
+        or isinstance(normal, str)
+        or len(normal) != 2
+    ):
+        return False
+    try:
+        px, py = float(point[0]), float(point[1])
+        sx, sy = float(start[0]), float(start[1])
+        tx, ty = float(tangent[0]), float(tangent[1])
+        nx, ny = float(normal[0]), float(normal[1])
+        length = float(face.get("length_mm") or 0.0)
+        inset = float(face.get("inset_mm") or 0.0)
+    except (TypeError, ValueError):
+        return False
+    if inset <= 0.0 or length <= 0.0:
+        return False
+    vx = px - sx
+    vy = py - sy
+    projected = vx * tx + vy * ty
+    if projected < -1e-6 or projected > length + 1e-6:
+        return False
+    signed_distance = vx * nx + vy * ny
+    return signed_distance + 1e-6 < inset
+
+
+def _rect_room_footprint_reject_reason(
+    *,
+    rect: tuple[int, int, int, int],
+    world: Mapping[str, Any],
+    row: Mapping[str, Any] | None = None,
+) -> str:
+    raw_bbox = _rect_tuple(world.get("room_bbox"))
+    if raw_bbox is not None and not _rect_inside_room(rect, raw_bbox):
+        return "outside_room"
+    if _row_uses_wall_inset(row):
+        placement_bbox = _rect_tuple(world.get("placement_room_bbox"))
+        if placement_bbox is not None and not _rect_inside_room(rect, placement_bbox):
+            return "wall_inner_face"
+    if (
+        not bool(world.get("room_polygon_is_axis_aligned_rectangle"))
+        and not _rect_inside_room_footprint(rect, world, row=row)
+    ):
+        if _row_uses_wall_inset(row) and not _rect_respects_wall_inner_faces(
+            rect,
+            world,
+        ):
+            return "wall_inner_face"
+        return "outside_room_polygon"
+    return "outside_room"
 
 
 def _rect_inside_polygon(

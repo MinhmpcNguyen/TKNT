@@ -351,17 +351,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   setBaseFloorplan: (floorplan) => set({ baseFloorplan: floorplan }),
   setDesign: (design) => {
-    const floorplan = get().floorplan ?? design?.floorplan_geometry ?? null;
     const placements = Array.isArray(design?.placements)
       ? design.placements.map((p) => ({
           ...p,
           placement_id: String(p.placement_id),
         }))
       : [];
-    const clampedPlacements = floorplan
-      ? placements.map((p) => clampPlacementToFloorplan(p as Placement, floorplan))
-      : placements;
-    set({ design: { ...design, placements: clampedPlacements } });
+    set({ design: { ...design, placements } });
   },
   setStyledResult: (styledResult) => set({ styledResult }),
   setLayoutVariants: (layoutVariants, selectedVariantId = null) =>

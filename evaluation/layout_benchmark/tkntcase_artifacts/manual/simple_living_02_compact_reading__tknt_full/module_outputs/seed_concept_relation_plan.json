@@ -4,26 +4,26 @@
   "room_type": "living_room",
   "planner_kind": "seed_concept_generator",
   "macro_concept": {
-    "concept_id": "concept_02",
-    "concept_family": "open_center",
+    "concept_id": "concept_03",
+    "concept_family": "focal_axis",
     "macro_scenario": {
-      "scenario_id": "open_center_left_right",
-      "label": "primary and media on opposing side walls with open center",
-      "primary_zone_id": "left_wall_zone",
-      "secondary_zone_id": "right_wall_zone",
-      "storage_zone_id": "bottom_wall_zone",
-      "support_zone_id": "top_wall_zone",
-      "primary_wall_side": "left_wall",
-      "secondary_wall_side": "right_wall",
-      "storage_wall_side": "bottom_wall",
+      "scenario_id": "focal_axis_top_bottom",
+      "label": "primary seating top wall, focal media opposite",
+      "primary_zone_id": "top_wall_zone",
+      "secondary_zone_id": "bottom_wall_zone",
+      "storage_zone_id": "right_wall_zone",
+      "support_zone_id": "left_wall_zone",
+      "primary_wall_side": "top_wall",
+      "secondary_wall_side": "bottom_wall",
+      "storage_wall_side": "right_wall",
       "pair_type": "opposite_walls",
-      "center_policy": "open_reserved",
+      "center_policy": "balanced_open",
       "primary_anchor_strength": "strong",
       "secondary_anchor_strength": "strong",
       "support_anchor_strength": "medium",
       "allow_primary_center_overlap": false
     },
-    "spatial_character": "living_room_open_center_clear_circulation",
+    "spatial_character": "living_room_focal_axis_balanced",
     "macro_region_map_snapshot": {
       "regions": [
         {
@@ -243,23 +243,22 @@
         "layout_role": "primary",
         "role_kind": "social_anchor",
         "priority": "core",
-        "macro_scenario_id": "open_center_left_right",
+        "macro_scenario_id": "focal_axis_top_bottom",
         "scenario_role": "primary",
         "scenario_locked": true,
-        "zone_assignment": "left_wall_zone",
+        "zone_assignment": "top_wall_zone",
         "required_region_ids": [],
         "preferred_region_ids": [
-          "left_wall_zone",
+          "top_wall_zone",
           "window_side_zone",
           "daylight_biased_zone",
           "floating_support_zone",
           "primary_focal_wall_zone"
         ],
         "forbidden_region_ids": [
-          "floating_center_zone",
           "center_access_lane"
         ],
-        "preferred_wall_side": "left_wall",
+        "preferred_wall_side": "top_wall",
         "anchor_strength": "strong",
         "region_candidates": [
           {
@@ -292,41 +291,43 @@
             ]
           }
         ],
-        "wall_claim": "medium",
-        "center_usage": "open_reserved",
+        "wall_claim": "strong",
+        "center_usage": "partial",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
         "privacy_relation": "privacy_preferred",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
+          "wall_backing": "required",
           "front_space": "required",
           "daylight_blocking": "neutral",
           "pose_flexibility": "low"
-        }
+        },
+        "committed_region_ids": [
+          "top_wall_zone"
+        ],
+        "committed_wall_side": "top_wall"
       },
       {
         "cluster_id": "media",
         "semantic_role": "media_focus_zone",
-        "layout_role": "primary",
+        "layout_role": "support",
         "role_kind": "media",
         "priority": "core",
-        "macro_scenario_id": "open_center_left_right",
+        "macro_scenario_id": "focal_axis_top_bottom",
         "scenario_role": "support",
         "scenario_locked": false,
-        "zone_assignment": "top_wall_zone",
+        "zone_assignment": "primary_focal_wall_zone",
         "required_region_ids": [],
         "preferred_region_ids": [
-          "top_wall_zone",
           "primary_focal_wall_zone",
           "window_side_zone",
           "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "forbidden_region_ids": [
-          "floating_center_zone",
-          "keep_open_center",
-          "center_openness_core"
+          "center_openness_core",
+          "center_access_lane"
         ],
         "preferred_wall_side": "",
         "anchor_strength": "medium",
@@ -345,10 +346,10 @@
             "cluster_id": "media",
             "region_id": "window_side_zone",
             "region_type": "window_side_zone",
-            "score": 5.0,
+            "score": 6.0,
             "reasons": [
               "wall_affinity=high",
-              "daylight_affinity=low"
+              "daylight_affinity=medium"
             ]
           },
           {
@@ -362,42 +363,44 @@
           }
         ],
         "wall_claim": "medium",
-        "center_usage": "open_reserved",
+        "center_usage": "none",
         "entry_relation": "avoid_direct_entry_conflict",
         "daylight_relation": "avoid_window_blocking",
         "privacy_relation": "neutral",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
-          "front_space": "optional",
+          "wall_backing": "required",
+          "front_space": "preferred",
           "daylight_blocking": "avoid",
           "pose_flexibility": "medium"
-        }
+        },
+        "committed_region_ids": [
+          "primary_focal_wall_zone"
+        ],
+        "committed_wall_side": ""
       },
       {
         "cluster_id": "storage_display_support",
-        "semantic_role": "storage_display_zone",
+        "semantic_role": "reading_storage_zone",
         "layout_role": "secondary",
         "role_kind": "storage",
         "priority": "support",
-        "macro_scenario_id": "open_center_left_right",
+        "macro_scenario_id": "focal_axis_top_bottom",
         "scenario_role": "secondary",
         "scenario_locked": true,
-        "zone_assignment": "right_wall_zone",
+        "zone_assignment": "bottom_wall_zone",
         "required_region_ids": [],
         "preferred_region_ids": [
-          "right_wall_zone",
           "bottom_wall_zone",
           "edge_loading_zone",
-          "left_wall_zone"
+          "left_wall_zone",
+          "right_wall_zone"
         ],
         "forbidden_region_ids": [
-          "floating_center_zone",
-          "keep_open_center",
           "center_openness_core",
           "center_access_lane"
         ],
-        "preferred_wall_side": "right_wall",
+        "preferred_wall_side": "bottom_wall",
         "anchor_strength": "strong",
         "region_candidates": [
           {
@@ -431,18 +434,22 @@
             ]
           }
         ],
-        "wall_claim": "medium",
-        "center_usage": "open_reserved",
+        "wall_claim": "strong",
+        "center_usage": "none",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
         "privacy_relation": "privacy_preferred",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
+          "wall_backing": "required",
           "front_space": "required",
           "daylight_blocking": "neutral",
           "pose_flexibility": "low"
-        }
+        },
+        "committed_region_ids": [
+          "bottom_wall_zone"
+        ],
+        "committed_wall_side": "bottom_wall"
       }
     ],
     "allowed_variant_families_by_cluster": {
@@ -454,7 +461,7 @@
       "media": [
         "media_facing",
         "wall_backed_focal",
-        "focal_media"
+        "focal_axis"
       ],
       "storage_display_support": [
         "storage_wall",
@@ -466,7 +473,7 @@
     "critical_object_orientations": [
       {
         "cluster_id": "main_seating",
-        "object_id": "coffee_table",
+        "object_id": "sofa",
         "intents": [
           "back_to_wall",
           "face_cluster",
@@ -487,104 +494,127 @@
         ],
         "priority": "medium",
         "reason": "Critical object orientation emitted by macro concept.",
-        "target_region": "top_wall_zone"
+        "target_region": "primary_focal_wall_zone"
       }
     ],
-    "object_viewing_pairs": [],
+    "object_viewing_pairs": [
+      {
+        "type": "viewing_pair",
+        "viewer_cluster_id": "main_seating",
+        "viewer_object_id": "sofa",
+        "viewer_object_type": "sofa",
+        "target_cluster_id": "media",
+        "target_object_id": "tv_console",
+        "target_object_type": "tv_console",
+        "relation": "view_target",
+        "required": true,
+        "priority": "high",
+        "source": "request_contract_relation_edge",
+        "evidence": "slim TV console"
+      }
+    ],
     "primary_pair_contracts": [
       {
-        "pair_type": "opposite_walls",
+        "pair_type": "view_target",
         "cluster_a": "main_seating",
-        "cluster_b": "storage_display_support",
+        "cluster_b": "media",
         "strength": "high",
-        "required": true
+        "required": true,
+        "source": "object_viewing_pair"
       }
     ],
     "anchor_region_preferences_by_cluster": {
       "main_seating": {
-        "zone_assignment": "left_wall_zone",
+        "zone_assignment": "top_wall_zone",
+        "committed_region_ids": [
+          "top_wall_zone"
+        ],
+        "committed_wall_side": "top_wall",
         "required_region_ids": [],
         "forbidden_region_ids": [
-          "floating_center_zone",
           "center_access_lane"
         ],
         "preferred_region_ids": [
-          "left_wall_zone",
+          "top_wall_zone",
           "window_side_zone",
           "daylight_biased_zone",
           "floating_support_zone",
           "primary_focal_wall_zone"
         ],
-        "wall_claim": "medium",
-        "center_usage": "open_reserved",
-        "preferred_wall_side": "left_wall",
+        "wall_claim": "strong",
+        "center_usage": "partial",
+        "preferred_wall_side": "top_wall",
         "anchor_strength": "strong",
         "scenario_role": "primary",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
+          "wall_backing": "required",
           "front_space": "required",
           "daylight_blocking": "neutral",
           "pose_flexibility": "low"
         }
       },
       "media": {
-        "zone_assignment": "top_wall_zone",
+        "zone_assignment": "primary_focal_wall_zone",
+        "committed_region_ids": [
+          "primary_focal_wall_zone"
+        ],
+        "committed_wall_side": "",
         "required_region_ids": [],
         "forbidden_region_ids": [
-          "floating_center_zone",
-          "keep_open_center",
-          "center_openness_core"
+          "center_openness_core",
+          "center_access_lane"
         ],
         "preferred_region_ids": [
-          "top_wall_zone",
           "primary_focal_wall_zone",
           "window_side_zone",
           "bottom_wall_zone",
           "edge_loading_zone"
         ],
         "wall_claim": "medium",
-        "center_usage": "open_reserved",
+        "center_usage": "none",
         "preferred_wall_side": "",
         "anchor_strength": "medium",
         "scenario_role": "support",
         "entry_relation": "avoid_direct_entry_conflict",
         "daylight_relation": "avoid_window_blocking",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
-          "front_space": "optional",
+          "wall_backing": "required",
+          "front_space": "preferred",
           "daylight_blocking": "avoid",
           "pose_flexibility": "medium"
         }
       },
       "storage_display_support": {
-        "zone_assignment": "right_wall_zone",
+        "zone_assignment": "bottom_wall_zone",
+        "committed_region_ids": [
+          "bottom_wall_zone"
+        ],
+        "committed_wall_side": "bottom_wall",
         "required_region_ids": [],
         "forbidden_region_ids": [
-          "floating_center_zone",
-          "keep_open_center",
           "center_openness_core",
           "center_access_lane"
         ],
         "preferred_region_ids": [
-          "right_wall_zone",
           "bottom_wall_zone",
           "edge_loading_zone",
-          "left_wall_zone"
+          "left_wall_zone",
+          "right_wall_zone"
         ],
-        "wall_claim": "medium",
-        "center_usage": "open_reserved",
-        "preferred_wall_side": "right_wall",
+        "wall_claim": "strong",
+        "center_usage": "none",
+        "preferred_wall_side": "bottom_wall",
         "anchor_strength": "strong",
         "scenario_role": "secondary",
         "entry_relation": "neutral",
         "daylight_relation": "neutral",
-        "placement_bias": "balanced",
+        "placement_bias": "wall_backed",
         "placement_behavior": {
-          "wall_backing": "preferred",
+          "wall_backing": "required",
           "front_space": "required",
           "daylight_blocking": "neutral",
           "pose_flexibility": "low"
@@ -593,29 +623,31 @@
     },
     "anchor_pair_contracts": [
       {
-        "pair_type": "opposite_walls",
+        "pair_type": "view_target",
         "cluster_a": "main_seating",
-        "cluster_b": "storage_display_support",
+        "cluster_b": "media",
         "strength": "high",
-        "required": true
+        "required": true,
+        "source": "object_viewing_pair"
       }
     ],
     "object_solver_policy": {
       "placement_mode": "anchor_first_object_level",
       "anchor_stage_first": true,
-      "family": "open_center",
+      "family": "focal_axis",
       "support_stage_enabled": true,
       "micro_refine_inside_solver": true,
       "placement_order_by_cluster": {
         "main_seating": [
+          "sofa",
           "coffee_table",
           "armchair",
           "side_table",
-          "floor_lamp",
-          "sofa"
+          "floor_lamp"
         ],
         "media": [
-          "tv_console"
+          "tv_console",
+          "media_shelf"
         ],
         "storage_display_support": [
           "bookshelf"
@@ -623,9 +655,8 @@
       },
       "protected_ids_by_cluster": {
         "main_seating": [
-          "coffee_table",
-          "floor_lamp",
-          "sofa"
+          "sofa",
+          "coffee_table"
         ],
         "media": [
           "tv_console"
@@ -636,8 +667,24 @@
       },
       "droppable_ids_by_cluster": {
         "main_seating": [
-          "armchair",
-          "side_table"
+          "side_table",
+          "armchair"
+        ],
+        "media": [
+          "media_shelf"
+        ],
+        "storage_display_support": []
+      },
+      "required_support_ids_by_cluster": {
+        "main_seating": [
+          "floor_lamp"
+        ],
+        "media": [],
+        "storage_display_support": []
+      },
+      "relaxable_required_ids_by_cluster": {
+        "main_seating": [
+          "floor_lamp"
         ],
         "media": [],
         "storage_display_support": []
@@ -646,9 +693,9 @@
     "topology_policy": {
       "preserve_entry_landing": true,
       "preserve_primary_corridor": true,
-      "reserve_center_degree": "high",
+      "reserve_center_degree": "very_high",
       "wall_loading_bias": "focal_wall_first",
-      "daylight_bias": "support_allowed",
+      "daylight_bias": "primary_support_preferred",
       "entry_avoidance_strength": "high",
       "secondary_zone_placement_bias": "edge_recede",
       "style_name": "balanced",
@@ -656,26 +703,15 @@
       "style_visual_balance": "social"
     },
     "macro_constraints": {
-      "keep_open_regions": [
-        {
-          "type": "center_lane",
-          "near": "center_openness_core",
-          "priority": "high"
-        }
-      ],
-      "reserved_regions": [
-        {
-          "region": "center_openness_core",
-          "reason": "center openness is the concept driver"
-        }
-      ],
+      "keep_open_regions": [],
+      "reserved_regions": [],
       "protected_topology": [
         {
           "region": "center_openness_core",
           "zone_type": "center_openness_core",
-          "priority": "critical",
+          "priority": "high",
           "enforcement": "hard_soft",
-          "max_overlap_ratio": 0.05,
+          "max_overlap_ratio": 0.1,
           "applies_to": [
             "core_clusters",
             "interaction_hulls"
@@ -683,55 +719,53 @@
           "violation_severity": "blocking"
         }
       ],
-      "cluster_separation_preferences": [
-        {
-          "a": "media",
-          "b": "main_seating",
-          "preference": "separate_macro_fields",
-          "priority": "medium"
-        }
-      ],
+      "cluster_separation_preferences": [],
       "cluster_alignment_preferences": [
         {
           "a": "main_seating",
           "b": "storage_display_support",
-          "preference": "opposite_walls",
+          "preference": "focal_face_axis",
           "priority": "high"
         }
       ],
       "anchor_region_constraints": [
         {
           "cluster_id": "main_seating",
+          "committed_region_ids": [
+            "top_wall_zone"
+          ],
+          "committed_wall_side": "top_wall",
           "required_region_ids": [],
           "preferred_region_ids": [
-            "left_wall_zone",
+            "top_wall_zone",
             "window_side_zone",
             "daylight_biased_zone",
             "floating_support_zone",
             "primary_focal_wall_zone"
           ],
           "forbidden_region_ids": [
-            "floating_center_zone",
             "center_access_lane"
           ],
-          "preferred_wall_side": "left_wall",
+          "preferred_wall_side": "top_wall",
           "anchor_strength": "strong",
           "scenario_role": "primary"
         },
         {
           "cluster_id": "media",
+          "committed_region_ids": [
+            "primary_focal_wall_zone"
+          ],
+          "committed_wall_side": "",
           "required_region_ids": [],
           "preferred_region_ids": [
-            "top_wall_zone",
             "primary_focal_wall_zone",
             "window_side_zone",
             "bottom_wall_zone",
             "edge_loading_zone"
           ],
           "forbidden_region_ids": [
-            "floating_center_zone",
-            "keep_open_center",
-            "center_openness_core"
+            "center_openness_core",
+            "center_access_lane"
           ],
           "preferred_wall_side": "",
           "anchor_strength": "medium",
@@ -739,20 +773,22 @@
         },
         {
           "cluster_id": "storage_display_support",
+          "committed_region_ids": [
+            "bottom_wall_zone"
+          ],
+          "committed_wall_side": "bottom_wall",
           "required_region_ids": [],
           "preferred_region_ids": [
-            "right_wall_zone",
             "bottom_wall_zone",
             "edge_loading_zone",
-            "left_wall_zone"
+            "left_wall_zone",
+            "right_wall_zone"
           ],
           "forbidden_region_ids": [
-            "floating_center_zone",
-            "keep_open_center",
             "center_openness_core",
             "center_access_lane"
           ],
-          "preferred_wall_side": "right_wall",
+          "preferred_wall_side": "bottom_wall",
           "anchor_strength": "strong",
           "scenario_role": "secondary"
         }
@@ -763,35 +799,66 @@
         "circulation_clear",
         "entry_preserved",
         "dominant_anchor_correct",
-        "workflow_preserved",
-        "center_openness_preserved"
+        "workflow_preserved"
       ],
       "required_pair_contracts": [
-        "opposite_walls"
+        "view_target"
       ],
-      "required_center_preservation": "high",
+      "required_center_preservation": "medium",
       "required_entry_preservation": true
     },
     "variant_bias_weights": {
-      "family_match_weight": 1.4,
-      "center_preserve_weight": 1.55,
-      "focal_axis_weight": 1.25,
-      "entry_clear_weight": 1.5,
-      "wall_loading_weight": 1.15,
-      "daylight_alignment_weight": 1.1,
-      "edge_loading_weight": 1.25,
-      "symmetry_weight": 1.1
+      "family_match_weight": 1.45,
+      "center_preserve_weight": 1.25,
+      "focal_axis_weight": 1.55,
+      "entry_clear_weight": 1.45,
+      "wall_loading_weight": 1.35,
+      "daylight_alignment_weight": 1.2,
+      "edge_loading_weight": 1.15,
+      "symmetry_weight": 1.35
     },
     "concept_score_prior": {
-      "functionality": 0.92,
-      "naturalness": 0.93,
-      "semantic_coherence": 0.9,
-      "spatial_quality": 0.94
+      "functionality": 0.95,
+      "naturalness": 0.9,
+      "semantic_coherence": 0.96,
+      "spatial_quality": 0.89
     },
     "llm_guided": false,
     "guidance_notes": [],
-    "diversity_signature": "open_center|scenario=open_center_left_right|center=high|wall=focal_wall_first|main_seating:left_wall_zone:left_wall:open_reserved:medium,media:top_wall_zone::open_reserved:medium,storage_display_support:right_wall_zone:right_wall:open_reserved:medium"
+    "material_macro_signature_target": "main_seating:top_wall_zone|media:primary_focal_wall_zone|storage_display_support:bottom_wall_zone",
+    "planned_material_macro_signature": "main_seating:top_wall_zone|media:primary_focal_wall_zone|storage_display_support:bottom_wall_zone",
+    "diversity_signature": "focal_axis|scenario=focal_axis_top_bottom|center=very_high|wall=focal_wall_first|main_seating:top_wall_zone:top_wall:partial:strong,media:primary_focal_wall_zone::none:medium,storage_display_support:bottom_wall_zone:bottom_wall:none:strong",
+    "pre_solve_design_softening": {
+      "applied": true,
+      "reason": "dense_requested_floor_objects_design_constraints_softened",
+      "requested_floor_object_count": 5,
+      "safety_policy": "door_landing_and_corridor_constraints_remain_hard",
+      "changes": [
+        {
+          "cluster_id": "main_seating",
+          "changes": {
+            "wall_backing": "preferred",
+            "front_space": "preferred"
+          }
+        },
+        {
+          "cluster_id": "media",
+          "changes": {
+            "wall_backing": "preferred",
+            "wall_claim": "medium"
+          }
+        },
+        {
+          "cluster_id": "storage_display_support",
+          "changes": {
+            "wall_backing": "preferred",
+            "front_space": "preferred"
+          }
+        }
+      ]
+    }
   },
+  "material_macro_signature_target": "main_seating:top_wall_zone|media:primary_focal_wall_zone|storage_display_support:bottom_wall_zone",
   "cluster_affinities": [
     {
       "cluster_id": "main_seating",
@@ -804,7 +871,7 @@
         "main_path",
         "center"
       ],
-      "priority": "medium",
+      "priority": "high",
       "reason": "Projection from concept zone assignment."
     },
     {
@@ -834,7 +901,7 @@
         "main_path",
         "center"
       ],
-      "priority": "medium",
+      "priority": "high",
       "reason": "Projection from concept zone assignment."
     }
   ],
@@ -860,7 +927,7 @@
         "access_to_open_space"
       ],
       "target_cluster_id": "main_seating",
-      "priority": "high",
+      "priority": "medium",
       "reason": "Projection from concept wall/center/focal policy."
     },
     {
@@ -868,17 +935,18 @@
       "intents": [
         "back_to_wall",
         "axis_parallel_wall",
+        "face_cluster",
         "access_to_open_space"
       ],
-      "target_cluster_id": null,
-      "priority": "medium",
+      "target_cluster_id": "main_seating",
+      "priority": "high",
       "reason": "Projection from concept wall/center/focal policy."
     }
   ],
   "object_orientations": [
     {
       "cluster_id": "main_seating",
-      "object_id": "coffee_table",
+      "object_id": "sofa",
       "intents": [
         "back_to_wall",
         "face_cluster",
@@ -899,95 +967,117 @@
       ],
       "priority": "medium",
       "reason": "Critical object orientation emitted by macro concept.",
-      "target_region": "top_wall_zone"
+      "target_region": "primary_focal_wall_zone"
     }
   ],
-  "object_viewing_pairs": [],
+  "object_viewing_pairs": [
+    {
+      "type": "viewing_pair",
+      "viewer_cluster_id": "main_seating",
+      "viewer_object_id": "sofa",
+      "viewer_object_type": "sofa",
+      "target_cluster_id": "media",
+      "target_object_id": "tv_console",
+      "target_object_type": "tv_console",
+      "relation": "view_target",
+      "required": true,
+      "priority": "high",
+      "source": "request_contract_relation_edge",
+      "evidence": "slim TV console"
+    }
+  ],
   "anchor_region_preferences_by_cluster": {
     "main_seating": {
-      "zone_assignment": "left_wall_zone",
+      "zone_assignment": "top_wall_zone",
+      "committed_region_ids": [
+        "top_wall_zone"
+      ],
+      "committed_wall_side": "top_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
         "center_access_lane"
       ],
       "preferred_region_ids": [
-        "left_wall_zone",
+        "top_wall_zone",
         "window_side_zone",
         "daylight_biased_zone",
         "floating_support_zone",
         "primary_focal_wall_zone"
       ],
-      "wall_claim": "medium",
-      "center_usage": "open_reserved",
-      "preferred_wall_side": "left_wall",
+      "wall_claim": "strong",
+      "center_usage": "partial",
+      "preferred_wall_side": "top_wall",
       "anchor_strength": "strong",
       "scenario_role": "primary",
       "entry_relation": "neutral",
       "daylight_relation": "neutral",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
+        "wall_backing": "required",
         "front_space": "required",
         "daylight_blocking": "neutral",
         "pose_flexibility": "low"
       }
     },
     "media": {
-      "zone_assignment": "top_wall_zone",
+      "zone_assignment": "primary_focal_wall_zone",
+      "committed_region_ids": [
+        "primary_focal_wall_zone"
+      ],
+      "committed_wall_side": "",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
-        "keep_open_center",
-        "center_openness_core"
+        "center_openness_core",
+        "center_access_lane"
       ],
       "preferred_region_ids": [
-        "top_wall_zone",
         "primary_focal_wall_zone",
         "window_side_zone",
         "bottom_wall_zone",
         "edge_loading_zone"
       ],
       "wall_claim": "medium",
-      "center_usage": "open_reserved",
+      "center_usage": "none",
       "preferred_wall_side": "",
       "anchor_strength": "medium",
       "scenario_role": "support",
       "entry_relation": "avoid_direct_entry_conflict",
       "daylight_relation": "avoid_window_blocking",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
-        "front_space": "optional",
+        "wall_backing": "required",
+        "front_space": "preferred",
         "daylight_blocking": "avoid",
         "pose_flexibility": "medium"
       }
     },
     "storage_display_support": {
-      "zone_assignment": "right_wall_zone",
+      "zone_assignment": "bottom_wall_zone",
+      "committed_region_ids": [
+        "bottom_wall_zone"
+      ],
+      "committed_wall_side": "bottom_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
-        "keep_open_center",
         "center_openness_core",
         "center_access_lane"
       ],
       "preferred_region_ids": [
-        "right_wall_zone",
         "bottom_wall_zone",
         "edge_loading_zone",
-        "left_wall_zone"
+        "left_wall_zone",
+        "right_wall_zone"
       ],
-      "wall_claim": "medium",
-      "center_usage": "open_reserved",
-      "preferred_wall_side": "right_wall",
+      "wall_claim": "strong",
+      "center_usage": "none",
+      "preferred_wall_side": "bottom_wall",
       "anchor_strength": "strong",
       "scenario_role": "secondary",
       "entry_relation": "neutral",
       "daylight_relation": "neutral",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
+        "wall_backing": "required",
         "front_space": "required",
         "daylight_blocking": "neutral",
         "pose_flexibility": "low"
@@ -996,43 +1086,48 @@
   },
   "anchor_layout_hints_by_cluster": {
     "main_seating": {
-      "zone_assignment": "left_wall_zone",
+      "zone_assignment": "top_wall_zone",
+      "committed_region_ids": [
+        "top_wall_zone"
+      ],
+      "committed_wall_side": "top_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
         "center_access_lane"
       ],
       "preferred_region_ids": [
-        "left_wall_zone",
+        "top_wall_zone",
         "window_side_zone",
         "daylight_biased_zone",
         "floating_support_zone",
         "primary_focal_wall_zone"
       ],
       "role_kind": "social_anchor",
-      "wall_claim": "medium",
-      "center_usage": "open_reserved",
-      "preferred_wall_side": "left_wall",
+      "wall_claim": "strong",
+      "center_usage": "partial",
+      "preferred_wall_side": "top_wall",
       "anchor_strength": "strong",
       "scenario_role": "primary",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
+        "wall_backing": "required",
         "front_space": "required",
         "daylight_blocking": "neutral",
         "pose_flexibility": "low"
       }
     },
     "media": {
-      "zone_assignment": "top_wall_zone",
+      "zone_assignment": "primary_focal_wall_zone",
+      "committed_region_ids": [
+        "primary_focal_wall_zone"
+      ],
+      "committed_wall_side": "",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
-        "keep_open_center",
-        "center_openness_core"
+        "center_openness_core",
+        "center_access_lane"
       ],
       "preferred_region_ids": [
-        "top_wall_zone",
         "primary_focal_wall_zone",
         "window_side_zone",
         "bottom_wall_zone",
@@ -1040,42 +1135,44 @@
       ],
       "role_kind": "media",
       "wall_claim": "medium",
-      "center_usage": "open_reserved",
+      "center_usage": "none",
       "preferred_wall_side": "",
       "anchor_strength": "medium",
       "scenario_role": "support",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
-        "front_space": "optional",
+        "wall_backing": "required",
+        "front_space": "preferred",
         "daylight_blocking": "avoid",
         "pose_flexibility": "medium"
       }
     },
     "storage_display_support": {
-      "zone_assignment": "right_wall_zone",
+      "zone_assignment": "bottom_wall_zone",
+      "committed_region_ids": [
+        "bottom_wall_zone"
+      ],
+      "committed_wall_side": "bottom_wall",
       "required_region_ids": [],
       "forbidden_region_ids": [
-        "floating_center_zone",
-        "keep_open_center",
         "center_openness_core",
         "center_access_lane"
       ],
       "preferred_region_ids": [
-        "right_wall_zone",
         "bottom_wall_zone",
         "edge_loading_zone",
-        "left_wall_zone"
+        "left_wall_zone",
+        "right_wall_zone"
       ],
       "role_kind": "storage",
-      "wall_claim": "medium",
-      "center_usage": "open_reserved",
-      "preferred_wall_side": "right_wall",
+      "wall_claim": "strong",
+      "center_usage": "none",
+      "preferred_wall_side": "bottom_wall",
       "anchor_strength": "strong",
       "scenario_role": "secondary",
-      "placement_bias": "balanced",
+      "placement_bias": "wall_backed",
       "placement_behavior": {
-        "wall_backing": "preferred",
+        "wall_backing": "required",
         "front_space": "required",
         "daylight_blocking": "neutral",
         "pose_flexibility": "low"
@@ -1084,29 +1181,31 @@
   },
   "anchor_pair_contracts": [
     {
-      "pair_type": "opposite_walls",
+      "pair_type": "view_target",
       "cluster_a": "main_seating",
-      "cluster_b": "storage_display_support",
+      "cluster_b": "media",
       "strength": "high",
-      "required": true
+      "required": true,
+      "source": "object_viewing_pair"
     }
   ],
   "object_solver_policy": {
     "placement_mode": "anchor_first_object_level",
     "anchor_stage_first": true,
-    "family": "open_center",
+    "family": "focal_axis",
     "support_stage_enabled": true,
     "micro_refine_inside_solver": true,
     "placement_order_by_cluster": {
       "main_seating": [
+        "sofa",
         "coffee_table",
         "armchair",
         "side_table",
-        "floor_lamp",
-        "sofa"
+        "floor_lamp"
       ],
       "media": [
-        "tv_console"
+        "tv_console",
+        "media_shelf"
       ],
       "storage_display_support": [
         "bookshelf"
@@ -1114,9 +1213,8 @@
     },
     "protected_ids_by_cluster": {
       "main_seating": [
-        "coffee_table",
-        "floor_lamp",
-        "sofa"
+        "sofa",
+        "coffee_table"
       ],
       "media": [
         "tv_console"
@@ -1127,8 +1225,24 @@
     },
     "droppable_ids_by_cluster": {
       "main_seating": [
-        "armchair",
-        "side_table"
+        "side_table",
+        "armchair"
+      ],
+      "media": [
+        "media_shelf"
+      ],
+      "storage_display_support": []
+    },
+    "required_support_ids_by_cluster": {
+      "main_seating": [
+        "floor_lamp"
+      ],
+      "media": [],
+      "storage_display_support": []
+    },
+    "relaxable_required_ids_by_cluster": {
+      "main_seating": [
+        "floor_lamp"
       ],
       "media": [],
       "storage_display_support": []
@@ -1355,7 +1469,7 @@
     "media": [
       "media_facing",
       "wall_backed_focal",
-      "focal_media"
+      "focal_axis"
     ],
     "storage_display_support": [
       "storage_wall",
@@ -1365,72 +1479,65 @@
     ]
   },
   "variant_bias_weights": {
-    "family_match_weight": 1.4,
-    "center_preserve_weight": 1.55,
-    "focal_axis_weight": 1.25,
-    "entry_clear_weight": 1.5,
-    "wall_loading_weight": 1.15,
-    "daylight_alignment_weight": 1.1,
-    "edge_loading_weight": 1.25,
-    "symmetry_weight": 1.1
+    "family_match_weight": 1.45,
+    "center_preserve_weight": 1.25,
+    "focal_axis_weight": 1.55,
+    "entry_clear_weight": 1.45,
+    "wall_loading_weight": 1.35,
+    "daylight_alignment_weight": 1.2,
+    "edge_loading_weight": 1.15,
+    "symmetry_weight": 1.35
   },
   "concept_readiness_requirements": {
     "required_publishable_diagnostics": [
       "circulation_clear",
       "entry_preserved",
       "dominant_anchor_correct",
-      "workflow_preserved",
-      "center_openness_preserved"
+      "workflow_preserved"
     ],
     "required_pair_contracts": [
-      "opposite_walls"
+      "view_target"
     ],
-    "required_center_preservation": "high",
+    "required_center_preservation": "medium",
     "required_entry_preservation": true
   },
   "cluster_relations": [
     {
       "a": "main_seating",
-      "b": "storage_display_support",
+      "b": "media",
       "relation": "near",
       "priority": "high",
-      "reason": "Projection from primary_pair_contract=opposite_walls."
-    },
-    {
-      "a": "media",
-      "b": "main_seating",
-      "relation": "far_if_possible",
-      "priority": "medium",
-      "reason": "Concept-specific topology keeps these macro fields distinct."
+      "reason": "Projection from primary_pair_contract=view_target."
     }
   ],
-  "cluster_directional_relations": [],
+  "cluster_directional_relations": [
+    {
+      "a": "main_seating",
+      "b": "media",
+      "relation": "view_target",
+      "priority": "high",
+      "reason": "Projection from primary_pair_contract=view_target."
+    }
+  ],
   "circulation_plan": {
     "main_paths": [],
-    "keep_open_regions": [
-      {
-        "type": "center_lane",
-        "near": "center_openness_core",
-        "priority": "high",
-        "reason": "Protected by deterministic macro concept policy."
-      }
-    ]
+    "keep_open_regions": []
   },
   "layout_intent_profile": {
-    "focus_mode": "mixed",
+    "focus_mode": "viewing",
     "primary_cluster_id": "main_seating",
-    "secondary_cluster_id": "media",
+    "secondary_cluster_id": "storage_display_support",
     "circulation_priority": "high",
     "center_open_preference": "high",
-    "support_cluster_behavior": "recede",
-    "distribution_mode": "balanced"
+    "support_cluster_behavior": "balanced",
+    "distribution_mode": "focal_grouped"
   },
   "placement_guidelines": [
     "Follow macro_concept.cluster_zone_plan before applying local repair.",
     "Preserve entry landing, primary corridor, and declared center openness before support clusters compete for space."
   ],
   "notes": [
-    "Generated by deterministic SeedConceptGenerator family=open_center.",
+    "Generated by deterministic SeedConceptGenerator family=focal_axis.",
     "Legacy relation fields are a solver projection of the macro concept, not the planning source of truth."
   ],
   "missing": []

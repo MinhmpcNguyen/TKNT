@@ -27,7 +27,6 @@ ClusterComposer = _cluster_composer.ClusterComposer
 _cluster_composer_tools = importlib.import_module("cluster_composer.tools")
 _constraint_score = importlib.import_module("cluster_composer.constraint_score")
 _find_cluster = _cluster_composer._find_cluster
-_coerce_verifier_args = _cluster_composer._coerce_verifier_args
 _greedy_improve_valid_layout = _cluster_composer._greedy_improve_valid_layout
 _run_verifier_once = _cluster_composer._run_verifier_once
 _seed_local_layout = _cluster_composer._seed_local_layout
@@ -290,75 +289,6 @@ class ClusterComposerArchitectureTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "OK")
         self.assertGreaterEqual(len(result.get("variant_bundle") or []), 1)
-
-    def test_generate_uses_deterministic_controller(self) -> None:
-        merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
-        original_run_with_tools = _cluster_composer._run_with_tools
-        self.addCleanup(
-            setattr, _cluster_composer, "_run_with_tools", original_run_with_tools
-        )
-
-        def _unexpected_llm_loop(**_: Any) -> str:
-            raise AssertionError(
-                "LLM loop should not be used by ClusterComposer.generate"
-            )
-
-        _cluster_composer._run_with_tools = _unexpected_llm_loop
-
-        result = ClusterComposer().generate(
-            merged_clusters=merged,
-            cluster_id="sleep_area",
-            description="",
-            special_notes="",
-        )
-
-        self.assertEqual(result["status"], "OK")
-        self.assertIn("deterministic", " ".join(result.get("notes") or []).lower())
-        self.assertTrue(result.get("canonical_variant_family"))
-        self.assertTrue(result.get("tight_hull_polygons_mm"))
-        self.assertIn("covered", result.get("family_coverage") or {})
-        self.assertTrue(
-            all(
-                item.get("canonical_variant_family")
-                for item in result.get("variant_bundle") or []
-                if isinstance(item, dict)
-            )
-        )
-
-        cluster = _find_cluster(merged, "sleep_area")
-        member_ids = {
-            member
-            for member in cluster.get("members") or []
-            if isinstance(member, str) and member
-        }
-        placement_ids = {
-            row["id"]
-            for row in result.get("local_placements") or []
-            if isinstance(row, dict) and isinstance(row.get("id"), str)
-        }
-        self.assertEqual(member_ids, placement_ids)
-
-    def test_coerce_verifier_args_populates_soft_constraints(self) -> None:
-        merged = _load_json(CASE_ROOT / "04_cluster_merged.json")
-        cluster = _find_cluster(merged, "sleep_area")
-
-        args = _coerce_verifier_args(
-            args={
-                "local_placements": [
-                    {"id": "bed", "x": 0, "y": 0, "rot": 0},
-                    {"id": "nightstand", "x": 0, "y": 1700, "rot": 0},
-                    {"id": "dresser", "x": 2000, "y": 0, "rot": 270},
-                ]
-            },
-            cluster=cluster,
-            last_draft=None,
-            access_clearance_ratio=0.25,
-        )
-
-        self.assertEqual(
-            args.get("soft_constraints"),
-            cluster.get("soft_constraints"),
-        )
 
     def test_seed_layout_keeps_head_left_anchor_semantics(self) -> None:
         merged = _load_json(CASE_ROOT / "04_cluster_merged.json")

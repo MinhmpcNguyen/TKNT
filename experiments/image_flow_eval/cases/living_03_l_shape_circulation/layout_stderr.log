@@ -1,0 +1,19 @@
+2026-05-29 14:32:26,334 | INFO | config | Configuration loaded and validated successfully: /Users/Yuki/TKNT/app-config.yaml
+2026-05-29 14:32:26,334 | INFO | config | Configuration loaded and validated successfully.
+2026-05-29 14:32:26,334 | INFO | config | Application configuration loaded from /Users/Yuki/TKNT/config/../app-config.yaml
+2026-05-29 14:32:29,595 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:32:29,604 | INFO | agent.semantic_layout_planner | SemanticLayoutPlanner adaptive LLM mode enabled.
+2026-05-29 14:32:40,610 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:32:47,728 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:32:54,276 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:33:00,132 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:33:00,148 | INFO | pipeline.orchestrator | Cluster forge primary produced 3 cluster(s).
+2026-05-29 14:33:00,148 | INFO | pipeline.orchestrator | Cluster forge primary cluster main_seating [living]: members=['sofa', 'coffee_table', 'side_table', 'sectional_sofa', 'armchair', 'floor_lamp'] anchors=['sofa']
+2026-05-29 14:33:00,148 | INFO | pipeline.orchestrator | Cluster forge primary cluster media [living]: members=['tv_console', 'media_shelf'] anchors=['tv_console']
+2026-05-29 14:33:00,148 | INFO | pipeline.orchestrator | Cluster forge primary cluster storage_display_support [storage]: members=['bookshelf'] anchors=['bookshelf']
+2026-05-29 14:33:00,153 | INFO | agent.tier_count_director | TierCount utility mode: available_area_m2=19.51 room_scale=large furnishing_mode=neutral
+2026-05-29 14:34:41,965 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:34:45,330 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:34:49,844 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:34:53,348 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 14:34:57,312 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"

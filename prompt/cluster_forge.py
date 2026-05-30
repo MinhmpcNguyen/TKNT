@@ -213,7 +213,28 @@ OUTPUT JSON (STRICT):
             "selection":"best_fit|first_fit",
             "orientation":"face_base|same_direction"
           }
-        ]
+        ],
+        "tier_count_hints": {
+          "bundle_class":"indispensable|strong_support|optional|decor_light",
+          "preserve_level":"highest|high|medium|low",
+          "keep_if_space_surplus": false,
+          "space_surplus_threshold": 0.45,
+          "drop_order_bias":"drop_first|drop_early|neutral|drop_late|drop_last",
+          "object_hints": [
+            {
+              "object_type":"object_id",
+              "min_keep":0,
+              "max_keep":1,
+              "keep_if_space_surplus": false,
+              "space_surplus_threshold":0.45,
+              "drop_order_bias":"neutral",
+              "preserve_level":"medium",
+              "preferred_size_tier":"S|M|L|null",
+              "size_intent":"compact|standard|generous",
+              "size_reason":"short reason"
+            }
+          ]
+        }
       },
       "hard_constraints":[
         {"type":"no_overlap","a":"id","b":"id"},
@@ -273,6 +294,9 @@ RULES
 - Ideal cluster size: 1 anchor + 2–4 support objects.
 - Reduce redundancy before splitting.
 - Follow structured limits such as optional_at_most and max_keep.
+- Emit tier_count_hints.object_hints for kept objects when you have request-scale evidence.
+- preferred_size_tier is a semantic prior, not a hard inventory pick: compact/student/single-style wording may prefer S, neutral wording may prefer M, and generous/master/queen-style wording may prefer M or L.
+- Use optional size_intent and size_reason to explain the size prior briefly.
 
 6) STRUCTURE
 - Every non-anchor object must relate to an anchor or another kept object.

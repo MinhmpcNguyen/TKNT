@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from .io import load_manifest, metric_results_to_json, write_json_file, write_metric_csv
-from .metrics import compute_fid_score, evaluate_variant_images, summarize_human_ratings
+from .metrics import evaluate_variant_images, summarize_human_ratings
 from .providers import resolve_provider, run_case_variant
 from .types import (
     CaseConfig,
@@ -61,7 +61,7 @@ def _parse_args() -> argparse.Namespace:
     run.add_argument("--output-dir", type=Path)
     run.add_argument(
         "--provider",
-        choices=("tknt_snapshot", "command", "evaluate_only"),
+        choices=("tknt_snapshot", "evaluate_only"),
         default="tknt_snapshot",
     )
     run.add_argument(
@@ -93,11 +93,6 @@ def _evaluate_command(args: argparse.Namespace) -> int:
         manifest=manifest,
         output_dir=output_dir,
         result_rows=rows,
-        generated_images=[
-            Path(str(row["output_image"]))
-            for row in rows
-            if isinstance(row.get("output_image"), str)
-        ],
     )
     return 1 if failed else 0
 
@@ -113,7 +108,6 @@ def _run_command(args: argparse.Namespace) -> int:
     variants = _cli_variants(args.variants)
     rows: list[dict[str, JSONValue]] = []
     failed = False
-    generated_images: list[Path] = []
 
     for case in manifest.cases:
         case_variants = variants or case.variants
@@ -135,11 +129,12 @@ def _run_command(args: argparse.Namespace) -> int:
                     metrics=[provider_error],
                 )
                 rows.append(row)
-                _write_variant_metrics(output_dir, case.id, variant.id, [provider_error])
+                _write_variant_metrics(
+                    output_dir, case.id, variant.id, [provider_error]
+                )
                 continue
 
             assert provider_result is not None
-            generated_images.append(provider_result.output_image)
             metrics = evaluate_variant_images(
                 manifest=manifest,
                 case=case,
@@ -164,7 +159,6 @@ def _run_command(args: argparse.Namespace) -> int:
         manifest=manifest,
         output_dir=output_dir,
         result_rows=rows,
-        generated_images=generated_images,
     )
     return 1 if failed else 0
 
@@ -267,23 +261,13 @@ def _write_reports(
     manifest: ManifestConfig,
     output_dir: Path,
     result_rows: list[dict[str, JSONValue]],
-    generated_images: list[Path],
 ) -> None:
-    batch_metrics: list[MetricResult] = []
-    if manifest.fid_reference_images:
-        batch_metrics.append(
-            compute_fid_score(
-                reference_images=manifest.fid_reference_images,
-                generated_images=generated_images,
-            )
-        )
     write_json_file(
         output_dir / "summary.json",
         {
             "manifest": str(manifest.path),
             "output_dir": str(output_dir),
             "results": result_rows,
-            "batch_metrics": metric_results_to_json(batch_metrics),
         },
     )
     csv_rows: list[dict[str, JSONValue]] = []

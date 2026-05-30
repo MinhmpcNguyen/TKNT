@@ -60,6 +60,46 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         self.assertIsInstance(cluster_semantics, dict)
         self.assertEqual(cluster_semantics["type"], "ARRAY")
 
+    def test_tier_count_hint_schema_and_sanitizer_keep_size_intent(self) -> None:
+        schema = semantic_layout_planner._adaptive_stage_response_schema(
+            "adaptive_candidate_overrides"
+        )
+        candidate_overrides = schema["properties"]["candidate_overrides"]
+        object_hints = candidate_overrides["items"]["properties"]["tier_count_hints"][
+            "properties"
+        ]["object_hints"]
+        hint_properties = object_hints["items"]["properties"]
+
+        self.assertIn("preferred_size_tier", hint_properties)
+        self.assertIn("size_intent", hint_properties)
+        self.assertIn("size_reason", hint_properties)
+
+        hints = semantic_layout_planner._sanitize_tier_count_hints(
+            {
+                "bundle_class": "indispensable",
+                "preserve_level": "highest",
+                "object_hints": [
+                    {
+                        "object_type": "bed",
+                        "min_keep": 1,
+                        "max_keep": 1,
+                        "preferred_size_tier": "S",
+                        "size_intent": "compact",
+                        "size_reason": "student single-bed brief",
+                    }
+                ],
+            },
+            object_types=["bed"],
+            default_bundle_class="indispensable",
+            default_preserve_level="highest",
+            required=False,
+        )
+
+        bed_hint = hints["object_hints"][0]
+        self.assertEqual(bed_hint["preferred_size_tier"], "S")
+        self.assertEqual(bed_hint["size_intent"], "compact")
+        self.assertEqual(bed_hint["size_reason"], "student single-bed brief")
+
     def test_cluster_semantics_accepts_cluster_id_mapping_shape(self) -> None:
         deterministic_program = {
             "active_clusters": [

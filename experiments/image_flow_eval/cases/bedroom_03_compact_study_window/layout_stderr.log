@@ -1,0 +1,14 @@
+2026-05-29 15:00:43,123 | INFO | config | Configuration loaded and validated successfully: /Users/Yuki/TKNT/app-config.yaml
+2026-05-29 15:00:43,123 | INFO | config | Configuration loaded and validated successfully.
+2026-05-29 15:00:43,123 | INFO | config | Application configuration loaded from /Users/Yuki/TKNT/config/../app-config.yaml
+2026-05-29 15:00:45,560 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 15:00:45,568 | INFO | agent.semantic_layout_planner | SemanticLayoutPlanner adaptive LLM mode enabled.
+2026-05-29 15:00:55,939 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 15:01:04,133 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 15:01:08,972 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 15:01:12,965 | INFO | httpx | HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 15:01:12,978 | INFO | pipeline.orchestrator | Cluster forge primary produced 3 cluster(s).
+2026-05-29 15:01:12,978 | INFO | pipeline.orchestrator | Cluster forge primary cluster sleep_core [sleep]: members=['bed', 'nightstand'] anchors=['bed']
+2026-05-29 15:01:12,978 | INFO | pipeline.orchestrator | Cluster forge primary cluster storage_core [storage]: members=['wardrobe', 'bookshelf'] anchors=['wardrobe']
+2026-05-29 15:01:12,978 | INFO | pipeline.orchestrator | Cluster forge primary cluster work_study [work]: members=['desk', 'chair'] anchors=['desk']
+2026-05-29 15:01:12,983 | INFO | agent.tier_count_director | TierCount utility mode: available_area_m2=8.60 room_scale=small furnishing_mode=minimal

@@ -44,7 +44,14 @@
       "max_x": 3400,
       "max_y": 4200
     },
-    "ceiling_height_mm": 2600
+    "ceiling_height_mm": 2600,
+    "wall_thickness_mm": 100,
+    "wall_thickness_by_wall_id": {
+      "wall_1": 100,
+      "wall_2": 100,
+      "wall_3": 100,
+      "wall_4": 100
+    }
   },
   "openings": {
     "doors": [],
@@ -416,6 +423,7 @@
             "y": 0
           },
           "length_mm": 3400,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -0.0,
             "y": 1.0
@@ -432,6 +440,7 @@
             "y": 4200
           },
           "length_mm": 4200,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -1.0,
             "y": 0.0
@@ -448,6 +457,7 @@
             "y": 4200
           },
           "length_mm": 3400,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": -0.0,
             "y": -1.0
@@ -464,6 +474,7 @@
             "y": 0
           },
           "length_mm": 4200,
+          "thickness_mm": 100,
           "inward_normal": {
             "x": 1.0,
             "y": 0.0
@@ -589,6 +600,7 @@
       "daylight_mid_side_margin_mm": 300,
       "min_wall_len_mm": 150,
       "min_usable_wall_len_mm": 700,
+      "default_wall_thickness_mm": 100,
       "affordance_field_resolution_mm": 200,
       "corridor_candidate_max": 4,
       "zone_split_max": 4,

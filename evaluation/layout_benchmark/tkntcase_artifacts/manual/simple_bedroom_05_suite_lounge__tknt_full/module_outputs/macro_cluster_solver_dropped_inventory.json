@@ -1,5 +1,15 @@
 {
   "status": "OK",
-  "total_dropped_items": 0,
-  "clusters": []
+  "total_dropped_items": 1,
+  "clusters": [
+    {
+      "cluster_id": "sleep_core",
+      "items": [
+        {
+          "object_id": "nightstand_2",
+          "reason": "support_slot_failed"
+        }
+      ]
+    }
+  ]
 }

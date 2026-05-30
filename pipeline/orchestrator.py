@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass
@@ -26,9 +26,11 @@ from agent.seed_concept_generator import SeedConceptGenerator, solver_plan_from_
 from agent.solver.solver import MacroClusterSolver
 from agent.stylist import Stylist, stylist_model_name_for_variant
 from agent.tier_count_director import TierCountDirector
-from agent.visual_relation_bundle_planner import VisualRelationBundlePlanner
 from agent.visual_relation_object_solver import VisualRelationObjectSolver
-from agent.visual_relation_planner import VisualRelationPlanner
+from agent.visual_relation_planner import (
+    VisualRelationBundlePlanner,
+    VisualRelationPlanner,
+)
 from agent.request_contract import (
     canonical_object_type,
     missing_functional_contract_types,
@@ -65,6 +67,7 @@ from pipeline.dropped_inventory import (
 from pipeline.layout_eligibility import annotate_layout_coverage
 from pipeline.layout_variants import (
     build_final_gallery_selection_summary,
+    material_macro_layout_signature,
     select_distinct_final_gallery_candidates,
 )
 from pipeline.manual_placements import (
@@ -107,7 +110,26 @@ _CONCEPT_REPAIR_FUNCTIONAL_REGION_PRIORITY = (
     "top_wall_zone",
     "quiet_private_deep_zone",
 )
+_PRIMARY_CORRIDOR_RELAXATION_ZONE_TYPES = {"primary_circulation_corridor"}
 _HARD_REQUEST_CONTRACT_INTENTS = {"must_keep", "must_try"}
+_MATERIAL_MACRO_REPAIR_REGION_PRIORITY = (
+    "left_wall_zone",
+    "right_wall_zone",
+    "top_wall_zone",
+    "bottom_wall_zone",
+    "window_side_zone",
+    "quiet_private_deep_zone",
+    "primary_focal_wall_zone",
+)
+_MATERIAL_MACRO_COMPLEMENT_BY_REGION = {
+    "left_wall_zone": "right_wall_zone",
+    "right_wall_zone": "left_wall_zone",
+    "top_wall_zone": "bottom_wall_zone",
+    "bottom_wall_zone": "top_wall_zone",
+    "window_side_zone": "bottom_wall_zone",
+    "quiet_private_deep_zone": "right_wall_zone",
+    "primary_focal_wall_zone": "bottom_wall_zone",
+}
 
 
 @dataclass(frozen=True)
@@ -1417,6 +1439,71 @@ def run_case(
         selected=styling_candidates,
         requested_count=target_final_count,
     )
+    material_repair_concepts = _build_material_macro_diversification_repair_concepts(
+        concepts=concepts,
+        solved_bundles=solved_bundles,
+        selection_summary=selection_summary,
+        target_final_count=target_final_count,
+    )
+    if material_repair_concepts:
+        seed_relation_plans["material_macro_diversification_repair"] = {
+            "attempted": True,
+            "repair_concept_count": len(material_repair_concepts),
+            "reason": "planned_material_macro_signatures_collapsed_in_solver",
+        }
+        _update_status(
+            paths,
+            "solver",
+            message="Repairing material macro diversity with committed anchor targets.",
+            progress_current=0,
+            progress_total=len(material_repair_concepts),
+        )
+        repair_bundles = _solve_seed_concept_pool(
+            concepts=material_repair_concepts,
+            room_output=room_output,
+            room_type=room_type,
+            cluster_output=cluster_output,
+            tier_output=tier_output,
+            merged_output=merged_output,
+            solver=solver,
+            manual_placements=manual_placements,
+            ablation_mode=resolved_ablation_mode,
+            target_final_count=len(material_repair_concepts),
+            paths=paths,
+            progress_offset=len(solved_bundles),
+            status_label="Solving material macro diversity repairs",
+        )
+        solved_bundles.extend(
+            _mark_material_macro_repair_bundles(
+                repair_bundles,
+                repair_reason="planned_material_macro_signatures_collapsed_in_solver",
+            )
+        )
+        _mark_macro_concept_fallback_collapses(solved_bundles)
+        styling_candidates = _select_final_styling_candidates(
+            solved_bundles,
+            max_variants=target_final_count,
+        )
+        selection_summary = build_final_gallery_selection_summary(
+            candidates=solved_bundles,
+            selected=styling_candidates,
+            requested_count=target_final_count,
+        )
+        seed_relation_plans["material_macro_diversification_repair"].update(
+            {
+                "solved_bundle_count": len(repair_bundles),
+                "selected_after_repair_count": len(styling_candidates),
+                "actual_macro_distinct_after_repair": selection_summary.get(
+                    "actual_macro_distinct_candidate_count"
+                ),
+            }
+        )
+        _write_module_json(
+            paths,
+            "seed_concept_generator",
+            seed_relation_plans,
+            legacy_path=paths.seed_relation_plans,
+        )
     if _seed_bundle_uses_llm_guidance(
         seed_relation_plans
     ) and _should_retry_seed_concepts(
@@ -2310,7 +2397,13 @@ def _solve_seed_concept_pool(
                 _write_bundle_stage_artifacts(paths, solved_bundle)
                 first_artifacts_written = True
 
+    _mark_macro_concept_fallback_collapses(solved_bundles)
     if paths is not None and failure_diagnostics:
+        if not solved_bundles:
+            _mark_downstream_module_outputs_stale(
+                paths,
+                blocked_by="macro_cluster_solver_failure",
+            )
         _write_module_json(
             paths,
             "macro_cluster_solver_failure",
@@ -2397,6 +2490,320 @@ def _summary_int(summary: Mapping[str, Any], key: str) -> int:
         return int(summary.get(key) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _build_material_macro_diversification_repair_concepts(
+    *,
+    concepts: list[dict[str, Any]],
+    solved_bundles: list[dict[str, Any]],
+    selection_summary: Mapping[str, Any],
+    target_final_count: int,
+) -> list[dict[str, Any]]:
+    target = min(max(1, int(target_final_count)), 3)
+    if target <= 1 or not concepts or not solved_bundles:
+        return []
+    planned_distinct = _summary_int(
+        selection_summary,
+        "planned_material_macro_distinct_candidate_count",
+    )
+    actual_distinct = _summary_int(
+        selection_summary,
+        "actual_macro_distinct_candidate_count",
+    )
+    returned_count = _summary_int(selection_summary, "returned_count")
+    if actual_distinct >= target and returned_count >= target:
+        return []
+    if planned_distinct <= actual_distinct and returned_count >= target:
+        return []
+
+    available_regions = _material_macro_available_regions(concepts)
+    if len(available_regions) < 2:
+        return []
+    existing_signatures = {
+        str(bundle.get("planned_material_macro_signature") or "").strip()
+        for bundle in solved_bundles
+        if str(bundle.get("planned_material_macro_signature") or "").strip()
+    }
+    repair_count = max(target_final_count, target + 1)
+    repairs: list[dict[str, Any]] = []
+    for index, target_region in enumerate(available_regions):
+        source = concepts[index % len(concepts)]
+        repaired = _retarget_material_macro_concept(
+            source,
+            primary_region=target_region,
+            available_regions=available_regions,
+            repair_index=len(repairs) + 1,
+        )
+        if repaired is None:
+            continue
+        signature = str(repaired.get("planned_material_macro_signature") or "").strip()
+        if not signature or signature in existing_signatures:
+            continue
+        existing_signatures.add(signature)
+        repairs.append(repaired)
+        if len(repairs) >= repair_count:
+            break
+    return repairs
+
+
+def _material_macro_available_regions(
+    concepts: list[dict[str, Any]],
+) -> list[str]:
+    region_ids: set[str] = set()
+    for concept in concepts:
+        macro_map = concept.get("macro_region_map_snapshot")
+        if isinstance(macro_map, Mapping):
+            for row in macro_map.get("regions") or []:
+                if not isinstance(row, Mapping):
+                    continue
+                region_id = str(row.get("region_id") or "").strip()
+                if region_id:
+                    region_ids.add(region_id)
+        for row in concept.get("cluster_zone_plan") or []:
+            if not isinstance(row, Mapping):
+                continue
+            region_id = str(row.get("zone_assignment") or "").strip()
+            if region_id:
+                region_ids.add(region_id)
+            region_ids.update(_clean_str_list(row.get("preferred_region_ids")))
+    out = [
+        region_id
+        for region_id in _MATERIAL_MACRO_REPAIR_REGION_PRIORITY
+        if region_id in region_ids and _material_macro_region_is_assignable(region_id)
+    ]
+    out.extend(
+        sorted(
+            region_id
+            for region_id in region_ids
+            if region_id not in out and _material_macro_region_is_assignable(region_id)
+        )
+    )
+    return out
+
+
+def _material_macro_region_is_assignable(region_id: str) -> bool:
+    token = region_id.strip().lower()
+    if not token:
+        return False
+    return not any(
+        blocked in token
+        for blocked in (
+            "entry",
+            "door",
+            "corridor",
+            "keep_open",
+            "center_openness",
+            "floating_center",
+        )
+    )
+
+
+def _retarget_material_macro_concept(
+    concept: dict[str, Any],
+    *,
+    primary_region: str,
+    available_regions: Sequence[str],
+    repair_index: int,
+) -> dict[str, Any] | None:
+    repaired = deepcopy(concept)
+    rows = [
+        dict(row)
+        for row in repaired.get("cluster_zone_plan") or []
+        if isinstance(row, Mapping)
+    ]
+    primary_row = _material_macro_primary_row(rows)
+    if primary_row is None:
+        return None
+    secondary_row = _material_macro_secondary_row(rows, primary_row)
+    _retarget_material_macro_row(primary_row, primary_region)
+    if secondary_row is not None:
+        complement = _material_macro_complement_region(
+            primary_region=primary_region,
+            available_regions=available_regions,
+        )
+        if complement is not None and complement != primary_region:
+            _retarget_material_macro_row(secondary_row, complement)
+    signature = _planned_material_macro_signature_from_rows(rows)
+    repaired["cluster_zone_plan"] = rows
+    repaired["concept_id"] = (
+        f"{concept.get('concept_id') or 'concept'}_material_repair_{repair_index:02d}"
+    )
+    repaired["material_macro_signature_target"] = signature
+    repaired["planned_material_macro_signature"] = signature
+    repaired["material_macro_repair_applied"] = True
+    repaired["material_macro_repair_source_concept_id"] = str(
+        concept.get("concept_id") or ""
+    )
+    repaired["anchor_region_preferences_by_cluster"] = (
+        _material_macro_anchor_preferences(rows)
+    )
+    macro_constraints = deepcopy(repaired.get("macro_constraints") or {})
+    if isinstance(macro_constraints, dict):
+        macro_constraints["anchor_region_constraints"] = (
+            _material_macro_anchor_constraints(rows)
+        )
+        repaired["macro_constraints"] = macro_constraints
+    repaired["diversity_signature"] = (
+        f"{repaired.get('concept_family') or 'material_repair'}|{signature}"
+    )
+    repaired["guidance_notes"] = _collect_unique_notes(
+        repaired.get("guidance_notes"),
+        ["Deterministic material macro diversity repair retargeted core anchors."],
+    )
+    return repaired
+
+
+def _material_macro_primary_row(
+    rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    for row in rows:
+        if str(row.get("scenario_role") or "") == "primary":
+            return row
+    for row in rows:
+        if _material_row_is_core(row):
+            return row
+    return rows[0] if rows else None
+
+
+def _material_macro_secondary_row(
+    rows: list[dict[str, Any]],
+    primary_row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    primary_cluster_id = str(primary_row.get("cluster_id") or "").strip()
+    for row in rows:
+        if (
+            str(row.get("cluster_id") or "").strip() != primary_cluster_id
+            and str(row.get("scenario_role") or "") == "secondary"
+        ):
+            return row
+    for row in rows:
+        if str(
+            row.get("cluster_id") or ""
+        ).strip() != primary_cluster_id and _material_row_is_core(row):
+            return row
+    return None
+
+
+def _retarget_material_macro_row(row: dict[str, Any], region_id: str) -> None:
+    wall_side = _material_macro_wall_side(region_id)
+    row["zone_assignment"] = region_id
+    row["committed_region_ids"] = [region_id]
+    row["committed_wall_side"] = wall_side
+    if wall_side:
+        row["preferred_wall_side"] = wall_side
+    preferred = [region_id, *_clean_str_list(row.get("preferred_region_ids"))]
+    row["preferred_region_ids"] = _ordered_unique_strings(preferred)
+    if str(row.get("scenario_role") or "") in {"primary", "secondary"}:
+        row["required_region_ids"] = [region_id]
+
+
+def _material_macro_wall_side(region_id: str) -> str:
+    token = region_id.strip().lower()
+    if "window" in token or "daylight" in token:
+        return "window_side"
+    for wall_side in ("left_wall", "right_wall", "top_wall", "bottom_wall"):
+        if wall_side in token:
+            return wall_side
+    if "center" in token or "floating" in token:
+        return "center"
+    return ""
+
+
+def _material_macro_complement_region(
+    *,
+    primary_region: str,
+    available_regions: Sequence[str],
+) -> str | None:
+    preferred = _MATERIAL_MACRO_COMPLEMENT_BY_REGION.get(primary_region)
+    if preferred in available_regions:
+        return preferred
+    primary_wall = _material_macro_wall_side(primary_region)
+    for region_id in available_regions:
+        if region_id == primary_region:
+            continue
+        wall_side = _material_macro_wall_side(region_id)
+        if wall_side and wall_side != primary_wall:
+            return region_id
+    return next(
+        (region_id for region_id in available_regions if region_id != primary_region),
+        None,
+    )
+
+
+def _material_macro_anchor_preferences(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if not cluster_id:
+            continue
+        out[cluster_id] = {
+            "zone_assignment": str(row.get("zone_assignment") or ""),
+            "committed_region_ids": _clean_str_list(row.get("committed_region_ids")),
+            "committed_wall_side": str(row.get("committed_wall_side") or ""),
+            "required_region_ids": _clean_str_list(row.get("required_region_ids")),
+            "preferred_region_ids": _clean_str_list(row.get("preferred_region_ids")),
+            "forbidden_region_ids": _clean_str_list(row.get("forbidden_region_ids")),
+            "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
+            "anchor_strength": str(row.get("anchor_strength") or "medium"),
+            "scenario_role": str(row.get("scenario_role") or "support"),
+            "placement_behavior": deepcopy(row.get("placement_behavior") or {}),
+        }
+    return out
+
+
+def _material_macro_anchor_constraints(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "cluster_id": str(row.get("cluster_id") or ""),
+            "committed_region_ids": _clean_str_list(row.get("committed_region_ids")),
+            "committed_wall_side": str(row.get("committed_wall_side") or ""),
+            "required_region_ids": _clean_str_list(row.get("required_region_ids")),
+            "preferred_region_ids": _clean_str_list(row.get("preferred_region_ids")),
+            "forbidden_region_ids": _clean_str_list(row.get("forbidden_region_ids")),
+            "preferred_wall_side": str(row.get("preferred_wall_side") or ""),
+            "anchor_strength": str(row.get("anchor_strength") or "medium"),
+            "scenario_role": str(row.get("scenario_role") or "support"),
+        }
+        for row in rows
+        if str(row.get("cluster_id") or "").strip()
+    ]
+
+
+def _ordered_unique_strings(values: Sequence[Any]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _mark_material_macro_repair_bundles(
+    bundles: list[dict[str, Any]],
+    *,
+    repair_reason: str,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for bundle in bundles:
+        next_bundle = deepcopy(bundle)
+        source = str(next_bundle.get("source") or "")
+        if source:
+            next_bundle["source"] = f"material_macro_repair:{source}"
+        next_bundle["material_macro_repair_applied"] = True
+        next_bundle["material_macro_repair_reason"] = repair_reason
+        next_bundle["notes"] = _collect_unique_notes(
+            next_bundle.get("notes"),
+            ["Deterministic material macro diversity repair applied before styling."],
+        )
+        out.append(next_bundle)
+    return out
 
 
 def _seed_bundle_uses_llm_guidance(seed_relation_plans: Mapping[str, Any]) -> bool:
@@ -2500,6 +2907,88 @@ def _candidate_macro_layout_signatures(candidates: list[dict[str, Any]]) -> list
     return _sorted_non_empty_unique(signatures)
 
 
+def _planned_material_macro_signature(
+    *,
+    concept: Mapping[str, Any],
+    relation_plan: Mapping[str, Any],
+) -> str:
+    payloads = [
+        concept,
+        relation_plan,
+        relation_plan.get("macro_concept")
+        if isinstance(relation_plan, Mapping)
+        else {},
+    ]
+    for payload in payloads:
+        if not isinstance(payload, Mapping):
+            continue
+        for key in (
+            "planned_material_macro_signature",
+            "material_macro_signature_target",
+        ):
+            signature = str(payload.get(key) or "").strip()
+            if signature:
+                return signature
+    return _planned_material_macro_signature_from_rows(
+        concept.get("cluster_zone_plan")
+        if isinstance(concept.get("cluster_zone_plan"), list)
+        else []
+    )
+
+
+def _planned_material_macro_signature_from_rows(rows: Sequence[Any]) -> str:
+    signature_rows: list[str] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        if not cluster_id or not _material_row_is_core(row):
+            continue
+        region_ids = _clean_str_list(row.get("committed_region_ids"))
+        region = (
+            region_ids[0]
+            if region_ids
+            else str(row.get("zone_assignment") or "").strip()
+        )
+        if not region:
+            continue
+        wall_side = str(
+            row.get("committed_wall_side") or row.get("preferred_wall_side") or ""
+        ).strip()
+        signature_rows.append(
+            f"{cluster_id}:{_material_macro_target_token(region, wall_side)}"
+        )
+    if not signature_rows:
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            region = str(row.get("zone_assignment") or "").strip()
+            if cluster_id and region:
+                signature_rows.append(f"{cluster_id}:{region}")
+    signature_rows.sort()
+    return "|".join(signature_rows)
+
+
+def _material_row_is_core(row: Mapping[str, Any]) -> bool:
+    if str(row.get("priority") or "").strip() == "core":
+        return True
+    if str(row.get("scenario_role") or "").strip() in {"primary", "secondary"}:
+        return True
+    return str(row.get("anchor_strength") or "").strip().lower() in {
+        "hard",
+        "strong",
+    }
+
+
+def _material_macro_target_token(region: str, wall_side: str) -> str:
+    if not wall_side or wall_side == "center" or wall_side in region:
+        return region
+    if any(token in region for token in ("private", "quiet", "edge", "focal")):
+        return f"{region}@{wall_side}"
+    return region
+
+
 def _sorted_non_empty_unique(values: Any) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -2531,6 +3020,63 @@ def _mark_seed_retry_bundles(
         )
         out.append(next_bundle)
     return out
+
+
+def _mark_macro_concept_fallback_collapses(bundles: list[dict[str, Any]]) -> None:
+    seen_actual: dict[str, dict[str, str]] = {}
+    for bundle in bundles:
+        actual_signature = str(
+            bundle.get("actual_macro_layout_signature") or ""
+        ).strip()
+        planned_signature = str(
+            bundle.get("planned_material_macro_signature") or ""
+        ).strip()
+        if not actual_signature:
+            absolute_layout = bundle.get("absolute_layout")
+            if isinstance(absolute_layout, dict):
+                actual_signature = material_macro_layout_signature(absolute_layout)
+                bundle["actual_macro_layout_signature"] = actual_signature
+        if not actual_signature:
+            continue
+        previous = seen_actual.get(actual_signature)
+        if previous is not None and planned_signature != previous.get("planned"):
+            used_committed_fallback = _bundle_used_committed_anchor_fallback(bundle)
+            bundle["macro_concept_collapsed_to_fallback"] = used_committed_fallback
+            bundle["macro_concept_fallback_duplicate_of"] = previous.get("source", "")
+            if used_committed_fallback:
+                bundle["notes"] = _collect_unique_notes(
+                    bundle.get("notes"),
+                    [
+                        "Committed material macro target missed; solver used a fallback anchor macro already seen."
+                    ],
+                )
+            continue
+        seen_actual[actual_signature] = {
+            "planned": planned_signature,
+            "source": str(bundle.get("source") or ""),
+        }
+
+
+def _bundle_used_committed_anchor_fallback(bundle: Mapping[str, Any]) -> bool:
+    diagnostics = bundle.get("anchor_candidate_diagnostics_by_cluster")
+    if not isinstance(diagnostics, Mapping):
+        solver_output = bundle.get("solver_output")
+        if isinstance(solver_output, Mapping):
+            solver_debug = solver_output.get("solver_debug")
+            if isinstance(solver_debug, Mapping):
+                diagnostics = solver_debug.get(
+                    "anchor_candidate_diagnostics_by_cluster"
+                )
+    if not isinstance(diagnostics, Mapping):
+        return False
+    return any(
+        isinstance(row, Mapping)
+        and (
+            bool(row.get("committed_region_missed"))
+            or bool(row.get("committed_region_relaxed_after_strict_fail"))
+        )
+        for row in diagnostics.values()
+    )
 
 
 def _solve_object_level_variant_bundle(
@@ -2671,11 +3217,16 @@ def _macro_cluster_solver_failure_payload(
 ) -> dict[str, Any]:
     quality_reasons: dict[str, int] = {}
     offending_objects: dict[str, int] = {}
+    zero_anchor_clusters: dict[str, int] = {}
     for row in diagnostics:
         for reason in row.get("quality_gate_reasons") or []:
             key = str(reason or "").strip()
             if key:
                 quality_reasons[key] = quality_reasons.get(key, 0) + 1
+        for cluster_id in row.get("zero_anchor_candidate_clusters") or []:
+            key = str(cluster_id or "").strip()
+            if key:
+                zero_anchor_clusters[key] = zero_anchor_clusters.get(key, 0) + 1
         for issue in row.get("blocking_objects") or []:
             object_id = str(issue.get("object_id") or "").strip()
             if object_id:
@@ -2697,6 +3248,13 @@ def _macro_cluster_solver_failure_payload(
                 key=lambda item: (-item[1], item[0]),
             )
         ],
+        "zero_anchor_candidate_clusters": [
+            {"cluster_id": cluster_id, "count": count}
+            for cluster_id, count in sorted(
+                zero_anchor_clusters.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ],
         "attempts": diagnostics,
     }
 
@@ -2712,14 +3270,20 @@ def _object_level_failure_diagnostic(
     best_partial = _as_mapping(solver_output.get("best_partial"))
     best_verify = _as_mapping(best_partial.get("verify_summary"))
     degradation = _as_mapping(solver_output.get("solver_degradation_report"))
+    repair_diagnostics = _concept_repair_diagnostics(solver_output)
     return {
         "concept_id": str(concept.get("concept_id") or ""),
         "concept_family": str(concept.get("concept_family") or ""),
         "repair_attempt": repair_attempt.repair_id if repair_attempt else None,
         "repair_notes": list(repair_attempt.notes) if repair_attempt else [],
         "status": str(solver_output.get("status") or ""),
-        "quality_gate_reasons": _clean_str_list(best_verify.get("quality_gate_reasons")),
+        "quality_gate_reasons": _clean_str_list(
+            best_verify.get("quality_gate_reasons")
+        ),
         "offending_clusters": _clean_str_list(best_verify.get("offending_clusters")),
+        "zero_anchor_candidate_clusters": repair_diagnostics[
+            "zero_anchor_candidate_clusters"
+        ],
         "blocking_objects": _blocking_object_rows_from_verify(best_verify),
         "protected_ids_by_cluster": _solver_policy_map(
             relation_plan,
@@ -2739,7 +3303,9 @@ def _object_level_failure_diagnostic(
     }
 
 
-def _blocking_object_rows_from_verify(verify: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _blocking_object_rows_from_verify(
+    verify: Mapping[str, Any],
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for key in (
         "blocking_orientation_issues",
@@ -2892,6 +3458,11 @@ def _object_level_solver_output_to_bundles(
             solver_candidate["concept_repair_notes"] = list(repair_attempt.notes)
             absolute_layout["concept_repair_applied"] = True
             absolute_layout["concept_repair_attempt"] = repair_attempt.repair_id
+        planned_material_signature = _planned_material_macro_signature(
+            concept=concept,
+            relation_plan=relation_plan,
+        )
+        actual_macro_signature = material_macro_layout_signature(absolute_layout)
         bundle = {
             "concept": deepcopy(concept),
             "relation_plan": relation_plan,
@@ -2947,6 +3518,18 @@ def _object_level_solver_output_to_bundles(
                 or concept.get("concept_family")
                 or variant_index
             ),
+            "planned_material_macro_signature": planned_material_signature,
+            "actual_macro_layout_signature": actual_macro_signature,
+            "anchor_candidate_diagnostics_by_cluster": deepcopy(
+                (
+                    solver_candidate.get("solver_debug")
+                    if isinstance(solver_candidate.get("solver_debug"), dict)
+                    else solver_output.get("solver_debug")
+                    if isinstance(solver_output.get("solver_debug"), dict)
+                    else {}
+                ).get("anchor_candidate_diagnostics_by_cluster")
+                or {}
+            ),
             "ablation_mode": ablation_mode,
         }
         if repair_attempt is not None:
@@ -2970,6 +3553,7 @@ def _build_concept_repair_attempts(
 
     attempts: list[_ConceptRepairAttempt] = []
     zone_pileup_clusters = _relation_plan_zone_pileup_clusters(relation_plan)
+    zero_anchor_candidate_clusters = set(diagnostics["zero_anchor_candidate_clusters"])
     needs_zone_spread = (
         bool(zone_pileup_clusters) or diagnostics["raw_solution_count"] == 0
     )
@@ -2993,6 +3577,23 @@ def _build_concept_repair_attempts(
         }
     )
 
+    if zero_anchor_candidate_clusters:
+        attempt = _make_concept_repair_attempt(
+            repair_id="primary_corridor_softening",
+            concept=concept,
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics=diagnostics,
+            apply_primary_corridor_relaxation=True,
+            apply_zone_spread=False,
+            apply_functional_gate=False,
+            apply_required_support_relaxation=False,
+            apply_support_droppable=False,
+            zone_pileup_clusters=zone_pileup_clusters,
+        )
+        if attempt is not None:
+            attempts.append(attempt)
+
     if needs_zone_spread:
         attempt = _make_concept_repair_attempt(
             repair_id="zone_spread",
@@ -3000,6 +3601,7 @@ def _build_concept_repair_attempts(
             relation_plan=relation_plan,
             merged_output=merged_output,
             diagnostics=diagnostics,
+            apply_primary_corridor_relaxation=False,
             apply_zone_spread=True,
             apply_functional_gate=False,
             apply_required_support_relaxation=False,
@@ -3016,6 +3618,7 @@ def _build_concept_repair_attempts(
             relation_plan=relation_plan,
             merged_output=merged_output,
             diagnostics=diagnostics,
+            apply_primary_corridor_relaxation=False,
             apply_zone_spread=False,
             apply_functional_gate=True,
             apply_required_support_relaxation=False,
@@ -3032,6 +3635,7 @@ def _build_concept_repair_attempts(
             relation_plan=relation_plan,
             merged_output=merged_output,
             diagnostics=diagnostics,
+            apply_primary_corridor_relaxation=False,
             apply_zone_spread=False,
             apply_functional_gate=False,
             apply_required_support_relaxation=True,
@@ -3053,6 +3657,7 @@ def _build_concept_repair_attempts(
             relation_plan=relation_plan,
             merged_output=merged_output,
             diagnostics=diagnostics,
+            apply_primary_corridor_relaxation=bool(zero_anchor_candidate_clusters),
             apply_zone_spread=needs_zone_spread,
             apply_functional_gate=needs_functional,
             apply_required_support_relaxation=needs_required_support,
@@ -3117,11 +3722,18 @@ def _concept_repair_diagnostics(solver_output: Mapping[str, Any]) -> dict[str, A
         debug.get("anchor_candidate_counts")
         or degradation.get("anchor_candidate_counts")
     )
+    zero_anchor_candidate_clusters = sorted(
+        cluster_id
+        for cluster_id, count in anchor_counts.items()
+        if (_int_or_none(count) or 0) <= 0
+    )
+    offending_clusters.update(zero_anchor_candidate_clusters)
     return {
         "raw_solution_count": raw_solution_count,
         "quality_gate_reasons": sorted(quality_gate_reasons),
         "offending_clusters": sorted(offending_clusters),
         "anchor_candidate_counts": dict(anchor_counts),
+        "zero_anchor_candidate_clusters": zero_anchor_candidate_clusters,
     }
 
 
@@ -3132,6 +3744,7 @@ def _make_concept_repair_attempt(
     relation_plan: dict[str, Any],
     merged_output: dict[str, Any],
     diagnostics: Mapping[str, Any],
+    apply_primary_corridor_relaxation: bool,
     apply_zone_spread: bool,
     apply_functional_gate: bool,
     apply_required_support_relaxation: bool,
@@ -3143,6 +3756,19 @@ def _make_concept_repair_attempt(
     repaired_merged_output = deepcopy(merged_output)
     notes: list[str] = []
     changed = False
+
+    if apply_primary_corridor_relaxation:
+        corridor_changed = _apply_primary_corridor_relaxation_repair(
+            relation_plan=repaired_relation_plan,
+            concept=repaired_concept,
+            merged_output=repaired_merged_output,
+            diagnostics=diagnostics,
+        )
+        changed = corridor_changed or changed
+        if corridor_changed:
+            notes.append(
+                "Softened primary room-center corridor constraints for zero-candidate anchors."
+            )
 
     if apply_zone_spread:
         changed = (
@@ -3216,6 +3842,225 @@ def _make_concept_repair_attempt(
         relation_plan=repaired_relation_plan,
         merged_output=repaired_merged_output,
         notes=tuple(notes),
+    )
+
+
+def _apply_primary_corridor_relaxation_repair(
+    *,
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+    merged_output: dict[str, Any],
+    diagnostics: Mapping[str, Any],
+) -> bool:
+    zero_anchor_clusters = set(
+        _clean_str_list(diagnostics.get("zero_anchor_candidate_clusters"))
+    )
+    if not zero_anchor_clusters:
+        return False
+
+    changed = False
+    for target in _relation_plan_relaxation_targets(relation_plan, concept):
+        changed = (
+            _strip_primary_corridor_forbidden_regions(
+                target,
+                cluster_ids=zero_anchor_clusters,
+            )
+            or changed
+        )
+        changed = (
+            _soften_primary_corridor_protected_topology(
+                target,
+                cluster_ids=zero_anchor_clusters,
+            )
+            or changed
+        )
+    changed = (
+        _strip_primary_corridor_avoid_regions_from_merged_output(
+            merged_output,
+            cluster_ids=zero_anchor_clusters,
+        )
+        or changed
+    )
+    return changed
+
+
+def _relation_plan_relaxation_targets(
+    relation_plan: dict[str, Any],
+    concept: dict[str, Any],
+) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = [relation_plan]
+    macro_concept = relation_plan.get("macro_concept")
+    if isinstance(macro_concept, dict):
+        targets.append(macro_concept)
+    if concept is not relation_plan:
+        targets.append(concept)
+    return targets
+
+
+def _strip_primary_corridor_forbidden_regions(
+    plan: dict[str, Any],
+    *,
+    cluster_ids: set[str],
+) -> bool:
+    changed = False
+    for section_name in (
+        "anchor_layout_hints_by_cluster",
+        "anchor_region_preferences_by_cluster",
+    ):
+        section = plan.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        for cluster_id in cluster_ids:
+            row = section.get(cluster_id)
+            if isinstance(row, dict):
+                changed = _filter_primary_corridor_region_list(row) or changed
+
+    macro_constraints = _as_mutable_mapping(plan.get("macro_constraints"))
+    rows = macro_constraints.get("anchor_region_constraints")
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            cluster_id = str(row.get("cluster_id") or "").strip()
+            if cluster_id in cluster_ids:
+                changed = _filter_primary_corridor_region_list(row) or changed
+    return changed
+
+
+def _filter_primary_corridor_region_list(row: dict[str, Any]) -> bool:
+    region_ids = _clean_str_list(row.get("forbidden_region_ids"))
+    if not region_ids:
+        return False
+    kept = [
+        region_id
+        for region_id in region_ids
+        if not _region_id_is_relaxable_primary_corridor(region_id)
+    ]
+    if kept == region_ids:
+        return False
+    row["forbidden_region_ids"] = kept
+    return True
+
+
+def _soften_primary_corridor_protected_topology(
+    plan: dict[str, Any],
+    *,
+    cluster_ids: set[str],
+) -> bool:
+    macro_constraints = _as_mutable_mapping(plan.get("macro_constraints"))
+    rows = macro_constraints.get("protected_topology")
+    if not isinstance(rows, list):
+        return False
+    changed = False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if not _protected_topology_row_is_relaxable_primary_corridor(row):
+            continue
+        current = set(_clean_str_list(row.get("softened_for_clusters")))
+        updated = current | cluster_ids
+        if updated == current:
+            continue
+        row["softened_for_clusters"] = sorted(updated)
+        row["relaxation_reason"] = (
+            "zero_anchor_candidate_corridor_softening_after_strict_solver_failure"
+        )
+        changed = True
+    return changed
+
+
+def _strip_primary_corridor_avoid_regions_from_merged_output(
+    merged_output: dict[str, Any],
+    *,
+    cluster_ids: set[str],
+) -> bool:
+    clusters = merged_output.get("clusters")
+    if not isinstance(clusters, list):
+        return False
+    changed = False
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()
+        if cluster_id not in cluster_ids:
+            continue
+        for claims in _cluster_zone_claim_targets(cluster):
+            changed = _filter_primary_corridor_avoid_regions(claims) or changed
+    return changed
+
+
+def _cluster_zone_claim_targets(cluster: dict[str, Any]) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = []
+    for container_name in ("cluster_rules", "object_program"):
+        container = cluster.get(container_name)
+        if not isinstance(container, dict):
+            continue
+        claims = container.get("zone_claims")
+        if isinstance(claims, dict):
+            targets.append(claims)
+    claims = cluster.get("zone_claims")
+    if isinstance(claims, dict):
+        targets.append(claims)
+    return targets
+
+
+def _filter_primary_corridor_avoid_regions(claims: dict[str, Any]) -> bool:
+    avoid_regions = _clean_str_list(claims.get("avoid_regions"))
+    if not avoid_regions:
+        return False
+    kept = [
+        region_id
+        for region_id in avoid_regions
+        if not _region_id_is_relaxable_primary_corridor(region_id)
+    ]
+    if kept == avoid_regions:
+        return False
+    claims["avoid_regions"] = kept
+    return True
+
+
+def _protected_topology_row_is_relaxable_primary_corridor(
+    row: Mapping[str, Any],
+) -> bool:
+    region_id = str(row.get("region") or row.get("region_id") or "").strip()
+    if _region_id_is_strict_opening_or_daylight(region_id):
+        return False
+    zone_type = str(row.get("zone_type") or "").strip().lower()
+    if zone_type in _PRIMARY_CORRIDOR_RELAXATION_ZONE_TYPES:
+        return True
+    return _region_id_is_relaxable_primary_corridor(region_id)
+
+
+def _region_id_is_strict_opening_or_daylight(region_id: str) -> bool:
+    token = region_id.strip().lower().replace("-", "_").replace(" ", "_")
+    if not token:
+        return False
+    if "corridor" in token:
+        return False
+    return any(
+        part in token
+        for part in (
+            "door_swing",
+            "entry_clearance",
+            "window_clearance",
+            "window",
+            "daylight",
+        )
+    )
+
+
+def _region_id_is_relaxable_primary_corridor(region_id: str) -> bool:
+    token = region_id.strip().lower().replace("-", "_").replace(" ", "_")
+    if not token or _region_id_is_strict_opening_or_daylight(token):
+        return False
+    if token in {"entry_to_center_corridor", "primary_circulation_corridor"}:
+        return True
+    if token.endswith("_to_room_center_corridor") or token.endswith(
+        "_to_center_corridor"
+    ):
+        return True
+    return "corridor" in token and (
+        "room_center" in token or "center" in token or "primary" in token
     )
 
 
@@ -3705,9 +4550,10 @@ def _required_member_ids_from_object_program(cluster: Mapping[str, Any]) -> set[
 
 def _decision_requires_solver_keep(row: Mapping[str, Any]) -> bool:
     intent = str(row.get("request_contract_intent") or row.get("intent") or "").strip()
-    return intent in _HARD_REQUEST_CONTRACT_INTENTS or (
-        _int_or_none(row.get("min_keep")) or 0
-    ) > 0
+    return (
+        intent in _HARD_REQUEST_CONTRACT_INTENTS
+        or (_int_or_none(row.get("min_keep")) or 0) > 0
+    )
 
 
 def _member_ids_matching_type(members: list[str], object_type: str) -> set[str]:
@@ -5328,6 +6174,12 @@ def _build_layout_variants_payload_from_final_candidates(
                 ),
                 "macro_layout_signature": str(
                     candidate.get("macro_layout_signature") or ""
+                ),
+                "planned_material_macro_signature": str(
+                    candidate.get("planned_material_macro_signature") or ""
+                ),
+                "actual_macro_layout_signature": str(
+                    candidate.get("actual_macro_layout_signature") or ""
                 ),
                 "gallery_selection_mode": str(
                     candidate.get("gallery_selection_mode") or ""
@@ -7231,6 +8083,28 @@ def _write_json(path: Path, payload: Any) -> None:
     temp_path = path.with_suffix(f"{path.suffix}.tmp")
     temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     temp_path.replace(path)
+
+
+def _mark_downstream_module_outputs_stale(
+    paths: CasePaths,
+    *,
+    blocked_by: str,
+) -> None:
+    payload = {
+        "status": "STALE",
+        "stale": True,
+        "blocked_by": blocked_by,
+        "generated_at_utc": _now_utc_iso(),
+        "reason": "Run failed before this module was regenerated.",
+    }
+    for module_name, legacy_path in (
+        ("macro_cluster_solver", paths.cluster_solver),
+        ("controlled_accessory_refill", paths.accessory_refill),
+        ("absolute_layout", paths.absolute_layout),
+        ("stylist", paths.stylist),
+        ("layout_variants", paths.layout_variants),
+    ):
+        _write_module_json(paths, module_name, payload, legacy_path=legacy_path)
 
 
 def _write_module_json(

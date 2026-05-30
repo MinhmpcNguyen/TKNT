@@ -1,0 +1,32 @@
+{
+  "case_id": "bedroom_03_compact_study_window",
+  "case_dir": "/Users/Yuki/TKNT/experiments/image_flow_eval/layout_artifacts/bedroom_03_compact_study_window",
+  "final_output": null,
+  "error": "object-level solver could not produce any feasible anchor-first layouts",
+  "llm_usage": {
+    "request_count": 5,
+    "input_tokens": 21203,
+    "output_tokens": 4433,
+    "total_tokens": 25636,
+    "by_provider": {
+      "openai": {
+        "request_count": 5,
+        "input_tokens": 21203,
+        "output_tokens": 4433,
+        "total_tokens": 25636,
+        "by_model": {
+          "gpt-5.4-mini": {
+            "request_count": 5,
+            "input_tokens": 21203,
+            "output_tokens": 4433,
+            "total_tokens": 25636
+          }
+        }
+      }
+    },
+    "retry_events": [],
+    "retry_summary": {}
+  },
+  "input_tokens": 21203,
+  "output_tokens": 4433
+}

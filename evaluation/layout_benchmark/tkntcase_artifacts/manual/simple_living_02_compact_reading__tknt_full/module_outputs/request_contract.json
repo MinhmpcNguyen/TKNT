@@ -10,17 +10,25 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a bookshelf",
-      "reason": "Explicitly requested storage/display object.",
-      "confidence": 0.98,
+      "reason": "Directly requested for reading-oriented storage/display.",
+      "confidence": 0.97,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "bookshelf",
+        "media_shelf"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "bookshelf",
+      "fulfilled_by": "bookshelf"
     },
     {
       "object_type": "coffee_table",
@@ -30,17 +38,25 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "small coffee table",
-      "reason": "Explicitly requested support piece for the seating area.",
-      "confidence": 0.99,
+      "reason": "Directly requested and supports reading and casual conversation.",
+      "confidence": 0.98,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "coffee_table",
+        "nesting_tables"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "coffee_table",
+      "fulfilled_by": "coffee_table"
     },
     {
       "object_type": "floor_lamp",
@@ -50,17 +66,24 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a floor lamp",
-      "reason": "Explicitly requested lighting object.",
-      "confidence": 0.99,
+      "reason": "Directly requested and supports reading and evening use.",
+      "confidence": 0.97,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "floor_lamp"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "floor_lamp",
+      "fulfilled_by": "floor_lamp"
     },
     {
       "object_type": "rug",
@@ -70,37 +93,23 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a rug",
-      "reason": "Explicitly requested decor/textile layer; not in inventory lists but clearly named in brief.",
+      "reason": "Explicitly requested decor/floor object; helps define the seating zone.",
       "confidence": 0.97,
       "placement_participation": "textile_overlay",
+      "llm_candidates": [
+        "rug"
+      ],
       "requested": true,
       "inventory_available": false,
+      "available_in_inventory": false,
       "available_in_program": false,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "floor"
-    },
-    {
-      "object_type": "sofa",
-      "intent": "must_keep",
-      "min_keep": 1,
-      "target_count": 1,
-      "preferred_count": 1,
-      "max_keep": 1,
-      "evidence": "use a small sofa or loveseat",
-      "reason": "Directly requested seating anchor; choose sofa as the explicit program type and keep one if viable.",
-      "confidence": 0.98,
-      "placement_participation": "floor_blocking",
-      "requested": true,
-      "inventory_available": true,
-      "available_in_program": true,
-      "solver_participation": "hard_solver_object",
-      "blocks_floor_area": true,
-      "can_overlap_floor_objects": false,
-      "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": "floor",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "rug"
     },
     {
       "object_type": "tv_console",
@@ -110,17 +119,85 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "slim TV console",
-      "reason": "Explicitly requested media anchor for the media wall focus.",
-      "confidence": 0.99,
+      "reason": "Directly requested and aligns with the media-wall focus.",
+      "confidence": 0.98,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "tv_console",
+        "console_table"
+      ],
+      "relation_edges": [
+        {
+          "relation": "face",
+          "target": "sofa"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "tv_console",
+      "fulfilled_by": "tv_console"
+    },
+    {
+      "object_type": "sofa",
+      "intent": "target_if_viable",
+      "min_keep": 1,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "small sofa or loveseat",
+      "reason": "Explicitly requested as the main seating anchor for a compact living room.",
+      "confidence": 0.98,
+      "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "sofa"
+      ],
+      "requested": true,
+      "inventory_available": true,
+      "available_in_inventory": true,
+      "available_in_program": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "sofa",
+      "fulfilled_by": "sofa"
+    },
+    {
+      "object_type": "armchair",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "reading, casual conversation",
+      "reason": "Not explicitly named in the brief, but supported by the compiled semantic rule as an optional seating addition if space allows.",
+      "confidence": 0.74,
+      "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "armchair"
+      ],
+      "requested": true,
+      "inventory_available": true,
+      "available_in_inventory": true,
+      "available_in_program": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "armchair",
+      "fulfilled_by": "armchair"
     },
     {
       "object_type": "media_shelf",
@@ -130,17 +207,52 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "media_wall",
-      "reason": "Not directly requested, but compatible with the media-wall focus if space allows.",
-      "confidence": 0.58,
-      "placement_participation": "wall_attached",
+      "reason": "Not explicitly requested, but a possible support piece for the media zone if wall space permits.",
+      "confidence": 0.62,
+      "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "media_shelf",
+        "bookshelf"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
-      "solver_participation": "post_solver_accessory",
-      "blocks_floor_area": false,
-      "can_overlap_floor_objects": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": "wall"
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "media_shelf",
+      "fulfilled_by": "media_shelf"
+    },
+    {
+      "object_type": "side_table",
+      "intent": "optional_if_surplus",
+      "min_keep": 0,
+      "target_count": 1,
+      "preferred_count": 1,
+      "max_keep": 1,
+      "evidence": "casual conversation",
+      "reason": "Not explicitly requested; can be added only if the compact layout still has surplus space.",
+      "confidence": 0.7,
+      "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "side_table"
+      ],
+      "requested": true,
+      "inventory_available": true,
+      "available_in_inventory": true,
+      "available_in_program": true,
+      "solver_participation": "soft_solver_object",
+      "blocks_floor_area": true,
+      "can_overlap_floor_objects": false,
+      "host_object_type": null,
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "side_table",
+      "fulfilled_by": "side_table"
     }
   ],
   "groups": [
@@ -149,27 +261,88 @@
       "members": [
         "sofa",
         "coffee_table",
+        "armchair",
+        "side_table",
         "floor_lamp"
       ],
-      "intent": "core seating and reading zone",
+      "intent": "core_function_zone",
       "priority": "core",
-      "drop_policy": "drop optional support before anchor"
+      "drop_policy": "drop_armchair_then_side_table_then_floor_lamp"
     },
     {
-      "group_id": "media_wall_bundle",
+      "group_id": "media_bundle",
       "members": [
         "tv_console",
-        "bookshelf"
+        "media_shelf"
       ],
-      "intent": "media wall focus with storage/display",
+      "intent": "core_function_zone",
       "priority": "core",
-      "drop_policy": "keep tv_console; drop bookshelf only if necessary"
+      "drop_policy": "drop_media_shelf_first"
     }
   ],
   "notes": [
-    "Interpreted the brief as a compact living room with a media-wall emphasis and calm practical use.",
-    "No curtains, mirrors, cushions, or ceiling lights were explicitly requested.",
-    "Loveseat was mentioned as an alternative to sofa, but sofa is the chosen explicit program type.",
-    "Request contract was normalized before tier-count enforcement."
-  ]
+    "Soft usage hints were not converted into objects.",
+    "No curtains, mirrors, ceiling lights, or other decor were explicitly requested.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Request contract was reconciled against room profile, inventory, and semantic clusters before tier count."
+  ],
+  "reconciliation": {
+    "version": 1,
+    "strategy": "hybrid_llm_rules",
+    "statuses": [
+      {
+        "object_type": "bookshelf",
+        "status": "fulfilled",
+        "chosen_object_type": "bookshelf",
+        "fulfilled_by": "bookshelf"
+      },
+      {
+        "object_type": "coffee_table",
+        "status": "fulfilled",
+        "chosen_object_type": "coffee_table",
+        "fulfilled_by": "coffee_table"
+      },
+      {
+        "object_type": "floor_lamp",
+        "status": "fulfilled",
+        "chosen_object_type": "floor_lamp",
+        "fulfilled_by": "floor_lamp"
+      },
+      {
+        "object_type": "rug",
+        "status": "fulfilled",
+        "chosen_object_type": "rug"
+      },
+      {
+        "object_type": "tv_console",
+        "status": "fulfilled",
+        "chosen_object_type": "tv_console",
+        "fulfilled_by": "tv_console"
+      },
+      {
+        "object_type": "sofa",
+        "status": "fulfilled",
+        "chosen_object_type": "sofa",
+        "fulfilled_by": "sofa"
+      },
+      {
+        "object_type": "armchair",
+        "status": "fulfilled",
+        "chosen_object_type": "armchair",
+        "fulfilled_by": "armchair"
+      },
+      {
+        "object_type": "media_shelf",
+        "status": "fulfilled",
+        "chosen_object_type": "media_shelf",
+        "fulfilled_by": "media_shelf"
+      },
+      {
+        "object_type": "side_table",
+        "status": "fulfilled",
+        "chosen_object_type": "side_table",
+        "fulfilled_by": "side_table"
+      }
+    ]
+  }
 }

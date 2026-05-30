@@ -5,14 +5,14 @@
     "social"
   ],
   "layout_policy": {
-    "target_density": "medium",
-    "center_openness_bias": "very_high",
+    "target_density": "balanced",
+    "center_openness_bias": "high",
     "wall_loading_bias": "focal_balanced",
     "symmetry_bias": "medium",
     "cluster_spacing_bias": "soft",
     "clutter_tolerance": "low_to_balanced",
     "decor_tolerance": "low_to_balanced",
-    "daylight_bias": "high",
+    "daylight_bias": "balanced",
     "floating_cluster_tolerance": "medium_high",
     "material_weight_bias": "balanced",
     "visual_balance_bias": "social"
@@ -35,7 +35,7 @@
     }
   },
   "policy_weights": {
-    "density_multiplier": 1.06,
+    "density_multiplier": 1.0,
     "optional_utility_bias": -0.45,
     "decor_utility_bias": -0.9,
     "openness_weight": 1.15,

@@ -10,17 +10,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a coffee table",
-      "reason": "Directly requested support piece for the seating arrangement.",
+      "reason": "Directly requested and part of the core seating composition.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "coffee_table"
+      ],
+      "relation_edges": [
+        {
+          "relation": "between",
+          "target": "sofa"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "coffee_table",
+      "fulfilled_by": "coffee_table"
     },
     {
       "object_type": "rug",
@@ -30,17 +43,33 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a rug",
-      "reason": "Explicitly requested floor textile for the room.",
+      "reason": "Explicitly requested decor/floor textile item.",
       "confidence": 0.98,
       "placement_participation": "textile_overlay",
+      "llm_candidates": [
+        "rug"
+      ],
+      "relation_edges": [
+        {
+          "relation": "under",
+          "target": "coffee_table"
+        },
+        {
+          "relation": "under",
+          "target": "sofa"
+        }
+      ],
       "requested": true,
       "inventory_available": false,
+      "available_in_inventory": false,
       "available_in_program": false,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "floor"
+      "mount_region_type": "floor",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "rug"
     },
     {
       "object_type": "sofa",
@@ -49,18 +78,31 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "include a sofa",
-      "reason": "Directly requested seating anchor for the living room.",
+      "evidence": "Include a sofa facing a TV console",
+      "reason": "Explicitly requested as part of the main seating arrangement and not framed as optional.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "sofa"
+      ],
+      "relation_edges": [
+        {
+          "relation": "face",
+          "target": "tv_console"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "sofa",
+      "fulfilled_by": "sofa"
     },
     {
       "object_type": "tv_console",
@@ -69,18 +111,26 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "facing a TV console",
-      "reason": "Explicitly requested media anchor for the movie area.",
-      "confidence": 0.99,
+      "evidence": "a TV console",
+      "reason": "Explicitly requested as the media anchor for the designated movie area.",
+      "confidence": 0.98,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "tv_console",
+        "media_shelf"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "tv_console",
+      "fulfilled_by": "tv_console"
     },
     {
       "object_type": "armchair",
@@ -90,17 +140,30 @@
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "one or two armchairs if they fit",
-      "reason": "Desired additional seating, with a fit-dependent range.",
-      "confidence": 0.97,
+      "reason": "Desired if space allows; lower bound is one, with a preferred upper count of two.",
+      "confidence": 0.96,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "armchair"
+      ],
+      "relation_edges": [
+        {
+          "relation": "near",
+          "target": "sofa"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "armchair",
+      "fulfilled_by": "armchair"
     },
     {
       "object_type": "floor_lamp",
@@ -110,17 +173,24 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "ample lighting",
-      "reason": "Lighting is requested as a room requirement; floor lamp is a viable lighting object from the available program types.",
+      "reason": "Lighting is requested in the brief; a floor lamp is the explicitly supported lighting object in the provided object set, but it is not mandatory if space is tight.",
       "confidence": 0.84,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "floor_lamp"
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "floor_lamp",
+      "fulfilled_by": "floor_lamp"
     },
     {
       "object_type": "media_shelf",
@@ -129,18 +199,32 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "large screen and surround sound",
-      "reason": "Supports the designated movie area as a media storage/display element, but is not explicitly named.",
-      "confidence": 0.62,
+      "evidence": "design a Living Room",
+      "reason": "A media-wall support piece is plausible for the requested movie area, but the brief explicitly names the TV console rather than shelving, so this remains optional support.",
+      "confidence": 0.55,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "media_shelf",
+        "bookshelf"
+      ],
+      "relation_edges": [
+        {
+          "relation": "near",
+          "target": "tv_console"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "media_shelf",
+      "fulfilled_by": "media_shelf"
     }
   ],
   "groups": [
@@ -151,24 +235,72 @@
         "coffee_table",
         "armchair"
       ],
-      "intent": "core seating composition",
+      "intent": "core composition for relaxation and socializing",
       "priority": "core",
-      "drop_policy": "preserve sofa and coffee table first; reduce armchairs if space is tight"
+      "drop_policy": "preserve sofa and coffee table first; reduce armchairs before core anchors"
     },
     {
-      "group_id": "movie_area",
+      "group_id": "media_wall_bundle",
       "members": [
         "tv_console",
         "media_shelf"
       ],
-      "intent": "media wall composition",
+      "intent": "movie area focal composition",
       "priority": "core",
-      "drop_policy": "preserve tv_console; drop media_shelf first if surplus is limited"
+      "drop_policy": "preserve tv_console; drop media_shelf first"
     }
   ],
   "notes": [
-    "No explicit curtains, mirrors, ceiling lights, or wall-mounted decor were requested.",
-    "The brief emphasizes keeping the room easy to move through and prefers an open center.",
-    "Request contract was normalized before tier-count enforcement."
-  ]
+    "No explicit curtains, mirrors, ceiling lights, or side tables were directly requested in the brief.",
+    "The brief emphasizes easy circulation, so optional items are capped conservatively.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Request contract was reconciled against room profile, inventory, and semantic clusters before tier count."
+  ],
+  "reconciliation": {
+    "version": 1,
+    "strategy": "hybrid_llm_rules",
+    "statuses": [
+      {
+        "object_type": "coffee_table",
+        "status": "fulfilled",
+        "chosen_object_type": "coffee_table",
+        "fulfilled_by": "coffee_table"
+      },
+      {
+        "object_type": "rug",
+        "status": "fulfilled",
+        "chosen_object_type": "rug"
+      },
+      {
+        "object_type": "sofa",
+        "status": "fulfilled",
+        "chosen_object_type": "sofa",
+        "fulfilled_by": "sofa"
+      },
+      {
+        "object_type": "tv_console",
+        "status": "fulfilled",
+        "chosen_object_type": "tv_console",
+        "fulfilled_by": "tv_console"
+      },
+      {
+        "object_type": "armchair",
+        "status": "fulfilled",
+        "chosen_object_type": "armchair",
+        "fulfilled_by": "armchair"
+      },
+      {
+        "object_type": "floor_lamp",
+        "status": "fulfilled",
+        "chosen_object_type": "floor_lamp",
+        "fulfilled_by": "floor_lamp"
+      },
+      {
+        "object_type": "media_shelf",
+        "status": "fulfilled",
+        "chosen_object_type": "media_shelf",
+        "fulfilled_by": "media_shelf"
+      }
+    ]
+  }
 }

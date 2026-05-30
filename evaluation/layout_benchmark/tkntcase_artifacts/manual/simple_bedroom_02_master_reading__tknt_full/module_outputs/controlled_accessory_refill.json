@@ -2,9 +2,9 @@
   "status": "UNCHANGED",
   "module": "controlled_accessory_refill",
   "refill_applied": false,
-  "total_dropped_items": 2,
+  "total_dropped_items": 1,
   "eligible_accessory_count": 0,
-  "rejected_count": 2,
+  "rejected_count": 1,
   "refill_count": 0,
   "inserted_count": 0,
   "remaining_count": 0,
@@ -12,15 +12,10 @@
   "refill_objects_by_cluster": {},
   "remaining_refill_objects_by_cluster": {},
   "rejected_refill_objects_by_cluster": {
-    "work_study": [
+    "sleep_core": [
       {
-        "object_id": "desk",
-        "reason": "optional_trial_anchor_cluster_not_placed",
-        "refill_rejected_reason": "not_accessory_or_decor"
-      },
-      {
-        "object_id": "chair",
-        "reason": "optional_trial_anchor_cluster_not_placed",
+        "object_id": "nightstand",
+        "reason": "support_slot_failed",
         "refill_rejected_reason": "not_accessory_or_decor"
       }
     ]

@@ -112,6 +112,42 @@ class SolverArchitectureTest(unittest.TestCase):
         self.assertEqual(object_orientation_ids, ["armchair", "sectional_sofa"])
         self.assertNotIn("coffee_table", object_orientation_ids)
 
+    def test_softened_primary_corridor_protected_region_is_cluster_scoped(self) -> None:
+        protected_regions = [
+            {
+                "region_id": "door_1_to_room_center_corridor",
+                "bbox": (0, 0, 1000, 1000),
+                "max_overlap_ratio": 0.0,
+                "priority": "high",
+                "enforcement": "hard_soft",
+                "violation_severity": "blocking",
+                "zone_type": "primary_circulation_corridor",
+                "softened_for_clusters": ["sleep_core"],
+            }
+        ]
+
+        issues = _solver._object_level_protected_region_issues(
+            placed_objects=[
+                {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "rect": (0, 0, 500, 500),
+                },
+                {
+                    "cluster_id": "work_study",
+                    "object_id": "desk",
+                    "rect": (0, 0, 500, 500),
+                },
+            ],
+            protected_regions=protected_regions,
+        )
+
+        blocking_by_cluster = {
+            issue["cluster_id"]: issue["blocking"] for issue in issues
+        }
+        self.assertFalse(blocking_by_cluster["sleep_core"])
+        self.assertTrue(blocking_by_cluster["work_study"])
+
     def test_ordered_cluster_ids_prefers_enumerator_priority(self) -> None:
         base_candidate = Candidate(
             cluster_id="placeholder",

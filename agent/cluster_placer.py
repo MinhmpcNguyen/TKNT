@@ -1562,12 +1562,6 @@ def _call_openai(*, system_prompt: str, user_payload_json: str) -> str | Dict[st
 # -----------------------------------------------------------------------------
 # Main orchestration
 # -----------------------------------------------------------------------------
-def _default_no_improvement(
-    payload: Dict[str, Any], note: str | None = None
-) -> Dict[str, Any]:
-    return make_no_improvement_repair(payload, note=note)
-
-
 def _repair_signature(repair: Dict[str, Any]) -> str:
     return json.dumps(
         {

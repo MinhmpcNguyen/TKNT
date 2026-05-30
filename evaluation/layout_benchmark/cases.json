@@ -1,667 +1,5 @@
 [
   {
-    "case_id": "bedroom_01_rect_door_right_window_left",
-    "room_type": "bedroom",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 3200,
-          "y": 0
-        },
-        {
-          "x": 3200,
-          "y": 4200
-        },
-        {
-          "x": 0,
-          "y": 4200
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 3200,
-                "y": 500
-              },
-              {
-                "x": 3200,
-                "y": 1400
-              }
-            ],
-            "swing_radius_mm": 850
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 2600
-              },
-              {
-                "x": 0,
-                "y": 3800
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Arrange a modern functional compact bedroom, 3.2m wide by 4.2m long. ",
-        "room_type": "bedroom",
-        "floor_area_m2": 13.44,
-        "height": 2600,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 4200
-          },
-          {
-            "x": 0,
-            "y": 4200
-          }
-        ],
-        "windows": 1,
-        "window_direction": "W",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 3200,
-              "y": 500
-            },
-            {
-              "x": 3200,
-              "y": 1400
-            }
-          ],
-          "swing_radius_mm": 850
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 2600
-            },
-            {
-              "x": 0,
-              "y": 3800
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "bed",
-        "wardrobe",
-        "nightstand",
-        "desk",
-        "curtain",
-        "ceiling_lamp"
-      ],
-      "valid_blocking_count_min": 4,
-      "valid_blocking_count_max": 8,
-      "count_ranges": {
-        "bed": {
-          "min": 1,
-          "max": 1
-        },
-        "wardrobe": {
-          "min": 1,
-          "max": 2
-        },
-        "desk": {
-          "min": 1,
-          "max": 1
-        }
-      },
-      "relations": [
-        {
-          "type": "avoid_near_opening",
-          "objects": [
-            "bed",
-            "wardrobe"
-          ],
-          "opening_kind": "door",
-          "min_distance_mm": 900
-        },
-        {
-          "type": "prefer_near_opening",
-          "objects": [
-            "desk"
-          ],
-          "opening_kind": "window",
-          "max_distance_mm": 1600
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "bedroom_02_square_two_nightstands",
-    "room_type": "bedroom",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 4000,
-          "y": 0
-        },
-        {
-          "x": 4000,
-          "y": 4500
-        },
-        {
-          "x": 0,
-          "y": 4500
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 2500,
-                "y": 0
-              },
-              {
-                "x": 3400,
-                "y": 0
-              }
-            ],
-            "swing_radius_mm": 850
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 900,
-                "y": 4500
-              },
-              {
-                "x": 2500,
-                "y": 4500
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Design a modern functional bedroom, 4.0m wide by 4.5m long. The entry door is on the bottom wall toward the right side, spanning roughly from 2.5m to 3.4m along that wall. One window is on the top wall near the left-middle area, spanning roughly from 0.9m to 2.5m along that wall. Include a bed, two nightstands if they fit, wardrobe on a solid wall, curtains, ceiling light, and comfortable circulation around the bed. The bed should not sit directly beside the entry door.",
-        "room_type": "bedroom",
-        "floor_area_m2": 18.0,
-        "height": 2700,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 4000,
-            "y": 0
-          },
-          {
-            "x": 4000,
-            "y": 4500
-          },
-          {
-            "x": 0,
-            "y": 4500
-          }
-        ],
-        "windows": 1,
-        "window_direction": "N",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 2500,
-              "y": 0
-            },
-            {
-              "x": 3400,
-              "y": 0
-            }
-          ],
-          "swing_radius_mm": 850
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 900,
-              "y": 4500
-            },
-            {
-              "x": 2500,
-              "y": 4500
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "bed",
-        "wardrobe",
-        "nightstand",
-        "curtain",
-        "ceiling_lamp"
-      ],
-      "valid_blocking_count_min": 4,
-      "valid_blocking_count_max": 8,
-      "count_ranges": {
-        "bed": {
-          "min": 1,
-          "max": 1
-        },
-        "nightstand": {
-          "min": 1,
-          "max": 2
-        },
-        "wardrobe": {
-          "min": 1,
-          "max": 2
-        }
-      },
-      "relations": [
-        {
-          "type": "avoid_near_opening",
-          "objects": [
-            "bed"
-          ],
-          "opening_kind": "door",
-          "min_distance_mm": 1000
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "bedroom_03_compact_study_window",
-    "room_type": "bedroom",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 3000,
-          "y": 0
-        },
-        {
-          "x": 3000,
-          "y": 3600
-        },
-        {
-          "x": 0,
-          "y": 3600
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 2100,
-                "y": 0
-              },
-              {
-                "x": 3000,
-                "y": 0
-              }
-            ],
-            "swing_radius_mm": 800
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 600,
-                "y": 3600
-              },
-              {
-                "x": 1900,
-                "y": 3600
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Create a modern functional student's bedroom, 3.0m wide by 3.6m long. The entry door is on the bottom wall at the right side, spanning roughly from 2.1m to 3.0m along that wall. One window is on the top wall toward the left side, spanning roughly from 0.6m to 1.9m along that wall. Prioritize a single bed, wardrobe, compact desk by the window, one chair, one nightstand only if it fits, curtains, and clear entry movement.",
-        "room_type": "bedroom",
-        "floor_area_m2": 10.8,
-        "height": 2500,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 3000,
-            "y": 0
-          },
-          {
-            "x": 3000,
-            "y": 3600
-          },
-          {
-            "x": 0,
-            "y": 3600
-          }
-        ],
-        "windows": 1,
-        "window_direction": "N",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 2100,
-              "y": 0
-            },
-            {
-              "x": 3000,
-              "y": 0
-            }
-          ],
-          "swing_radius_mm": 800
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 600,
-              "y": 3600
-            },
-            {
-              "x": 1900,
-              "y": 3600
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "bed",
-        "wardrobe",
-        "desk",
-        "chair",
-        "curtain"
-      ],
-      "valid_blocking_count_min": 4,
-      "valid_blocking_count_max": 7,
-      "count_ranges": {
-        "bed": {
-          "min": 1,
-          "max": 1
-        },
-        "desk": {
-          "min": 1,
-          "max": 1
-        },
-        "chair": {
-          "min": 1,
-          "max": 1
-        }
-      },
-      "relations": [
-        {
-          "type": "prefer_near_opening",
-          "objects": [
-            "desk"
-          ],
-          "opening_kind": "window",
-          "max_distance_mm": 1400
-        },
-        {
-          "type": "avoid_near_opening",
-          "objects": [
-            "wardrobe"
-          ],
-          "opening_kind": "door",
-          "min_distance_mm": 800
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "bedroom_04_wide_two_windows",
-    "room_type": "bedroom",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 4800,
-          "y": 0
-        },
-        {
-          "x": 4800,
-          "y": 3600
-        },
-        {
-          "x": 0,
-          "y": 3600
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 500
-              },
-              {
-                "x": 0,
-                "y": 1400
-              }
-            ],
-            "swing_radius_mm": 850
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 1300,
-                "y": 3600
-              },
-              {
-                "x": 2500,
-                "y": 3600
-              }
-            ],
-            "clearance_mm": 450
-          },
-          {
-            "id": "window_2",
-            "segment_mm": [
-              {
-                "x": 3300,
-                "y": 3600
-              },
-              {
-                "x": 4500,
-                "y": 3600
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Arrange a modern functional bedroom, 4.8m wide by 3.6m long. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. There are two windows on the top wall: one from about 1.3m to 2.5m and another from about 3.3m to 4.5m along that wall. Use a bed as the focal point, wardrobe, a reading chair near a window, side table or nightstand, curtains for both windows, and clear center circulation.",
-        "room_type": "bedroom",
-        "floor_area_m2": 17.28,
-        "height": 2700,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 4800,
-            "y": 0
-          },
-          {
-            "x": 4800,
-            "y": 3600
-          },
-          {
-            "x": 0,
-            "y": 3600
-          }
-        ],
-        "windows": 2,
-        "window_direction": "N",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 500
-            },
-            {
-              "x": 0,
-              "y": 1400
-            }
-          ],
-          "swing_radius_mm": 850
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 1300,
-              "y": 3600
-            },
-            {
-              "x": 2500,
-              "y": 3600
-            }
-          ],
-          "clearance_mm": 450
-        },
-        {
-          "id": "window_2",
-          "segment_mm": [
-            {
-              "x": 3300,
-              "y": 3600
-            },
-            {
-              "x": 4500,
-              "y": 3600
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "bed",
-        "wardrobe",
-        "armchair",
-        "nightstand",
-        "curtain"
-      ],
-      "valid_blocking_count_min": 5,
-      "valid_blocking_count_max": 9,
-      "count_ranges": {
-        "bed": {
-          "min": 1,
-          "max": 1
-        },
-        "armchair": {
-          "min": 1,
-          "max": 1
-        },
-        "wardrobe": {
-          "min": 1,
-          "max": 2
-        }
-      },
-      "relations": [
-        {
-          "type": "prefer_near_opening",
-          "objects": [
-            "armchair"
-          ],
-          "opening_kind": "window",
-          "max_distance_mm": 1800
-        }
-      ]
-    }
-  },
-  {
     "case_id": "bedroom_05_l_shape_storage",
     "room_type": "bedroom",
     "room": {
@@ -728,9 +66,9 @@
     },
     "input_payload": {
       "user_input": {
-        "description": "Plan a modern functional L-shaped bedroom. The overall footprint is about 4.6m wide by 4.3m long, with a 1.4m by 1.5m notch removed from the upper-right corner. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. One window is on the top wall toward the left-middle area, spanning roughly from 0.9m to 2.4m along that wall. Put sleeping in the deeper quiet zone, keep the wardrobe accessible but away from the entry door, and place a small desk or vanity near the window if possible.",
+        "description": "Plan a modern functional single-room L-shaped bedroom. This is one bedroom only. The overall bounding rectangle is 4.6m wide by 4.3m long, but the upper-right 1.4m by 1.5m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is greater than 3.2m and y is greater than 2.8m. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. One window is on the top wall toward the left-middle area, spanning roughly from 0.9m to 2.4m along that wall. Put sleeping in the deeper quiet zone, keep the wardrobe accessible but away from the entry door, and place a small desk or vanity near the window if possible.",
         "room_type": "bedroom",
-        "floor_area_m2": 17.62,
+        "floor_area_m2": 17.68,
         "height": 2600,
         "shape_points": [
           {
@@ -833,471 +171,6 @@
     }
   },
   {
-    "case_id": "bedroom_06_master_reading_corner",
-    "room_type": "bedroom",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 5000,
-          "y": 0
-        },
-        {
-          "x": 5000,
-          "y": 4000
-        },
-        {
-          "x": 0,
-          "y": 4000
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 4100,
-                "y": 0
-              },
-              {
-                "x": 5000,
-                "y": 0
-              }
-            ],
-            "swing_radius_mm": 900
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 1500
-              },
-              {
-                "x": 0,
-                "y": 3100
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Create a modern functional master bedroom, 5.0m wide by 4.0m long. The entry door is on the bottom wall at the far right, spanning roughly from 4.1m to 5.0m along that wall. One window is on the left wall around the middle, spanning roughly from 1.5m to 3.1m along that wall. Include a bed, two nightstands, wardrobe, reading chair and floor lamp near the window, curtains, and a clear path from door to bed.",
-        "room_type": "bedroom",
-        "floor_area_m2": 20.0,
-        "height": 2800,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 5000,
-            "y": 0
-          },
-          {
-            "x": 5000,
-            "y": 4000
-          },
-          {
-            "x": 0,
-            "y": 4000
-          }
-        ],
-        "windows": 1,
-        "window_direction": "W",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 4100,
-              "y": 0
-            },
-            {
-              "x": 5000,
-              "y": 0
-            }
-          ],
-          "swing_radius_mm": 900
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 1500
-            },
-            {
-              "x": 0,
-              "y": 3100
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "bed",
-        "wardrobe",
-        "nightstand",
-        "armchair",
-        "floor_lamp",
-        "curtain"
-      ],
-      "valid_blocking_count_min": 5,
-      "valid_blocking_count_max": 10,
-      "count_ranges": {
-        "bed": {
-          "min": 1,
-          "max": 1
-        },
-        "nightstand": {
-          "min": 1,
-          "max": 2
-        },
-        "armchair": {
-          "min": 1,
-          "max": 1
-        }
-      },
-      "relations": [
-        {
-          "type": "prefer_near_opening",
-          "objects": [
-            "armchair",
-            "floor_lamp"
-          ],
-          "opening_kind": "window",
-          "max_distance_mm": 1800
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "living_01_rect_sofa_tv",
-    "room_type": "living_room",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 4000,
-          "y": 0
-        },
-        {
-          "x": 4000,
-          "y": 5000
-        },
-        {
-          "x": 0,
-          "y": 5000
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 500
-              },
-              {
-                "x": 0,
-                "y": 1400
-              }
-            ],
-            "swing_radius_mm": 900
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 900,
-                "y": 5000
-              },
-              {
-                "x": 3000,
-                "y": 5000
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Arrange a modern functional living room, 4.0m wide by 5.0m long. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. One window is on the top wall, spanning roughly from 0.9m to 3.0m along that wall. Use a sofa facing a TV console, coffee table, rug, one side table if it fits, curtains, and clear entry circulation.",
-        "room_type": "living_room",
-        "floor_area_m2": 20.0,
-        "height": 2700,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 4000,
-            "y": 0
-          },
-          {
-            "x": 4000,
-            "y": 5000
-          },
-          {
-            "x": 0,
-            "y": 5000
-          }
-        ],
-        "windows": 1,
-        "window_direction": "N",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 500
-            },
-            {
-              "x": 0,
-              "y": 1400
-            }
-          ],
-          "swing_radius_mm": 900
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 900,
-              "y": 5000
-            },
-            {
-              "x": 3000,
-              "y": 5000
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "sofa",
-        "tv_console",
-        "coffee_table",
-        "rug",
-        "curtain"
-      ],
-      "valid_blocking_count_min": 3,
-      "valid_blocking_count_max": 8,
-      "count_ranges": {
-        "sofa": {
-          "min": 1,
-          "max": 1
-        },
-        "coffee_table": {
-          "min": 1,
-          "max": 1
-        },
-        "tv_console": {
-          "min": 1,
-          "max": 1
-        }
-      },
-      "relations": [
-        {
-          "type": "avoid_near_opening",
-          "objects": [
-            "sofa",
-            "tv_console"
-          ],
-          "opening_kind": "door",
-          "min_distance_mm": 900
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "living_02_solid_wall_tv_window_clear",
-    "room_type": "living_room",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
-        },
-        {
-          "x": 3800,
-          "y": 0
-        },
-        {
-          "x": 3800,
-          "y": 4200
-        },
-        {
-          "x": 0,
-          "y": 4200
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 2900,
-                "y": 0
-              },
-              {
-                "x": 3800,
-                "y": 0
-              }
-            ],
-            "swing_radius_mm": 850
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 1400
-              },
-              {
-                "x": 0,
-                "y": 3100
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Create a modern functional compact living room, 3.8m wide by 4.2m long. The entry door is on the bottom wall at the right side, spanning roughly from 2.9m to 3.8m along that wall. One window is on the left wall around the middle, spanning roughly from 1.4m to 3.1m along that wall. Place the TV on a solid wall, use a sofa, coffee table, rug, and do not block the window or door.",
-        "room_type": "living_room",
-        "floor_area_m2": 15.96,
-        "height": 2600,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 3800,
-            "y": 0
-          },
-          {
-            "x": 3800,
-            "y": 4200
-          },
-          {
-            "x": 0,
-            "y": 4200
-          }
-        ],
-        "windows": 1,
-        "window_direction": "W",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 2900,
-              "y": 0
-            },
-            {
-              "x": 3800,
-              "y": 0
-            }
-          ],
-          "swing_radius_mm": 850
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 1400
-            },
-            {
-              "x": 0,
-              "y": 3100
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "sofa",
-        "tv_console",
-        "coffee_table",
-        "rug"
-      ],
-      "valid_blocking_count_min": 3,
-      "valid_blocking_count_max": 7,
-      "count_ranges": {
-        "sofa": {
-          "min": 1,
-          "max": 1
-        },
-        "tv_console": {
-          "min": 1,
-          "max": 1
-        },
-        "coffee_table": {
-          "min": 1,
-          "max": 1
-        }
-      },
-      "relations": [
-        {
-          "type": "avoid_near_opening",
-          "objects": [
-            "sofa",
-            "tv_console"
-          ],
-          "opening_kind": "window",
-          "min_distance_mm": 450
-        }
-      ]
-    }
-  },
-  {
     "case_id": "living_03_l_shape_circulation",
     "room_type": "living_room",
     "room": {
@@ -1364,9 +237,9 @@
     },
     "input_payload": {
       "user_input": {
-        "description": "Arrange a modern functional L-shaped living room. The overall footprint is about 5.2m wide by 4.8m long, with a 1.6m by 1.8m notch removed from the upper-right corner. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. One window is on the top wall near the left-middle area, spanning roughly from 1.3m to 3.0m along that wall. Main seating should face media, keep circulation from entry through the room, add coffee table, rug, and a reading chair near the window if space permits.",
+        "description": "Arrange a modern functional single-room L-shaped living room. This is one living room only. The overall bounding rectangle is 5.2m wide by 4.8m long, but the upper-right 1.6m by 1.8m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is greater than 3.6m and y is greater than 3.0m. The entry door is on the left wall near the lower corner, spanning roughly from 0.5m to 1.4m along that wall. One window is on the top wall near the left-middle area, spanning roughly from 1.3m to 3.0m along that wall. Main seating should face media, keep circulation from entry through the usable living room area, add coffee table, rug, and a reading chair near the window if space permits.",
         "room_type": "living_room",
-        "floor_area_m2": 22.44,
+        "floor_area_m2": 22.08,
         "height": 2700,
         "shape_points": [
           {
@@ -1468,7 +341,288 @@
     }
   },
   {
-    "case_id": "living_04_large_sectional",
+    "case_id": "nonrect_proof_bedroom_l_no_openings",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 2800
+        },
+        {
+          "x": 3100,
+          "y": 2800
+        },
+        {
+          "x": 3100,
+          "y": 4400
+        },
+        {
+          "x": 0,
+          "y": 4400
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Arrange a modern functional single-room L-shaped bedroom with no door or window openings. This is one bedroom only. The overall bounding rectangle is 4.6m wide by 4.4m long, but the upper-right 1.5m by 1.6m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is greater than 3.1m and y is greater than 2.8m. Include a bed in the main sleeping zone, a wardrobe on a solid wall, a compact desk, one nightstand, and a ceiling light while keeping usable walking space inside the bedroom.",
+        "room_type": "bedroom",
+        "floor_area_m2": 17.84,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 2800
+          },
+          {
+            "x": 3100,
+            "y": 2800
+          },
+          {
+            "x": 3100,
+            "y": 4400
+          },
+          {
+            "x": 0,
+            "y": 4400
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "desk",
+        "nightstand",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 7,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "nonrect_proof_bedroom_l_openings",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4800,
+          "y": 0
+        },
+        {
+          "x": 4800,
+          "y": 4200
+        },
+        {
+          "x": 1800,
+          "y": 4200
+        },
+        {
+          "x": 1800,
+          "y": 2600
+        },
+        {
+          "x": 0,
+          "y": 2600
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 3300,
+                "y": 0
+              },
+              {
+                "x": 4200,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 4800,
+                "y": 2400
+              },
+              {
+                "x": 4800,
+                "y": 3600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Design a modern functional single-room L-shaped bedroom. This is one bedroom only. The overall bounding rectangle is 4.8m wide by 4.2m long, but the upper-left 1.8m by 1.6m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is less than 1.8m and y is greater than 2.6m. The entry door is on the bottom wall toward the right side, spanning roughly from 3.3m to 4.2m. One window is on the right wall, spanning roughly from 2.4m to 3.6m along that wall. Include a bed, wardrobe, compact desk near the window if possible, one nightstand, curtains, and a ceiling light.",
+        "room_type": "bedroom",
+        "floor_area_m2": 17.28,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4800,
+            "y": 0
+          },
+          {
+            "x": 4800,
+            "y": 4200
+          },
+          {
+            "x": 1800,
+            "y": 4200
+          },
+          {
+            "x": 1800,
+            "y": 2600
+          },
+          {
+            "x": 0,
+            "y": 2600
+          }
+        ],
+        "windows": 1,
+        "window_direction": "E",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 3300,
+              "y": 0
+            },
+            {
+              "x": 4200,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 4800,
+              "y": 2400
+            },
+            {
+              "x": 4800,
+              "y": 3600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "desk",
+        "nightstand",
+        "curtain",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": [
+        {
+          "type": "avoid_near_opening",
+          "objects": [
+            "bed",
+            "wardrobe"
+          ],
+          "opening_kind": "door",
+          "min_distance_mm": 900
+        },
+        {
+          "type": "prefer_near_opening",
+          "objects": [
+            "desk"
+          ],
+          "opening_kind": "window",
+          "max_distance_mm": 1600
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "nonrect_proof_living_l_no_openings",
     "room_type": "living_room",
     "room": {
       "polygon_mm": [
@@ -1477,11 +631,289 @@
           "y": 0
         },
         {
-          "x": 5500,
+          "x": 5400,
           "y": 0
         },
         {
-          "x": 5500,
+          "x": 5400,
+          "y": 2800
+        },
+        {
+          "x": 3600,
+          "y": 2800
+        },
+        {
+          "x": 3600,
+          "y": 4800
+        },
+        {
+          "x": 0,
+          "y": 4800
+        }
+      ],
+      "openings": {
+        "doors": [],
+        "windows": []
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Arrange a modern functional single-room L-shaped living room with no door or window openings. This is one living room only. The overall bounding rectangle is 5.4m wide by 4.8m long, but the upper-right 1.8m by 2.0m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is greater than 3.6m and y is greater than 2.8m. Create a social seating group with sofa, TV console, coffee table, rug, and one armchair while keeping usable walking space inside the living room.",
+        "room_type": "living_room",
+        "floor_area_m2": 22.32,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5400,
+            "y": 0
+          },
+          {
+            "x": 5400,
+            "y": 2800
+          },
+          {
+            "x": 3600,
+            "y": 2800
+          },
+          {
+            "x": 3600,
+            "y": 4800
+          },
+          {
+            "x": 0,
+            "y": 4800
+          }
+        ],
+        "windows": 0,
+        "window_direction": "",
+        "style": "modern functional"
+      },
+      "doors": [],
+      "windows": []
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "armchair"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": []
+    }
+  },
+  {
+    "case_id": "nonrect_proof_living_l_openings",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 0
+        },
+        {
+          "x": 3600,
+          "y": 1600
+        },
+        {
+          "x": 5200,
+          "y": 1600
+        },
+        {
+          "x": 5200,
+          "y": 4800
+        },
+        {
+          "x": 0,
+          "y": 4800
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 900
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1800,
+                "y": 4800
+              },
+              {
+                "x": 3400,
+                "y": 4800
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Design a modern functional single-room L-shaped living room. This is one living room only. The overall bounding rectangle is 5.2m wide by 4.8m long, but the lower-right 1.6m by 1.6m rectangle is missing and is not usable floor area. Do not place any object in the missing notch where x is greater than 3.6m and y is less than 1.6m. The entry door is on the bottom wall toward the left side, spanning roughly from 0.6m to 1.5m. One window is on the top wall, spanning roughly from 1.8m to 3.4m. Include sofa, TV console, coffee table, rug, bookshelf, curtains, and clear circulation from the door into the usable living room area.",
+        "room_type": "living_room",
+        "floor_area_m2": 22.4,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 0
+          },
+          {
+            "x": 3600,
+            "y": 1600
+          },
+          {
+            "x": 5200,
+            "y": 1600
+          },
+          {
+            "x": 5200,
+            "y": 4800
+          },
+          {
+            "x": 0,
+            "y": 4800
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 900
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1800,
+              "y": 4800
+            },
+            {
+              "x": 3400,
+              "y": 4800
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "bookshelf",
+        "curtain"
+      ],
+      "valid_blocking_count_min": 5,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "bookshelf": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": [
+        {
+          "type": "avoid_near_opening",
+          "objects": [
+            "sofa",
+            "tv_console",
+            "bookshelf"
+          ],
+          "opening_kind": "door",
+          "min_distance_mm": 850
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "nonrect_common_bedroom_chamfer_openings",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4400,
+          "y": 0
+        },
+        {
+          "x": 4400,
+          "y": 3000
+        },
+        {
+          "x": 3400,
           "y": 4000
         },
         {
@@ -1495,15 +927,15 @@
             "id": "door_1",
             "segment_mm": [
               {
-                "x": 4600,
+                "x": 600,
                 "y": 0
               },
               {
-                "x": 5500,
+                "x": 1500,
                 "y": 0
               }
             ],
-            "swing_radius_mm": 900
+            "swing_radius_mm": 850
           }
         ],
         "windows": [
@@ -1512,11 +944,11 @@
             "segment_mm": [
               {
                 "x": 0,
-                "y": 900
+                "y": 2000
               },
               {
                 "x": 0,
-                "y": 3100
+                "y": 3200
               }
             ],
             "clearance_mm": 450
@@ -1526,21 +958,25 @@
     },
     "input_payload": {
       "user_input": {
-        "description": "Design a modern functional social living room, 5.5m wide by 4.0m long. The entry door is on the bottom wall at the far right, spanning roughly from 4.6m to 5.5m along that wall. One window is on the left wall, spanning roughly from 0.9m to 3.1m along that wall. Include a sectional or large sofa, TV console, coffee table, rug, two armchairs if possible, and keep the window-side area usable.",
-        "room_type": "living_room",
-        "floor_area_m2": 22.0,
-        "height": 2800,
+        "description": "Design a modern functional single-room bedroom with a chamfered upper-right corner. This is one bedroom only. The bounding rectangle is 4.4m wide by 4.0m long, but the upper-right triangular corner beyond the diagonal wall from (4.4m, 3.0m) to (3.4m, 4.0m) is not usable floor area. Do not place any object in that clipped triangular corner. The entry door is on the bottom wall, spanning roughly from 0.6m to 1.5m. One window is on the left wall, spanning roughly from 2.0m to 3.2m. Include a bed, wardrobe, compact desk, one nightstand, curtains, and a ceiling light.",
+        "room_type": "bedroom",
+        "floor_area_m2": 17.1,
+        "height": 2700,
         "shape_points": [
           {
             "x": 0,
             "y": 0
           },
           {
-            "x": 5500,
+            "x": 4400,
             "y": 0
           },
           {
-            "x": 5500,
+            "x": 4400,
+            "y": 3000
+          },
+          {
+            "x": 3400,
             "y": 4000
           },
           {
@@ -1557,15 +993,15 @@
           "id": "door_1",
           "segment_mm": [
             {
-              "x": 4600,
+              "x": 600,
               "y": 0
             },
             {
-              "x": 5500,
+              "x": 1500,
               "y": 0
             }
           ],
-          "swing_radius_mm": 900
+          "swing_radius_mm": 850
         }
       ],
       "windows": [
@@ -1574,11 +1010,11 @@
           "segment_mm": [
             {
               "x": 0,
-              "y": 900
+              "y": 2000
             },
             {
               "x": 0,
-              "y": 3100
+              "y": 3200
             }
           ],
           "clearance_mm": 450
@@ -1587,24 +1023,25 @@
     },
     "expected": {
       "required_objects": [
-        "sofa",
-        "tv_console",
-        "coffee_table",
-        "rug",
-        "armchair"
+        "bed",
+        "wardrobe",
+        "desk",
+        "nightstand",
+        "curtain",
+        "ceiling_lamp"
       ],
-      "valid_blocking_count_min": 5,
-      "valid_blocking_count_max": 11,
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 8,
       "count_ranges": {
-        "sofa": {
+        "bed": {
           "min": 1,
-          "max": 2
+          "max": 1
         },
-        "armchair": {
+        "wardrobe": {
           "min": 1,
-          "max": 2
+          "max": 1
         },
-        "coffee_table": {
+        "desk": {
           "min": 1,
           "max": 1
         }
@@ -1613,170 +1050,25 @@
         {
           "type": "avoid_near_opening",
           "objects": [
-            "tv_console",
-            "sofa"
+            "bed",
+            "wardrobe"
           ],
           "opening_kind": "door",
-          "min_distance_mm": 900
-        }
-      ]
-    }
-  },
-  {
-    "case_id": "living_05_compact_loveseat",
-    "room_type": "living_room",
-    "room": {
-      "polygon_mm": [
-        {
-          "x": 0,
-          "y": 0
+          "min_distance_mm": 850
         },
         {
-          "x": 3200,
-          "y": 0
-        },
-        {
-          "x": 3200,
-          "y": 3400
-        },
-        {
-          "x": 0,
-          "y": 3400
-        }
-      ],
-      "openings": {
-        "doors": [
-          {
-            "id": "door_1",
-            "segment_mm": [
-              {
-                "x": 0,
-                "y": 450
-              },
-              {
-                "x": 0,
-                "y": 1350
-              }
-            ],
-            "swing_radius_mm": 800
-          }
-        ],
-        "windows": [
-          {
-            "id": "window_1",
-            "segment_mm": [
-              {
-                "x": 900,
-                "y": 3400
-              },
-              {
-                "x": 2300,
-                "y": 3400
-              }
-            ],
-            "clearance_mm": 450
-          }
-        ]
-      }
-    },
-    "input_payload": {
-      "user_input": {
-        "description": "Create a modern functional very compact living room, 3.2m wide by 3.4m long. The entry door is on the left wall near the lower corner, spanning roughly from 0.45m to 1.35m along that wall. One window is on the top wall, spanning roughly from 0.9m to 2.3m along that wall. Use a loveseat or small sofa, TV console, small coffee table, rug, and avoid overfurnishing.",
-        "room_type": "living_room",
-        "floor_area_m2": 10.88,
-        "height": 2500,
-        "shape_points": [
-          {
-            "x": 0,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 0
-          },
-          {
-            "x": 3200,
-            "y": 3400
-          },
-          {
-            "x": 0,
-            "y": 3400
-          }
-        ],
-        "windows": 1,
-        "window_direction": "N",
-        "style": "modern functional"
-      },
-      "doors": [
-        {
-          "id": "door_1",
-          "segment_mm": [
-            {
-              "x": 0,
-              "y": 450
-            },
-            {
-              "x": 0,
-              "y": 1350
-            }
-          ],
-          "swing_radius_mm": 800
-        }
-      ],
-      "windows": [
-        {
-          "id": "window_1",
-          "segment_mm": [
-            {
-              "x": 900,
-              "y": 3400
-            },
-            {
-              "x": 2300,
-              "y": 3400
-            }
-          ],
-          "clearance_mm": 450
-        }
-      ]
-    },
-    "expected": {
-      "required_objects": [
-        "sofa",
-        "tv_console",
-        "coffee_table",
-        "rug"
-      ],
-      "valid_blocking_count_min": 3,
-      "valid_blocking_count_max": 6,
-      "count_ranges": {
-        "sofa": {
-          "min": 1,
-          "max": 1
-        },
-        "coffee_table": {
-          "min": 1,
-          "max": 1
-        },
-        "armchair": {
-          "min": 0,
-          "max": 0
-        }
-      },
-      "relations": [
-        {
-          "type": "avoid_near_opening",
+          "type": "prefer_near_opening",
           "objects": [
-            "sofa"
+            "desk"
           ],
-          "opening_kind": "door",
-          "min_distance_mm": 800
+          "opening_kind": "window",
+          "max_distance_mm": 1600
         }
       ]
     }
   },
   {
-    "case_id": "living_06_two_doors_bookshelf",
+    "case_id": "nonrect_common_living_chamfer_openings",
     "room_type": "living_room",
     "room": {
       "polygon_mm": [
@@ -1785,16 +1077,20 @@
           "y": 0
         },
         {
-          "x": 4600,
+          "x": 4200,
           "y": 0
         },
         {
-          "x": 4600,
-          "y": 5200
+          "x": 5200,
+          "y": 1000
+        },
+        {
+          "x": 5200,
+          "y": 4400
         },
         {
           "x": 0,
-          "y": 5200
+          "y": 4400
         }
       ],
       "openings": {
@@ -1812,20 +1108,6 @@
               }
             ],
             "swing_radius_mm": 900
-          },
-          {
-            "id": "door_2",
-            "segment_mm": [
-              {
-                "x": 4600,
-                "y": 3800
-              },
-              {
-                "x": 4600,
-                "y": 4700
-              }
-            ],
-            "swing_radius_mm": 900
           }
         ],
         "windows": [
@@ -1833,12 +1115,12 @@
             "id": "window_1",
             "segment_mm": [
               {
-                "x": 1200,
-                "y": 5200
+                "x": 1600,
+                "y": 4400
               },
               {
-                "x": 3200,
-                "y": 5200
+                "x": 3400,
+                "y": 4400
               }
             ],
             "clearance_mm": 450
@@ -1848,26 +1130,30 @@
     },
     "input_payload": {
       "user_input": {
-        "description": "Arrange a modern functional family living room, 4.6m wide by 5.2m long. One entry door is on the left wall near the lower side, spanning roughly from 0.6m to 1.5m along that wall. A second door is on the right wall near the upper side, spanning roughly from 3.8m to 4.7m along that wall. One window is on the top wall, spanning roughly from 1.2m to 3.2m along that wall. Include sofa, TV console, coffee table, rug, bookshelf, and clear circulation between the two doors.",
+        "description": "Arrange a modern functional single-room living room with a chamfered lower-right corner. This is one living room only. The bounding rectangle is 5.2m wide by 4.4m long, but the lower-right triangular corner beyond the diagonal wall from (4.2m, 0.0m) to (5.2m, 1.0m) is not usable floor area. Do not place any object in that clipped triangular corner. The entry door is on the left wall, spanning roughly from 0.6m to 1.5m. One window is on the top wall, spanning roughly from 1.6m to 3.4m. Include sofa, TV console, coffee table, rug, curtains, and one armchair if it fits.",
         "room_type": "living_room",
-        "floor_area_m2": 23.92,
-        "height": 2800,
+        "floor_area_m2": 22.38,
+        "height": 2700,
         "shape_points": [
           {
             "x": 0,
             "y": 0
           },
           {
-            "x": 4600,
+            "x": 4200,
             "y": 0
           },
           {
-            "x": 4600,
-            "y": 5200
+            "x": 5200,
+            "y": 1000
+          },
+          {
+            "x": 5200,
+            "y": 4400
           },
           {
             "x": 0,
-            "y": 5200
+            "y": 4400
           }
         ],
         "windows": 1,
@@ -1888,20 +1174,6 @@
             }
           ],
           "swing_radius_mm": 900
-        },
-        {
-          "id": "door_2",
-          "segment_mm": [
-            {
-              "x": 4600,
-              "y": 3800
-            },
-            {
-              "x": 4600,
-              "y": 4700
-            }
-          ],
-          "swing_radius_mm": 900
         }
       ],
       "windows": [
@@ -1909,12 +1181,12 @@
           "id": "window_1",
           "segment_mm": [
             {
-              "x": 1200,
-              "y": 5200
+              "x": 1600,
+              "y": 4400
             },
             {
-              "x": 3200,
-              "y": 5200
+              "x": 3400,
+              "y": 4400
             }
           ],
           "clearance_mm": 450
@@ -1927,7 +1199,7 @@
         "tv_console",
         "coffee_table",
         "rug",
-        "bookshelf"
+        "curtain"
       ],
       "valid_blocking_count_min": 4,
       "valid_blocking_count_max": 9,
@@ -1936,11 +1208,11 @@
           "min": 1,
           "max": 1
         },
-        "bookshelf": {
+        "tv_console": {
           "min": 1,
           "max": 1
         },
-        "tv_console": {
+        "coffee_table": {
           "min": 1,
           "max": 1
         }
@@ -1949,7 +1221,389 @@
         {
           "type": "avoid_near_opening",
           "objects": [
-            "bookshelf",
+            "sofa",
+            "tv_console"
+          ],
+          "opening_kind": "door",
+          "min_distance_mm": 850
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "nonrect_common_bedroom_side_recess_openings",
+    "room_type": "bedroom",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 0
+        },
+        {
+          "x": 4600,
+          "y": 1500
+        },
+        {
+          "x": 3800,
+          "y": 1500
+        },
+        {
+          "x": 3800,
+          "y": 2600
+        },
+        {
+          "x": 4600,
+          "y": 2600
+        },
+        {
+          "x": 4600,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 850
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1400,
+                "y": 4000
+              },
+              {
+                "x": 2800,
+                "y": 4000
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Design a modern functional single-room bedroom with a side wall recess. This is one bedroom only. The bounding rectangle is 4.6m wide by 4.0m long, but a 0.8m by 1.1m rectangular recess is cut out of the right wall between y=1.5m and y=2.6m. That recess is not usable floor area. Do not place any object where x is greater than 3.8m and y is between 1.5m and 2.6m. The entry door is on the bottom wall, spanning roughly from 0.6m to 1.5m. One window is on the top wall, spanning roughly from 1.4m to 2.8m. Include a bed, wardrobe, compact desk, one nightstand, curtains, and a ceiling light.",
+        "room_type": "bedroom",
+        "floor_area_m2": 17.52,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 0
+          },
+          {
+            "x": 4600,
+            "y": 1500
+          },
+          {
+            "x": 3800,
+            "y": 1500
+          },
+          {
+            "x": 3800,
+            "y": 2600
+          },
+          {
+            "x": 4600,
+            "y": 2600
+          },
+          {
+            "x": 4600,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 850
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1400,
+              "y": 4000
+            },
+            {
+              "x": 2800,
+              "y": 4000
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "bed",
+        "wardrobe",
+        "desk",
+        "nightstand",
+        "curtain",
+        "ceiling_lamp"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 8,
+      "count_ranges": {
+        "bed": {
+          "min": 1,
+          "max": 1
+        },
+        "wardrobe": {
+          "min": 1,
+          "max": 1
+        },
+        "desk": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": [
+        {
+          "type": "avoid_near_opening",
+          "objects": [
+            "bed",
+            "wardrobe"
+          ],
+          "opening_kind": "door",
+          "min_distance_mm": 850
+        },
+        {
+          "type": "prefer_near_opening",
+          "objects": [
+            "desk"
+          ],
+          "opening_kind": "window",
+          "max_distance_mm": 1700
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "nonrect_common_living_bay_window_openings",
+    "room_type": "living_room",
+    "room": {
+      "polygon_mm": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5000,
+          "y": 0
+        },
+        {
+          "x": 5000,
+          "y": 4000
+        },
+        {
+          "x": 3400,
+          "y": 4000
+        },
+        {
+          "x": 3400,
+          "y": 4600
+        },
+        {
+          "x": 1800,
+          "y": 4600
+        },
+        {
+          "x": 1800,
+          "y": 4000
+        },
+        {
+          "x": 0,
+          "y": 4000
+        }
+      ],
+      "openings": {
+        "doors": [
+          {
+            "id": "door_1",
+            "segment_mm": [
+              {
+                "x": 600,
+                "y": 0
+              },
+              {
+                "x": 1500,
+                "y": 0
+              }
+            ],
+            "swing_radius_mm": 900
+          }
+        ],
+        "windows": [
+          {
+            "id": "window_1",
+            "segment_mm": [
+              {
+                "x": 1900,
+                "y": 4600
+              },
+              {
+                "x": 3300,
+                "y": 4600
+              }
+            ],
+            "clearance_mm": 450
+          }
+        ]
+      }
+    },
+    "input_payload": {
+      "user_input": {
+        "description": "Arrange a modern functional single-room living room with a centered bay-window alcove. This is one living room only. The main room is 5.0m wide by 4.0m long, with a 1.6m wide by 0.6m deep bay alcove projecting from the top wall. Only the centered bay alcove is usable beyond the main rectangle; do not place objects in the empty top-left or top-right areas outside the polygon. The entry door is on the bottom wall, spanning roughly from 0.6m to 1.5m. The window is along the bay alcove, spanning roughly from 1.9m to 3.3m. Include sofa, TV console, coffee table, rug, curtains, and one armchair or side chair near the bay if it fits.",
+        "room_type": "living_room",
+        "floor_area_m2": 20.96,
+        "height": 2700,
+        "shape_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5000,
+            "y": 0
+          },
+          {
+            "x": 5000,
+            "y": 4000
+          },
+          {
+            "x": 3400,
+            "y": 4000
+          },
+          {
+            "x": 3400,
+            "y": 4600
+          },
+          {
+            "x": 1800,
+            "y": 4600
+          },
+          {
+            "x": 1800,
+            "y": 4000
+          },
+          {
+            "x": 0,
+            "y": 4000
+          }
+        ],
+        "windows": 1,
+        "window_direction": "N",
+        "style": "modern functional"
+      },
+      "doors": [
+        {
+          "id": "door_1",
+          "segment_mm": [
+            {
+              "x": 600,
+              "y": 0
+            },
+            {
+              "x": 1500,
+              "y": 0
+            }
+          ],
+          "swing_radius_mm": 900
+        }
+      ],
+      "windows": [
+        {
+          "id": "window_1",
+          "segment_mm": [
+            {
+              "x": 1900,
+              "y": 4600
+            },
+            {
+              "x": 3300,
+              "y": 4600
+            }
+          ],
+          "clearance_mm": 450
+        }
+      ]
+    },
+    "expected": {
+      "required_objects": [
+        "sofa",
+        "tv_console",
+        "coffee_table",
+        "rug",
+        "curtain"
+      ],
+      "valid_blocking_count_min": 4,
+      "valid_blocking_count_max": 9,
+      "count_ranges": {
+        "sofa": {
+          "min": 1,
+          "max": 1
+        },
+        "tv_console": {
+          "min": 1,
+          "max": 1
+        },
+        "coffee_table": {
+          "min": 1,
+          "max": 1
+        }
+      },
+      "relations": [
+        {
+          "type": "avoid_near_opening",
+          "objects": [
             "sofa",
             "tv_console"
           ],

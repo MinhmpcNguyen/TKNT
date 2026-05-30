@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -27,12 +26,12 @@ def run_case_variant(
 ) -> ProviderResult:
     if provider == "evaluate_only":
         return _evaluate_only(case=case, variant=variant)
-    if provider == "command":
-        return _run_command(case=case, variant=variant, output_root=output_root)
     return _run_tknt_snapshot(case=case, variant=variant, output_root=output_root)
 
 
-def resolve_provider(default_provider: ProviderName, variant: VariantConfig) -> ProviderName:
+def resolve_provider(
+    default_provider: ProviderName, variant: VariantConfig
+) -> ProviderName:
     if variant.provider is not None:
         return variant.provider
     if variant.output_image is not None:
@@ -50,67 +49,6 @@ def _evaluate_only(*, case: CaseConfig, variant: VariantConfig) -> ProviderResul
         variant_id=variant.id,
         output_image=variant.output_image,
         metadata_path=None,
-    )
-
-
-def _run_command(
-    *,
-    case: CaseConfig,
-    variant: VariantConfig,
-    output_root: Path,
-) -> ProviderResult:
-    if variant.command is None:
-        raise ValueError(f"Variant {variant.id} has provider=command but no command.")
-    output_image = variant.output_image or output_root / case.id / variant.id / "output.png"
-    output_image.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        part.format(
-            case_id=case.id,
-            variant_id=variant.id,
-            source_image=str(case.source_image or ""),
-            reference_image=str(case.reference_image or ""),
-            mask_image=str(case.mask_image or ""),
-            output_image=str(output_image),
-            prompt=variant.prompt or case.edit_prompt or case.render_prompt or "",
-        )
-        for part in variant.command
-    ]
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    metadata_path = output_root / case.id / variant.id / "command_result.json"
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "command": command,
-                "returncode": completed.returncode,
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-                "expected_output_image": str(output_image),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"Command provider failed for {case.id}/{variant.id}. "
-            f"See {metadata_path}."
-        )
-    if not output_image.exists():
-        raise FileNotFoundError(
-            f"Command provider completed but did not create {output_image}."
-        )
-    return ProviderResult(
-        case_id=case.id,
-        variant_id=variant.id,
-        output_image=output_image,
-        metadata_path=metadata_path,
     )
 
 

@@ -9,18 +9,31 @@
       "target_count": 1,
       "preferred_count": 1,
       "max_keep": 1,
-      "evidence": "a comfortable bed",
-      "reason": "Directly requested as a core guest bedroom anchor.",
+      "evidence": "comfortable bed",
+      "reason": "Explicitly requested as the main sleeping anchor for a guest bedroom.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "bed"
+      ],
+      "relation_edges": [
+        {
+          "relation": "dominant_anchor_of",
+          "target": "room"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "bed",
+      "fulfilled_by": "bed"
     },
     {
       "object_type": "ceiling_light",
@@ -30,17 +43,24 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a ceiling lamp",
-      "reason": "Explicit lighting request; use ceiling-attached participation.",
-      "confidence": 0.99,
+      "reason": "Explicitly requested lighting fixture and should be included.",
+      "confidence": 0.98,
       "placement_participation": "ceiling_attached",
+      "llm_candidates": [
+        "ceiling_light",
+        "pendant_light"
+      ],
       "requested": true,
       "inventory_available": false,
+      "available_in_inventory": false,
       "available_in_program": false,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "ceiling"
+      "mount_region_type": "ceiling",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "ceiling_light"
     },
     {
       "object_type": "rug",
@@ -50,17 +70,29 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a rug",
-      "reason": "Explicit decor/textile request.",
-      "confidence": 0.99,
+      "reason": "Explicitly requested decor/floor textile and should be included.",
+      "confidence": 0.98,
       "placement_participation": "textile_overlay",
+      "llm_candidates": [
+        "rug"
+      ],
+      "relation_edges": [
+        {
+          "relation": "under",
+          "target": "bed"
+        }
+      ],
       "requested": true,
       "inventory_available": false,
+      "available_in_inventory": false,
       "available_in_program": false,
       "solver_participation": "post_solver_accessory",
       "blocks_floor_area": false,
       "can_overlap_floor_objects": true,
       "host_object_type": null,
-      "mount_region_type": "floor"
+      "mount_region_type": "floor",
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "rug"
     },
     {
       "object_type": "wardrobe",
@@ -70,17 +102,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a wardrobe",
-      "reason": "Directly requested storage item for the guest bedroom.",
+      "reason": "Explicit storage item explicitly requested and should remain in the room.",
       "confidence": 0.99,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "wardrobe"
+      ],
+      "relation_edges": [
+        {
+          "relation": "storage_anchor_of",
+          "target": "room"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "hard_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "wardrobe",
+      "fulfilled_by": "wardrobe"
     },
     {
       "object_type": "chair",
@@ -90,17 +135,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "with a chair",
-      "reason": "Directly paired with the desk/vanity request.",
-      "confidence": 0.97,
+      "reason": "Directly tied to the desk/vanity requirement and should be included if the work area is kept.",
+      "confidence": 0.95,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "chair"
+      ],
+      "relation_edges": [
+        {
+          "relation": "supports",
+          "target": "desk"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "chair",
+      "fulfilled_by": "chair"
     },
     {
       "object_type": "desk",
@@ -110,17 +168,30 @@
       "preferred_count": 1,
       "max_keep": 1,
       "evidence": "a small desk or vanity",
-      "reason": "Requested work/vanity surface; desk is the available explicit object type match.",
-      "confidence": 0.93,
+      "reason": "Requested as one of two alternatives; choose a compact desk if viable.",
+      "confidence": 0.96,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "desk"
+      ],
+      "relation_edges": [
+        {
+          "relation": "paired_with",
+          "target": "chair"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "desk",
+      "fulfilled_by": "desk"
     },
     {
       "object_type": "nightstand",
@@ -130,44 +201,106 @@
       "preferred_count": 2,
       "max_keep": 2,
       "evidence": "one or two nightstands",
-      "reason": "Explicit bounded range; keep at least one and prefer two if space allows.",
+      "reason": "Requested as a bounded range; keep at least one and prefer two if space allows.",
       "confidence": 0.98,
       "placement_participation": "floor_blocking",
+      "llm_candidates": [
+        "nightstand",
+        "side_table"
+      ],
+      "relation_edges": [
+        {
+          "relation": "adjacent_to",
+          "target": "bed"
+        }
+      ],
       "requested": true,
       "inventory_available": true,
+      "available_in_inventory": true,
       "available_in_program": true,
       "solver_participation": "soft_solver_object",
       "blocks_floor_area": true,
       "can_overlap_floor_objects": false,
       "host_object_type": null,
-      "mount_region_type": null
+      "mount_region_type": null,
+      "request_reconciliation_status": "fulfilled",
+      "chosen_object_type": "nightstand",
+      "fulfilled_by": "nightstand"
     }
   ],
   "groups": [
     {
-      "group_id": "sleep_core_bundle",
+      "group_id": "sleep_core",
       "members": [
         "bed",
         "nightstand"
       ],
-      "intent": "required composition",
+      "intent": "core sleeping composition",
       "priority": "core",
-      "drop_policy": "reduce nightstands before bed"
+      "drop_policy": "reduce_nightstand_count_then_drop_nightstand"
     },
     {
-      "group_id": "work_study_bundle",
+      "group_id": "work_zone",
       "members": [
         "desk",
         "chair"
       ],
-      "intent": "functional pairing",
+      "intent": "compact work or vanity setup",
       "priority": "support",
-      "drop_policy": "drop chair before desk only if necessary"
+      "drop_policy": "drop_chair_then_drop_desk"
     }
   ],
   "notes": [
-    "Requested room type is bedroom; style and soft usage hints are not objects.",
-    "No mirror, curtains, cushions, or additional lighting were explicitly requested.",
-    "Request contract was normalized before tier-count enforcement."
-  ]
+    "Guest bedroom should feel welcoming and efficient without unnecessary furniture.",
+    "Prefer the bed back wall for the primary sleep anchor.",
+    "Work zone should be kept compact and daylit if viable.",
+    "Request contract was normalized before tier-count enforcement.",
+    "Request contract was reconciled against room profile, inventory, and semantic clusters before tier count."
+  ],
+  "reconciliation": {
+    "version": 1,
+    "strategy": "hybrid_llm_rules",
+    "statuses": [
+      {
+        "object_type": "bed",
+        "status": "fulfilled",
+        "chosen_object_type": "bed",
+        "fulfilled_by": "bed"
+      },
+      {
+        "object_type": "ceiling_light",
+        "status": "fulfilled",
+        "chosen_object_type": "ceiling_light"
+      },
+      {
+        "object_type": "rug",
+        "status": "fulfilled",
+        "chosen_object_type": "rug"
+      },
+      {
+        "object_type": "wardrobe",
+        "status": "fulfilled",
+        "chosen_object_type": "wardrobe",
+        "fulfilled_by": "wardrobe"
+      },
+      {
+        "object_type": "chair",
+        "status": "fulfilled",
+        "chosen_object_type": "chair",
+        "fulfilled_by": "chair"
+      },
+      {
+        "object_type": "desk",
+        "status": "fulfilled",
+        "chosen_object_type": "desk",
+        "fulfilled_by": "desk"
+      },
+      {
+        "object_type": "nightstand",
+        "status": "fulfilled",
+        "chosen_object_type": "nightstand",
+        "fulfilled_by": "nightstand"
+      }
+    ]
+  }
 }

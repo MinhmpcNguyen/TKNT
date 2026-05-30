@@ -1,0 +1,32 @@
+{
+  "case_id": "living_02_solid_wall_tv_window_clear",
+  "case_dir": "/Users/Yuki/TKNT/experiments/image_flow_eval/layout_artifacts/living_02_solid_wall_tv_window_clear",
+  "final_output": null,
+  "error": "object-level solver could not produce any feasible anchor-first layouts",
+  "llm_usage": {
+    "request_count": 5,
+    "input_tokens": 21380,
+    "output_tokens": 4044,
+    "total_tokens": 25424,
+    "by_provider": {
+      "openai": {
+        "request_count": 5,
+        "input_tokens": 21380,
+        "output_tokens": 4044,
+        "total_tokens": 25424,
+        "by_model": {
+          "gpt-5.4-mini": {
+            "request_count": 5,
+            "input_tokens": 21380,
+            "output_tokens": 4044,
+            "total_tokens": 25424
+          }
+        }
+      }
+    },
+    "retry_events": [],
+    "retry_summary": {}
+  },
+  "input_tokens": 21380,
+  "output_tokens": 4044
+}

@@ -219,6 +219,41 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
 
         self.assertEqual([row["source"] for row in selected], ["good"])
 
+    def test_selection_summary_reports_planned_to_actual_macro_collapse(self) -> None:
+        candidates = [
+            {
+                **_candidate("concept:one", _layout(0)),
+                "planned_material_macro_signature": "sleep_core:left_wall_zone",
+                "actual_macro_layout_signature": "sleep_core:00",
+                "macro_concept_collapsed_to_fallback": False,
+            },
+            {
+                **_candidate("concept:two", _layout(3600)),
+                "planned_material_macro_signature": "sleep_core:right_wall_zone",
+                "actual_macro_layout_signature": "sleep_core:00",
+                "macro_concept_collapsed_to_fallback": True,
+            },
+        ]
+
+        summary = layout_variants.build_final_gallery_selection_summary(
+            candidates=candidates,
+            selected=candidates[:1],
+            requested_count=2,
+        )
+
+        self.assertEqual(
+            summary["planned_material_macro_distinct_candidate_count"],
+            2,
+        )
+        self.assertEqual(summary["actual_macro_distinct_candidate_count"], 1)
+        self.assertEqual(summary["macro_concept_collapsed_to_fallback_count"], 1)
+        self.assertTrue(
+            any(
+                "Seed planned more material macro signatures" in note
+                for note in summary["notes"]
+            )
+        )
+
     def test_selector_rejects_missing_hard_requested_solver_object(self) -> None:
         missing_tv = _candidate(
             "missing_tv",

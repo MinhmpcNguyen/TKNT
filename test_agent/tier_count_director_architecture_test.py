@@ -6,7 +6,6 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -200,6 +199,61 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
         self.assertEqual(decisions_by_type["desk_chair"]["category"], "desk_chair")
         self.assertIn("rep_dims_m", decisions_by_type["desk_chair"])
         self.assertEqual(decisions_by_type["bed"]["quantity"], 1)
+
+    def test_clusterforge_size_prior_can_select_compact_bed_tier(self) -> None:
+        tier = _tier_count_director._select_size_tier(
+            obj={
+                "object_type": "bed",
+                "base_type": "bed",
+                "role": "dominant_anchor",
+                "preferred_size_tier": "S",
+                "size_intent": "compact",
+            },
+            quantity=1,
+            score={"total": 10.0},
+            used_footprint_m2=0.0,
+            capacity_model={"clutter_budget_m2": 4.5},
+            size_profiles_by_category={
+                "bed": {
+                    "rep_dims_m": {
+                        "S": {"L": 1.91, "W": 1.0, "A": 1.91},
+                        "M": {"L": 1.91, "W": 1.5, "A": 2.865},
+                        "L": {"L": 1.91, "W": 1.69, "A": 3.228},
+                    }
+                }
+            },
+            room_scale="medium",
+            furnishing_mode="balanced",
+        )
+
+        self.assertEqual(tier, "S")
+
+    def test_generous_anchor_without_compact_prior_is_not_forced_small(self) -> None:
+        tier = _tier_count_director._select_size_tier(
+            obj={
+                "object_type": "bed",
+                "base_type": "bed",
+                "role": "dominant_anchor",
+                "size_intent": "generous",
+            },
+            quantity=1,
+            score={"total": 10.0},
+            used_footprint_m2=0.0,
+            capacity_model={"clutter_budget_m2": 8.0},
+            size_profiles_by_category={
+                "bed": {
+                    "rep_dims_m": {
+                        "S": {"L": 1.91, "W": 1.0, "A": 1.91},
+                        "M": {"L": 1.91, "W": 1.5, "A": 2.865},
+                        "L": {"L": 2.05, "W": 1.8, "A": 3.69},
+                    }
+                }
+            },
+            room_scale="large",
+            furnishing_mode="generous",
+        )
+
+        self.assertIn(tier, {"M", "L"})
 
     def test_generate_uses_canonical_profiles_for_instance_member_ids(self) -> None:
         requested_categories: list[str] = []
@@ -565,33 +619,35 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
             }
 
         brief_text = "Include a compact desk with a chair and a bookshelf."
-        semantic_program = _request_contract.attach_request_contract_to_semantic_program(
-            {
-                "active_clusters": [
-                    {
-                        "cluster_id": "work_area",
-                        "priority": "support",
-                        "required_bundles": [
-                            {
-                                "bundle_id": "workstation",
-                                "objects": [
-                                    {"object_type": "desk", "role": "support"},
-                                    {"object_type": "chair", "role": "support"},
-                                    {
-                                        "object_type": "bookshelf",
-                                        "role": "support",
-                                    },
-                                ],
-                            }
-                        ],
-                    }
-                ],
-                "request_contract": _request_contract.build_request_contract(
-                    brief_text=brief_text,
-                    available_object_types=["desk", "chair", "bookshelf"],
-                ),
-            },
-            brief_text=brief_text,
+        semantic_program = (
+            _request_contract.attach_request_contract_to_semantic_program(
+                {
+                    "active_clusters": [
+                        {
+                            "cluster_id": "work_area",
+                            "priority": "support",
+                            "required_bundles": [
+                                {
+                                    "bundle_id": "workstation",
+                                    "objects": [
+                                        {"object_type": "desk", "role": "support"},
+                                        {"object_type": "chair", "role": "support"},
+                                        {
+                                            "object_type": "bookshelf",
+                                            "role": "support",
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                    "request_contract": _request_contract.build_request_contract(
+                        brief_text=brief_text,
+                        available_object_types=["desk", "chair", "bookshelf"],
+                    ),
+                },
+                brief_text=brief_text,
+            )
         )
         clusters_json = {
             "semantic_layout_program": semantic_program,
@@ -658,29 +714,31 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
             }
 
         brief_text = "Include a compact desk with a chair."
-        semantic_program = _request_contract.attach_request_contract_to_semantic_program(
-            {
-                "active_clusters": [
-                    {
-                        "cluster_id": "work_area",
-                        "priority": "support",
-                        "required_bundles": [
-                            {
-                                "bundle_id": "workstation",
-                                "objects": [
-                                    {"object_type": "desk", "role": "support"},
-                                    {"object_type": "chair", "role": "support"},
-                                ],
-                            }
-                        ],
-                    }
-                ],
-                "request_contract": _request_contract.build_request_contract(
-                    brief_text=brief_text,
-                    available_object_types=["desk", "chair"],
-                ),
-            },
-            brief_text=brief_text,
+        semantic_program = (
+            _request_contract.attach_request_contract_to_semantic_program(
+                {
+                    "active_clusters": [
+                        {
+                            "cluster_id": "work_area",
+                            "priority": "support",
+                            "required_bundles": [
+                                {
+                                    "bundle_id": "workstation",
+                                    "objects": [
+                                        {"object_type": "desk", "role": "support"},
+                                        {"object_type": "chair", "role": "support"},
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                    "request_contract": _request_contract.build_request_contract(
+                        brief_text=brief_text,
+                        available_object_types=["desk", "chair"],
+                    ),
+                },
+                brief_text=brief_text,
+            )
         )
         clusters_json = {
             "semantic_layout_program": semantic_program,

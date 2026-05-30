@@ -3,6 +3,7 @@
 .idea/
 .vscode/
 *.code-workspace
+*.swp
 
 # Python
 __pycache__/
@@ -33,6 +34,9 @@ logs/
 outputs*/
 cases/*tenant_*/
 cases/user_*/
+
+# Local JSON outputs
+*.json
 
 # Secrets (do not commit)
 app-config.yaml
