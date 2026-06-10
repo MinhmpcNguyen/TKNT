@@ -40,15 +40,23 @@ from agent.request_contract import (
 from cluster_composer.merge import merge_cluster_outputs
 from cluster_composer.outline import compute_cluster_outline
 from layout.grid_policy import GLOBAL_LAYOUT_GRID_MM
+from layout.orientation_metadata import enrich_styled_output_orientations
 from layout.room_profiles.registry import all_profile_non_functional_layout_specs
 from pipeline.ablation_modes import (
     AblationMode,
     ablation_metadata,
     apply_tier_output_for_mode,
+    cluster_output_for_mode,
     resolve_ablation_mode,
+    room_output_for_mode,
     skip_accessory_refill,
     style_policy_for_mode,
     target_final_count_for_mode,
+    use_concept_repair,
+    use_gallery_selector,
+    use_material_macro_repair,
+    use_semantic_layout_planner,
+    use_stylist_llm,
     uses_neutral_style_policy,
 )
 from pipeline.compose_feedback import (
@@ -1230,6 +1238,10 @@ def run_case(
         special_notes=special_notes,
     ).model_dump()
     room_output = _strip_raw_text(room_output)
+    room_output = room_output_for_mode(
+        mode=resolved_ablation_mode,
+        room_output=room_output,
+    )
     _write_module_json(
         paths, "room_interpreter", room_output, legacy_path=paths.room_interpreter
     )
@@ -1292,6 +1304,7 @@ def run_case(
         room_model_json=room_output,
         inventory_catalog=_extract_inventory_catalog(prepared_input_payload),
         style_policy_json=style_policy,
+        use_semantic_planner=use_semantic_layout_planner(resolved_ablation_mode),
     ).model_dump()
     cluster_output = _strip_raw_text(cluster_output)
     cluster_output = augment_cluster_forge_with_manual_placements(
@@ -1301,6 +1314,10 @@ def run_case(
         room_output=room_output, cluster_output=cluster_output
     )
     cluster_output = _validate_semantic_cluster_unique_members(cluster_output)
+    cluster_output = cluster_output_for_mode(
+        mode=resolved_ablation_mode,
+        cluster_output=cluster_output,
+    )
     if speed_split_notes:
         logger.info("Fast mode split clusters before tier count: %s", speed_split_notes)
     _log_cluster_forge_output(cluster_output, context="primary")
@@ -1433,6 +1450,7 @@ def run_case(
     styling_candidates = _select_final_styling_candidates(
         solved_bundles,
         max_variants=target_final_count,
+        ablation_mode=resolved_ablation_mode,
     )
     selection_summary = build_final_gallery_selection_summary(
         candidates=solved_bundles,
@@ -1445,7 +1463,7 @@ def run_case(
         selection_summary=selection_summary,
         target_final_count=target_final_count,
     )
-    if material_repair_concepts:
+    if material_repair_concepts and use_material_macro_repair(resolved_ablation_mode):
         seed_relation_plans["material_macro_diversification_repair"] = {
             "attempted": True,
             "repair_concept_count": len(material_repair_concepts),
@@ -1483,6 +1501,7 @@ def run_case(
         styling_candidates = _select_final_styling_candidates(
             solved_bundles,
             max_variants=target_final_count,
+            ablation_mode=resolved_ablation_mode,
         )
         selection_summary = build_final_gallery_selection_summary(
             candidates=solved_bundles,
@@ -1498,6 +1517,19 @@ def run_case(
                 ),
             }
         )
+        _write_module_json(
+            paths,
+            "seed_concept_generator",
+            seed_relation_plans,
+            legacy_path=paths.seed_relation_plans,
+        )
+    elif material_repair_concepts:
+        seed_relation_plans["material_macro_diversification_repair"] = {
+            "attempted": False,
+            "skipped_by_ablation": True,
+            "repair_concept_count": len(material_repair_concepts),
+            "reason": "no_material_macro_repair",
+        }
         _write_module_json(
             paths,
             "seed_concept_generator",
@@ -1568,6 +1600,7 @@ def run_case(
             styling_candidates = _select_final_styling_candidates(
                 solved_bundles,
                 max_variants=target_final_count,
+                ablation_mode=resolved_ablation_mode,
             )
             seed_relation_plans["llm_retry_result"] = {
                 "solved_bundle_count": len(retry_bundles),
@@ -1641,6 +1674,7 @@ def run_case(
             stylist_tenant_id=stylist_tenant_id,
             manual_placements=manual_placements,
             variant_index=variant_index,
+            ablation_mode=resolved_ablation_mode,
         )
         if finalized_bundle is None:
             continue
@@ -1649,6 +1683,7 @@ def run_case(
             paths=paths,
             final_candidates=final_candidates,
             target_final_count=target_final_count,
+            ablation_mode=resolved_ablation_mode,
         )
         _update_status(
             paths,
@@ -1680,8 +1715,10 @@ def run_case(
         progress_current=0,
         progress_total=1,
     )
-    final_gallery_candidates = select_distinct_final_gallery_candidates(
-        candidates=final_candidates, max_variants=target_final_count
+    final_gallery_candidates = _select_final_styling_candidates(
+        final_candidates,
+        max_variants=target_final_count,
+        ablation_mode=resolved_ablation_mode,
     )
     layout_variants = _build_layout_variants_payload_from_final_candidates(
         final_gallery_candidates, status="OK"
@@ -3128,6 +3165,11 @@ def _solve_object_level_variant_bundle(
                 repair_attempt=None,
             )
         )
+        if not use_concept_repair(ablation_mode):
+            return _ObjectLevelSolveResult(
+                bundles=[],
+                failure_diagnostics=failure_diagnostics,
+            )
 
         repair_attempts = _build_concept_repair_attempts(
             concept=concept,
@@ -6162,6 +6204,10 @@ def _build_layout_variants_payload_from_final_candidates(
         styled_result = candidate.get("styled_result")
         if not isinstance(absolute_layout, dict) or not isinstance(styled_result, dict):
             continue
+        enriched_styled_result = enrich_styled_output_orientations(
+            styled_payload=styled_result,
+            absolute_layout_payload=absolute_layout,
+        )
         payload_variants.append(
             {
                 "variant_id": f"variant_{index}",
@@ -6201,7 +6247,7 @@ def _build_layout_variants_payload_from_final_candidates(
                 ),
                 "notes": deepcopy(candidate.get("notes") or []),
                 "absolute_layout": deepcopy(absolute_layout),
-                "styled_result": deepcopy(styled_result),
+                "styled_result": enriched_styled_result,
             }
         )
 
@@ -6219,13 +6265,15 @@ def _write_partial_layout_variants_artifact(
     paths: CasePaths,
     final_candidates: list[dict[str, Any]],
     target_final_count: int,
+    ablation_mode: AblationMode,
 ) -> None:
     if not final_candidates:
         return
 
-    selected = select_distinct_final_gallery_candidates(
-        candidates=final_candidates,
+    selected = _select_final_styling_candidates(
+        final_candidates,
         max_variants=target_final_count,
+        ablation_mode=ablation_mode,
     )
     layout_variants = _build_layout_variants_payload_from_final_candidates(
         selected,
@@ -6251,7 +6299,10 @@ def _select_final_styling_candidates(
     candidates: list[dict[str, Any]],
     *,
     max_variants: int,
+    ablation_mode: AblationMode = "full",
 ) -> list[dict[str, Any]]:
+    if not use_gallery_selector(ablation_mode):
+        return candidates[: max(1, int(max_variants))]
     return select_distinct_final_gallery_candidates(
         candidates=candidates,
         max_variants=max_variants,
@@ -7695,6 +7746,7 @@ def _style_judged_variant_bundle(
     stylist_tenant_id: str | None,
     manual_placements: list[dict[str, Any]] | None,
     variant_index: int,
+    ablation_mode: AblationMode = "full",
 ) -> dict[str, Any] | None:
     try:
         absolute_layout = bundle.get("absolute_layout")
@@ -7702,12 +7754,16 @@ def _style_judged_variant_bundle(
             return None
 
         style_model_name = stylist_model_name_for_variant(variant_index)
-        style_plan = stylist.generate_style_plan(
-            layout_json=absolute_layout,
-            user_context_json=stylist_user_context_json,
-            tenant_id=stylist_tenant_id,
-            model_name=style_model_name,
-        )
+        if use_stylist_llm(ablation_mode):
+            style_plan = stylist.generate_style_plan(
+                layout_json=absolute_layout,
+                user_context_json=stylist_user_context_json,
+                tenant_id=stylist_tenant_id,
+                model_name=style_model_name,
+            )
+        else:
+            style_plan = {}
+            style_model_name = "deterministic_fallback"
         styled_result = stylist.apply_style_plan(
             layout_json=absolute_layout,
             user_context_json=stylist_user_context_json,

@@ -22,6 +22,7 @@ import {
   estimateImageRenderCredits,
   formatVnd,
   getMonthlyCreditsRemaining,
+  getPaidCreditsRemaining,
   type BillingChargeKind,
 } from '../billing';
 import { BillingPaymentModal } from './BillingPaymentModal';
@@ -83,6 +84,7 @@ type RenderObject = {
   frontSideLocal?: unknown;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   placementFootprintMm?: { w: number; d: number } | null;
+  placementHeightMm?: number | null;
   placeOn?: { method: string; targetId?: string | null } | null;
   draggable?: boolean;
   reintroduced?: boolean;
@@ -92,15 +94,28 @@ type ResolvedRenderObject = RenderObject & {
   inventoryResolution: InventoryPreviewResolution;
 };
 
-type OnTopSupportAnchor = {
-  centerXmm: number;
-  centerYmm: number;
+type PlacementSupportAnchor = {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
   topHeightMm: number;
-  type: string;
+};
+
+type SupportedObjectAttachment = {
+  root: any;
+};
+
+type WindowMountAnchor = {
+  id: string;
+  centerXmm: number;
+  centerYmm: number;
+  xMm: number;
+  yMm: number;
+  rotY: number;
+  widthMm: number;
+  bottomMm: number;
+  heightMm: number;
 };
 
 type ObjectVisualDiagnostic = {
@@ -160,6 +175,11 @@ type EvalLayoutPayload = {
 type EvalCaptureResult = {
   snapshotArtifact: ThreeSnapshotArtifact;
   cleanSnapshotImageDataUrl: string;
+  depthMapImageDataUrl?: string;
+  edgeMapImageDataUrl?: string;
+  segmentationMapImageDataUrl?: string;
+  instanceOutlineImageDataUrl?: string;
+  instanceOutlineOverlayImageDataUrl?: string;
 };
 type EvalBridge = {
   loadLayout: (payload: EvalLayoutPayload) => Promise<{ status: 'ok' }>;
@@ -184,6 +204,9 @@ type EvalBridge = {
     hasRenderState: boolean;
     objectCount: number;
     pendingGlbCount: number;
+    pendingOpeningGlbCount: number;
+    loadedOpeningGlbCount: number;
+    proxyOpeningCount: number;
     proxyObjectCount: number;
     activeCameraPresetId: string | null;
     viewMode: string;
@@ -216,6 +239,7 @@ const ORBIT_MIN_DISTANCE_M = 0.35;
 const ORBIT_MAX_DISTANCE_ROOM_MULTIPLIER = 1.8;
 const ORBIT_MAX_TARGET_RADIUS_ROOM_MULTIPLIER = 1.35;
 const REFILL_ASSET_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
+const EVAL_PENDING_GLB_GRACE_MS = 8000;
 
 function getThreeRuntimeModuleUrl(modulePath: string): string {
   if (import.meta.env.DEV) {
@@ -228,6 +252,8 @@ function defaultHeightMm(type: string): number {
   const t = type.toLowerCase();
   if (t.includes('rug') || t.includes('mat')) return 10;
   if (t.includes('wall_art') || t.includes('clock') || t.includes('mirror')) return 30;
+  if (t.includes('curtain') || t.includes('drape')) return 1800;
+  if (t.includes('blind')) return 1200;
   if (t.includes('ceiling_light') || t.includes('pendant_light') || t.includes('track_light'))
     return 200;
   if (t.includes('air_conditioner')) return 250;
@@ -240,76 +266,229 @@ function defaultHeightMm(type: string): number {
   return 800;
 }
 
-function buildOnTopSupportAnchors(
+function readPositiveMm(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function placementSupportHeightBoundsMm(type: string): { minMm: number; maxMm: number } | null {
+  const t = type.toLowerCase();
+  if (t.includes('nightstand') || t.includes('side_table') || t.includes('end_table')) {
+    return { minMm: 350, maxMm: 720 };
+  }
+  if (t.includes('coffee_table')) {
+    return { minMm: 220, maxMm: 560 };
+  }
+  if (t.includes('console_table') || t.includes('console')) {
+    return { minMm: 600, maxMm: 950 };
+  }
+  if (t.includes('desk') || t.includes('dining_table') || t.includes('work_table')) {
+    return { minMm: 620, maxMm: 900 };
+  }
+  if (t.includes('vanity') || t.includes('dresser')) {
+    return { minMm: 650, maxMm: 980 };
+  }
+  if (t.includes('tv_stand') || t.includes('media_console')) {
+    return { minMm: 300, maxMm: 720 };
+  }
+  return null;
+}
+
+function resolvePreviewHeightMm(object: ResolvedRenderObject): number {
+  const inventoryDimensions = getInventoryDimensionsMm(object.inventoryResolution.item);
+  const rawHeightMm =
+    readPositiveMm(object.placementHeightMm) ??
+    inventoryDimensions?.height ??
+    defaultHeightMm(object.type);
+  const bounds = placementSupportHeightBoundsMm(object.type);
+  return bounds ? clamp(rawHeightMm, bounds.minMm, bounds.maxMm) : rawHeightMm;
+}
+
+function buildPlacementSupportAnchors(
   objects: ResolvedRenderObject[],
   heightById: Map<string, number>
-): Map<string, OnTopSupportAnchor> {
-  const anchors = new Map<string, OnTopSupportAnchor>();
+): Map<string, PlacementSupportAnchor> {
+  const anchors = new Map<string, PlacementSupportAnchor>();
+  const supportIds = new Set(
+    objects
+      .filter((object) => object.placeOn?.method === 'on_top')
+      .map((object) => object.placeOn?.targetId)
+      .filter(
+        (targetId): targetId is string => typeof targetId === 'string' && targetId.length > 0
+      )
+  );
   for (const object of objects) {
+    if (!supportIds.has(object.id)) {
+      continue;
+    }
     const { minX, minY, maxX, maxY } = object.bbox;
     if (![minX, minY, maxX, maxY].every(Number.isFinite)) {
       continue;
     }
     anchors.set(object.id, {
-      centerXmm: (minX + maxX) / 2,
-      centerYmm: (minY + maxY) / 2,
       minX,
       minY,
       maxX,
       maxY,
       topHeightMm: heightById.get(object.id) ?? defaultHeightMm(object.type),
-      type: object.type,
     });
   }
   return anchors;
 }
 
-function resolveOnTopPlanPosition(params: {
-  objectType: string;
-  support: OnTopSupportAnchor;
+function resolveSupportedObjectPlanPosition(params: {
+  support: PlacementSupportAnchor;
   currentXmm: number;
   currentYmm: number;
   widthMm: number;
   depthMm: number;
 }): { xMm: number; yMm: number } {
-  const { objectType, support, currentXmm, currentYmm, widthMm, depthMm } = params;
-  if (isSmallTableLampOnSupport(objectType, support.type)) {
-    return { xMm: support.centerXmm, yMm: support.centerYmm };
-  }
-  if (pointInsideSupportFootprint(currentXmm, currentYmm, support)) {
-    return { xMm: currentXmm, yMm: currentYmm };
-  }
+  const { support, currentXmm, currentYmm, widthMm, depthMm } = params;
   return {
-    xMm: clampToSupportCenterRange(currentXmm, support.minX, support.maxX, widthMm),
-    yMm: clampToSupportCenterRange(currentYmm, support.minY, support.maxY, depthMm),
+    xMm: clampSupportedObjectCenter(currentXmm, support.minX, support.maxX, widthMm),
+    yMm: clampSupportedObjectCenter(currentYmm, support.minY, support.maxY, depthMm),
   };
 }
 
-function isSmallTableLampOnSupport(objectType: string, supportType: string): boolean {
+function resolveSupportSurfaceHeightM(
+  THREE: any,
+  root: any,
+  fallbackHeightM: number
+): number | null {
+  root?.updateMatrixWorld?.(true);
+  const supportBox = new THREE.Box3().setFromObject(root);
+  if (typeof supportBox.isEmpty === 'function' && supportBox.isEmpty()) {
+    return null;
+  }
+  const supportSize = supportBox.getSize(new THREE.Vector3());
+  const supportHeightM = Math.max(0, supportSize.y);
+  if (!(supportHeightM > 0)) {
+    return null;
+  }
+
+  const slabs: Array<{ maxY: number; horizontalArea: number; thickness: number }> = [];
+  let maxHorizontalArea = 0;
+  root?.traverse?.((node: any) => {
+    if (!node?.isMesh || !node.visible || !node.geometry) {
+      return;
+    }
+    if (typeof node.geometry.computeBoundingBox === 'function' && !node.geometry.boundingBox) {
+      node.geometry.computeBoundingBox();
+    }
+    const geometryBox = node.geometry.boundingBox;
+    if (!geometryBox?.clone) {
+      return;
+    }
+    const box = geometryBox.clone().applyMatrix4(node.matrixWorld);
+    if (typeof box.isEmpty === 'function' && box.isEmpty()) {
+      return;
+    }
+    const size = box.getSize(new THREE.Vector3());
+    const horizontalArea = Math.max(0, size.x) * Math.max(0, size.z);
+    const thickness = Math.max(0, size.y);
+    if (!(horizontalArea > 0) || !(thickness > 0)) {
+      return;
+    }
+    maxHorizontalArea = Math.max(maxHorizontalArea, horizontalArea);
+    slabs.push({ maxY: box.max.y - supportBox.min.y, horizontalArea, thickness });
+  });
+
+  if (slabs.length === 0 || !(maxHorizontalArea > 0)) {
+    return null;
+  }
+
+  const broadSlabMinArea = maxHorizontalArea * 0.32;
+  const maxSlabThickness = Math.max(0.025, supportHeightM * 0.18);
+  const candidates = slabs.filter(
+    (slab) =>
+      slab.horizontalArea >= broadSlabMinArea &&
+      slab.thickness <= maxSlabThickness &&
+      slab.maxY >= supportHeightM * 0.12
+  );
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const surfaceHeightM = Math.max(...candidates.map((slab) => slab.maxY));
+  if (
+    !Number.isFinite(surfaceHeightM) ||
+    surfaceHeightM <= 0 ||
+    surfaceHeightM >= fallbackHeightM * 0.96
+  ) {
+    return null;
+  }
+  return surfaceHeightM;
+}
+
+function updateSupportedObjectAttachments(
+  attachments: SupportedObjectAttachment[] | undefined,
+  baseY: number
+): void {
+  if (!attachments || attachments.length === 0 || !Number.isFinite(baseY)) {
+    return;
+  }
+  for (const attachment of attachments) {
+    if (!attachment.root?.parent) {
+      continue;
+    }
+    attachment.root.position.y = baseY;
+    attachment.root.userData = {
+      ...attachment.root.userData,
+      baseY,
+    };
+  }
+}
+
+function isWindowCoveringObject(objectType: string): boolean {
   const objectKey = objectType.toLowerCase();
-  const supportKey = supportType.toLowerCase();
   return (
-    (objectKey.includes('bedside_lamp') ||
-      objectKey.includes('table_lamp') ||
-      objectKey.includes('desk_lamp')) &&
-    (supportKey.includes('nightstand') || supportKey.includes('side_table'))
+    objectKey.includes('curtain') ||
+    objectKey.includes('blind') ||
+    objectKey.includes('drape')
   );
 }
 
-function pointInsideSupportFootprint(
-  xMm: number,
-  yMm: number,
-  support: OnTopSupportAnchor
-): boolean {
+function targetIdMatchesWindowMount(targetId: string | null, windowId: string): boolean {
+  if (!targetId) {
+    return false;
+  }
+  const normalizedTarget = targetId.trim().toLowerCase();
+  const normalizedWindowId = windowId.trim().toLowerCase();
   return (
-    xMm >= support.minX &&
-    xMm <= support.maxX &&
-    yMm >= support.minY &&
-    yMm <= support.maxY
+    normalizedTarget === normalizedWindowId ||
+    normalizedTarget === `window:${normalizedWindowId}` ||
+    normalizedTarget === 'window' ||
+    normalizedTarget === 'opening'
   );
 }
 
-function clampToSupportCenterRange(
+function resolveWindowMountForObject(params: {
+  targetId: string | null;
+  currentXmm: number;
+  currentYmm: number;
+  windowMounts: WindowMountAnchor[];
+}): WindowMountAnchor | null {
+  const { targetId, currentXmm, currentYmm, windowMounts } = params;
+  if (windowMounts.length === 0) {
+    return null;
+  }
+  const matchingMounts = windowMounts.filter((mount) =>
+    targetIdMatchesWindowMount(targetId, mount.id)
+  );
+  const candidates = matchingMounts.length > 0 ? matchingMounts : windowMounts;
+  return candidates.reduce<WindowMountAnchor | null>((best, mount) => {
+    const distance2 =
+      (mount.centerXmm - currentXmm) ** 2 + (mount.centerYmm - currentYmm) ** 2;
+    if (!best) {
+      return mount;
+    }
+    const bestDistance2 =
+      (best.centerXmm - currentXmm) ** 2 + (best.centerYmm - currentYmm) ** 2;
+    return distance2 < bestDistance2 ? mount : best;
+  }, null);
+}
+
+function clampSupportedObjectCenter(
   valueMm: number,
   minMm: number,
   maxMm: number,
@@ -327,6 +506,28 @@ function clampToSupportCenterRange(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function axisAlignedBboxFromPlanPose(params: {
+  centerXmm: number;
+  centerYmm: number;
+  widthMm: number;
+  depthMm: number;
+  rotationDeg: number;
+}): { minX: number; minY: number; maxX: number; maxY: number } {
+  const rotationRad = (params.rotationDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rotationRad));
+  const sin = Math.abs(Math.sin(rotationRad));
+  const halfX =
+    (Math.max(0, params.widthMm) * cos + Math.max(0, params.depthMm) * sin) / 2;
+  const halfY =
+    (Math.max(0, params.widthMm) * sin + Math.max(0, params.depthMm) * cos) / 2;
+  return {
+    minX: params.centerXmm - halfX,
+    minY: params.centerYmm - halfY,
+    maxX: params.centerXmm + halfX,
+    maxY: params.centerYmm + halfY,
+  };
 }
 
 function pointsEqualMm(left: RoomPointMm, right: RoomPointMm, epsilon = 1): boolean {
@@ -1188,8 +1389,10 @@ const PUBLIC_PREVIEW_GLB_BY_STYLE: Record<string, Record<string, string>> = {
   japandi: {
     armchair: 'armchair_009.glb',
     bed: 'bed_001.glb',
+    bedside_lamp: 'bedside_lamp_008.glb',
     bookshelf: 'bookshelf_012.glb',
     ceiling_lamp: 'pendant_light_003.glb',
+    chair: 'chair_001.glb',
     coffee_table: 'coffee_table_007.glb',
     console_table: 'console_table_004.glb',
     curtain: 'curtain_012.glb',
@@ -1197,6 +1400,7 @@ const PUBLIC_PREVIEW_GLB_BY_STYLE: Record<string, Record<string, string>> = {
     desk_lamp: 'desk_lamp_005.glb',
     dresser: 'dresser_008.glb',
     floor_lamp: 'floor_lamp_001.glb',
+    laptop: 'laptop_006.glb',
     media_shelf: 'media_shelf_002.glb',
     nightstand: 'nightstand_004.glb',
     pendant_light: 'pendant_light_003.glb',
@@ -1208,18 +1412,23 @@ const PUBLIC_PREVIEW_GLB_BY_STYLE: Record<string, Record<string, string>> = {
     table_lamp: 'table_lamp_005.glb',
     tv_console: 'tv_console_001_6c201e05c42543ecb1418747261f4572.glb',
     wardrobe: 'wardrobe_004.glb',
+    wall_art: 'wall_art_001.glb',
   },
   modern: {
     armchair: 'armchair_008.glb',
     bed: 'bed_001.glb',
+    bedside_lamp: 'bedside_lamp_002.glb',
     bookshelf: 'bookshelf_or_storage_001.glb',
     ceiling_lamp: 'ceiling_light_006.glb',
+    chair: 'chair_001.glb',
     coffee_table: 'coffee_table_007.glb',
     console_table: 'console_table_004.glb',
     curtain: 'curtain_or_blinds_001.glb',
     desk: 'desk_003.glb',
+    desk_lamp: 'table_lamp_006.glb',
     dresser: 'dresser_002.glb',
     floor_lamp: 'floor_lamp_001.glb',
+    laptop: 'laptop_001.glb',
     media_shelf: 'media_shelf_002.glb',
     nightstand: 'nightstand_002.glb',
     rug: 'rug_002.glb',
@@ -1230,6 +1439,7 @@ const PUBLIC_PREVIEW_GLB_BY_STYLE: Record<string, Record<string, string>> = {
     table_lamp: 'table_lamp_006.glb',
     tv_console: 'tv_console_006.glb',
     wardrobe: 'wardrobe_004.glb',
+    wall_art: 'wall_art_008.glb',
   },
 };
 
@@ -1330,13 +1540,20 @@ function resolveOpeningSegmentMm(
   return null;
 }
 
-function normalizeSnapshotOpenings(items: any[]): SnapshotOpeningRecord[] {
+function normalizeSnapshotOpenings(
+  items: any[],
+  kind: 'door' | 'window'
+): SnapshotOpeningRecord[] {
   return items
-    .map((item) => {
+    .map((item, index) => {
       const segment = resolveOpeningSegmentMm(item);
       if (!segment) return null;
+      const id =
+        kind === 'door'
+          ? String(item?.door_id ?? item?.id ?? `door_${index + 1}`)
+          : String(item?.window_id ?? item?.id ?? `window_${index + 1}`);
       return {
-        id: String(item?.id ?? 'opening'),
+        id,
         segmentMm: [
           { x: segment.p1.x, y: segment.p1.y },
           { x: segment.p2.x, y: segment.p2.y },
@@ -1359,17 +1576,6 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
-}
-
-function resolveSnapshotCapturePixelRatio(params: {
-  previousPixelRatio: number | null;
-}): number {
-  const screenPixelRatio = Math.max(
-    1,
-    Number(window.devicePixelRatio) || 0,
-    Number(params.previousPixelRatio) || 0
-  );
-  return Math.min(screenPixelRatio, MAX_RENDERER_PIXEL_RATIO);
 }
 
 type TemporaryVisibilityRecord = {
@@ -1403,15 +1609,18 @@ function hideNode(
   visibleNode.visible = false;
 }
 
+function isAiSnapshotHelperNode(node: any): boolean {
+  return (
+    node?.userData?.aiRenderHide === true ||
+    node?.userData?.aiStructuralEdge === true ||
+    node?.userData?.structuralEdgeOverlay === true
+  );
+}
+
 function hideAiSnapshotHelperNodes(scene: any): TemporaryVisibilityRecord[] {
   const hiddenNodes: TemporaryVisibilityRecord[] = [];
   scene.traverse((node: any) => {
-    if (
-      (node?.userData?.aiRenderHide === true ||
-        node?.userData?.aiStructuralEdge === true ||
-        node?.userData?.structuralEdgeOverlay === true) &&
-      typeof node.visible === 'boolean'
-    ) {
+    if (isAiSnapshotHelperNode(node) && typeof node.visible === 'boolean') {
       hideNode(hiddenNodes, node);
     }
   });
@@ -1441,10 +1650,7 @@ function renderDepthMapDataUrl(params: {
 
   try {
     scene.traverse((node: any) => {
-      if (
-        node?.userData?.aiStructuralEdge === true &&
-        typeof node.visible === 'boolean'
-      ) {
+      if (isAiSnapshotHelperNode(node) && typeof node.visible === 'boolean') {
         hideNode(hiddenNodes, node);
         return;
       }
@@ -1496,10 +1702,7 @@ function renderSegmentationMapDataUrl(params: {
 
   try {
     scene.traverse((node: any) => {
-      if (
-        node?.userData?.aiStructuralEdge === true &&
-        typeof node.visible === 'boolean'
-      ) {
+      if (isAiSnapshotHelperNode(node) && typeof node.visible === 'boolean') {
         hideNode(hiddenNodes, node);
         return;
       }
@@ -1555,6 +1758,223 @@ function colorForSegmentKey(THREE: any, segmentKey: string): any {
   }
   const hue = ((hash >>> 0) % 360) / 360;
   return new THREE.Color().setHSL(hue, 0.76, 0.56);
+}
+
+function buildInstanceOutlineGuideImageDataUrl(params: {
+  segmentationMapImageDataUrl: string;
+}): Promise<string> {
+  const { segmentationMapImageDataUrl } = params;
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      if (!width || !height) {
+        reject(new Error('Unable to decode the segmentation map size.'));
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        reject(new Error('Unable to read the segmentation map pixels.'));
+        return;
+      }
+      context.drawImage(image, 0, 0, width, height);
+      const source = context.getImageData(0, 0, width, height);
+      const sourceData = source.data;
+
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+      const outputContext = outputCanvas.getContext('2d');
+      if (!outputContext) {
+        reject(new Error('Unable to create the instance outline guide.'));
+        return;
+      }
+      const output = outputContext.createImageData(width, height);
+      const outputData = output.data;
+      for (let index = 0; index < outputData.length; index += 4) {
+        outputData[index] = 17;
+        outputData[index + 1] = 24;
+        outputData[index + 2] = 39;
+        outputData[index + 3] = 255;
+      }
+
+      const isBackgroundPixel = (offset: number): boolean =>
+        sourceData[offset + 3] < 8 ||
+        (sourceData[offset] < 5 &&
+          sourceData[offset + 1] < 5 &&
+          sourceData[offset + 2] < 5);
+      const isDifferentColor = (leftOffset: number, rightOffset: number): boolean =>
+        Math.abs(sourceData[leftOffset] - sourceData[rightOffset]) > 8 ||
+        Math.abs(sourceData[leftOffset + 1] - sourceData[rightOffset + 1]) > 8 ||
+        Math.abs(sourceData[leftOffset + 2] - sourceData[rightOffset + 2]) > 8 ||
+        Math.abs(sourceData[leftOffset + 3] - sourceData[rightOffset + 3]) > 8;
+      const paintOutlinePixel = (x: number, y: number, offset: number): void => {
+        if (isBackgroundPixel(offset)) {
+          return;
+        }
+        for (let dy = -1; dy <= 1; dy += 1) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= height) {
+            continue;
+          }
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= width) {
+              continue;
+            }
+            const outputOffset = (yy * width + xx) * 4;
+            outputData[outputOffset] = sourceData[offset];
+            outputData[outputOffset + 1] = sourceData[offset + 1];
+            outputData[outputOffset + 2] = sourceData[offset + 2];
+            outputData[outputOffset + 3] = 255;
+          }
+        }
+      };
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const offset = (y * width + x) * 4;
+          if (x + 1 < width) {
+            const rightOffset = (y * width + x + 1) * 4;
+            if (isDifferentColor(offset, rightOffset)) {
+              paintOutlinePixel(x, y, offset);
+              paintOutlinePixel(x + 1, y, rightOffset);
+            }
+          }
+          if (y + 1 < height) {
+            const lowerOffset = ((y + 1) * width + x) * 4;
+            if (isDifferentColor(offset, lowerOffset)) {
+              paintOutlinePixel(x, y, offset);
+              paintOutlinePixel(x, y + 1, lowerOffset);
+            }
+          }
+        }
+      }
+
+      outputContext.putImageData(output, 0, 0);
+      resolve(canvasToDataUrl(outputCanvas));
+    };
+    image.onerror = () => {
+      reject(new Error('Unable to load the segmentation map image.'));
+    };
+    image.src = segmentationMapImageDataUrl;
+  });
+}
+
+function buildInstanceOutlineOverlayImageDataUrl(params: {
+  sourceImageDataUrl: string;
+  instanceOutlineImageDataUrl: string;
+}): Promise<string> {
+  const { sourceImageDataUrl, instanceOutlineImageDataUrl } = params;
+  const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Unable to load the outline overlay image.'));
+      image.src = dataUrl;
+    });
+
+  return Promise.all([loadImage(sourceImageDataUrl), loadImage(instanceOutlineImageDataUrl)]).then(
+    ([sourceImage, outlineImage]) => {
+      const width = sourceImage.naturalWidth || sourceImage.width;
+      const height = sourceImage.naturalHeight || sourceImage.height;
+      if (!width || !height) {
+        throw new Error('Unable to decode the source image size.');
+      }
+
+      const outlineCanvas = document.createElement('canvas');
+      outlineCanvas.width = width;
+      outlineCanvas.height = height;
+      const outlineContext = outlineCanvas.getContext('2d', {
+        willReadFrequently: true,
+      });
+      if (!outlineContext) {
+        throw new Error('Unable to read the instance outline pixels.');
+      }
+      outlineContext.drawImage(outlineImage, 0, 0, width, height);
+      const outline = outlineContext.getImageData(0, 0, width, height);
+      const outlineData = outline.data;
+
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+      const outputContext = outputCanvas.getContext('2d', {
+        willReadFrequently: true,
+      });
+      if (!outputContext) {
+        throw new Error('Unable to build the instance outline overlay.');
+      }
+      outputContext.drawImage(sourceImage, 0, 0, width, height);
+      const output = outputContext.getImageData(0, 0, width, height);
+      const outputData = output.data;
+
+      const isOutlinePixel = (offset: number): boolean =>
+        outlineData[offset + 3] > 32 &&
+        (Math.abs(outlineData[offset] - 17) > 12 ||
+          Math.abs(outlineData[offset + 1] - 24) > 12 ||
+          Math.abs(outlineData[offset + 2] - 39) > 12);
+      const blendPixel = (
+        offset: number,
+        red: number,
+        green: number,
+        blue: number,
+        alpha: number
+      ): void => {
+        const inverseAlpha = 1 - alpha;
+        outputData[offset] = Math.round(outputData[offset] * inverseAlpha + red * alpha);
+        outputData[offset + 1] = Math.round(
+          outputData[offset + 1] * inverseAlpha + green * alpha
+        );
+        outputData[offset + 2] = Math.round(
+          outputData[offset + 2] * inverseAlpha + blue * alpha
+        );
+        outputData[offset + 3] = 255;
+      };
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const offset = (y * width + x) * 4;
+          if (!isOutlinePixel(offset)) {
+            continue;
+          }
+          for (let dy = -1; dy <= 1; dy += 1) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= height) {
+              continue;
+            }
+            for (let dx = -1; dx <= 1; dx += 1) {
+              const xx = x + dx;
+              if (xx < 0 || xx >= width) {
+                continue;
+              }
+              blendPixel((yy * width + xx) * 4, 0, 0, 0, 0.42);
+            }
+          }
+        }
+      }
+
+      for (let index = 0; index < outlineData.length; index += 4) {
+        if (!isOutlinePixel(index)) {
+          continue;
+        }
+        blendPixel(
+          index,
+          outlineData[index],
+          outlineData[index + 1],
+          outlineData[index + 2],
+          0.92
+        );
+      }
+
+      outputContext.putImageData(output, 0, 0);
+      return canvasToDataUrl(outputCanvas);
+    }
+  );
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -1991,6 +2411,7 @@ function readObjectAppearanceReferencesFromRender(
         item.operation_type === 'add' ||
         item.operation_type === 'replace' ||
         item.operation_type === 'recolor' ||
+        item.operation_type === 'remove' ||
         item.operation_type === 'prompt'
           ? item.operation_type
           : null,
@@ -2045,6 +2466,22 @@ function resolveCanvasSizeFromAspectRatio(
   return {
     widthPx: Math.round(width * 400),
     heightPx: Math.round(height * 400),
+  };
+}
+
+function resolveImageRenderSize(
+  imageSize: SnapshotImageSize | string | null | undefined
+): { widthPx: number; heightPx: number } {
+  const rawValue = imageSize?.trim() ?? '';
+  const [rawWidth, rawHeight] = rawValue.split('x');
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { widthPx: 1536, heightPx: 1024 };
+  }
+  return {
+    widthPx: Math.round(width),
+    heightPx: Math.round(height),
   };
 }
 
@@ -2136,6 +2573,16 @@ function buildSavedRenderSnapshotArtifact(
     visibleObjectCount: visibleObjects.length,
     hiddenObjectCount: 0,
     visibilityMethod: 'saved_render_metadata',
+    visibilityDiagnostics: {
+      status: 'degraded',
+      allObjectCount: visibleObjects.length,
+      visibleObjectCount: visibleObjects.length,
+      raycastVisibleObjectCount: 0,
+      projectedFallbackObjectCount: visibleObjects.length,
+      openingBboxMissingCount: 0,
+      openingIdsMissingBbox: [],
+      reasons: ['saved_render_metadata_without_live_raycast'],
+    },
     wallOcclusionOpacityThreshold: SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD,
     allObjects: visibleObjects,
     visibleObjects,
@@ -2637,6 +3084,7 @@ type SnapshotEditDelta = {
 type PendingBillingPayment = {
   amountVnd: number;
   chargeKind: BillingChargeKind;
+  credits: number;
   reason: string;
   reference: string;
 };
@@ -3013,7 +3461,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
     upsertSavedRender,
     appendRunLog,
     consumeMonthlyImageCredits,
-    recordPaidImageUse,
+    addPaidCredits,
+    consumePaidCredits,
   } = useEditorStore();
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -3099,6 +3548,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
     objectCount: 0,
     pendingGlbCount: 0,
     proxyObjectCount: 0,
+  });
+  const openingGlbStatusRef = useRef({
+    loadedCount: 0,
+    pendingCount: 0,
+    proxyCount: 0,
   });
   const inventoryCountRef = useRef(0);
   const isThreeSceneLoadingRef = useRef(false);
@@ -3192,14 +3646,27 @@ export const ThreeDPreviewPanel: React.FC = () => {
       }
 
       const latestSettings = useEditorStore.getState().billingSettings;
+      if (consumePaidCredits(creditCount)) {
+        const nextSettings = useEditorStore.getState().billingSettings;
+        appendRunLog(
+          `Image ${chargeLabel} used ${creditCount} paid credit${
+            creditCount === 1 ? '' : 's'
+          } (${getPaidCreditsRemaining(nextSettings)} paid left).`
+        );
+        return true;
+      }
+
+      const paidCreditBalance = getPaidCreditsRemaining(latestSettings);
+      const creditsToBuy = Math.max(1, creditCount - paidCreditBalance);
       const payment: PendingBillingPayment = {
-        amountVnd: latestSettings.perCreditPriceVnd * creditCount,
+        amountVnd: latestSettings.perCreditPriceVnd * creditsToBuy,
         chargeKind,
         reason:
           latestSettings.mode === 'monthly'
-            ? `Monthly credit balance is too low. Scan this QR to unlock ${creditCount} credit${creditCount === 1 ? '' : 's'}.`
-            : `Pay per credit is selected. Scan this QR to unlock ${creditCount} credit${creditCount === 1 ? '' : 's'}.`,
+            ? `Monthly credit balance is too low. Scan this QR to add ${creditsToBuy} paid credit${creditsToBuy === 1 ? '' : 's'} and unlock this render.`
+            : `Pay per credit is selected. Scan this QR to add ${creditsToBuy} paid credit${creditsToBuy === 1 ? '' : 's'} and unlock this render.`,
         reference: buildPaymentReference(chargeKind),
+        credits: creditsToBuy,
       };
       setRenderStatus({
         tone: 'neutral',
@@ -3214,18 +3681,26 @@ export const ThreeDPreviewPanel: React.FC = () => {
         return false;
       }
 
-      recordPaidImageUse(creditCount);
+      addPaidCredits(creditsToBuy);
+      if (!consumePaidCredits(creditCount)) {
+        setRenderStatus({
+          tone: 'error',
+          text: 'Paid credits were not applied. Image rendering was not started.',
+        });
+        return false;
+      }
       appendRunLog(
-        `Image ${chargeLabel} unlocked ${creditCount} credit${
+        `Image ${chargeLabel} used ${creditCount} paid credit${
           creditCount === 1 ? '' : 's'
-        } by mock payment ${completedPayment.reference}.`
+        } after mock payment ${completedPayment.reference}.`
       );
       return true;
     },
     [
+      addPaidCredits,
       appendRunLog,
       consumeMonthlyImageCredits,
-      recordPaidImageUse,
+      consumePaidCredits,
       requestBillingPayment,
     ]
   );
@@ -3400,6 +3875,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           frontSideLocal,
           bbox: { minX, minY, maxX, maxY },
           placementFootprintMm: placement?.footprint_mm ?? null,
+          placementHeightMm: readPositiveMm(placement?.height_mm),
           placeOn,
           draggable:
             placementsById.has(id) &&
@@ -3428,6 +3904,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           frontSideLocal: p.front_side_local ?? null,
           bbox,
           placementFootprintMm: p.footprint_mm ?? null,
+          placementHeightMm: readPositiveMm(p.height_mm),
           placeOn: { method: 'floor', targetId: 'floor' },
           draggable: p.constraint_mode !== 'locked',
           reintroduced:
@@ -3456,6 +3933,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         frontSideLocal: placement.front_side_local ?? null,
         bbox: getWorldBboxFromPlacement(placement),
         placementFootprintMm: placement.footprint_mm ?? null,
+        placementHeightMm: readPositiveMm(placement.height_mm),
         placeOn: { method: 'floor', targetId: 'floor' },
         draggable: placement.constraint_mode !== 'locked',
         reintroduced:
@@ -3524,14 +4002,23 @@ export const ThreeDPreviewPanel: React.FC = () => {
         .sort((left, right) => left.label.localeCompare(right.label)),
     [objectVisualDiagnostics]
   );
-  const pendingGlbCount = glbObjects.filter(
-    (item) => item.status === 'glb_loading'
-  ).length;
+  const pendingGlbObjects = glbObjects.filter((item) => item.status === 'glb_loading');
+  const pendingGlbCount = pendingGlbObjects.length;
   const glbLoadedCount = glbObjects.filter(
     (item) => item.status === 'glb_loaded'
   ).length;
   const proxyObjectCount = proxyObjects.length;
   const showThreeLoadingOverlay = isThreeSceneLoading || pendingGlbCount > 0;
+  const pendingGlbOverlayText =
+    pendingGlbCount === 0
+      ? 'Loading 3D models...'
+      : `Loading ${pendingGlbCount} 3D model${pendingGlbCount === 1 ? '' : 's'}: ${pendingGlbObjects
+          .slice(0, 2)
+          .map((item) => {
+            const modelName = item.modelUrl?.split('/').pop();
+            return modelName ? `${item.label} (${modelName})` : item.label;
+          })
+          .join(', ')}${pendingGlbCount > 2 ? ` +${pendingGlbCount - 2} more` : ''}...`;
 
   useEffect(() => {
     glbStatusRef.current = {
@@ -4091,20 +4578,19 @@ export const ThreeDPreviewPanel: React.FC = () => {
       typeof renderer.getPixelRatio === 'function' ? renderer.getPixelRatio() : null;
     const previousCameraAspect =
       typeof camera.aspect === 'number' ? camera.aspect : null;
-    const viewportRect = renderer.domElement.parentElement?.getBoundingClientRect();
-    const viewportWidth = Math.max(
-      1,
-      Math.round(viewportRect?.width || renderer.domElement.clientWidth || 1)
-    );
-    const viewportHeight = Math.max(
+      const viewportRect = renderer.domElement.parentElement?.getBoundingClientRect();
+      const viewportWidth = Math.max(
+        1,
+        Math.round(viewportRect?.width || renderer.domElement.clientWidth || 1)
+      );
+      const viewportHeight = Math.max(
       1,
       Math.round(viewportRect?.height || renderer.domElement.clientHeight || 1)
     );
-    const targetPixelRatio = resolveSnapshotCapturePixelRatio({
-      previousPixelRatio,
-    });
+      const captureSize = resolveImageRenderSize(renderSize);
+      const targetPixelRatio = 1;
 
-    try {
+      try {
       const rotatorGroup = rotatorGroupRef.current;
       if (rotatorGroup && typeof rotatorGroup.visible === 'boolean') {
         hideNode(hiddenNodes, rotatorGroup);
@@ -4113,9 +4599,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
       if (typeof renderer.setPixelRatio === 'function') {
         renderer.setPixelRatio(targetPixelRatio);
       }
-      renderer.setSize(viewportWidth, viewportHeight, false);
+      renderer.setSize(captureSize.widthPx, captureSize.heightPx, false);
       if (previousCameraAspect !== null) {
-        camera.aspect = viewportWidth / viewportHeight;
+        camera.aspect = captureSize.widthPx / captureSize.heightPx;
         camera.updateProjectionMatrix?.();
       }
       controlsRef.current?.update?.();
@@ -4165,6 +4651,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
     const buildEvalState = () => {
       const containerRect = containerRef.current?.getBoundingClientRect() ?? null;
       const glbStatus = glbStatusRef.current;
+      const openingGlbStatus = openingGlbStatusRef.current;
       return {
         cameraPresetCount: cameraPresetsRef.current.length,
         containerSize: containerRect
@@ -4184,6 +4671,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
         glbLoadedCount: glbStatus.glbLoadedCount,
         objectCount: glbStatus.objectCount,
         pendingGlbCount: glbStatus.pendingGlbCount,
+        pendingOpeningGlbCount: openingGlbStatus.pendingCount,
+        loadedOpeningGlbCount: openingGlbStatus.loadedCount,
+        proxyOpeningCount: openingGlbStatus.proxyCount,
         proxyObjectCount: glbStatus.proxyObjectCount,
         activeCameraPresetId,
         viewMode,
@@ -4193,8 +4683,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
     const waitForReady = async (timeoutMs = 30000) => {
       const startedAt = Date.now();
       while (Date.now() - startedAt <= timeoutMs) {
+        const elapsedMs = Date.now() - startedAt;
         const cameraPresetCount = cameraPresetsRef.current.length;
         const glbStatus = glbStatusRef.current;
+        const openingGlbStatus = openingGlbStatusRef.current;
+        const hasRenderableObjects =
+          glbStatus.objectCount === 0 ||
+          glbStatus.glbLoadedCount > 0 ||
+          elapsedMs >= EVAL_PENDING_GLB_GRACE_MS;
+        const glbReady =
+          glbStatus.pendingGlbCount === 0 || elapsedMs >= EVAL_PENDING_GLB_GRACE_MS;
         const ready =
           viewMode === '3d' &&
           !isThreeSceneLoadingRef.current &&
@@ -4202,8 +4700,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
           Boolean(sceneRef.current) &&
           Boolean(cameraRef.current) &&
           Boolean(renderStateRef.current) &&
-          glbStatus.pendingGlbCount === 0 &&
-          (glbStatus.objectCount === 0 || glbStatus.glbLoadedCount > 0) &&
+          glbReady &&
+          openingGlbStatus.pendingCount === 0 &&
+          hasRenderableObjects &&
           cameraPresetCount > 0;
         if (ready) {
           return {
@@ -4278,7 +4777,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
       },
       async captureSnapshot() {
         await waitForReady(30000);
-        return captureCurrentViewportSnapshot();
+        return captureCurrentAiSnapshot();
       },
       getState() {
         return buildEvalState();
@@ -4300,6 +4799,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
     depthMapImageDataUrl: string;
     edgeMapImageDataUrl: string;
     segmentationMapImageDataUrl: string;
+    instanceOutlineImageDataUrl: string;
+    instanceOutlineOverlayImageDataUrl: string;
   }> {
     return captureWithCurrentViewport(async ({
       camera,
@@ -4321,6 +4822,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
         scene,
         camera,
       });
+      const instanceOutlineImageDataUrl = await buildInstanceOutlineGuideImageDataUrl({
+        segmentationMapImageDataUrl,
+      });
+      const instanceOutlineOverlayImageDataUrl =
+        await buildInstanceOutlineOverlayImageDataUrl({
+          sourceImageDataUrl,
+          instanceOutlineImageDataUrl,
+        });
       const edgeMapImageDataUrl = await buildEdgeMapReferenceImageDataUrl({
         sourceImageDataUrl,
       });
@@ -4341,6 +4850,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
         depthMapImageDataUrl,
         edgeMapImageDataUrl,
         segmentationMapImageDataUrl,
+        instanceOutlineImageDataUrl,
+        instanceOutlineOverlayImageDataUrl,
       };
     });
   }
@@ -4394,6 +4905,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         depthMapImageDataUrl,
         edgeMapImageDataUrl,
         segmentationMapImageDataUrl,
+        instanceOutlineOverlayImageDataUrl,
       } =
         await captureCurrentAiSnapshot();
       setStreamPreviewImageDataUrl(cleanSnapshotImageDataUrl);
@@ -4418,11 +4930,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
           edgeMapImageDataUrl,
           segmentationMapImageDataUrl,
           layoutReferenceImageDataUrl: null,
-          annotatedReferenceImageDataUrl: snapshotImageDataUrl,
+          annotatedReferenceImageDataUrl:
+            instanceOutlineOverlayImageDataUrl || snapshotImageDataUrl,
           sceneReferenceImageDataUrl: null,
           sceneReferenceMode: 'none',
           userPrompt: '',
           renderMode: 'generate',
+          renderFlow: 'single_edit_edge_silhouette_guided',
           presetSelection,
           rootLayoutId: renderLayoutContext.rootLayoutId,
           caseId: renderLayoutContext.caseId,
@@ -4592,6 +5106,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           editSourceImageDataUrl: renderedSnapshotImage.image.data_url,
           userPrompt: '',
           renderMode: 'edit',
+          renderFlow:
+            action === 'edit' && editOperations.length > 0
+              ? 'edit_object_scope_preflight'
+              : 'default',
           presetSelection: editDelta.presetSelectionDelta,
           rootLayoutId: renderLayoutContext.rootLayoutId,
           caseId: renderLayoutContext.caseId,
@@ -4884,6 +5402,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
     const el = containerRef.current;
     setError(null);
     setIsThreeSceneLoading(true);
+    openingGlbStatusRef.current = {
+      loadedCount: 0,
+      pendingCount: 0,
+      proxyCount: 0,
+    };
     const finishSceneLoading = () => {
       if (!disposed) {
         setIsThreeSceneLoading(false);
@@ -5375,13 +5898,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
         const heightById = new Map<string, number>();
         for (const obj of resolvedObjects) {
-          const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
-          const hMm =
-            inventoryDimensions?.height ??
-            defaultHeightMm(obj.type);
-          heightById.set(obj.id, hMm);
+          heightById.set(obj.id, resolvePreviewHeightMm(obj));
         }
-        const supportAnchorById = buildOnTopSupportAnchors(resolvedObjects, heightById);
+        const placementSupportAnchorById = buildPlacementSupportAnchors(
+          resolvedObjects,
+          heightById
+        );
+        const supportedObjectAttachmentsBySupportId = new Map<
+          string,
+          SupportedObjectAttachment[]
+        >();
 
         const objectGroup = new THREE.Group();
         scene.add(objectGroup);
@@ -5410,6 +5936,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
           }
         }
 
+        const windowMounts: WindowMountAnchor[] = [];
+
         const tryLoadOpeningGlb = (params: {
           root: any;
           resolution: InventoryPreviewResolution;
@@ -5422,8 +5950,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
             params.resolution.modelResolution?.descriptor ??
             buildOpeningFallbackModelDescriptor(params.resolution, userInput.style);
           if (!GLTFLoader || !descriptor) {
+            openingGlbStatusRef.current.proxyCount += 1;
             return;
           }
+          openingGlbStatusRef.current.pendingCount += 1;
           const previewOverride = applyInventoryModelPreviewOverride({
             descriptor,
             context: 'panel',
@@ -5456,9 +5986,17 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 thresholdAngleDeg: 18,
               });
               replaceThreeObjectChildren(params.root, model);
+              openingGlbStatusRef.current.loadedCount += 1;
             })
             .catch(() => {
               // Keep the procedural opening proxy when the model cannot be loaded.
+              openingGlbStatusRef.current.proxyCount += 1;
+            })
+            .finally(() => {
+              openingGlbStatusRef.current.pendingCount = Math.max(
+                0,
+                openingGlbStatusRef.current.pendingCount - 1
+              );
             });
         };
 
@@ -5588,6 +6126,18 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const anchor = findInteriorOffsetPoint(midX, midY, extraMm);
           const pxMm = anchor?.xMm ?? midX;
           const pyMm = anchor?.yMm ?? midY;
+          const wallMount = findWallMount(midX, midY);
+          windowMounts.push({
+            id: winId,
+            centerXmm: midX,
+            centerYmm: midY,
+            xMm: wallMount?.xMm ?? pxMm,
+            yMm: wallMount?.yMm ?? pyMm,
+            rotY: wallMount?.rotY ?? angle,
+            widthMm: lenMm,
+            bottomMm,
+            heightMm: actualHeightMm,
+          });
 
           const wM = lenMm * MM_TO_M;
           const hM = actualHeightMm * MM_TO_M;
@@ -5693,6 +6243,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           const inventoryDimensions = getInventoryDimensionsMm(obj.inventoryResolution.item);
           const isWallHung = method === 'hang_on' && !isCeiling;
+          const windowMountAnchor =
+            isWallHung && isWindowCoveringObject(obj.type)
+              ? resolveWindowMountForObject({
+                  targetId,
+                  currentXmm: cxMm,
+                  currentYmm: cyMm,
+                  windowMounts,
+                })
+              : null;
           const placementFootprintMm = obj.placementFootprintMm;
           const hasPlacementFootprint =
             !isWallHung &&
@@ -5721,12 +6280,25 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           // Wall-hung items in a 2D plan typically use bbox as (width x height).
           if (isWallHung) {
-            wM = Math.max(0.06, wMmPlan * MM_TO_M);
-            hM = Math.max(0.06, dMmPlan * MM_TO_M);
+            const wallPlaneWidthMm = windowMountAnchor?.widthMm ?? wMmPlan;
+            const maxWindowCoveringHeightMm =
+              windowMountAnchor !== null
+                ? Math.max(200, wallHeightMm - windowMountAnchor.bottomMm - 60)
+                : null;
+            const wallPlaneHeightMm =
+              windowMountAnchor !== null
+                ? clamp(
+                    Math.max(windowMountAnchor.heightMm, defaultHeightMm(obj.type)),
+                    windowMountAnchor.heightMm,
+                    maxWindowCoveringHeightMm ?? wallHeightMm
+                  )
+                : dMmPlan;
+            wM = Math.max(0.06, wallPlaneWidthMm * MM_TO_M);
+            hM = Math.max(0.06, wallPlaneHeightMm * MM_TO_M);
             const thicknessMm = resolveWallHungPreviewDepthMm({
               objectType: obj.type,
-              planWidthMm: wMmPlan,
-              planHeightMm: dMmPlan,
+              planWidthMm: wallPlaneWidthMm,
+              planHeightMm: wallPlaneHeightMm,
               inventoryDimensions,
             });
             dM = Math.max(0.02, thicknessMm * MM_TO_M);
@@ -5735,13 +6307,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
           let baseY = 0;
           const supportAnchor =
             method === 'on_top' && typeof targetId === 'string'
-              ? supportAnchorById.get(targetId) ?? null
+              ? placementSupportAnchorById.get(targetId) ?? null
               : null;
           if (supportAnchor) {
             baseY = supportAnchor.topHeightMm * MM_TO_M + 0.004;
           } else if (method === 'hang_on') {
             if (isCeiling) {
               baseY = wallHeight - hM;
+            } else if (windowMountAnchor) {
+              baseY = clamp(windowMountAnchor.bottomMm * MM_TO_M, 0, wallHeight - hM);
             } else {
               baseY = clamp(wallHeight * 0.6 - hM / 2, 0.6, wallHeight - hM);
             }
@@ -5750,16 +6324,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
           let pxMm = cxMm;
           let pyMm = cyMm;
           if (supportAnchor) {
-            const onTopPosition = resolveOnTopPlanPosition({
-              objectType: obj.type,
+            const supportedPosition = resolveSupportedObjectPlanPosition({
               support: supportAnchor,
               currentXmm: pxMm,
               currentYmm: pyMm,
               widthMm: wMm,
               depthMm: dMm,
             });
-            pxMm = onTopPosition.xMm;
-            pyMm = onTopPosition.yMm;
+            pxMm = supportedPosition.xMm;
+            pyMm = supportedPosition.yMm;
           }
           // Plan Y is mapped to -Z so 3D matches the 2D canvas orientation.
           // Prefer the same explicit front metadata that drives the 2D white marker.
@@ -5769,7 +6342,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
             frontSideWorld: obj.frontSideWorld,
             frontSideLocal: obj.frontSideLocal,
           });
-          if (method === 'hang_on' && !isCeiling) {
+          if (windowMountAnchor) {
+            pxMm = windowMountAnchor.xMm;
+            pyMm = windowMountAnchor.yMm;
+            rotY = windowMountAnchor.rotY;
+          } else if (method === 'hang_on' && !isCeiling) {
             const mount = findWallMount(cxMm, cyMm);
             if (mount) {
               pxMm = mount.xMm;
@@ -5793,6 +6370,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
             wMm,
             dMm,
           };
+          if (supportAnchor && typeof targetId === 'string') {
+            const attachments = supportedObjectAttachmentsBySupportId.get(targetId) ?? [];
+            attachments.push({
+              root: objectRoot,
+            });
+            supportedObjectAttachmentsBySupportId.set(targetId, attachments);
+          }
 
           const fallbackProxy = buildObjectProxy(THREE, {
             type: obj.type,
@@ -5811,6 +6395,17 @@ export const ThreeDPreviewPanel: React.FC = () => {
           objectGroup.add(objectRoot);
           proxyById.set(obj.id, objectRoot);
           const renderIdentity = resolveRenderIdentityForObject(obj.type);
+          const sceneYawDeg = yawRadToPlanRotationDeg(rotY);
+          const supportsPlacedObjects = placementSupportAnchorById.has(obj.id);
+          const metadataBbox = windowMountAnchor
+            ? axisAlignedBboxFromPlanPose({
+                centerXmm: pxMm,
+                centerYmm: pyMm,
+                widthMm: Math.round(wM / MM_TO_M),
+                depthMm: Math.round(dM / MM_TO_M),
+                rotationDeg: sceneYawDeg,
+              })
+            : obj.bbox;
           objectMetadataById.set(obj.id, {
             id: obj.id,
             assetId: obj.assetId ?? null,
@@ -5821,10 +6416,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
             colorHex: obj.colorHex,
             material: obj.material ?? null,
             bboxMm: {
-              minX: Math.round(obj.bbox.minX),
-              minY: Math.round(obj.bbox.minY),
-              maxX: Math.round(obj.bbox.maxX),
-              maxY: Math.round(obj.bbox.maxY),
+              minX: Math.round(metadataBbox.minX),
+              minY: Math.round(metadataBbox.minY),
+              maxX: Math.round(metadataBbox.maxX),
+              maxY: Math.round(metadataBbox.maxY),
             },
             planPositionMm: {
               x: Math.round(pxMm),
@@ -5837,7 +6432,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
               height: Math.round(hM / MM_TO_M),
             },
             planRotationDeg: Math.round(rotCcwDeg * 100) / 100,
-            sceneYawDeg: Math.round(yawRadToPlanRotationDeg(rotY) * 100) / 100,
+            sceneYawDeg: Math.round(sceneYawDeg * 100) / 100,
             placeOn: obj.placeOn
               ? {
                   method: String(obj.placeOn.method ?? 'floor'),
@@ -5870,9 +6465,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 : preserveGeneratedMeshShape
                   ? 'wall-plane-uniform'
                   : 'wall-plane-uniform-or-proxy'
-              : preserveGeneratedMeshShape
-                ? 'footprint-uniform'
-                : 'footprint-uniform-or-proxy';
+              : supportsPlacedObjects
+                ? 'footprint'
+                : preserveGeneratedMeshShape
+                  ? 'footprint-uniform'
+                  : 'footprint-uniform-or-proxy';
             const previewOverride = applyInventoryModelPreviewOverride({
               descriptor: modelDescriptor,
               context: 'panel',
@@ -5908,6 +6505,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 colorHex: obj.colorHex,
                 preserveMaterialTextures: preserveGeneratedMeshShape,
                 minimumHorizontalAspectRatio: preserveGeneratedMeshShape ? 0.45 : null,
+                horizontalAnchor: method === 'on_top' ? 'bottom-center' : 'bbox-center',
               })
               .then((model) => {
                 if (disposed || !objectRoot.parent) {
@@ -5938,6 +6536,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
                           : `Loaded GLB for inventory asset "${obj.inventoryResolution.item?.asset_id ?? obj.assetId ?? obj.type}".`,
                   },
                 }));
+                const currentMetadata = objectMetadataById.get(obj.id);
+                if (currentMetadata) {
+                  objectMetadataById.set(obj.id, {
+                    ...currentMetadata,
+                    resolvedAssetId: obj.inventoryResolution.item?.asset_id ?? null,
+                    modelUrl: descriptorForPanel.url,
+                    modelSource: descriptorForPanel.source,
+                    glbFitStrategy: previewOverride.fitStrategy,
+                  });
+                }
                 const previousChildren = [...objectRoot.children];
                 for (const child of previousChildren) {
                   objectRoot.remove(child);
@@ -5951,6 +6559,15 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   thresholdAngleDeg: 18,
                 });
                 objectRoot.add(model);
+                if (supportsPlacedObjects) {
+                  const surfaceHeightM = resolveSupportSurfaceHeightM(THREE, model, hM);
+                  if (surfaceHeightM !== null) {
+                    updateSupportedObjectAttachments(
+                      supportedObjectAttachmentsBySupportId.get(obj.id),
+                      objectRoot.position.y + surfaceHeightM + 0.004
+                    );
+                  }
+                }
               })
               .catch((modelError: unknown) => {
                 const reason =
@@ -6029,9 +6646,13 @@ export const ThreeDPreviewPanel: React.FC = () => {
             y: centerYmm,
           },
           roomOpenings: {
-            doors: normalizeSnapshotOpenings(Array.isArray(openings.doors) ? openings.doors : []),
+            doors: normalizeSnapshotOpenings(
+              Array.isArray(openings.doors) ? openings.doors : [],
+              'door'
+            ),
             windows: normalizeSnapshotOpenings(
-              Array.isArray(openings.windows) ? openings.windows : []
+              Array.isArray(openings.windows) ? openings.windows : [],
+              'window'
             ),
           },
           roomSurfaceColors: {
@@ -6953,7 +7574,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
             <span>
               {isThreeSceneLoading
                 ? 'Loading 3D preview...'
-                : `Loading ${pendingGlbCount} 3D model${pendingGlbCount === 1 ? '' : 's'}...`}
+                : pendingGlbOverlayText}
             </span>
           </div>
         ) : null}
@@ -6991,10 +7612,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
           ) : null}
           {glbObjects.length > 0 ? (
             <div className="three-debug-card">
-              <div className="three-debug-title">Loaded GLBs ({glbObjects.length})</div>
+              <div className="three-debug-title">GLB Models ({glbObjects.length})</div>
               <div className="three-debug-list">
                 {glbObjects.map((item) => {
                   const modelName = item.modelUrl?.split('/').pop() ?? 'n/a';
+                  const statusLabel =
+                    item.status === 'glb_loading' ? 'loading' : 'loaded';
                   const offsetLabel =
                     typeof item.previewRotationOffsetDeg === 'number'
                       ? `${Math.round(item.previewRotationOffsetDeg)}deg`
@@ -7014,6 +7637,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                         model: {modelName} | offset: {offsetLabel} | final rot:{' '}
                         {finalRotationLabel}
                       </span>
+                      <span>status: {statusLabel}</span>
                       <span>{item.reason}</span>
                     </div>
                   );
@@ -7159,6 +7783,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
         <BillingPaymentModal
           amountVnd={pendingBillingPayment.amountVnd}
           chargeKind={pendingBillingPayment.chargeKind}
+          creditCount={pendingBillingPayment.credits}
           countdownSeconds={billingCountdownSeconds}
           reason={pendingBillingPayment.reason}
           reference={pendingBillingPayment.reference}

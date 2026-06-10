@@ -1,6 +1,6 @@
 export type BillingMode = 'monthly' | 'per_use';
 
-export type BillingChargeKind = 'generate' | 'edit';
+export type BillingChargeKind = 'generate' | 'edit' | 'add_credit';
 
 export type BillingSettings = {
   mode: BillingMode;
@@ -8,6 +8,7 @@ export type BillingSettings = {
   monthlyCreditQuota: number;
   monthlyCreditsUsed: number;
   monthlyPeriodStartedAt: string;
+  paidCreditBalance: number;
   perCreditPriceVnd: number;
   totalMonthlyCredits: number;
   totalPaidCredits: number;
@@ -79,6 +80,7 @@ export function createDefaultBillingSettings(now = new Date()): BillingSettings 
     monthlyCreditQuota: DEFAULT_MONTHLY_CREDIT_QUOTA,
     monthlyCreditsUsed: 0,
     monthlyPeriodStartedAt: now.toISOString(),
+    paidCreditBalance: 0,
     perCreditPriceVnd: DEFAULT_PER_CREDIT_PRICE_VND,
     totalMonthlyCredits: 0,
     totalPaidCredits: 0,
@@ -108,6 +110,10 @@ export function getMonthlyCreditsRemaining(settings: BillingSettings): number {
   return Math.max(0, settings.monthlyCreditQuota - settings.monthlyCreditsUsed);
 }
 
+export function getPaidCreditsRemaining(settings: BillingSettings): number {
+  return Math.max(0, settings.paidCreditBalance);
+}
+
 export function formatVnd(amount: number): string {
   return new Intl.NumberFormat('vi-VN', {
     currency: 'VND',
@@ -117,7 +123,8 @@ export function formatVnd(amount: number): string {
 }
 
 export function buildPaymentReference(kind: BillingChargeKind): string {
-  return `TKNT-${kind.toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+  const kindToken = kind.toUpperCase().replace('_', '-');
+  return `TKNT-${kindToken}-${Date.now().toString(36).toUpperCase()}`;
 }
 
 export function loadBillingSettings(): BillingSettings {
@@ -170,6 +177,10 @@ function sanitizeBillingSettings(value: unknown): BillingSettings {
       typeof value.monthlyPeriodStartedAt === 'string'
         ? value.monthlyPeriodStartedAt
         : defaults.monthlyPeriodStartedAt,
+    paidCreditBalance: readNonNegativeInteger(
+      value.paidCreditBalance,
+      defaults.paidCreditBalance
+    ),
     perCreditPriceVnd: readPositiveInteger(
       value.perCreditPriceVnd ?? value.perUsePriceVnd,
       defaults.perCreditPriceVnd

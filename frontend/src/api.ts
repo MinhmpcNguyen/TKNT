@@ -49,6 +49,10 @@ export type SnapshotImageSceneReferenceMode =
 
 export type SnapshotImageQuality = 'low' | 'medium' | 'high';
 export type SnapshotImageSize = '1024x1024' | '1024x1536' | '1536x1024';
+export type SnapshotImageRenderFlow =
+  | 'default'
+  | 'single_edit_edge_silhouette_guided'
+  | 'edit_object_scope_preflight';
 
 export type AuthSessionResponse = {
   access_token: string;
@@ -59,6 +63,7 @@ export type AuthSessionResponse = {
 export type SnapshotImageRenderResult = {
   request: {
     render_mode: 'generate' | 'edit' | 'camera_rerender';
+    render_flow?: SnapshotImageRenderFlow;
     system_prompt: string;
     user_prompt: string;
     raw_user_prompt?: string | null;
@@ -126,6 +131,7 @@ export type SnapshotImageRenderResult = {
     visible_objects?: Array<Record<string, unknown>>;
     visible_object_ids?: string[];
     render_mode?: 'generate' | 'edit' | 'camera_rerender';
+    render_flow?: SnapshotImageRenderFlow;
     preset_selection?: SnapshotImagePresetSelection;
     edit_operations?: SnapshotImageEditOperationSummary[];
     render_state?: Record<string, unknown>;
@@ -142,6 +148,8 @@ export type SnapshotImageRenderResult = {
     geometry_atlas_omitted_object_ids?: string[];
     geometry_lock_policy?: string;
     validation?: Record<string, unknown>;
+    visual_preflight?: Record<string, unknown>;
+    object_scope_edit_mask?: Record<string, unknown>;
   };
 };
 
@@ -177,6 +185,7 @@ type SnapshotImageRenderClientRequest = {
   sceneReferenceMode?: SnapshotImageSceneReferenceMode;
   userPrompt: string;
   renderMode?: 'generate' | 'edit' | 'camera_rerender';
+  renderFlow?: SnapshotImageRenderFlow;
   presetSelection?: SnapshotImagePresetSelection;
   rootLayoutId?: string | null;
   caseId?: string | null;
@@ -785,6 +794,7 @@ function buildSnapshotImageRenderBody(
     scene_reference_mode: request.sceneReferenceMode ?? 'none',
     user_prompt: request.userPrompt,
     render_mode: request.renderMode ?? 'generate',
+    render_flow: request.renderFlow ?? 'default',
     preset_selection: request.presetSelection ?? {},
     root_layout_id: request.rootLayoutId ?? null,
     case_id: request.caseId ?? null,

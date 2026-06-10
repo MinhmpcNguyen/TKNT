@@ -6,9 +6,11 @@ import signal
 import subprocess
 import sys
 import time
-from contextlib import ExitStack
 from collections.abc import Mapping
+from contextlib import ExitStack
 from pathlib import Path
+
+from evaluation.layout_benchmark.cache_env import configure_fresh_cache_env
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BENCHMARK_DIR.parents[1]
@@ -51,6 +53,8 @@ def run_external_case(
     attempts: list[dict[str, object]] = []
     for attempt_number in range(1, max_attempts + 1):
         _unlink_if_exists(output_path)
+        attempt_env = dict(env)
+        configure_fresh_cache_env(attempt_env, output_path.parent)
         started = time.perf_counter()
         try:
             with ExitStack() as stack:
@@ -67,7 +71,7 @@ def run_external_case(
                 completed = subprocess.run(
                     command,
                     cwd=cwd,
-                    env=env,
+                    env=attempt_env,
                     text=True,
                     stdout=stdout_target,
                     stderr=stderr_file,
@@ -230,11 +234,11 @@ def _external_command(
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["MPLBACKEND"] = "Agg"
-    _configure_writable_cache_env(env, output_path.parent)
 
     system_id = _canonical_system_id(system_id)
     locked_model = model or DEFAULT_MODEL
     if system_id == "idesign_openai":
+        env["IDESIGN_DISABLE_CACHE"] = "1"
         env["IDESIGN_USE_OPENAI"] = "true"
         env["IDESIGN_OPENAI_MODEL"] = env.get("IDESIGN_OPENAI_MODEL") or locked_model
         cwd = REPO_ROOT / "other_systems" / "IDesign"
@@ -543,15 +547,6 @@ def _returncode_summary(returncode: int) -> str:
     except ValueError:
         signal_name = f"signal_{signal_number}"
     return f"killed_by_{signal_name}"
-
-
-def _configure_writable_cache_env(env: dict[str, str], run_dir: Path) -> None:
-    cache_dir = run_dir / ".cache"
-    matplotlib_dir = cache_dir / "matplotlib"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    matplotlib_dir.mkdir(parents=True, exist_ok=True)
-    env.setdefault("XDG_CACHE_HOME", str(cache_dir))
-    env.setdefault("MPLCONFIGDIR", str(matplotlib_dir))
 
 
 def _unlink_if_exists(path: Path) -> None:

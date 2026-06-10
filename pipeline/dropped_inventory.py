@@ -64,7 +64,7 @@ _ACCESSORY_DECOR_TYPES = frozenset(
         "wall_art",
     }
 )
-_ACCESSORY_REFILL_SKIP_TYPES = frozenset({"throw_blanket"})
+_ACCESSORY_REFILL_SKIP_TYPES = frozenset({"cushion", "throw_blanket"})
 _FUNCTIONAL_CORE_TYPES = frozenset(
     {
         "bathroom_core",

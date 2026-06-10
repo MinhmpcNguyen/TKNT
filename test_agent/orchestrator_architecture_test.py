@@ -380,6 +380,38 @@ class _FakeObjectLevelSolver:
 
 
 class OrchestratorArchitectureTest(unittest.TestCase):
+    def test_layout_variants_copy_orientation_into_styled_output(self) -> None:
+        payload = orchestrator._build_layout_variants_payload_from_final_candidates(
+            [
+                {
+                    "absolute_layout": {
+                        "objects": [
+                            {
+                                "object_id": "bed",
+                                "rotation_ccw": 270,
+                                "front_world": {"dx": -1, "dy": 0},
+                                "front_side_world": "left",
+                            }
+                        ]
+                    },
+                    "styled_result": {
+                        "objects": [
+                            {
+                                "instance_id": "bed",
+                                "object_type": "bed",
+                            }
+                        ]
+                    },
+                }
+            ],
+            status="OK",
+        )
+
+        bed = payload["variants"][0]["styled_result"]["objects"][0]
+        self.assertEqual(bed["rotation_ccw"], 270)
+        self.assertEqual(bed["front_world"], {"dx": -1, "dy": 0})
+        self.assertEqual(bed["front_side_world"], "left")
+
     def test_requested_non_functional_specs_use_stylist_place_on_methods(
         self,
     ) -> None:
@@ -1425,6 +1457,106 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         self.assertEqual(solve_result.bundles, [])
         self.assertTrue(solve_result.failure_diagnostics)
         self.assertLessEqual(len(solver.calls), 4)
+
+    def test_no_concept_repair_ablation_skips_repair_attempts(self) -> None:
+        solver = _FakeObjectLevelSolver(
+            [
+                _unsat_solver_output(
+                    reasons=["view_corridor_blocked"],
+                    offenders=["work_study"],
+                    raw_solution_count=0,
+                ),
+                _ok_object_solver_output(),
+            ]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "daylight"},
+            relation_plan=_repair_relation_plan(),
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=_repair_merged_output(),
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="no_concept_repair",
+        )
+
+        self.assertEqual(solve_result.bundles, [])
+        self.assertTrue(solve_result.failure_diagnostics)
+        self.assertEqual(len(solver.calls), 1)
+
+    def test_no_stylist_llm_ablation_applies_empty_style_plan(self) -> None:
+        class _FakeStylist:
+            def __init__(self) -> None:
+                self.generate_calls = 0
+                self.applied_style_plan: dict[str, object] | None = None
+
+            def generate_style_plan(self, **_kwargs: object) -> dict[str, object]:
+                self.generate_calls += 1
+                raise AssertionError("style LLM should be skipped")
+
+            def apply_style_plan(self, **kwargs: object) -> dict[str, object]:
+                style_plan = kwargs.get("style_plan")
+                self.applied_style_plan = (
+                    dict(style_plan) if isinstance(style_plan, dict) else None
+                )
+                return {"room": {}, "objects": []}
+
+        stylist = _FakeStylist()
+
+        result = orchestrator._style_judged_variant_bundle(
+            bundle={
+                "absolute_layout": {"status": "OK", "objects": []},
+                "source": "concept:1",
+            },
+            stylist=stylist,
+            stylist_user_context_json={},
+            stylist_tenant_id=None,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="no_stylist_llm",
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(stylist.generate_calls, 0)
+        self.assertEqual(stylist.applied_style_plan, {})
+        assert result is not None
+        self.assertEqual(result["stylist_model_name"], "deterministic_fallback")
+
+    def test_no_accessory_refill_ablation_returns_bundle_unchanged(self) -> None:
+        bundle = {
+            "absolute_layout": {"status": "OK", "objects": []},
+            "cluster_output": {"clusters": []},
+            "dropped_inventory_by_cluster": {"cluster": []},
+        }
+
+        result = orchestrator._refill_judged_variant_accessories(
+            bundle=bundle,
+            room_output={"room": {"room_id": "room_1"}},
+            variant_index=1,
+            ablation_mode="no_accessory_refill",
+        )
+
+        self.assertIs(result, bundle)
+
+    def test_no_gallery_selector_ablation_keeps_solver_order(self) -> None:
+        def _raise_selector(**_kwargs: object) -> list[dict[str, object]]:
+            raise AssertionError("gallery selector should be skipped")
+
+        original_selector = orchestrator.select_distinct_final_gallery_candidates
+        orchestrator.select_distinct_final_gallery_candidates = _raise_selector
+        try:
+            selected = orchestrator._select_final_styling_candidates(
+                [{"id": "first"}, {"id": "second"}],
+                max_variants=1,
+                ablation_mode="no_gallery_selector",
+            )
+        finally:
+            orchestrator.select_distinct_final_gallery_candidates = original_selector
+
+        self.assertEqual(selected, [{"id": "first"}])
 
 
 if __name__ == "__main__":

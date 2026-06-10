@@ -29,6 +29,9 @@ class LayoutItem:
     object_type: str
     polygon: tuple[Point2D, ...]
     rotation_degrees: float = 0.0
+    front_world: Mapping[str, object] | None = None
+    front_side_world: str | None = None
+    axis_world: Mapping[str, object] | None = None
     raw: Mapping[str, object] = field(default_factory=dict)
 
 
@@ -60,13 +63,20 @@ def opening_to_json(opening: OpeningSegment) -> JsonDict:
 
 
 def item_to_json(item: LayoutItem) -> JsonDict:
-    return {
+    payload: JsonDict = {
         "id": item.object_id,
         "type": item.object_type,
         "polygon": [point_to_json(point) for point in item.polygon],
         "rotation_degrees": item.rotation_degrees,
         "raw": dict(item.raw),
     }
+    if item.front_world is not None:
+        payload["front_world"] = dict(item.front_world)
+    if item.front_side_world is not None:
+        payload["front_side_world"] = item.front_side_world
+    if item.axis_world is not None:
+        payload["axis_world"] = dict(item.axis_world)
+    return payload
 
 
 def normalized_layout_to_json(layout: NormalizedLayout) -> JsonDict:

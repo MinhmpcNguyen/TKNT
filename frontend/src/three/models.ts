@@ -41,6 +41,8 @@ export type GlbFitStrategy =
   | 'footprint-uniform'
   | 'wall-plane-uniform';
 
+export type GlbHorizontalAnchor = 'bbox-center' | 'bottom-center';
+
 export type InventoryModelPreviewOverride = {
   enabled: boolean;
   contexts: string[];
@@ -129,6 +131,7 @@ type BuildGlbPreviewModelParams = {
   colorHex?: string | null;
   preserveMaterialTextures?: boolean;
   minimumHorizontalAspectRatio?: number | null;
+  horizontalAnchor?: GlbHorizontalAnchor;
 };
 
 const DIRECT_MODEL_KEYS = [
@@ -180,6 +183,22 @@ const URL_VALUE_KEYS = [
   'gltf_path',
   'gltfPath',
 ];
+const GLB_PREVIEW_LOAD_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Timed out loading GLB model "${label}" after ${timeoutMs / 1000}s.`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  });
+}
 
 const SCALE_VALUE_KEYS = ['scale', 'preview_scale', 'previewScale', 'model_scale', 'modelScale'];
 const ROTATION_VALUE_KEYS = [
@@ -288,6 +307,77 @@ function computePreviewBounds(THREE: any, root: any): any {
     mergedBox.union(entry.box);
   }
   return mergedBox;
+}
+
+function computeBottomCenterHorizontalAnchor(
+  THREE: any,
+  root: any,
+  fittedBox: any
+): { x: number; z: number } | null {
+  const fittedSize = fittedBox.getSize(new THREE.Vector3());
+  const bottomLimitY = fittedBox.min.y + Math.max(0.02, fittedSize.y * 0.08);
+  const horizontalMargin = Math.max(0.01, Math.max(fittedSize.x, fittedSize.z) * 0.02);
+  const point = new THREE.Vector3();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  let includedPointCount = 0;
+
+  root?.traverse?.((node: any) => {
+    const position = node?.geometry?.attributes?.position;
+    if (!node?.isMesh || !position || typeof position.count !== 'number') {
+      return;
+    }
+    node.updateMatrixWorld?.(true);
+    for (let index = 0; index < position.count; index += 1) {
+      point.fromBufferAttribute(position, index).applyMatrix4(node.matrixWorld);
+      if (
+        point.y > bottomLimitY ||
+        point.x < fittedBox.min.x - horizontalMargin ||
+        point.x > fittedBox.max.x + horizontalMargin ||
+        point.z < fittedBox.min.z - horizontalMargin ||
+        point.z > fittedBox.max.z + horizontalMargin
+      ) {
+        continue;
+      }
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minZ = Math.min(minZ, point.z);
+      maxZ = Math.max(maxZ, point.z);
+      includedPointCount += 1;
+    }
+  });
+
+  if (includedPointCount < 3 || !Number.isFinite(minX + maxX + minZ + maxZ)) {
+    return null;
+  }
+
+  return {
+    x: (minX + maxX) / 2,
+    z: (minZ + maxZ) / 2,
+  };
+}
+
+function resolveHorizontalPreviewAnchorPoint(params: {
+  THREE: any;
+  root: any;
+  fittedBox: any;
+  horizontalAnchor: GlbHorizontalAnchor;
+}): { x: number; z: number } {
+  const center = params.fittedBox.getCenter(new params.THREE.Vector3());
+  if (params.horizontalAnchor === 'bottom-center') {
+    return (
+      computeBottomCenterHorizontalAnchor(params.THREE, params.root, params.fittedBox) ?? {
+        x: center.x,
+        z: center.z,
+      }
+    );
+  }
+  return {
+    x: center.x,
+    z: center.z,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1020,6 +1110,7 @@ export async function buildGlbPreviewModel(
     colorHex = null,
     preserveMaterialTextures = false,
     minimumHorizontalAspectRatio = null,
+    horizontalAnchor = 'bbox-center',
   } = params;
 
   let gltfPromise = gltfPromiseCache.get(descriptor.url);
@@ -1033,7 +1124,11 @@ export async function buildGlbPreviewModel(
     if (ktx2Loader && typeof loader.setKTX2Loader === 'function') {
       loader.setKTX2Loader(ktx2Loader);
     }
-    gltfPromise = loader.loadAsync(descriptor.url).catch((error: unknown) => {
+    gltfPromise = withTimeout(
+      loader.loadAsync(descriptor.url),
+      GLB_PREVIEW_LOAD_TIMEOUT_MS,
+      descriptor.url
+    ).catch((error: unknown) => {
       gltfPromiseCache.delete(descriptor.url);
       throw error;
     });
@@ -1215,9 +1310,14 @@ export async function buildGlbPreviewModel(
 
   visualRoot.updateMatrixWorld(true);
   const fittedBox = computePreviewBounds(THREE, visualRoot);
-  const fittedCenter = fittedBox.getCenter(new THREE.Vector3());
-  visualRoot.position.x -= fittedCenter.x;
-  visualRoot.position.z -= fittedCenter.z;
+  const horizontalAnchorPoint = resolveHorizontalPreviewAnchorPoint({
+    THREE,
+    root: visualRoot,
+    fittedBox,
+    horizontalAnchor,
+  });
+  visualRoot.position.x -= horizontalAnchorPoint.x;
+  visualRoot.position.z -= horizontalAnchorPoint.z;
   visualRoot.position.y -= fittedBox.min.y;
   visualRoot.updateMatrixWorld(true);
 

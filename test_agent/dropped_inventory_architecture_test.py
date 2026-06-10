@@ -337,7 +337,9 @@ class DroppedInventoryArchitectureTest(unittest.TestCase):
             ),
             120.0,
         )
-        self.assertIn(inserted.get("front_side_world"), {"top", "bottom", "left", "right"})
+        self.assertIn(
+            inserted.get("front_side_world"), {"top", "bottom", "left", "right"}
+        )
         self.assertIsInstance(inserted.get("front_world"), dict)
 
     def test_reintroduced_object_is_skipped_when_only_center_gap_remains(self) -> None:
@@ -418,9 +420,36 @@ class DroppedInventoryArchitectureTest(unittest.TestCase):
             ),
             120.0,
         )
-        self.assertIn(inserted.get("front_side_world"), {"top", "bottom", "left", "right"})
+        self.assertIn(
+            inserted.get("front_side_world"), {"top", "bottom", "left", "right"}
+        )
         self.assertIsInstance(inserted.get("front_world"), dict)
         self.assertFalse(dropped_inventory._overlaps_blockers(polygon, blockers))
+
+    def test_controlled_accessory_refill_rejects_cushion(self) -> None:
+        absolute_layout, summary = dropped_inventory.controlled_accessory_refill(
+            room_output=_room_output(),
+            absolute_layout=_absolute_layout(),
+            cluster_output=_cluster_output(),
+            dropped_inventory_by_cluster={
+                "seating_zone": [
+                    {
+                        "object_type": "cushion",
+                        "category": "decor",
+                        "rep_dims_m": {"L": 0.42, "W": 0.32},
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(len(absolute_layout["objects"]), 1)
+        self.assertEqual(summary["refill_count"], 0)
+        self.assertEqual(
+            summary["rejected_refill_objects_by_cluster"]["seating_zone"][0][
+                "refill_rejected_reason"
+            ],
+            "accessory_refill_type_disabled",
+        )
 
 
 if __name__ == "__main__":

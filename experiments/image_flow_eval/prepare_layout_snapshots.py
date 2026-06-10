@@ -64,6 +64,11 @@ class CameraCandidate:
     details: JSONObject
     snapshot_artifact: Mapping[str, object]
     clean_snapshot_image_data_url: str
+    depth_map_image_data_url: str | None = None
+    edge_map_image_data_url: str | None = None
+    segmentation_map_image_data_url: str | None = None
+    instance_outline_image_data_url: str | None = None
+    instance_outline_overlay_image_data_url: str | None = None
 
 
 class CdpError(RuntimeError):
@@ -448,6 +453,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     artifact=artifact,
                     max_camera_presets=max(0, args.max_camera_presets),
                     capture_timeout_s=args.capture_timeout_s,
+                    reuse_selected_camera_preset=args.reuse_selected_camera_preset,
                 )
                 print(f"Snapshot ready: {artifact.case.case_id}")
             except Exception as exc:
@@ -535,6 +541,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Optional cap for camera presets captured/scored per layout. "
             "0 means all camera presets."
+        ),
+    )
+    parser.add_argument(
+        "--reuse-selected-camera-preset",
+        action="store_true",
+        help=(
+            "Capture only the camera preset saved in each case's existing "
+            "snapshot_meta.json selected_preset.id."
         ),
     )
     parser.add_argument(
@@ -668,7 +682,18 @@ def _prepare_benchmark_run_layout(
         benchmark_case=benchmark_case,
         pipeline_payload=pipeline_payload,
         option_index=option_index,
+        module_outputs_dir=run_dir / "module_outputs",
     )
+    inventory_report = _layout_inventory_integrity_report(
+        pipeline_payload=pipeline_payload,
+        layout_payload=layout_payload,
+    )
+    _write_json(case_output_dir / "inventory_integrity_report.json", inventory_report)
+    if inventory_report.get("status") == "failed":
+        raise RuntimeError(
+            "Imported benchmark layout inventory drifted from output.json. "
+            f"See {case_output_dir / 'inventory_integrity_report.json'}."
+        )
     _write_json(layout_path, layout_payload)
 
     score = (
@@ -773,25 +798,25 @@ def _build_layout_payload(
     benchmark_case: BenchmarkCase,
     pipeline_payload: Mapping[str, object],
     option_index: int,
+    module_outputs_dir: Path | None = None,
 ) -> JSONObject:
     case_dir = _pipeline_case_dir(pipeline_payload, benchmark_case.case_id)
+    artifact_dir = module_outputs_dir or case_dir / "module_outputs"
     absolute_layout = _first_json_mapping(
         (
-            case_dir / "module_outputs" / "absolute_layout.json",
+            artifact_dir / "absolute_layout.json",
             case_dir / "07_absolute_layout.json",
         )
     )
     styled_result = _first_json_mapping(
         (
-            case_dir / "module_outputs" / "stylist.json",
+            artifact_dir / "stylist.json",
             case_dir / "08_stylist.json",
         )
     )
     if not styled_result:
         styled_result = _mapping(pipeline_payload.get("final_output"))
-    layout_variants = _first_json_mapping(
-        (case_dir / "module_outputs" / "layout_variants.json",)
-    )
+    layout_variants = _first_json_mapping((artifact_dir / "layout_variants.json",))
     room_payload = _room_payload_for_case(benchmark_case)
     drafts = build_saved_layout_option_drafts(
         case_id=benchmark_case.case_id,
@@ -829,12 +854,83 @@ def _build_layout_payload(
     return payload
 
 
+def _layout_inventory_integrity_report(
+    *,
+    pipeline_payload: Mapping[str, object],
+    layout_payload: Mapping[str, object],
+) -> JSONObject:
+    final_output = _mapping(pipeline_payload.get("final_output"))
+    styled_result = _mapping(layout_payload.get("styled_result"))
+    design = _mapping(layout_payload.get("design"))
+    final_ids = _object_inventory_ids(final_output.get("objects"))
+    styled_ids = _object_inventory_ids(styled_result.get("objects"))
+    design_ids = _object_inventory_ids(design.get("placements"))
+    if not final_ids or not styled_ids or not design_ids:
+        return {
+            "status": "failed",
+            "reason": "inventory_ids_missing",
+            "final_output_ids": final_ids,
+            "styled_result_ids": styled_ids,
+            "design_placement_ids": design_ids,
+        }
+    final_set = set(final_ids)
+    styled_set = set(styled_ids)
+    design_set = set(design_ids)
+    duplicate_ids = sorted(
+        {
+            object_id
+            for object_ids in (final_ids, styled_ids, design_ids)
+            for object_id in object_ids
+            if object_ids.count(object_id) > 1
+        }
+    )
+    extra_styled_ids = sorted(styled_set - final_set)
+    missing_styled_ids = sorted(final_set - styled_set)
+    extra_design_ids = sorted(design_set - styled_set)
+    missing_design_ids = sorted(styled_set - design_set)
+    passed = not (
+        duplicate_ids
+        or extra_styled_ids
+        or missing_styled_ids
+        or extra_design_ids
+        or missing_design_ids
+    )
+    return {
+        "status": "passed" if passed else "failed",
+        "reason": "inventory_match" if passed else "inventory_drift",
+        "final_output_ids": final_ids,
+        "styled_result_ids": styled_ids,
+        "design_placement_ids": design_ids,
+        "duplicate_ids": duplicate_ids,
+        "extra_styled_ids": extra_styled_ids,
+        "missing_styled_ids": missing_styled_ids,
+        "extra_design_ids": extra_design_ids,
+        "missing_design_ids": missing_design_ids,
+    }
+
+
+def _object_inventory_ids(value: object) -> list[str]:
+    object_ids: list[str] = []
+    for item in _sequence(value):
+        payload = _mapping(item)
+        object_id = (
+            _string(payload.get("instance_id"))
+            or _string(payload.get("placement_id"))
+            or _string(payload.get("object_id"))
+            or _string(payload.get("id"))
+        )
+        if object_id:
+            object_ids.append(object_id)
+    return object_ids
+
+
 def _capture_layout_snapshot(
     *,
     chrome: ChromeSession,
     artifact: LayoutArtifact,
     max_camera_presets: int,
     capture_timeout_s: float,
+    reuse_selected_camera_preset: bool,
 ) -> None:
     layout = _read_json_mapping(artifact.layout_path)
     eval_payload = {
@@ -860,9 +956,25 @@ def _capture_layout_snapshot(
         for item in _sequence(presets_value)
         if _string(_mapping(item).get("id"))
     ]
-    if max_camera_presets:
-        presets = presets[:max_camera_presets]
+    selected_preset_id = (
+        _load_selected_camera_preset_id(artifact.case_output_dir)
+        if reuse_selected_camera_preset
+        else None
+    )
+    if reuse_selected_camera_preset and not selected_preset_id:
+        raise RuntimeError(
+            "No selected camera preset found in existing snapshot_meta.json."
+        )
+    presets = _camera_presets_for_capture(
+        presets=presets,
+        selected_preset_id=selected_preset_id,
+        max_camera_presets=max_camera_presets,
+    )
     if not presets:
+        if selected_preset_id:
+            raise RuntimeError(
+                f"Selected camera preset is not available: {selected_preset_id}"
+            )
         raise RuntimeError("No 3D camera presets are available for this layout.")
 
     candidates: list[CameraCandidate] = []
@@ -894,6 +1006,17 @@ def _capture_layout_snapshot(
                 details=details,
                 snapshot_artifact=snapshot_artifact,
                 clean_snapshot_image_data_url=data_url,
+                depth_map_image_data_url=_string(capture.get("depthMapImageDataUrl")),
+                edge_map_image_data_url=_string(capture.get("edgeMapImageDataUrl")),
+                segmentation_map_image_data_url=_string(
+                    capture.get("segmentationMapImageDataUrl")
+                ),
+                instance_outline_image_data_url=_string(
+                    capture.get("instanceOutlineImageDataUrl")
+                ),
+                instance_outline_overlay_image_data_url=_string(
+                    capture.get("instanceOutlineOverlayImageDataUrl")
+                ),
             )
         )
 
@@ -913,6 +1036,11 @@ def _capture_layout_snapshot(
         best.clean_snapshot_image_data_url,
         artifact.case_output_dir / "snapshot.png",
     )
+    selected_geometry_maps = _write_snapshot_geometry_maps(
+        candidate=best,
+        output_dir=artifact.case_output_dir,
+        file_prefix=None,
+    )
     _write_json(
         artifact.case_output_dir / "snapshot_payload.json",
         best.snapshot_artifact,
@@ -929,6 +1057,7 @@ def _capture_layout_snapshot(
                 camera_index_path,
                 artifact.case_output_dir,
             ),
+            "geometry_maps": selected_geometry_maps,
             "candidates": [
                 {
                     "preset": _json_value(candidate.preset),
@@ -939,6 +1068,32 @@ def _capture_layout_snapshot(
             ],
         },
     )
+
+
+def _load_selected_camera_preset_id(case_output_dir: Path) -> str | None:
+    meta_path = case_output_dir / "snapshot_meta.json"
+    if not meta_path.exists():
+        return None
+    snapshot_meta = _read_json_mapping(meta_path)
+    selected_preset = _mapping(snapshot_meta.get("selected_preset"))
+    return _string(selected_preset.get("id"))
+
+
+def _camera_presets_for_capture(
+    *,
+    presets: Sequence[Mapping[str, object]],
+    selected_preset_id: str | None,
+    max_camera_presets: int,
+) -> list[Mapping[str, object]]:
+    if selected_preset_id:
+        return [
+            preset
+            for preset in presets
+            if _string(preset.get("id")) == selected_preset_id
+        ]
+    if max_camera_presets:
+        return list(presets[:max_camera_presets])
+    return list(presets)
 
 
 def _write_camera_snapshot_gallery(
@@ -961,6 +1116,11 @@ def _write_camera_snapshot_gallery(
         payload_path = camera_dir / f"{file_stem}.snapshot_payload.json"
         _write_data_url_png(candidate.clean_snapshot_image_data_url, image_path)
         _write_json(payload_path, candidate.snapshot_artifact)
+        geometry_maps = _write_snapshot_geometry_maps(
+            candidate=candidate,
+            output_dir=camera_dir,
+            file_prefix=file_stem,
+        )
         entries.append(
             {
                 "preset": _json_value(candidate.preset),
@@ -968,6 +1128,7 @@ def _write_camera_snapshot_gallery(
                 "score_details": candidate.details,
                 "snapshot_payload": _relative_path(payload_path, camera_dir),
                 "snapshot_image": _relative_path(image_path, camera_dir),
+                "geometry_maps": geometry_maps,
                 "selected": candidate is selected_candidate,
             }
         )
@@ -1435,6 +1596,36 @@ def _write_data_url_png(data_url: str, output_path: Path) -> None:
         raise ValueError(f"Expected image/png data URL, got {mime_type}.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(base64.b64decode(image_base64))
+
+
+def _write_snapshot_geometry_maps(
+    *,
+    candidate: CameraCandidate,
+    output_dir: Path,
+    file_prefix: str | None,
+) -> JSONObject:
+    entries: JSONObject = {}
+    for key, data_url in (
+        ("depth_map", candidate.depth_map_image_data_url),
+        ("edge_map", candidate.edge_map_image_data_url),
+        ("segmentation_map", candidate.segmentation_map_image_data_url),
+        ("instance_outline_guide", candidate.instance_outline_image_data_url),
+        ("instance_outline_overlay", candidate.instance_outline_overlay_image_data_url),
+    ):
+        filename = f"{file_prefix}.{key}.png" if file_prefix else f"{key}.png"
+        output_path = output_dir / filename
+        if _write_optional_data_url_png(data_url, output_path):
+            entries[key] = filename
+        else:
+            entries[key] = None
+    return entries
+
+
+def _write_optional_data_url_png(data_url: str | None, output_path: Path) -> bool:
+    if not data_url:
+        return False
+    _write_data_url_png(data_url, output_path)
+    return True
 
 
 def _clip_screen_box(

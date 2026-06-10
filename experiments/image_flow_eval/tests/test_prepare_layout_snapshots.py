@@ -10,7 +10,11 @@ from experiments.image_flow_eval.prepare_layout_snapshots import (
     CameraCandidate,
     LayoutArtifact,
     SkippedLayoutCase,
+    _build_layout_payload,
+    _camera_presets_for_capture,
+    _layout_inventory_integrity_report,
     _load_benchmark_run_cases,
+    _load_selected_camera_preset_id,
     _prepare_layout_artifact,
     _score_snapshot_candidate,
     _select_cases,
@@ -216,6 +220,133 @@ class PrepareLayoutSnapshotsTest(unittest.TestCase):
             )
             self.assertTrue(payload["snapshots"][1]["selected"])
 
+    def test_write_camera_snapshot_gallery_saves_geometry_maps(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case_dir = root / "case_1"
+            case_dir.mkdir()
+            artifact = LayoutArtifact(
+                case=_case("case_1"),
+                case_output_dir=case_dir,
+                layout_path=case_dir / "layout.json",
+                pipeline_output_path=case_dir / "pipeline_output.json",
+            )
+            data_url = _candidate(
+                "mid-corner-1", score=10.0
+            ).clean_snapshot_image_data_url
+            candidate = CameraCandidate(
+                preset={"id": "mid-corner-1", "group": "mid"},
+                score=10.0,
+                details={"visible_object_count": 1},
+                snapshot_artifact={"visibleObjectCount": 1},
+                clean_snapshot_image_data_url=data_url,
+                depth_map_image_data_url=data_url,
+                edge_map_image_data_url=data_url,
+                segmentation_map_image_data_url=data_url,
+                instance_outline_image_data_url=data_url,
+                instance_outline_overlay_image_data_url=data_url,
+            )
+
+            index_path = _write_camera_snapshot_gallery(
+                artifact=artifact,
+                candidates=[candidate],
+                selected_candidate=candidate,
+            )
+
+            camera_dir = case_dir / "camera_snapshots"
+            payload = json.loads(index_path.read_text(encoding="utf-8"))
+            geometry_maps = payload["snapshots"][0]["geometry_maps"]
+            self.assertTrue((camera_dir / geometry_maps["depth_map"]).is_file())
+            self.assertTrue((camera_dir / geometry_maps["edge_map"]).is_file())
+            self.assertTrue((camera_dir / geometry_maps["segmentation_map"]).is_file())
+            self.assertTrue(
+                (camera_dir / geometry_maps["instance_outline_guide"]).is_file()
+            )
+            self.assertTrue(
+                (camera_dir / geometry_maps["instance_outline_overlay"]).is_file()
+            )
+
+    def test_load_selected_camera_preset_id_reads_existing_meta(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "snapshot_meta.json").write_text(
+                json.dumps({"selected_preset": {"id": "mid-corner-3"}}),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                _load_selected_camera_preset_id(root),
+                "mid-corner-3",
+            )
+
+    def test_camera_presets_for_capture_reuses_selected_preset_only(self) -> None:
+        presets = [
+            {"id": "mid-corner-1"},
+            {"id": "mid-corner-2"},
+            {"id": "mid-corner-3"},
+        ]
+
+        selected = _camera_presets_for_capture(
+            presets=presets,
+            selected_preset_id="mid-corner-2",
+            max_camera_presets=1,
+        )
+
+        self.assertEqual(selected, [{"id": "mid-corner-2"}])
+
+    def test_build_layout_payload_uses_explicit_module_outputs_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stale_dir = root / "stale"
+            fresh_dir = root / "fresh"
+            (stale_dir / "module_outputs").mkdir(parents=True)
+            fresh_dir.mkdir()
+            _write_layout_variants(
+                stale_dir / "module_outputs" / "layout_variants.json",
+                ["sofa", "armchair_2"],
+            )
+            _write_layout_variants(
+                fresh_dir / "layout_variants.json",
+                ["sofa"],
+            )
+
+            payload = _build_layout_payload(
+                benchmark_case=_case("case_1"),
+                pipeline_payload={"case_dir": str(stale_dir)},
+                option_index=1,
+                module_outputs_dir=fresh_dir,
+            )
+
+        styled_objects = payload["styled_result"]["objects"]
+        self.assertEqual(
+            [item["instance_id"] for item in styled_objects],
+            ["sofa"],
+        )
+
+    def test_layout_inventory_integrity_report_rejects_extra_object(self) -> None:
+        report = _layout_inventory_integrity_report(
+            pipeline_payload={
+                "final_output": {"objects": [{"instance_id": "sofa"}]},
+            },
+            layout_payload={
+                "styled_result": {
+                    "objects": [
+                        {"instance_id": "sofa"},
+                        {"instance_id": "armchair_2"},
+                    ]
+                },
+                "design": {
+                    "placements": [
+                        {"placement_id": "sofa"},
+                        {"placement_id": "armchair_2"},
+                    ]
+                },
+            },
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["extra_styled_ids"], ["armchair_2"])
+
 
 def _case(case_id: str) -> BenchmarkCase:
     return BenchmarkCase(
@@ -225,9 +356,40 @@ def _case(case_id: str) -> BenchmarkCase:
             "user_input": {
                 "description": f"Description for {case_id}",
                 "room_type": "living_room",
+                "shape_points": [
+                    {"x": 0, "y": 0},
+                    {"x": 1000, "y": 0},
+                    {"x": 1000, "y": 1000},
+                    {"x": 0, "y": 1000},
+                ],
             }
         },
         raw={"case_id": case_id},
+    )
+
+
+def _write_layout_variants(path: Path, object_ids: list[str]) -> None:
+    objects = [
+        {
+            "instance_id": object_id,
+            "object_type": object_id,
+            "bbox": {"min_x": 0, "min_y": 0, "max_x": 100, "max_y": 100},
+        }
+        for object_id in object_ids
+    ]
+    path.write_text(
+        json.dumps(
+            {
+                "variants": [
+                    {
+                        "variant_id": "variant_1",
+                        "styled_result": {"objects": objects},
+                        "absolute_layout": {},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
     )
 
 

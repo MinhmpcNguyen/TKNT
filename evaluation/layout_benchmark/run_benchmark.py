@@ -13,6 +13,10 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
+from evaluation.layout_benchmark.cache_env import (
+    clear_run_cache,
+    configure_fresh_cache_env,
+)
 from evaluation.layout_benchmark.external_runners import run_external_case
 from evaluation.layout_benchmark.normalize import load_output_payload, normalize_payload
 from evaluation.layout_benchmark.schema import normalized_layout_to_json
@@ -42,9 +46,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("plan", "run", "score"),
+        choices=("plan", "run", "resume", "score"),
         default="plan",
-        help="plan writes the schedule, run executes TKNT systems, score scores existing outputs.",
+        help=(
+            "plan writes the schedule, run executes systems from scratch, "
+            "resume skips completed outputs, score scores existing outputs."
+        ),
     )
     parser.add_argument(
         "--cases",
@@ -93,13 +100,19 @@ def main() -> int:
         help="Where TKNT pipeline case artifacts are written.",
     )
     parser.add_argument("--user", default="benchmark_user")
-    parser.add_argument("--timeout-s", type=int, default=3600)
+    parser.add_argument(
+        "--timeout-s",
+        type=int,
+        default=1200,
+        help="Per-run subprocess timeout in seconds. Defaults to 20 minutes.",
+    )
     parser.add_argument(
         "--external-timeout-s",
         type=int,
         default=None,
         help=(
-            "Optional timeout for IDesign/FlairGPT subprocesses. Use 0 to disable it."
+            "Optional timeout for IDesign/FlairGPT subprocesses. "
+            "Defaults to --timeout-s. Use 0 to disable it."
         ),
     )
     parser.add_argument(
@@ -149,7 +162,7 @@ def main() -> int:
         print(f"Wrote benchmark plan: {output_root / 'run_plan.jsonl'}")
         return 0
 
-    if args.mode == "run":
+    if args.mode in {"run", "resume"}:
         _run_plan(
             plan_rows=plan_rows,
             cases=cases,
@@ -168,6 +181,7 @@ def main() -> int:
             model=args.model,
             idesign_objects=max(1, args.idesign_objects),
             external_max_attempts=max(1, args.external_max_attempts),
+            resume=args.mode == "resume",
         )
 
     score_rows = _score_plan(
@@ -180,6 +194,7 @@ def main() -> int:
     )
     _write_jsonl(output_root / "scores.jsonl", score_rows)
     _write_summary(output_root, score_rows)
+    _write_ablation_summary(output_root, score_rows)
     print(f"Wrote benchmark scores: {output_root / 'scores.jsonl'}")
     return 0
 
@@ -315,14 +330,22 @@ def _run_plan(
     model: str,
     idesign_objects: int,
     external_max_attempts: int,
+    resume: bool,
 ) -> None:
-    _ = output_root
     system_by_id = {system.system_id: system for system in systems}
     case_by_id = {_case_id(benchmark_case): benchmark_case for benchmark_case in cases}
     pending_external: list[dict[str, object]] = []
+    skipped_rows: list[dict[str, object]] = []
+    processed_count = 0
     for index, row in enumerate(plan_rows):
-        if max_runs and index >= max_runs:
+        if not resume and max_runs and index >= max_runs:
             break
+        if resume and _resume_output_complete(row):
+            skipped_rows.append(_resume_skip_summary(row))
+            continue
+        if resume and max_runs and processed_count >= max_runs:
+            break
+        processed_count += 1
         system = system_by_id[_string(row.get("system_id"))]
         benchmark_case = case_by_id[_string(row.get("case_id"))]
         output_path = Path(_string(row.get("output_path")))
@@ -371,6 +394,21 @@ def _run_plan(
             payload = load_output_payload(source_path)
             _write_json(output_path, payload)
     _write_jsonl(output_root / "pending_external_jobs.jsonl", pending_external)
+    if resume:
+        _write_json(
+            output_root / "resume_report.json",
+            {
+                "skipped_count": len(skipped_rows),
+                "processed_count": processed_count,
+                "pending_external_count": len(pending_external),
+                "skipped": skipped_rows,
+            },
+        )
+        print(
+            "Resume skipped "
+            f"{len(skipped_rows)} completed run(s), processed "
+            f"{processed_count} remaining run(s)."
+        )
 
 
 def _run_external_case(
@@ -430,7 +468,7 @@ def _run_tknt_case(
     env["TKNT_BENCHMARK_TEXT_MODEL"] = locked_model
     if system.ablation:
         env["TKNT_ABLATION_MODE"] = system.ablation
-    _configure_writable_cache_env(env, output_path.parent)
+    configure_fresh_cache_env(env, output_path.parent)
 
     command = [
         env.get("TKNT_PYTHON") or sys.executable,
@@ -611,7 +649,10 @@ def _score_tknt_final_variants(
 ) -> dict[str, object] | None:
     if system.normalizer != "tknt":
         return None
-    variants_payload = _load_tknt_layout_variants(payload)
+    variants_payload = _load_tknt_layout_variants(
+        payload=payload,
+        run_dir=output_path.parent,
+    )
     if variants_payload is None:
         return None
     variants = [
@@ -767,6 +808,30 @@ def _failed_output_score(
     return score
 
 
+def _resume_output_complete(row: Mapping[str, object]) -> bool:
+    output_value = _string(row.get("output_path"))
+    if not output_value:
+        return False
+    output_path = Path(output_value)
+    if not output_path.is_file():
+        return False
+    try:
+        load_output_payload(output_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return True
+
+
+def _resume_skip_summary(row: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "run_id": _string(row.get("run_id")),
+        "case_id": _string(row.get("case_id")),
+        "system_id": _string(row.get("system_id")),
+        "output_path": _string(row.get("output_path")),
+        "reason": "output_exists",
+    }
+
+
 def _attach_llm_retry_report(
     score: dict[str, object],
     payload: object,
@@ -788,21 +853,44 @@ def _promote_score_metric_fields(score: dict[str, object]) -> None:
             score[key] = metrics.get(key)
 
 
-def _load_tknt_layout_variants(payload: object) -> Mapping[str, object] | None:
+def _load_tknt_layout_variants(
+    *,
+    payload: object,
+    run_dir: Path | None = None,
+) -> Mapping[str, object] | None:
     root = _mapping(payload)
     embedded = _mapping(root.get("layout_variants"))
     if embedded:
         return embedded
 
+    candidates: list[Path] = []
+    if run_dir is not None:
+        candidates.extend(
+            (
+                run_dir / "module_outputs" / "layout_variants.json",
+                run_dir / "09_layout_variants.json",
+            )
+        )
+
+    run_module_outputs_path = _string(root.get("run_module_outputs_path"))
+    if run_module_outputs_path:
+        candidates.append(Path(run_module_outputs_path) / "layout_variants.json")
+
     case_dir = _string(root.get("case_dir"))
-    if not case_dir:
-        return None
-    case_path = Path(case_dir)
-    candidates = (
-        case_path / "module_outputs" / "layout_variants.json",
-        case_path / "09_layout_variants.json",
-    )
+    if case_dir:
+        case_path = Path(case_dir)
+        candidates.extend(
+            (
+                case_path / "module_outputs" / "layout_variants.json",
+                case_path / "09_layout_variants.json",
+            )
+        )
+
+    seen: set[Path] = set()
     for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
         if not path.exists():
             continue
         payload_from_file = load_output_payload(path)
@@ -1287,6 +1375,113 @@ def _write_summary(
         writer.writerows(summary_rows)
 
 
+def _write_ablation_summary(
+    output_root: Path,
+    score_rows: Sequence[Mapping[str, object]],
+) -> None:
+    grouped: dict[str, list[Mapping[str, object]]] = {}
+    for row in score_rows:
+        system_id = _string(row.get("system_id"))
+        grouped.setdefault(system_id, []).append(row)
+    baseline_rows = grouped.get("tknt_full")
+    if not baseline_rows:
+        return
+
+    baseline = _ablation_summary_row("tknt_full", baseline_rows)
+    baseline_overall = _float(baseline.get("mean_overall_score"))
+    baseline_canonical = _float(baseline.get("mean_canonical_overall_score"))
+    summary_rows: list[dict[str, object]] = []
+    for system_id, rows in sorted(grouped.items()):
+        row = _ablation_summary_row(system_id, rows)
+        row["delta_vs_tknt_full_overall"] = round(
+            _float(row.get("mean_overall_score")) - baseline_overall,
+            3,
+        )
+        canonical = row.get("mean_canonical_overall_score")
+        row["delta_vs_tknt_full_canonical"] = (
+            round(_float(canonical) - baseline_canonical, 3)
+            if canonical is not None
+            else None
+        )
+        summary_rows.append(row)
+
+    _write_json(output_root / "ablation_summary.json", summary_rows)
+    csv_path = output_root / "ablation_summary.csv"
+    fieldnames = list(summary_rows[0].keys()) if summary_rows else ["system_id"]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(summary_rows)
+
+
+def _ablation_summary_row(
+    system_id: str,
+    rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    best_gallery_score = _mean_nested_metric(
+        rows,
+        "variant_evaluation",
+        "best_overall_score",
+    )
+    if best_gallery_score is None:
+        best_gallery_score = _mean_metric(rows, "overall_score")
+    return {
+        "system_id": system_id,
+        "case_count": len(rows),
+        "missing_or_failed": len([row for row in rows if row.get("error")]),
+        "mean_overall_score": _mean_metric(rows, "overall_score"),
+        "mean_canonical_overall_score": _mean_nested_metric(
+            rows,
+            "variant_evaluation",
+            "canonical_overall_score",
+        ),
+        "mean_best_gallery_overall_score": best_gallery_score,
+        "mean_runtime_s": _mean_metric(rows, "runtime_s"),
+        "mean_input_tokens": _mean_metric(rows, "input_tokens"),
+        "mean_output_tokens": _mean_metric(rows, "output_tokens"),
+        "mean_final_variant_count": _mean_nested_metric(
+            rows,
+            "variant_evaluation",
+            "variant_count",
+        ),
+        "mean_component_geometry": _mean_nested_metric(
+            rows,
+            "component_scores",
+            "geometry",
+        ),
+        "mean_component_request_following": _mean_nested_metric(
+            rows,
+            "component_scores",
+            "request_following",
+        ),
+        "mean_component_arrangement_reasonableness": _mean_nested_metric(
+            rows,
+            "component_scores",
+            "arrangement_reasonableness",
+        ),
+        "mean_component_valid_object_count": _mean_nested_metric(
+            rows,
+            "component_scores",
+            "valid_object_count",
+        ),
+        "mean_objects_out_of_bounds": _mean_nested_metric(
+            rows,
+            "metrics",
+            "objects_out_of_bounds",
+        ),
+        "mean_overlapping_blocking_pairs": _mean_nested_metric(
+            rows,
+            "metrics",
+            "overlapping_blocking_pairs",
+        ),
+        "mean_valid_blocking_object_count": _mean_nested_metric(
+            rows,
+            "metrics",
+            "valid_blocking_object_count",
+        ),
+    }
+
+
 def _write_pending_external_jobs(
     *,
     plan_rows: Sequence[Mapping[str, object]],
@@ -1374,6 +1569,7 @@ def _clear_stale_run_artifacts(row: Mapping[str, object]) -> None:
         _unlink_if_exists(run_dir / "module_io_manifest.json")
         _unlink_if_exists(run_dir / "drop_diagnostics.json")
         _unlink_if_exists(run_dir / "request_awareness_diagnostics.json")
+        clear_run_cache(run_dir)
         _remove_directory_if_exists(run_dir / "module_outputs")
     for key in (
         "output_path",
@@ -1385,15 +1581,6 @@ def _clear_stale_run_artifacts(row: Mapping[str, object]) -> None:
         value = _string(row.get(key))
         if value:
             _unlink_if_exists(Path(value))
-
-
-def _configure_writable_cache_env(env: dict[str, str], run_dir: Path) -> None:
-    cache_dir = run_dir / ".cache"
-    matplotlib_dir = cache_dir / "matplotlib"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    matplotlib_dir.mkdir(parents=True, exist_ok=True)
-    env.setdefault("XDG_CACHE_HOME", str(cache_dir))
-    env.setdefault("MPLCONFIGDIR", str(matplotlib_dir))
 
 
 def _read_text_tail(path: Path, *, max_chars: int) -> str:

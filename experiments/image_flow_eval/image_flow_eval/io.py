@@ -6,17 +6,21 @@ import json
 import mimetypes
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from .types import (
     AlignMode,
     BBoxNorm,
     CaseConfig,
     EditOperationConfig,
+    EditOperationType,
+    EditSourceSelectionMode,
+    EditSourceVariantConfig,
     JSONValue,
     ManifestConfig,
     MetricResult,
     ProviderName,
+    RenderPresetSelection,
     VariantConfig,
     VariantMode,
 )
@@ -28,13 +32,55 @@ _DEFAULT_METRICS: tuple[str, ...] = (
     "ssim",
     "nrmse",
 )
-_VALID_METRICS: set[str] = {"blank", "visual", "visual_diff", "psnr", "ssim", "nrmse"}
+_VALID_METRICS: set[str] = {
+    "blank",
+    "detector_layout",
+    "detector_spatial_relations",
+    "layout_depth_structure",
+    "layout_dino_object_similarity",
+    "layout_dino_patch_similarity",
+    "layout_dino_similarity",
+    "layout_edge_structure",
+    "layout_fidelity",
+    "layout_gate_score",
+    "layout_lpips",
+    "preset_fidelity",
+    "nrmse",
+    "provider_runtime",
+    "provider_token_usage",
+    "psnr",
+    "ssim",
+    "structural_layout_score",
+    "visual",
+    "visual_diff",
+}
 _VALID_VARIANT_MODES: set[str] = {
     "baseline",
+    "simple_prompt",
+    "simple_prompt_with_instance_overlay",
+    "contract_lite",
+    "contract_objects",
+    "contract_objects_preflight",
+    "contract_objects_preflight_locked_geometry",
+    "contract_objects_preflight_visual_only",
+    "llm_visual_preflight",
+    "llm_visual_preflight_with_instance_overlay",
+    "llm_visual_preflight_object_anchors",
+    "llm_visual_preflight_no_metadata",
+    "single_edit_edge_silhouette_guided",
+    "single_edit_geometry_locked",
+    "two_pass_geometry_repair",
+    "edit_prompt_image_only",
+    "edit_object_scope_preflight",
+    "operation_dsl",
+    "operation_dsl_preflight",
+    "operation_dsl_preflight_no_dsl",
+    "operation_dsl_preflight_no_edit_mask",
     "no_layout_reference",
     "no_edit_mask",
     "no_preservation_prompt",
     "no_reference_images",
+    "no_preset_reference_images",
 }
 _VALID_PROVIDERS: set[str] = {"evaluate_only", "tknt_snapshot"}
 _VALID_ALIGN_MODES: set[str] = {"strict", "resize_to_reference"}
@@ -56,8 +102,9 @@ def load_manifest(path: str | Path) -> ManifestConfig:
         _string_value(defaults.get("align_mode"), "resize_to_reference")
     )
     output_dir = _optional_path(base_dir, payload.get("output_dir"))
+    default_preset_selection = _parse_preset_selection(defaults.get("preset_selection"))
     cases = tuple(
-        _parse_case(base_dir, item)
+        _parse_case(base_dir, item, default_preset_selection=default_preset_selection)
         for item in _mapping_sequence(payload.get("cases"), context="cases")
     )
     return ManifestConfig(
@@ -90,6 +137,7 @@ def write_metric_csv(path: Path, rows: Iterable[Mapping[str, JSONValue]]) -> Non
     fieldnames = [
         "case_id",
         "variant_id",
+        "provider_status",
         "metric",
         "status",
         "value",
@@ -133,7 +181,12 @@ def metric_results_to_json(results: Sequence[MetricResult]) -> list[JSONValue]:
     return [result.to_json() for result in results]
 
 
-def _parse_case(base_dir: Path, value: Mapping[str, object]) -> CaseConfig:
+def _parse_case(
+    base_dir: Path,
+    value: Mapping[str, object],
+    *,
+    default_preset_selection: RenderPresetSelection | None = None,
+) -> CaseConfig:
     case_id = _required_string(value, "id", context="case")
     variants = tuple(
         _parse_variant(base_dir, item)
@@ -169,6 +222,13 @@ def _parse_case(base_dir: Path, value: Mapping[str, object]) -> CaseConfig:
         scene_reference_image=_optional_path(
             base_dir, value.get("scene_reference_image")
         ),
+        preset_selection=_parse_preset_selection(
+            value.get("preset_selection"),
+            fallback=default_preset_selection,
+        ),
+        edit_source_variant=_parse_edit_source_variant(
+            value.get("edit_source_variant")
+        ),
         edit_operations=tuple(
             _parse_edit_operation(base_dir, item)
             for item in _mapping_sequence(
@@ -194,6 +254,39 @@ def _parse_variant(base_dir: Path, value: Mapping[str, object]) -> VariantConfig
         output_image=_optional_path(base_dir, value.get("output_image")),
         prompt=_optional_string(value.get("prompt")),
     )
+
+
+def _parse_edit_source_variant(value: object) -> EditSourceVariantConfig | None:
+    if value is None:
+        return None
+    payload = _expect_mapping(value, context="edit_source_variant")
+    selection_mode_raw = _optional_string(payload.get("selection_mode"))
+    selection_mode: EditSourceSelectionMode = (
+        "exact" if selection_mode_raw == "exact" else "best_passed"
+    )
+    return EditSourceVariantConfig(
+        case_id=_required_string(payload, "case_id", context="edit_source_variant"),
+        variant=_required_string(payload, "variant", context="edit_source_variant"),
+        selection_mode=selection_mode,
+    )
+
+
+def _parse_preset_selection(
+    value: object,
+    *,
+    fallback: RenderPresetSelection | None = None,
+) -> RenderPresetSelection | None:
+    if value is None:
+        return fallback
+    payload = _expect_mapping(value, context="preset_selection")
+    preset = RenderPresetSelection(
+        style=_optional_string(payload.get("style")),
+        lighting=_optional_string(payload.get("lighting")),
+        scenery=_optional_string(payload.get("scenery")),
+    )
+    if not preset.to_mapping():
+        return None
+    return preset
 
 
 def _parse_edit_operation(
@@ -258,15 +351,13 @@ def _float_mapping(value: object) -> dict[str, float]:
     return {key: _float_value(item, field=key) for key, item in payload.items()}
 
 
-def _optional_operation_type(
-    value: object,
-) -> Literal["prompt", "add", "replace", "recolor"] | None:
+def _optional_operation_type(value: object) -> EditOperationType | None:
     if value is None:
         return None
     normalized = str(value).strip()
-    if normalized not in {"prompt", "add", "replace", "recolor"}:
+    if normalized not in {"prompt", "add", "replace", "recolor", "remove"}:
         raise ValueError(f"Unknown edit operation type: {normalized}")
-    return cast(Literal["prompt", "add", "replace", "recolor"], normalized)
+    return cast(EditOperationType, normalized)
 
 
 def _provider_name(value: str) -> ProviderName:

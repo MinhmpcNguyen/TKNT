@@ -29,9 +29,13 @@ export type SnapshotObjectRecord = {
   id: string;
   assetId?: string | null;
   rawAssetId?: string | null;
+  resolvedAssetId?: string | null;
   type: string;
   renderIdentityLabel?: string | null;
   renderIdentityHint?: string | null;
+  modelUrl?: string | null;
+  modelSource?: string | null;
+  glbFitStrategy?: string | null;
   colorHex: string;
   material: string | null;
   bboxMm: SnapshotBoundsMm;
@@ -159,6 +163,7 @@ export type ThreeSnapshotArtifact = {
 
 const MM_PER_M = 1000;
 const OCCLUSION_TOLERANCE_M = 0.03;
+const SNAPSHOT_RAYCAST_LINE_THRESHOLD_M = 0.005;
 
 export function buildThreeSnapshotArtifact(
   state: ThreeSnapshotRenderState
@@ -192,6 +197,8 @@ export function buildThreeSnapshotArtifact(
     : null;
   const visibleObjects: VisibleSnapshotObject[] = [];
   const raycaster = new THREE.Raycaster();
+  raycaster.params.Line.threshold = SNAPSHOT_RAYCAST_LINE_THRESHOLD_M;
+  raycaster.params.Points.threshold = SNAPSHOT_RAYCAST_LINE_THRESHOLD_M;
   const canvasRect = renderer.domElement.getBoundingClientRect();
   const canvasWidth = Math.max(
     1,
@@ -388,7 +395,7 @@ export function buildThreeSnapshotArtifact(
     visibleObjectCount: visibleObjects.length,
     hiddenObjectCount: Math.max(0, allObjects.length - visibleObjects.length),
     visibilityMethod:
-      'frustum intersection plus center/corner occlusion sampling against current object meshes and walls above the opacity threshold',
+      'frustum intersection plus center/corner occlusion sampling against current object meshes and walls above the opacity threshold, excluding render-only helpers',
     visibilityDiagnostics,
     wallOcclusionOpacityThreshold: state.wallOcclusionOpacityThreshold,
     allObjects,
@@ -561,6 +568,12 @@ function isSamplePointVisible(params: {
   }
   for (const intersection of intersections) {
     const hitObject = intersection.object;
+    if (
+      intersection.distance <= OCCLUSION_TOLERANCE_M ||
+      isSnapshotRaycastHelper(hitObject)
+    ) {
+      continue;
+    }
     const hitRoot = findObjectRoot(hitObject);
     if (String(hitRoot?.userData?.objectId ?? '') === expectedObjectId) {
       return true;
@@ -584,6 +597,21 @@ function isSamplePointVisible(params: {
     if (hitRoot?.userData?.objectId) {
       return false;
     }
+  }
+  return false;
+}
+
+function isSnapshotRaycastHelper(node: any): boolean {
+  let current = node;
+  while (current) {
+    if (
+      current.userData?.aiRenderHide === true ||
+      current.userData?.aiStructuralEdge === true ||
+      current.userData?.structuralEdgeOverlay === true
+    ) {
+      return true;
+    }
+    current = current.parent ?? null;
   }
   return false;
 }

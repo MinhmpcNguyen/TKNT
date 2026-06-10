@@ -9,25 +9,71 @@ from stylist.style_policy import build_neutral_style_policy
 
 AblationMode = Literal[
     "full",
+    "minimal_room_context",
     "no_style_policy",
+    "no_semantic_layout_planner",
+    "no_request_contract",
+    "no_tier_capacity",
     "no_capacity_control",
     "single_concept",
+    "no_concept_repair",
+    "no_material_macro_repair",
+    "no_accessory_refill",
+    "no_stylist_llm",
+    "no_gallery_selector",
 ]
 
 ABLATION_ENV = "TKNT_ABLATION_MODE"
 
 _VALID_MODES: set[str] = {
     "full",
+    "minimal_room_context",
     "no_style_policy",
+    "no_semantic_layout_planner",
+    "no_request_contract",
+    "no_tier_capacity",
     "no_capacity_control",
     "single_concept",
+    "no_concept_repair",
+    "no_material_macro_repair",
+    "no_accessory_refill",
+    "no_stylist_llm",
+    "no_gallery_selector",
 }
 
 _SYSTEM_ID_BY_MODE: dict[str, str] = {
     "full": "TKNT-Full",
+    "minimal_room_context": "TKNT-AB-MinimalRoomContext",
     "no_style_policy": "TKNT-A1-NoStylePolicy",
+    "no_semantic_layout_planner": "TKNT-AB-NoSemanticLayoutPlanner",
+    "no_request_contract": "TKNT-AB-NoRequestContract",
+    "no_tier_capacity": "TKNT-AB-NoTierCapacity",
     "no_capacity_control": "TKNT-A2-NoCapacityControl",
     "single_concept": "TKNT-A3-SingleConcept",
+    "no_concept_repair": "TKNT-AB-NoConceptRepair",
+    "no_material_macro_repair": "TKNT-AB-NoMaterialMacroRepair",
+    "no_accessory_refill": "TKNT-AB-NoAccessoryRefill",
+    "no_stylist_llm": "TKNT-AB-NoStylistLLM",
+    "no_gallery_selector": "TKNT-AB-NoGallerySelector",
+}
+
+_TIER_CAPACITY_DISABLED_MODES: set[str] = {
+    "no_tier_capacity",
+    "no_capacity_control",
+}
+
+_EMPTY_AFFORDANCE_MAP: dict[str, Any] = {
+    "usable_walls": [],
+    "blocked_walls": [],
+    "entry_landing_zones": [],
+    "circulation_corridors": [],
+    "daylight_regions": [],
+    "privacy_regions": [],
+    "focal_surfaces": [],
+    "center_openness_regions": [],
+    "wall_anchor_candidates": [],
+    "floating_zone_candidates": [],
+    "soft_usage_hints": {},
 }
 
 
@@ -61,6 +107,53 @@ def uses_neutral_style_policy(mode: AblationMode) -> bool:
     return mode == "no_style_policy"
 
 
+def use_semantic_layout_planner(mode: AblationMode) -> bool:
+    return mode != "no_semantic_layout_planner"
+
+
+def use_request_contract(mode: AblationMode) -> bool:
+    return mode != "no_request_contract"
+
+
+def use_concept_repair(mode: AblationMode) -> bool:
+    return mode != "no_concept_repair"
+
+
+def use_material_macro_repair(mode: AblationMode) -> bool:
+    return mode != "no_material_macro_repair"
+
+
+def use_stylist_llm(mode: AblationMode) -> bool:
+    return mode != "no_stylist_llm"
+
+
+def use_gallery_selector(mode: AblationMode) -> bool:
+    return mode != "no_gallery_selector"
+
+
+def room_output_for_mode(
+    *,
+    mode: AblationMode,
+    room_output: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = deepcopy(dict(room_output))
+    if mode != "minimal_room_context":
+        return payload
+
+    payload["affordance_map"] = deepcopy(_EMPTY_AFFORDANCE_MAP)
+    topology = payload.get("topology")
+    wall_graph = topology.get("wall_graph") if isinstance(topology, Mapping) else {}
+    payload["topology"] = {"wall_graph": deepcopy(wall_graph or {})}
+    payload["notes"] = []
+    quality_meta = payload.get("quality_meta")
+    if isinstance(quality_meta, Mapping):
+        updated_quality_meta = deepcopy(dict(quality_meta))
+        updated_quality_meta["notes"] = []
+        payload["quality_meta"] = updated_quality_meta
+    payload["ablation_minimal_room_context"] = True
+    return payload
+
+
 def style_policy_for_mode(
     *,
     mode: AblationMode,
@@ -75,6 +168,19 @@ def style_policy_for_mode(
     return deepcopy(dict(current_policy or {}))
 
 
+def cluster_output_for_mode(
+    *,
+    mode: AblationMode,
+    cluster_output: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = deepcopy(dict(cluster_output))
+    if use_request_contract(mode):
+        return payload
+    stripped = _strip_request_contract_fields(payload)
+    stripped["request_contract_disabled"] = True
+    return stripped
+
+
 def target_final_count_for_mode(mode: AblationMode, default_count: int) -> int:
     if mode == "single_concept":
         return 1
@@ -87,7 +193,7 @@ def apply_tier_output_for_mode(
     tier_output: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = deepcopy(dict(tier_output))
-    if mode != "no_capacity_control":
+    if mode not in _TIER_CAPACITY_DISABLED_MODES:
         return payload
 
     changed = False
@@ -117,8 +223,9 @@ def apply_tier_output_for_mode(
                         changed = _force_keep_decision(row) or changed
 
     notes = _string_list(payload.get("notes"))
+    label = "A2 legacy capacity-control" if mode == "no_capacity_control" else "tier"
     note = (
-        "Ablation A2 disabled capacity pruning/backoff; zero-quantity tier "
+        f"Ablation disabled {label} capacity pruning/backoff; zero-quantity tier "
         "decisions were forced active before layout solving."
     )
     if changed and note not in notes:
@@ -130,7 +237,34 @@ def apply_tier_output_for_mode(
 
 
 def skip_accessory_refill(mode: AblationMode) -> bool:
-    return mode == "no_capacity_control"
+    return mode in {"no_accessory_refill", "no_capacity_control"}
+
+
+def select_candidates_for_mode(
+    *,
+    mode: AblationMode,
+    candidates: list[dict[str, Any]],
+    max_variants: int,
+) -> list[dict[str, Any]]:
+    if use_gallery_selector(mode):
+        return candidates
+    return candidates[: max(1, int(max_variants))]
+
+
+def _strip_request_contract_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            clean_key = str(key)
+            if clean_key == "request_contract" or clean_key.startswith(
+                "request_contract_"
+            ):
+                continue
+            out[clean_key] = _strip_request_contract_fields(item)
+        return out
+    if isinstance(value, list):
+        return [_strip_request_contract_fields(item) for item in value]
+    return deepcopy(value)
 
 
 def _force_keep_decision(row: dict[str, Any]) -> bool:

@@ -20,6 +20,7 @@ else:
 _OVERLAP_AREA_THRESHOLD_MM2 = 10_000.0
 _OOB_AREA_THRESHOLD_MM2 = 5_000.0
 _ACCESS_PATH_WIDTH_MM = 700.0
+_SIMPLE_SIMPLE_CASE_PREFIX = "simple_simple_"
 
 _ALIASES: dict[str, tuple[str, ...]] = {
     "bed": ("bed", "queen_bed", "king_bed", "single_bed", "double_bed"),
@@ -61,7 +62,10 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "sink": ("sink", "kitchen_sink"),
     "stove": ("stove", "range", "oven_range", "cooker"),
 }
-_ALIASES.update(all_profile_scoring_aliases())
+for _canonical_type, _profile_aliases in all_profile_scoring_aliases().items():
+    _ALIASES[_canonical_type] = tuple(
+        dict.fromkeys((*_ALIASES.get(_canonical_type, ()), *_profile_aliases))
+    )
 
 _NON_BLOCKING_TOKENS = (
     "rug",
@@ -118,18 +122,20 @@ def score_layout(
     overlaps = _blocking_overlaps(blocking_items)
     opening_hits = _opening_clearance_hits(blocking_items, layout)
     access_hits = _access_path_hits(blocking_items, layout, room_shape)
+    valid_blocking_count = _valid_blocking_count(
+        blocking_items=blocking_items,
+        out_of_bounds_ids={item_id for item_id, _area in out_of_bounds},
+        overlap_ids=_overlap_item_ids(overlaps),
+    )
     request_checks = _request_checks(
         benchmark_case=benchmark_case,
         layout=layout,
         shaped_items=shaped_items,
+        valid_blocking_count=valid_blocking_count,
     )
     count_score = _object_count_score(
         benchmark_case=benchmark_case,
-        valid_blocking_count=_valid_blocking_count(
-            blocking_items=blocking_items,
-            out_of_bounds_ids={item_id for item_id, _area in out_of_bounds},
-            overlap_ids=_overlap_item_ids(overlaps),
-        ),
+        valid_blocking_count=valid_blocking_count,
     )
 
     geometry_score = _clamp_score(
@@ -157,11 +163,6 @@ def score_layout(
         + object_count_score * 0.20
     )
 
-    valid_blocking_count = _valid_blocking_count(
-        blocking_items=blocking_items,
-        out_of_bounds_ids={item_id for item_id, _area in out_of_bounds},
-        overlap_ids=_overlap_item_ids(overlaps),
-    )
     return {
         "case_id": layout.case_id,
         "system_id": layout.system_id,
@@ -389,8 +390,19 @@ def _request_checks(
     benchmark_case: Mapping[str, object],
     layout: NormalizedLayout,
     shaped_items: Sequence[_ShapeItem],
+    valid_blocking_count: int,
 ) -> list[dict[str, object]]:
     expected = _mapping(benchmark_case.get("expected"))
+    if _is_simple_simple_case(benchmark_case=benchmark_case, layout=layout):
+        return [
+            *_simple_simple_request_checks(
+                benchmark_case=benchmark_case,
+                shaped_items=shaped_items,
+                valid_blocking_count=valid_blocking_count,
+            ),
+            *_relation_checks(expected.get("relations"), shaped_items, layout),
+        ]
+
     checks: list[dict[str, object]] = []
     present_types = {item.canonical_type for item in shaped_items}
     for object_type in _string_sequence(expected.get("required_objects")):
@@ -426,7 +438,53 @@ def _request_checks(
             }
         )
 
-    for relation in _sequence(expected.get("relations")):
+    checks.extend(_relation_checks(expected.get("relations"), shaped_items, layout))
+    return checks
+
+
+def _simple_simple_request_checks(
+    *,
+    benchmark_case: Mapping[str, object],
+    shaped_items: Sequence[_ShapeItem],
+    valid_blocking_count: int,
+) -> list[dict[str, object]]:
+    expected = _mapping(benchmark_case.get("expected"))
+    checks: list[dict[str, object]] = []
+
+    minimum = _int_or_none(expected.get("valid_blocking_count_min"))
+    if minimum is not None:
+        checks.append(
+            {
+                "type": "solid_count_min",
+                "target": "valid_blocking_object_count",
+                "count": valid_blocking_count,
+                "min": minimum,
+                "passed": valid_blocking_count >= minimum,
+            }
+        )
+
+    anchor_types = _simple_simple_anchor_types(benchmark_case)
+    if anchor_types:
+        present_types = {item.canonical_type for item in shaped_items}
+        matched = sorted(anchor_types & present_types)
+        checks.append(
+            {
+                "type": "room_primary_anchor",
+                "target": sorted(anchor_types),
+                "matched": matched,
+                "passed": bool(matched),
+            }
+        )
+    return checks
+
+
+def _relation_checks(
+    relations: object,
+    shaped_items: Sequence[_ShapeItem],
+    layout: NormalizedLayout,
+) -> list[dict[str, object]]:
+    checks: list[dict[str, object]] = []
+    for relation in _sequence(relations):
         relation_map = _mapping(relation)
         if relation_map.get("type") == "avoid_near_opening":
             checks.append(_avoid_near_opening_check(relation_map, shaped_items, layout))
@@ -435,6 +493,31 @@ def _request_checks(
                 _prefer_near_opening_check(relation_map, shaped_items, layout)
             )
     return checks
+
+
+def _is_simple_simple_case(
+    *,
+    benchmark_case: Mapping[str, object],
+    layout: NormalizedLayout,
+) -> bool:
+    case_id = _benchmark_case_id(benchmark_case) or layout.case_id
+    return case_id.startswith(_SIMPLE_SIMPLE_CASE_PREFIX)
+
+
+def _simple_simple_anchor_types(
+    benchmark_case: Mapping[str, object],
+) -> set[str]:
+    room_type = str(benchmark_case.get("room_type") or "").strip().lower()
+    case_id = _benchmark_case_id(benchmark_case)
+    if room_type == "bedroom" or "_bedroom_" in case_id:
+        return {"bed"}
+    if room_type in {"living", "living_room"} or "_living_" in case_id:
+        return {"armchair", "chair", "sofa"}
+    return set()
+
+
+def _benchmark_case_id(benchmark_case: Mapping[str, object]) -> str:
+    return str(benchmark_case.get("case_id") or benchmark_case.get("id") or "").strip()
 
 
 def _avoid_near_opening_check(
@@ -516,14 +599,11 @@ def _object_count_score(
 ) -> float:
     expected = _mapping(benchmark_case.get("expected"))
     minimum = _int_or_none(expected.get("valid_blocking_count_min"))
-    maximum = _int_or_none(expected.get("valid_blocking_count_max"))
-    if minimum is None and maximum is None:
+    if minimum is None:
         return 100.0
     score = 100.0
-    if minimum is not None and valid_blocking_count < minimum:
+    if valid_blocking_count < minimum:
         score -= (minimum - valid_blocking_count) * 18.0
-    if maximum is not None and valid_blocking_count > maximum:
-        score -= (valid_blocking_count - maximum) * 10.0
     return score
 
 

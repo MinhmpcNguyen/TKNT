@@ -24,7 +24,7 @@ DEFAULT_RUNS_ROOT = BENCHMARK_DIR / "runs" / "manual" / "runs"
 DEFAULT_CASES_PATH = BENCHMARK_DIR / "cases.json"
 
 # Change these names when the run folders change.
-SYSTEM_RUN_FOLDERS = ("tknt_new", "idesign", "flairgpt")
+SYSTEM_RUN_FOLDERS = ("tknt_new_s_o", "idesign_s_o", "flairgpt_s_o")
 
 DEFAULT_OUTPUT_NAME = "layout_2d.png"
 GRID_SIZE_MM = 500.0
@@ -78,6 +78,30 @@ _SOFT_LAYER_TOKENS = (
 )
 
 _FLOOR_LAYER_TOKENS = ("carpet", "rug")
+
+_DIRECTION_SIDE_VECTORS: dict[str, Point2D] = {
+    "bottom": Point2D(x=0.0, y=-1.0),
+    "down": Point2D(x=0.0, y=-1.0),
+    "east": Point2D(x=1.0, y=0.0),
+    "east_wall": Point2D(x=1.0, y=0.0),
+    "left": Point2D(x=-1.0, y=0.0),
+    "north": Point2D(x=0.0, y=1.0),
+    "north_wall": Point2D(x=0.0, y=1.0),
+    "right": Point2D(x=1.0, y=0.0),
+    "south": Point2D(x=0.0, y=-1.0),
+    "south_wall": Point2D(x=0.0, y=-1.0),
+    "top": Point2D(x=0.0, y=1.0),
+    "up": Point2D(x=0.0, y=1.0),
+    "west": Point2D(x=-1.0, y=0.0),
+    "west_wall": Point2D(x=-1.0, y=0.0),
+}
+
+_ORIENTATION_KEYS = (
+    "axis_world",
+    "front_side_world",
+    "front_world",
+    "rotation_ccw",
+)
 
 
 @dataclass(frozen=True)
@@ -297,6 +321,7 @@ def load_layout_for_case_dir(
     normalized_path = case_dir / "normalized.json"
     if normalized_path.is_file():
         payload = _load_json_mapping(normalized_path)
+        payload = _enrich_normalized_orientations(payload=payload, case_dir=case_dir)
         return _layout_view_from_payload(
             payload=payload,
             source_path=normalized_path,
@@ -308,11 +333,105 @@ def load_layout_for_case_dir(
         system_folder=system_folder,
         case_index=case_index,
     )
+    fallback_payload = _enrich_normalized_orientations(
+        payload=fallback_payload,
+        case_dir=case_dir,
+    )
     return _layout_view_from_payload(
         payload=fallback_payload,
         source_path=source_path,
         status_note=status_note,
     )
+
+
+def _enrich_normalized_orientations(
+    *,
+    payload: Mapping[str, object],
+    case_dir: Path,
+) -> Mapping[str, object]:
+    orientation_rows = _load_canonical_orientation_rows(case_dir)
+    orientation_by_id: dict[str, Mapping[str, object]] = {}
+    for row in orientation_rows:
+        object_id = _first_string(row, "object_id", "instance_id", "id")
+        orientation = {key: row[key] for key in _ORIENTATION_KEYS if key in row}
+        if object_id and orientation:
+            orientation_by_id[object_id] = orientation
+    if not orientation_by_id:
+        return payload
+
+    changed = False
+    objects: list[object] = []
+    for value in _sequence(payload.get("objects")):
+        item = _mapping(value)
+        object_id = _first_string(item, "id", "object_id", "instance_id")
+        orientation = orientation_by_id.get(object_id)
+        if not item or orientation is None:
+            objects.append(value)
+            continue
+
+        enriched_item = dict(item)
+        raw = dict(_mapping(enriched_item.get("raw")))
+        for key, orientation_value in orientation.items():
+            if key not in raw:
+                raw[key] = orientation_value
+                changed = True
+        rotation_degrees = _number(orientation.get("rotation_ccw"))
+        if rotation_degrees is not None:
+            enriched_item["rotation_degrees"] = rotation_degrees
+            changed = True
+        enriched_item["raw"] = raw
+        objects.append(enriched_item)
+
+    if not changed:
+        return payload
+    enriched_payload = dict(payload)
+    enriched_payload["objects"] = objects
+    return enriched_payload
+
+
+def _load_canonical_orientation_rows(
+    case_dir: Path,
+) -> tuple[Mapping[str, object], ...]:
+    paths = (
+        case_dir / "module_outputs" / "layout_variants.json",
+        case_dir / "09_layout_variants.json",
+        case_dir / "module_outputs" / "absolute_layout.json",
+        case_dir / "07_absolute_layout.json",
+    )
+    for path in paths:
+        if not path.is_file():
+            continue
+        try:
+            payload = _load_json_mapping(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            _LOGGER.debug("Cannot load orientation metadata from %s: %s", path, exc)
+            continue
+        absolute_layout = _canonical_absolute_layout(payload)
+        rows = tuple(
+            row
+            for value in _sequence(absolute_layout.get("objects"))
+            if (row := _mapping(value)) and any(key in row for key in _ORIENTATION_KEYS)
+        )
+        if rows:
+            return rows
+    return ()
+
+
+def _canonical_absolute_layout(payload: Mapping[str, object]) -> Mapping[str, object]:
+    variants = _sequence(payload.get("variants"))
+    if variants:
+        selected_variant_id = _first_string(payload, "selected_variant_id")
+        selected_variant = next(
+            (
+                variant
+                for value in variants
+                if (variant := _mapping(value))
+                and _first_string(variant, "variant_id") == selected_variant_id
+            ),
+            _mapping(variants[0]),
+        )
+        return _mapping(selected_variant.get("absolute_layout"))
+    return _mapping(payload.get("absolute_layout")) or payload
 
 
 def render_layout_png(*, layout: LayoutView, output_path: Path, dpi: int) -> None:
@@ -323,7 +442,6 @@ def render_layout_png(*, layout: LayoutView, output_path: Path, dpi: int) -> Non
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "matplotlib is required. Try running with "
-            ".conda_envs/benchmark-idesign/bin/python or "
             ".conda_envs/benchmark-flairgpt/bin/python."
         ) from exc
 
@@ -465,7 +583,12 @@ def _layout_view_from_payload(
         polygon = points_from_json(_sequence(item.get("polygon")))
         if len(polygon) < 3:
             continue
-        raw = _mapping(item.get("raw"))
+        raw = dict(_mapping(item.get("raw")))
+        for key in _ORIENTATION_KEYS:
+            if key in item and key not in raw:
+                raw[key] = item[key]
+        if "rotation_degrees" in item and "rotation_degrees" not in raw:
+            raw["rotation_degrees"] = item["rotation_degrees"]
         objects.append(
             ObjectView(
                 object_id=_first_string(item, "id", "object_id", "instance_id")
@@ -668,27 +791,103 @@ def _plot_segment(
 
 
 def _draw_front_marker(*, ax: object, row: ObjectView) -> None:
-    front = _mapping(row.raw.get("front_world"))
-    dx = _number(front.get("dx"))
-    dy = _number(front.get("dy"))
-    if dx is None or dy is None or abs(dx) + abs(dy) <= 1e-6:
+    direction = _object_direction(row)
+    if direction is None:
         return
 
-    min_x, min_y, max_x, max_y = _polygon_bounds(row.polygon)
-    width = max(1.0, max_x - min_x)
-    height = max(1.0, max_y - min_y)
-    inset_x = max(45.0, min(width * 0.16, 120.0))
-    inset_y = max(45.0, min(height * 0.16, 120.0))
-    if abs(dx) >= abs(dy):
-        x = max_x - inset_x if dx >= 0 else min_x + inset_x
-        y1 = min_y + inset_y
-        y2 = max_y - inset_y
-        ax.plot([x, x], [y1, y2], color="#ffffff", linewidth=2.2, zorder=16)
+    center = _polygon_center(row.polygon)
+    edge_distance = _ray_distance_to_polygon_edge(
+        center=center,
+        direction=direction,
+        polygon=row.polygon,
+    )
+    if edge_distance is None or edge_distance <= 1e-6:
         return
-    y = max_y - inset_y if dy >= 0 else min_y + inset_y
-    x1 = min_x + inset_x
-    x2 = max_x - inset_x
-    ax.plot([x1, x2], [y, y], color="#ffffff", linewidth=2.2, zorder=16)
+
+    tip_distance = edge_distance * 0.76
+    tip = Point2D(
+        x=center.x + direction.x * tip_distance,
+        y=center.y + direction.y * tip_distance,
+    )
+    for color, linewidth, mutation_scale, zorder in (
+        ("#ffffff", 4.2, 13.0, 16),
+        ("#34444d", 1.8, 10.0, 17),
+    ):
+        ax.annotate(
+            "",
+            xy=(tip.x, tip.y),
+            xytext=(center.x, center.y),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": color,
+                "linewidth": linewidth,
+                "mutation_scale": mutation_scale,
+                "shrinkA": 0,
+                "shrinkB": 0,
+            },
+            zorder=zorder,
+        )
+
+
+def _object_direction(row: ObjectView) -> Point2D | None:
+    front = _vector(row.raw.get("front_world"))
+    if front is not None:
+        return front
+
+    front_side = _first_string(row.raw, "front_side_world", "facing").lower()
+    if front_side in _DIRECTION_SIDE_VECTORS:
+        return _DIRECTION_SIDE_VECTORS[front_side]
+
+    if not any(
+        key in row.raw
+        for key in (
+            "angle",
+            "angle_degrees",
+            "rotation",
+            "rotation_ccw",
+            "rotation_degrees",
+            "theta",
+        )
+    ):
+        return None
+    radians = math.radians(row.rotation_degrees)
+    return Point2D(x=math.sin(radians), y=math.cos(radians))
+
+
+def _vector(value: object) -> Point2D | None:
+    item = _mapping(value)
+    dx = _number(item.get("dx"))
+    dy = _number(item.get("dy"))
+    if dx is None or dy is None or abs(dx) + abs(dy) <= 1e-6:
+        return None
+    return _normalized(Point2D(x=dx, y=dy))
+
+
+def _ray_distance_to_polygon_edge(
+    *,
+    center: Point2D,
+    direction: Point2D,
+    polygon: Sequence[Point2D],
+) -> float | None:
+    if not polygon:
+        return None
+
+    distances: list[float] = []
+    for start, end in zip(polygon, (*polygon[1:], polygon[0])):
+        edge = Point2D(x=end.x - start.x, y=end.y - start.y)
+        denominator = _cross(direction, edge)
+        if abs(denominator) <= 1e-9:
+            continue
+        offset = Point2D(x=start.x - center.x, y=start.y - center.y)
+        distance = _cross(offset, edge) / denominator
+        edge_ratio = _cross(offset, direction) / denominator
+        if distance > 1e-6 and -1e-6 <= edge_ratio <= 1.0 + 1e-6:
+            distances.append(distance)
+    return min(distances) if distances else None
+
+
+def _cross(first: Point2D, second: Point2D) -> float:
+    return first.x * second.y - first.y * second.x
 
 
 def _draw_object_label(*, ax: object, row: ObjectView) -> None:

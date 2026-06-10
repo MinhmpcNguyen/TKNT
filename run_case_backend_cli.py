@@ -71,7 +71,13 @@ def main() -> int:
     parser.add_argument(
         "--ablation",
         default="",
-        help="TKNT ablation mode: full, no_style_policy, no_capacity_control, or single_concept.",
+        help=(
+            "TKNT ablation mode such as full, minimal_room_context, "
+            "no_style_policy, no_semantic_layout_planner, no_request_contract, "
+            "no_tier_capacity, single_concept, no_concept_repair, "
+            "no_material_macro_repair, no_accessory_refill, no_stylist_llm, "
+            "or no_gallery_selector. no_capacity_control remains as a legacy mode."
+        ),
     )
     args = parser.parse_args()
 

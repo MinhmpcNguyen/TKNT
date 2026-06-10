@@ -2348,7 +2348,7 @@ button.danger {
   font-size: 13px;
 }
 
-.profile-close-button {
+.profile-save-button {
   flex: 0 0 auto;
 }
 
@@ -2392,6 +2392,7 @@ button.danger {
 .profile-section-header span,
 .billing-usage-header span,
 .billing-plan-card small,
+.billing-add-credit-card span,
 .billing-dev-grid span,
 .billing-payment-details span {
   color: #746b5e;
@@ -2467,6 +2468,55 @@ button.danger {
   border-color: #2f6f5e;
   background: #f2faf6;
   box-shadow: 0 0 0 2px rgba(47, 111, 94, 0.12);
+}
+
+.billing-add-credit-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e7dfd1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.billing-add-credit-header,
+.billing-add-credit-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.billing-add-credit-header > div,
+.billing-add-credit-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.billing-add-credit-header > strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.billing-add-credit-controls label {
+  flex: 1 1 180px;
+}
+
+.billing-add-credit-controls input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #cfc6b8;
+  border-radius: 8px;
+  background: #fffdf8;
+  font: inherit;
+}
+
+.billing-add-credit-status {
+  color: #2f6f5e;
+  font-weight: 700;
 }
 
 .billing-usage-header {
@@ -2596,6 +2646,12 @@ button.danger {
   .billing-dev-grid,
   .billing-payment-grid {
     grid-template-columns: 1fr;
+  }
+
+  .billing-add-credit-header,
+  .billing-add-credit-controls {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .billing-qr {

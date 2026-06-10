@@ -7,10 +7,13 @@ import {
 type BillingPaymentModalProps = {
   amountVnd: number;
   chargeKind: BillingChargeKind;
-  countdownSeconds: number;
+  countdownSeconds?: number | null;
+  creditCount?: number;
+  confirmLabel?: string;
   reason: string;
   reference: string;
   onCancel: () => void;
+  onConfirm?: () => void;
 };
 
 const QR_GRID_SIZE = 13;
@@ -56,16 +59,26 @@ function getFinderCell(row: number, col: number): boolean | null {
   return null;
 }
 
+function getActionLabel(chargeKind: BillingChargeKind): string {
+  if (chargeKind === 'add_credit') {
+    return 'Add Credits';
+  }
+  return chargeKind === 'edit' ? 'Edit Image' : 'Generate Image';
+}
+
 export const BillingPaymentModal: React.FC<BillingPaymentModalProps> = ({
   amountVnd,
   chargeKind,
-  countdownSeconds,
+  countdownSeconds = null,
+  creditCount,
+  confirmLabel = 'Confirm payment',
   reason,
   reference,
   onCancel,
+  onConfirm,
 }) => {
   const cells = useMemo(() => buildQrCells(reference), [reference]);
-  const actionLabel = chargeKind === 'edit' ? 'Edit Image' : 'Generate Image';
+  const actionLabel = getActionLabel(chargeKind);
 
   return (
     <div className="billing-payment-overlay" role="dialog" aria-modal="true">
@@ -95,20 +108,33 @@ export const BillingPaymentModal: React.FC<BillingPaymentModalProps> = ({
               <span>Amount</span>
               <strong>{formatVnd(amountVnd)}</strong>
             </div>
+            {creditCount ? (
+              <div>
+                <span>Credits</span>
+                <strong>{creditCount}</strong>
+              </div>
+            ) : null}
             <div>
               <span>Reference</span>
               <strong>{reference}</strong>
             </div>
-            <div>
-              <span>Unlocks in</span>
-              <strong>{countdownSeconds}s</strong>
-            </div>
+            {countdownSeconds !== null ? (
+              <div>
+                <span>Unlocks in</span>
+                <strong>{countdownSeconds}s</strong>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="billing-payment-actions">
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
+          {onConfirm ? (
+            <button className="primary-button" type="button" onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

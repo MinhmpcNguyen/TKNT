@@ -154,6 +154,16 @@ def _fake_list_inventory_by_types(
                 },
             },
             {
+                "id": "inv_pet_bed",
+                "type": "pet_bed",
+                "asset_type": "pet_bed",
+                "dimensions": {
+                    "length_mm": 700,
+                    "width_mm": 550,
+                    "height_mm": 180,
+                },
+            },
+            {
                 "id": "inv_curtain",
                 "type": "curtain",
                 "asset_type": "curtain",
@@ -513,6 +523,8 @@ class StylistArchitectureTest(unittest.TestCase):
             2700,
         )
         self.assertNotIn("throw_blanket_001", objects_by_id)
+        self.assertNotIn("cushion_001", objects_by_id)
+        self.assertNotIn("pet_bed_001", objects_by_id)
 
         self.assertEqual(curtain["place_on"]["method"], "hang_on")
         self.assertEqual(curtain["place_on"]["target_instance_id"], "window_1")
@@ -525,6 +537,68 @@ class StylistArchitectureTest(unittest.TestCase):
         self.assertIn(
             "Palette locked from the requested Japandi direction.",
             result["notes"],
+        )
+
+    def test_existing_floor_side_object_is_preserved_as_regular_layout_object(
+        self,
+    ) -> None:
+        layout = _sample_layout()
+        objects = layout["objects"]
+        self.assertIsInstance(objects, list)
+        objects.append(
+            {
+                "instance_id": "pet_bed_1",
+                "object_type": "pet_bed",
+                "cluster_id": "sleep",
+                "bbox": {
+                    "min_x": 2200,
+                    "min_y": 2400,
+                    "max_x": 2900,
+                    "max_y": 2950,
+                },
+                "polygon_ccw": [
+                    {"x": 2200, "y": 2400},
+                    {"x": 2900, "y": 2400},
+                    {"x": 2900, "y": 2950},
+                    {"x": 2200, "y": 2950},
+                ],
+            }
+        )
+
+        result = Stylist().apply_style_plan(
+            layout_json=layout,
+            user_context_json={"tenant_id": "demo_tenant", "style": "japandi"},
+            tenant_id="demo_tenant",
+            style_plan={},
+        )
+
+        objects_by_id = {
+            row["instance_id"]: row
+            for row in result["objects"]
+            if isinstance(row, dict) and isinstance(row.get("instance_id"), str)
+        }
+
+        self.assertIn("pet_bed_1", objects_by_id)
+        self.assertEqual(objects_by_id["pet_bed_1"]["object_type"], "pet_bed")
+        self.assertEqual(objects_by_id["pet_bed_1"]["source"], "existing")
+        self.assertNotIn("pet_bed_001", objects_by_id)
+
+    def test_floor_side_inventory_is_not_selected_as_auto_decor(self) -> None:
+        self.assertEqual(
+            _deterministic_layout._select_anchor_candidates(
+                anchor="bed",
+                room_type="bedroom",
+                candidates=["rug", "pet_bed"],
+            ),
+            ["rug"],
+        )
+        self.assertEqual(
+            _deterministic_layout._select_anchor_candidates(
+                anchor="__utility_zone__",
+                room_type="bedroom",
+                candidates=["dehumidifier", "heater"],
+            ),
+            [],
         )
 
     def test_ceiling_accessory_is_clamped_inside_room_bounds(self) -> None:

@@ -34,9 +34,14 @@ logs/
 outputs*/
 cases/*tenant_*/
 cases/user_*/
+.cache/
+.playwright-mcp/
+Thesis_Chapters_DOCX/
+Thesis_LaTeX/
 
 # Local JSON outputs
 *.json
+!evaluation/layout_benchmark/systems_ablation.json
 
 # Secrets (do not commit)
 app-config.yaml
@@ -55,3 +60,19 @@ private_key.enc
 
 # Local model weights
 OpenShape-Embeddings/*.pt
+
+# Generated/cache artifacts
+.cache/
+.playwright-mcp/
+Thesis_Chapters_DOCX/
+Thesis_LaTeX/
+experiments/image_flow_eval/runs/
+experiments/*_outputs/
+experiments/triposr_output*/
+experiments/hunyuan3d_outputs/
+generated/user_content/
+generated/object_3d_jobs/
+evaluation/layout_benchmark/*_artifacts/
+models/metrics/*.pt
+*.pth
+*.safetensors

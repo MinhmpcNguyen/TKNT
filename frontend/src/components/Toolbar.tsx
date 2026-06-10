@@ -23,6 +23,7 @@ const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
     )
   )
 );
+const PARTIAL_LAYOUT_REFRESH_INTERVAL_MS = 1_500;
 const VISUAL_RELATION_IMAGE_MAX_CHARS = 4_500_000;
 type VisualRelationPlannerMode = 'shadow' | 'candidate';
 
@@ -218,6 +219,7 @@ export const Toolbar: React.FC = () => {
       let lastStage = '';
       let lastProgressLine = '';
       let lastLoadedVariantCount = 0;
+      let lastPartialLayoutRefreshAt = 0;
       let lastActionIndex = 0;
       const loadPipelineLayouts = async (
         caseId: string,
@@ -237,10 +239,12 @@ export const Toolbar: React.FC = () => {
           resultPayload: stylist,
           fallbackFloorplan: floorplan ?? null,
         });
-        if (prepared.floorplan) {
+        const shouldApplyLoadedDesign = options.finalize || lastLoadedVariantCount === 0;
+        if (shouldApplyLoadedDesign && prepared.floorplan) {
           setFloorplan(prepared.floorplan);
         }
         if (
+          shouldApplyLoadedDesign &&
           prepared.styledResult &&
           typeof prepared.styledResult === 'object' &&
           (Array.isArray((prepared.styledResult as any).objects) ||
@@ -248,7 +252,7 @@ export const Toolbar: React.FC = () => {
         ) {
           setStyledResult(prepared.styledResult);
         }
-        if (prepared.design) {
+        if (shouldApplyLoadedDesign && prepared.design) {
           setDesign(prepared.design);
         }
         if (prepared.variants.length > 0) {
@@ -265,15 +269,13 @@ export const Toolbar: React.FC = () => {
               (variant) => variant.variant_id === prepared.selectedVariantId
             ) ?? linkedVariants[0];
           setLayoutVariants(linkedVariants, primaryVariant.variant_id);
-          if (options.finalize || lastLoadedVariantCount === 0) {
+          if (shouldApplyLoadedDesign) {
             applyVariant(primaryVariant);
           }
           if (options.finalize) {
             setProgressPercent(100);
           }
-          setProgressLabel(
-            `Option 1/${prepared.variants.length} loaded`
-          );
+          setProgressLabel(formatLoadedOptionProgress(prepared.variants.length));
           setReadyNotice(formatReadyOptionNotice(prepared.variants.length));
         } else {
           if (options.finalize) {
@@ -335,7 +337,16 @@ export const Toolbar: React.FC = () => {
           break;
         }
         const readyVariantCount = getReadyVariantCount(status);
-        if (readyVariantCount > lastLoadedVariantCount) {
+        const partialLayoutsCanUpdate =
+          status.stage === 'stylist' || status.stage === 'layout_variants';
+        const now = Date.now();
+        const partialRefreshDue =
+          now - lastPartialLayoutRefreshAt >= PARTIAL_LAYOUT_REFRESH_INTERVAL_MS;
+        const shouldRefreshPartialLayouts =
+          readyVariantCount > lastLoadedVariantCount ||
+          (partialLayoutsCanUpdate && partialRefreshDue);
+        if (shouldRefreshPartialLayouts) {
+          lastPartialLayoutRefreshAt = now;
           try {
             const partialState = await loadPipelineLayouts(caseId, { finalize: false });
             if (partialState.variantCount > lastLoadedVariantCount) {
@@ -795,7 +806,7 @@ function formatStatusReadyOptionNotice(status: {
   progress_current?: number | null;
   progress_total?: number | null;
 }): string | null {
-  if (status.stage !== 'stylist') {
+  if (status.stage !== 'stylist' && status.stage !== 'layout_variants') {
     return null;
   }
   const current =
@@ -810,6 +821,12 @@ function formatStatusReadyOptionNotice(status: {
     return null;
   }
   return `Option ${Math.min(current, total)}/${total} ready`;
+}
+
+function formatLoadedOptionProgress(variantCount: number): string {
+  return variantCount === 1
+    ? 'Option 1 loaded'
+    : `${variantCount} layout options loaded`;
 }
 
 function formatReadyOptionNotice(variantCount: number): string | null {

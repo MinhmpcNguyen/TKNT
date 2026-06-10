@@ -25,7 +25,7 @@ DEFAULT_WINDOW_COLOR = "#D7E3EE"
 DEFAULT_OBJECT_COLOR = "#CFCAC2"
 
 STRUCTURAL_SKIP_TYPES = {"mattress", "headboard"}
-AUTO_DECOR_SKIP_TYPES = {"throw_blanket"}
+AUTO_DECOR_SKIP_TYPES = {"cushion", "throw_blanket"}
 UNDERLAY_TYPES = {"rug"}
 OPENING_MOUNTED_TYPES = {"curtain", "blind"}
 CEILING_MOUNTED_TYPES = {"ceiling_light", "pendant_light", "track_light"}
@@ -685,7 +685,7 @@ def _select_anchor_candidates(
     for item_type in ordered:
         if item_type in STRUCTURAL_SKIP_TYPES:
             continue
-        if item_type in AUTO_DECOR_SKIP_TYPES:
+        if item_type in AUTO_DECOR_SKIP_TYPES or item_type in FLOOR_SIDE_TYPES:
             continue
         if _is_disallowed_anchor_attachment(anchor=anchor, item_type=item_type):
             continue
@@ -1065,7 +1065,10 @@ def _place_adjacent_floor_item(
     horizontal = support.rect.width >= support.rect.height
     room_cx, room_cy = room_center
     if horizontal:
-        side = _outward_direction(support.rect.center_y, room_cy)
+        side = _outward_direction(
+            support_center=support.rect.center_y,
+            room_center=room_cy,
+        )
         if side > 0:
             min_y = support.rect.min_y - height - STACK_GAP_MM
             max_y = min_y + height
@@ -1076,7 +1079,10 @@ def _place_adjacent_floor_item(
         min_x = int(round(center_x - width / 2.0))
         max_x = min_x + width
     else:
-        side = _outward_direction(support.rect.center_x, room_cx)
+        side = _outward_direction(
+            support_center=support.rect.center_x,
+            room_center=room_cx,
+        )
         if side > 0:
             min_x = support.rect.min_x - width - STACK_GAP_MM
             max_x = min_x + width

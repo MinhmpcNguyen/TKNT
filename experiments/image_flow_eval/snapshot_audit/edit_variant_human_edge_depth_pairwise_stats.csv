@@ -1,0 +1,16 @@
+group,value,metric,n,delta_mean,ci95_low,ci95_high,sd_diff,cohens_dz,p_raw,p_holm,holm_reject_0_05,winner_by_delta,wins_object_scope,wins_prompt_only,ties
+overall,all,human_score_ratio,64,0.059375,0.0276787,0.0910713,0.12689047,0.46792325,0.00039525,0.00513829,True,edit_object_scope_preflight,21,4,39
+overall,all,layout_edge_structure,64,-0.03479444,-0.05710892,-0.01247997,0.08933201,-0.3894958,0.00276029,0.03312352,True,edit_prompt_image_only,31,33,0
+overall,all,layout_depth_structure,64,-0.02170901,-0.04153416,-0.00188386,0.07936645,-0.27352885,0.03236892,0.31762288,False,edit_prompt_image_only,30,34,0
+operation:add,add,human_score_ratio,16,-0.0125,-0.03914312,0.01414312,0.05,-0.25,0.33317014,1.0,False,edit_prompt_image_only,0,1,15
+operation:add,add,layout_edge_structure,16,-0.05824128,-0.11067021,-0.00581234,0.09839113,-0.59193623,0.03176229,0.31762288,False,edit_prompt_image_only,2,14,0
+operation:add,add,layout_depth_structure,16,-0.02256301,-0.08395819,0.03883217,0.1152177,-0.1958294,0.44563314,1.0,False,edit_prompt_image_only,7,9,0
+operation:recolor,recolor,human_score_ratio,16,0.225,0.18859857,0.26140143,0.06831301,3.29366275,0.0,2e-08,True,edit_object_scope_preflight,16,0,0
+operation:recolor,recolor,layout_edge_structure,16,0.01394627,0.00829518,0.01959735,0.01060515,1.31504714,9.606e-05,0.00134479,True,edit_object_scope_preflight,16,0,0
+operation:recolor,recolor,layout_depth_structure,16,-0.00142541,-0.01706155,0.01421074,0.02934368,-0.04857635,0.84854378,1.0,False,edit_prompt_image_only,10,6,0
+operation:remove,remove,human_score_ratio,16,0.0125,-0.03466158,0.05966158,0.08850612,0.14123317,0.58047097,1.0,False,edit_object_scope_preflight,2,1,13
+operation:remove,remove,layout_edge_structure,16,-0.00191389,-0.00631475,0.00248696,0.0082589,-0.23173708,0.36862866,1.0,False,edit_prompt_image_only,8,8,0
+operation:remove,remove,layout_depth_structure,16,-0.00809296,-0.02056719,0.00438126,0.02340984,-0.34570768,0.18695761,1.0,False,edit_prompt_image_only,6,10,0
+operation:replace,replace,human_score_ratio,16,0.0125,-0.04864388,0.07364388,0.1147461,0.10893617,0.6692275,1.0,False,edit_object_scope_preflight,3,2,11
+operation:replace,replace,layout_edge_structure,16,-0.09296887,-0.15988896,-0.02604879,0.12558605,-0.74028024,0.00971139,0.10682525,False,edit_prompt_image_only,5,11,0
+operation:replace,replace,layout_depth_structure,16,-0.05475467,-0.10795971,-0.00154963,0.09984762,-0.54838238,0.04444075,0.35552598,False,edit_prompt_image_only,7,9,0

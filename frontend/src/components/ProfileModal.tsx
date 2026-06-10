@@ -1,17 +1,28 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  buildPaymentReference,
   formatVnd,
   getMonthlyCreditsRemaining,
   type BillingMode,
 } from '../billing';
 import { useEditorStore } from '../store';
 import type { GeneratedRenderRecord } from '../types';
+import { BillingPaymentModal } from './BillingPaymentModal';
 
 type ProfileModalProps = {
   onClose: () => void;
 };
 
 type RenderMode = 'generate' | 'edit' | 'camera_rerender' | 'unknown';
+
+type PendingAddCreditPayment = {
+  amountVnd: number;
+  credits: number;
+  reason: string;
+  reference: string;
+};
+
+const DEFAULT_ADD_CREDIT_COUNT = 10;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -63,9 +74,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
     savedLayouts,
     savedRenders,
     billingSettings,
+    addPaidCredits,
+    appendRunLog,
     updateBillingSettings,
   } = useEditorStore();
+  const [creditDraft, setCreditDraft] = useState(
+    String(DEFAULT_ADD_CREDIT_COUNT)
+  );
+  const [pendingAddCreditPayment, setPendingAddCreditPayment] =
+    useState<PendingAddCreditPayment | null>(null);
+  const [addCreditStatus, setAddCreditStatus] = useState<string | null>(null);
   const monthlyRemaining = getMonthlyCreditsRemaining(billingSettings);
+  const addCreditCount = clampInteger(creditDraft, 1);
+  const addCreditAmountVnd = addCreditCount * billingSettings.perCreditPriceVnd;
   const usagePercent =
     billingSettings.monthlyCreditQuota > 0
       ? Math.min(
@@ -98,12 +119,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (pendingAddCreditPayment) {
+          setPendingAddCreditPayment(null);
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, pendingAddCreditPayment]);
 
   const selectBillingMode = (mode: BillingMode): void => {
     updateBillingSettings(
@@ -117,47 +142,85 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
     );
   };
 
-  return (
-    <div
-      className="profile-modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="profile-modal-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className="profile-modal-card">
-        <div className="profile-modal-header">
-          <div>
-            <div id="profile-modal-title" className="profile-modal-title">
-              Profile
-            </div>
-            <div className="profile-modal-subtitle">
-              {currentUser?.display_name || currentUser?.email}
-            </div>
-          </div>
-          <button className="profile-close-button" onClick={onClose} type="button">
-            Close
-          </button>
-        </div>
+  const startAddCreditPayment = (): void => {
+    const creditCount = clampInteger(creditDraft, 1);
+    const amountVnd = creditCount * billingSettings.perCreditPriceVnd;
+    setCreditDraft(String(creditCount));
+    setAddCreditStatus(null);
+    setPendingAddCreditPayment({
+      amountVnd,
+      credits: creditCount,
+      reason: `Scan this QR to add ${creditCount} paid render credit${
+        creditCount === 1 ? '' : 's'
+      } to this workspace.`,
+      reference: buildPaymentReference('add_credit'),
+    });
+  };
 
-        <div className="profile-modal-body">
-          <section className="profile-identity-card">
-            <div className="profile-avatar">
-              {(currentUser?.display_name || currentUser?.email || 'U')
-                .trim()
-                .slice(0, 1)
-                .toUpperCase()}
+  const confirmAddCreditPayment = (): void => {
+    if (!pendingAddCreditPayment) {
+      return;
+    }
+    addPaidCredits(pendingAddCreditPayment.credits);
+    appendRunLog(
+      `Added ${pendingAddCreditPayment.credits} paid credit${
+        pendingAddCreditPayment.credits === 1 ? '' : 's'
+      } by mock payment ${pendingAddCreditPayment.reference}.`
+    );
+    setAddCreditStatus(
+      `Added ${pendingAddCreditPayment.credits} paid credit${
+        pendingAddCreditPayment.credits === 1 ? '' : 's'
+      }.`
+    );
+    setPendingAddCreditPayment(null);
+  };
+
+  return (
+    <>
+      <div
+        className="profile-modal-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-modal-title"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
+      >
+        <div className="profile-modal-card">
+          <div className="profile-modal-header">
+            <div>
+              <div id="profile-modal-title" className="profile-modal-title">
+                Profile
+              </div>
+              <div className="profile-modal-subtitle">
+                {currentUser?.display_name || currentUser?.email}
+              </div>
             </div>
-            <div className="profile-identity-copy">
-              <strong>{currentUser?.display_name || currentUser?.email}</strong>
-              <span>{currentUser?.email}</span>
-              <span>Tenant: {currentUser?.tenant_id}</span>
-            </div>
-          </section>
+            <button
+              className="profile-save-button"
+              onClick={onClose}
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+
+          <div className="profile-modal-body">
+            <section className="profile-identity-card">
+              <div className="profile-avatar">
+                {(currentUser?.display_name || currentUser?.email || 'U')
+                  .trim()
+                  .slice(0, 1)
+                  .toUpperCase()}
+              </div>
+              <div className="profile-identity-copy">
+                <strong>{currentUser?.display_name || currentUser?.email}</strong>
+                <span>{currentUser?.email}</span>
+                <span>Tenant: {currentUser?.tenant_id}</span>
+              </div>
+            </section>
 
           <section className="profile-section">
             <div className="profile-section-header">
@@ -187,7 +250,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
               </div>
               <div className="profile-stat-card">
                 <span>Paid Credits</span>
-                <strong>{billingSettings.totalPaidCredits}</strong>
+                <strong>{billingSettings.paidCreditBalance}</strong>
               </div>
             </div>
           </section>
@@ -222,6 +285,46 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 <strong>{formatVnd(billingSettings.perCreditPriceVnd)}</strong>
                 <small>QR by selected render credits</small>
               </button>
+            </div>
+
+            <div className="billing-add-credit-card">
+              <div className="billing-add-credit-header">
+                <div>
+                  <strong>Paid Credit Balance</strong>
+                  <span>
+                    {billingSettings.paidCreditBalance} available ·{' '}
+                    {billingSettings.totalPaidCredits} added total
+                  </span>
+                </div>
+                <strong>{billingSettings.paidCreditBalance}</strong>
+              </div>
+              <div className="billing-add-credit-controls">
+                <label>
+                  <span>Credits to add</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={creditDraft}
+                    onChange={(event) => setCreditDraft(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={startAddCreditPayment}
+                >
+                  Add Credit
+                </button>
+              </div>
+              <span className="billing-add-credit-note">
+                QR amount: {formatVnd(addCreditAmountVnd)}
+              </span>
+              {addCreditStatus ? (
+                <span className="billing-add-credit-status">
+                  {addCreditStatus}
+                </span>
+              ) : null}
             </div>
 
             <div className="billing-usage-card">
@@ -293,6 +396,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
           </section>
         </div>
       </div>
-    </div>
+      </div>
+      {pendingAddCreditPayment ? (
+        <BillingPaymentModal
+          amountVnd={pendingAddCreditPayment.amountVnd}
+          chargeKind="add_credit"
+          confirmLabel="I paid, add credits"
+          creditCount={pendingAddCreditPayment.credits}
+          reason={pendingAddCreditPayment.reason}
+          reference={pendingAddCreditPayment.reference}
+          onCancel={() => setPendingAddCreditPayment(null)}
+          onConfirm={confirmAddCreditPayment}
+        />
+      ) : null}
+    </>
   );
 };

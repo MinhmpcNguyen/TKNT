@@ -1146,9 +1146,11 @@ export const Canvas2D: React.FC = () => {
       const w = placement.footprint_mm.w * scale;
       const d = placement.footprint_mm.d * scale;
       const isSelected = placement.placement_id === selectedPlacementId;
+      const canvasRotationDeg = planRotationToCanvasDeg(placement.rotation_deg);
       const stroke = isPlacementErrored(placement.placement_id) ? '#d9534f' : '#333';
       const labelText = isCurtain ? 'curtain' : placement.category;
       const labelColor = isCurtain ? '#b65a3a' : '#1f1f1f';
+      const selectedLabelWidth = Math.max(70, placement.category.length * 8);
       const showInlineLabel = true;
       const showHoverTag = false;
       const tagText = labelText;
@@ -1242,7 +1244,7 @@ export const Canvas2D: React.FC = () => {
             {isSelected && (
               <Group x={mid.x + 12} y={mid.y - curtainStrokeWidth - 10}>
                 <Rect
-                  width={Math.max(70, placement.category.length * 8)}
+                  width={selectedLabelWidth}
                   height={20}
                   fill="#fff"
                   stroke="#333"
@@ -1379,7 +1381,7 @@ export const Canvas2D: React.FC = () => {
             {isSelected && (
               <Group x={mid.x + 12} y={mid.y - wallItemStrokeWidth - 10}>
                 <Rect
-                  width={Math.max(70, placement.category.length * 8)}
+                  width={selectedLabelWidth}
                   height={20}
                   fill="#fff"
                   stroke="#333"
@@ -1497,199 +1499,220 @@ export const Canvas2D: React.FC = () => {
         );
       }
 
+      const selectedOverlaySize = Math.max(w, d);
+      const selectedOverlayX = clamp(
+        pos.x + selectedOverlaySize / 2 + 14,
+        4,
+        width - selectedLabelWidth - 4
+      );
+      const selectedOverlayY = clamp(
+        pos.y - selectedOverlaySize / 2,
+        4,
+        height - 48
+      );
+
       return (
-        <Group
-          key={placement.placement_id}
-          x={pos.x}
-          y={pos.y}
-          rotation={planRotationToCanvasDeg(placement.rotation_deg)}
-          draggable={!isLocked}
-          onDragMove={(evt) => {
-            if (isLocked) return;
-            if (evt.target !== evt.currentTarget) return;
-            const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
-            updatePlacement({ ...placement, position_mm: newPos });
-          }}
-          onClick={() => selectPlacement(placement.placement_id)}
-          onTap={() => selectPlacement(placement.placement_id)}
-        >
-          <Rect
-            x={-w / 2}
-            y={-d / 2}
-            width={w}
-            height={d}
-            fill={placement.color_hex || '#cfcac2'}
-            stroke={stroke}
-            strokeWidth={isSelected ? 3 : 1}
-            cornerRadius={6}
-            shadowColor="#333"
-            shadowBlur={isSelected ? 6 : 0}
-            shadowOffset={{ x: 0, y: 0 }}
-            shadowOpacity={0.2}
-          />
-          <Line
-            points={frontPoints}
-            stroke="rgba(255,255,255,0.96)"
-            strokeWidth={Math.max(3, Math.min(Math.min(w, d) * 0.06, 8))}
-            lineCap="round"
-            listening={false}
-          />
-          {showInlineLabel && (
-            <Group x={-w / 2 + 6} y={-d / 2 + 6} listening={false}>
-              <Rect
-                width={tagWidth}
-                height={tagHeight}
-                fill="rgba(255,255,255,0.75)"
-                stroke="rgba(0,0,0,0.18)"
-                cornerRadius={5}
-              />
-              <Text
-                text={tagText}
-                fontSize={tagFontSize}
-                fill={labelColor}
-                x={tagPaddingX}
-                y={tagPaddingY - 1}
-                width={Math.max(0, tagWidth - tagPaddingX * 2)}
-                ellipsis
-              />
-            </Group>
-          )}
-          {showHoverTag && (
-            <Group x={w / 2 + 10} y={-d / 2} listening={false}>
-              <Rect
-                width={Math.max(70, tagText.length * 7 + 22)}
-                height={20}
-                fill="rgba(255,255,255,0.9)"
-                stroke="rgba(0,0,0,0.25)"
-                cornerRadius={4}
-                shadowColor="#333"
-                shadowBlur={2}
-                shadowOpacity={0.12}
-              />
-              <Text text={tagText} fontSize={12} fill="#111" x={6} y={4} />
-            </Group>
-          )}
-          {isSelected && (
-            <Group x={w / 2 + 14} y={-d / 2}>
-              <Rect
-                width={Math.max(70, placement.category.length * 8)}
-                height={20}
-                fill="#fff"
-                stroke="#333"
-                cornerRadius={4}
-                shadowColor="#333"
-                shadowBlur={2}
-                shadowOpacity={0.15}
-              />
-              <Text
-                text={placement.category}
-                fontSize={12}
-                fill="#111"
-                x={6}
-                y={4}
-              />
-            </Group>
-          )}
+        <React.Fragment key={placement.placement_id}>
+          <Group
+            x={pos.x}
+            y={pos.y}
+            rotation={canvasRotationDeg}
+            draggable={!isLocked}
+            onDragMove={(evt) => {
+              if (isLocked) return;
+              if (evt.target !== evt.currentTarget) return;
+              const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
+              updatePlacement({ ...placement, position_mm: newPos });
+            }}
+            onClick={() => selectPlacement(placement.placement_id)}
+            onTap={() => selectPlacement(placement.placement_id)}
+          >
+            <Rect
+              x={-w / 2}
+              y={-d / 2}
+              width={w}
+              height={d}
+              fill={placement.color_hex || '#cfcac2'}
+              stroke={stroke}
+              strokeWidth={isSelected ? 3 : 1}
+              cornerRadius={6}
+              shadowColor="#333"
+              shadowBlur={isSelected ? 6 : 0}
+              shadowOffset={{ x: 0, y: 0 }}
+              shadowOpacity={0.2}
+            />
+            <Line
+              points={frontPoints}
+              stroke="rgba(255,255,255,0.96)"
+              strokeWidth={Math.max(3, Math.min(Math.min(w, d) * 0.06, 8))}
+              lineCap="round"
+              listening={false}
+            />
+            {showInlineLabel && (
+              <Group x={-w / 2 + 6} y={-d / 2 + 6} listening={false}>
+                <Rect
+                  width={tagWidth}
+                  height={tagHeight}
+                  fill="rgba(255,255,255,0.75)"
+                  stroke="rgba(0,0,0,0.18)"
+                  cornerRadius={5}
+                />
+                <Text
+                  text={tagText}
+                  fontSize={tagFontSize}
+                  fill={labelColor}
+                  x={tagPaddingX}
+                  y={tagPaddingY - 1}
+                  width={Math.max(0, tagWidth - tagPaddingX * 2)}
+                  ellipsis
+                />
+              </Group>
+            )}
+            {showHoverTag && (
+              <Group x={w / 2 + 10} y={-d / 2} listening={false}>
+                <Rect
+                  width={Math.max(70, tagText.length * 7 + 22)}
+                  height={20}
+                  fill="rgba(255,255,255,0.9)"
+                  stroke="rgba(0,0,0,0.25)"
+                  cornerRadius={4}
+                  shadowColor="#333"
+                  shadowBlur={2}
+                  shadowOpacity={0.12}
+                />
+                <Text text={tagText} fontSize={12} fill="#111" x={6} y={4} />
+              </Group>
+            )}
+            {isSelected && !isLocked && (
+              <Group
+                x={w / 2 + 18}
+                y={0}
+                rotation={-canvasRotationDeg}
+              >
+                <Line
+                  points={[-18, 0, 0, 0]}
+                  stroke="rgba(51, 51, 51, 0.45)"
+                  strokeWidth={1.5}
+                  dash={[5, 5]}
+                  listening={false}
+                />
+                <Group
+                  draggable
+                  y={0}
+                  onMouseDown={(evt) => {
+                    evt.cancelBubble = true;
+                  }}
+                  onTouchStart={(evt) => {
+                    evt.cancelBubble = true;
+                  }}
+                  onDragStart={(evt) => {
+                    evt.cancelBubble = true;
+                  }}
+                  onDragMove={(evt) => {
+                    evt.cancelBubble = true;
+                    const pointer = stageRef.current?.getPointerPosition();
+                    if (!pointer) return;
+                    const worldPoint = fromCanvasPoint({ x: pointer.x, y: pointer.y });
+                    const localX = worldPoint.x - placement.position_mm.x;
+                    const localY = worldPoint.y - placement.position_mm.y;
+                    const rad = Math.atan2(localY, localX);
+                    updatePlacement({ ...placement, rotation_deg: (rad * 180) / Math.PI });
+                    evt.target.position({ x: 0, y: 0 });
+                  }}
+                >
+                  <Circle
+                    radius={16}
+                    fill={ROTATE_CONTROL_FILL}
+                    stroke={ROTATE_CONTROL_STROKE}
+                    strokeWidth={2.5}
+                    shadowColor="#000"
+                    shadowBlur={4}
+                    shadowOpacity={0.18}
+                  />
+                  <Line
+                    points={[-5, -2, 0, -7, 6, -2]}
+                    stroke={ROTATE_CONTROL_HIGHLIGHT}
+                    strokeWidth={2.5}
+                    lineCap="round"
+                    lineJoin="round"
+                    closed
+                    listening={false}
+                  />
+                  <Line
+                    points={[-6, 5, 0, 9, 7, 5]}
+                    stroke={ROTATE_CONTROL_HIGHLIGHT}
+                    strokeWidth={2.5}
+                    lineCap="round"
+                    lineJoin="round"
+                    closed
+                    listening={false}
+                  />
+                </Group>
+              </Group>
+            )}
+          </Group>
           {isSelected && (
             <Group
-              x={w / 2 + 14}
-              y={-d / 2 + 26}
+              x={selectedOverlayX}
+              y={selectedOverlayY}
               onClick={(evt) => {
                 evt.cancelBubble = true;
-                removePlacement(placement.placement_id);
               }}
               onTap={(evt) => {
                 evt.cancelBubble = true;
-                removePlacement(placement.placement_id);
               }}
             >
-              <Rect
-                width={60}
-                height={18}
-                fill="#d9534f"
-                stroke="#b52b27"
-                cornerRadius={4}
-                shadowColor="#000"
-                shadowBlur={2}
-                shadowOpacity={0.15}
-              />
-              <Text
-                text="Delete"
-                fontSize={11}
-                fill="#fff"
-                x={10}
-                y={3}
-              />
-            </Group>
-          )}
-          {isSelected && !isLocked && (
-            <Group
-              x={w / 2 + 18}
-              y={0}
-              rotation={-planRotationToCanvasDeg(placement.rotation_deg)}
-            >
-              <Line
-                points={[-18, 0, 0, 0]}
-                stroke="rgba(51, 51, 51, 0.45)"
-                strokeWidth={1.5}
-                dash={[5, 5]}
-                listening={false}
-              />
+              <Group>
+                <Rect
+                  width={selectedLabelWidth}
+                  height={20}
+                  fill="#fff"
+                  stroke="#333"
+                  cornerRadius={4}
+                  shadowColor="#333"
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
+                />
+                <Text
+                  text={placement.category}
+                  fontSize={12}
+                  fill="#111"
+                  x={6}
+                  y={4}
+                />
+              </Group>
               <Group
-                draggable
-                y={0}
-                onMouseDown={(evt) => {
+                y={26}
+                onClick={(evt) => {
                   evt.cancelBubble = true;
+                  removePlacement(placement.placement_id);
                 }}
-                onTouchStart={(evt) => {
+                onTap={(evt) => {
                   evt.cancelBubble = true;
-                }}
-                onDragStart={(evt) => {
-                  evt.cancelBubble = true;
-                }}
-                onDragMove={(evt) => {
-                  evt.cancelBubble = true;
-                  const pointer = stageRef.current?.getPointerPosition();
-                  if (!pointer) return;
-                  const worldPoint = fromCanvasPoint({ x: pointer.x, y: pointer.y });
-                  const localX = worldPoint.x - placement.position_mm.x;
-                  const localY = worldPoint.y - placement.position_mm.y;
-                  const rad = Math.atan2(localY, localX);
-                  updatePlacement({ ...placement, rotation_deg: (rad * 180) / Math.PI });
-                  evt.target.position({ x: 0, y: 0 });
+                  removePlacement(placement.placement_id);
                 }}
               >
-                <Circle
-                  radius={16}
-                  fill={ROTATE_CONTROL_FILL}
-                  stroke={ROTATE_CONTROL_STROKE}
-                  strokeWidth={2.5}
+                <Rect
+                  width={60}
+                  height={18}
+                  fill="#d9534f"
+                  stroke="#b52b27"
+                  cornerRadius={4}
                   shadowColor="#000"
-                  shadowBlur={4}
-                  shadowOpacity={0.18}
+                  shadowBlur={2}
+                  shadowOpacity={0.15}
                 />
-                <Line
-                  points={[-5, -2, 0, -7, 6, -2]}
-                  stroke={ROTATE_CONTROL_HIGHLIGHT}
-                  strokeWidth={2.5}
-                  lineCap="round"
-                  lineJoin="round"
-                  closed
-                  listening={false}
-                />
-                <Line
-                  points={[-6, 5, 0, 9, 7, 5]}
-                  stroke={ROTATE_CONTROL_HIGHLIGHT}
-                  strokeWidth={2.5}
-                  lineCap="round"
-                  lineJoin="round"
-                  closed
-                  listening={false}
+                <Text
+                  text="Delete"
+                  fontSize={11}
+                  fill="#fff"
+                  x={10}
+                  y={3}
                 />
               </Group>
             </Group>
           )}
-        </Group>
+        </React.Fragment>
       );
     });
   };

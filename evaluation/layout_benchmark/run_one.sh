@@ -19,12 +19,13 @@ fi
 : "${FLAIRGPT_ENV_PREFIX:=.conda_envs/benchmark-flairgpt}"
 : "${RUN_ROOT:=evaluation/layout_benchmark/runs/manual}"
 : "${CASES:=evaluation/layout_benchmark/cases.json}"
+: "${MODE:=run}"
 CASE="${CASE-bedroom_01_rect_door_right_window_left}"
 SYSTEM="${SYSTEM-tknt_full}"
 : "${CASES_ROOT:=evaluation/layout_benchmark/tknt_case_artifacts/manual}"
-: "${TIMEOUT_S:=600}"
-: "${EXTERNAL_TIMEOUT_S:=0}"
-: "${EXTERNAL_MAX_ATTEMPTS:=3}"
+: "${TIMEOUT_S:=1200}"
+: "${EXTERNAL_TIMEOUT_S:=$TIMEOUT_S}"
+: "${EXTERNAL_MAX_ATTEMPTS:=1}"
 : "${IDESIGN_LLM_TIMEOUT_S:=0}"
 : "${FLAIRGPT_LLM_TIMEOUT_S:=0}"
 
@@ -73,7 +74,7 @@ cd "$REPO_ROOT"
 
 command=(
   "$BENCHMARK_RUNNER_PYTHON" -m evaluation.layout_benchmark.run_benchmark
-  --mode run
+  --mode "$MODE"
   --run-external
   --cases "$CASES"
   --model "$MODEL"

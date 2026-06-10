@@ -106,6 +106,9 @@ def normalize_tknt_payload(
                 object_type=object_type,
                 polygon=polygon,
                 rotation_degrees=_number(item.get("rotation_ccw")) or 0.0,
+                front_world=_optional_mapping(item.get("front_world")),
+                front_side_world=_first_string(item, "front_side_world") or None,
+                axis_world=_optional_mapping(item.get("axis_world")),
                 raw=dict(item),
             )
         )
@@ -159,6 +162,10 @@ def normalize_generic_external_payload(
                 object_type=object_type,
                 polygon=polygon,
                 rotation_degrees=_rotation_degrees(item),
+                front_world=_optional_mapping(item.get("front_world")),
+                front_side_world=_first_string(item, "front_side_world", "facing")
+                or None,
+                axis_world=_optional_mapping(item.get("axis_world")),
                 raw=dict(item),
             )
         )
@@ -408,6 +415,11 @@ def _rotated_box(
 
 def _mapping(value: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _optional_mapping(value: object) -> Mapping[str, object] | None:
+    item = _mapping(value)
+    return item or None
 
 
 def _sequence(value: object) -> Sequence[object]:

@@ -1,0 +1,74 @@
+[
+  {
+    "system_id": "tknt_full",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "full"
+  },
+  {
+    "system_id": "tknt_ab_minimal_room_context",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "minimal_room_context"
+  },
+  {
+    "system_id": "tknt_ab_no_style_policy",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_style_policy"
+  },
+  {
+    "system_id": "tknt_ab_no_semantic_layout_planner",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_semantic_layout_planner"
+  },
+  {
+    "system_id": "tknt_ab_no_request_contract",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_request_contract"
+  },
+  {
+    "system_id": "tknt_ab_no_tier_capacity",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_tier_capacity"
+  },
+  {
+    "system_id": "tknt_ab_single_concept",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "single_concept"
+  },
+  {
+    "system_id": "tknt_ab_no_concept_repair",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_concept_repair"
+  },
+  {
+    "system_id": "tknt_ab_no_material_macro_repair",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_material_macro_repair"
+  },
+  {
+    "system_id": "tknt_ab_no_accessory_refill",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_accessory_refill"
+  },
+  {
+    "system_id": "tknt_ab_no_stylist_llm",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_stylist_llm"
+  },
+  {
+    "system_id": "tknt_ab_no_gallery_selector",
+    "kind": "tknt",
+    "normalizer": "tknt",
+    "ablation": "no_gallery_selector"
+  }
+]

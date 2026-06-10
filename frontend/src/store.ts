@@ -175,7 +175,8 @@ export type EditorState = {
   setBillingSettings: (settings: BillingSettings) => void;
   updateBillingSettings: (patch: Partial<BillingSettings>) => void;
   consumeMonthlyImageCredits: (credits: number) => boolean;
-  recordPaidImageUse: (credits: number) => void;
+  addPaidCredits: (credits: number) => void;
+  consumePaidCredits: (credits: number) => boolean;
 };
 
 function normalizeUserInputOptions(userInput: UserInput): UserInput {
@@ -622,16 +623,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ billingSettings: next });
     return true;
   },
-  recordPaidImageUse: (credits) =>
+  addPaidCredits: (credits) =>
     set((state) => {
       const creditCount = Math.max(1, Math.round(credits));
       const next = ensureCurrentBillingPeriod({
         ...state.billingSettings,
+        paidCreditBalance: state.billingSettings.paidCreditBalance + creditCount,
         totalPaidCredits: state.billingSettings.totalPaidCredits + creditCount,
       });
       saveBillingSettings(next);
       return { billingSettings: next };
     }),
+  consumePaidCredits: (credits) => {
+    const creditCount = Math.max(1, Math.round(credits));
+    const current = ensureCurrentBillingPeriod(get().billingSettings);
+    if (current.paidCreditBalance < creditCount) {
+      if (current !== get().billingSettings) {
+        saveBillingSettings(current);
+        set({ billingSettings: current });
+      }
+      return false;
+    }
+    const next = {
+      ...current,
+      paidCreditBalance: current.paidCreditBalance - creditCount,
+    };
+    saveBillingSettings(next);
+    set({ billingSettings: next });
+    return true;
+  },
 }));
 
 function normalizeEditablePlacement(

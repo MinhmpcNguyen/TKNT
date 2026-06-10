@@ -47,6 +47,11 @@ SNAPSHOT_RENDER_INCLUDE_PRESET_REFERENCE_IMAGES_ENV = (
     "TKNT_SNAPSHOT_RENDER_INCLUDE_PRESET_REFERENCE_IMAGES"
 )
 SNAPSHOT_RENDER_SIMPLE_PROMPT_ENV = "TKNT_SNAPSHOT_RENDER_SIMPLE_PROMPT"
+SNAPSHOT_RENDER_TEXT_CONTRACT_ENV = "TKNT_SNAPSHOT_RENDER_TEXT_CONTRACT"
+SNAPSHOT_RENDER_TEXT_CONTRACT_OBJECT_LIMIT_ENV = (
+    "TKNT_SNAPSHOT_RENDER_TEXT_CONTRACT_OBJECT_LIMIT"
+)
+SNAPSHOT_RENDER_STRICT_LAYOUT_ENV = "TKNT_SNAPSHOT_RENDER_STRICT_LAYOUT"
 OPENAI_IMAGE_API_KEY_ENV = "OPENAI_IMAGE_API_KEY"
 OPENAI_IMAGE_MODEL_ENV = "TKNT_OPENAI_IMAGE_MODEL"
 OPENAI_IMAGE_SIZE_ENV = "TKNT_OPENAI_IMAGE_SIZE"
@@ -59,6 +64,9 @@ _DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 _DEFAULT_OPENAI_IMAGE_SIZE = "1536x1024"
 _DEFAULT_OPENAI_IMAGE_QUALITY = "medium"
 _DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES = 2
+_DEFAULT_TEXT_CONTRACT_OBJECT_LIMIT = 10
+_MAX_TEXT_CONTRACT_OBJECT_LIMIT = 24
+_DEFAULT_STRICT_LAYOUT = True
 _SUPPORTED_OPENAI_IMAGE_SIZES = {
     "1024x1024",
     "1024x1536",
@@ -73,8 +81,13 @@ _DEFAULT_USER_PROMPT = (
     "architecture, room shell, openings, object count, object colors, object "
     "shapes, main furniture, and visible layout."
 )
-_DEFAULT_SIMPLE_USER_PROMPT = (
-    "make this more photorealistic, don't change anything."
+_DEFAULT_SIMPLE_USER_PROMPT = "make this more photorealistic, don't change anything."
+_STRICT_LAYOUT_USER_PROMPT = (
+    "Materialize the exact 3D source view as a photorealistic interior. "
+    "Keep the same camera, crop, room shell, openings, object inventory, "
+    "object positions, object scale, object silhouettes, object colors, and "
+    "depth order. Only improve material realism, finish detail, lighting "
+    "quality, and exterior scenery visible through existing windows."
 )
 _TV_CONSOLE_RENDER_IDENTITY_LABEL = "TV console with integrated flat-screen TV"
 _TV_CONSOLE_RENDER_IDENTITY_HINT = (
@@ -130,12 +143,20 @@ _EDIT_SYSTEM_PROMPT = (
     "Change only the explicitly requested selected object, drawn region, or global preset attribute. Preserve room identity, materials, style continuity, architecture, openings, camera, layout, object count, object shapes, positions, scale, and every unedited object unless the prompt explicitly asks for that exact target to change.\n"
     "Output a clean photorealistic interior photograph. No colored rectangles, no region IDs, no label text, no guide graphics, no annotations of any kind, no people, no watermarks, no room-type change."
 )
+_LAYOUT_MATERIALIZATION_EDIT_SYSTEM_PROMPT = (
+    "You are materializing an exact 3D interior source image into a photorealistic interior using one source-guided edit.\n\n"
+    "The first input image is the exact 3D source view and is the source of truth for camera, crop, room shell, openings, object inventory, object positions, object scale, silhouettes, colors, depth order, and occlusion.\n"
+    "If an edit mask is provided, transparent pixels may be photorealized, while opaque pixels preserve the source and must not be redrawn or moved.\n"
+    "If a structural guide image is provided, use its semantic room-shell surfaces, crop guard, opening marks, object anchors, edge map, and rejected-anchor notes only to understand layout. Never render guide colors, lines, labels, boxes, masks, text, or annotations.\n"
+    "This is material and lighting refinement only. Do not invent, add, remove, resize, move, complete, or replace walls, openings, built-ins, furniture, decor, or foreground objects.\n"
+    "Output a clean photorealistic interior photograph. No colored rectangles, no labels, no guide graphics, no people, no text, no watermark, no room-type change."
+)
 _CAMERA_TRANSFER_EDIT_SYSTEM_PROMPT = (
     "You are editing an existing photorealistic interior image while transferring it to a new 3D camera view.\n\n"
     "The first input image is the approved photorealistic source image. Preserve its object identity, materials, colors, lighting style, and realistic finish unless explicit edit operations or changed presets say otherwise.\n"
     "The second input image is the sharp target 3D layout/camera reference. It is the source of truth for the new camera angle, framing, perspective, room shell, openings, object placement, object scale, depth order, and occlusion.\n"
     "Do not preserve the old camera from the first image. Change the output viewpoint to match the second image.\n"
-    "If an edit-region guide image is provided, use its colored boxes and region labels only to locate requested local edits. The boxes, labels, outlines, colored fills, tinted overlays, and all other guide graphics must never appear in the output image.\n"
+    "If a structural guide image is provided, use it only to understand room-shell surfaces, crop edges, openings, object anchors, and noisy-anchor warnings. If an edit-region guide image is provided, use its colored boxes and region labels only to locate requested local edits. Guide colors, boxes, labels, outlines, tinted overlays, and all other guide graphics must never appear in the output image.\n"
     "If preset or replacement reference images are provided, use them only for the explicitly mapped preset or edit operation. Do not copy their room, camera, layout, architecture, object count, object placement, or furniture arrangement.\n"
     "Output a clean photorealistic interior photograph from the target 3D camera. No colored rectangles, no region IDs, no label text, no guide graphics, no annotations of any kind, no people, no watermarks, no room-type change."
 )
@@ -160,6 +181,11 @@ class SnapshotImageRenderConfig:
     include_locked_geometry_references: bool = False
     include_preset_reference_images: bool = True
     simple_prompt_mode: bool = False
+    text_contract_mode: bool = False
+    text_contract_object_limit: int = _DEFAULT_TEXT_CONTRACT_OBJECT_LIMIT
+    include_edit_operation_dsl: bool = True
+    disable_edit_mask: bool = False
+    strict_layout_mode: bool = _DEFAULT_STRICT_LAYOUT
     openai_api_key: str | None = None
     openai_image_model: str = _DEFAULT_OPENAI_IMAGE_MODEL
     openai_image_size: str = _DEFAULT_OPENAI_IMAGE_SIZE
@@ -223,6 +249,21 @@ class SnapshotImageRenderConfig:
                 SNAPSHOT_RENDER_SIMPLE_PROMPT_ENV,
                 default=False,
             ),
+            text_contract_mode=_read_bool_env(
+                SNAPSHOT_RENDER_TEXT_CONTRACT_ENV,
+                default=False,
+            ),
+            text_contract_object_limit=_normalize_text_contract_object_limit(
+                _read_int_env(
+                    SNAPSHOT_RENDER_TEXT_CONTRACT_OBJECT_LIMIT_ENV,
+                    default=_DEFAULT_TEXT_CONTRACT_OBJECT_LIMIT,
+                )
+            ),
+            include_edit_operation_dsl=True,
+            strict_layout_mode=_read_bool_env(
+                SNAPSHOT_RENDER_STRICT_LAYOUT_ENV,
+                default=_DEFAULT_STRICT_LAYOUT,
+            ),
             openai_api_key=openai_api_key,
             openai_image_model=openai_image_model,
             openai_image_size=openai_image_size,
@@ -235,9 +276,9 @@ class SnapshotImageRenderConfig:
 class SnapshotEditOperation:
     object_id: str
     object_name: str | None = None
-    operation_type: (
-        Literal["prompt", "add", "replace", "recolor", "remove"] | None
-    ) = None
+    operation_type: Literal["prompt", "add", "replace", "recolor", "remove"] | None = (
+        None
+    )
     prompt: str | None = None
     bbox_norm: Mapping[str, float] | None = None
     replacement_image_data_url: str | None = None
@@ -306,6 +347,8 @@ def render_snapshot_image(
     user_prompt: str | None = None,
     layout_reference_image_data_url: str | None = None,
     annotated_reference_image_data_url: str | None = None,
+    layout_guard_mask_image_data_url: str | None = None,
+    layout_materialization_mode: bool = False,
     scene_reference_image_data_url: str | None = None,
     scene_reference_mode: SceneReferenceMode = "none",
     render_mode: RenderMode = "generate",
@@ -343,8 +386,14 @@ def render_snapshot_image(
         segmentation_map_image_data_url=segmentation_map_image_data_url,
     )
     geometry_reference_requested = any(geometry_references_requested.values())
+    geometry_reference_allowed = render_mode in {"generate", "camera_rerender"} or (
+        render_mode == "edit"
+        and (
+            layout_materialization_mode or layout_guard_mask_image_data_url is not None
+        )
+    )
     geometry_reference_used = (
-        render_mode in {"generate", "camera_rerender"}
+        geometry_reference_allowed
         and geometry_reference_requested
         and resolved_config.include_geometry_references
     )
@@ -471,6 +520,17 @@ def render_snapshot_image(
         if annotated_reference_image_data_url
         else None
     )
+    normalized_layout_guard_mask = (
+        _normalize_image_data_url(layout_guard_mask_image_data_url)
+        if layout_guard_mask_image_data_url
+        else None
+    )
+    layout_guard_mask_used = (
+        render_mode == "edit" and normalized_layout_guard_mask is not None
+    )
+    layout_materialization_mode_used = render_mode == "edit" and (
+        layout_materialization_mode or layout_guard_mask_used
+    )
     annotated_reference_requested = normalized_annotated_reference is not None
     edit_region_guide_used = (
         render_mode == "edit"
@@ -478,9 +538,8 @@ def render_snapshot_image(
         and annotated_reference_requested
         and any(operation.bbox_norm is not None for operation in normalized_operations)
     )
-    annotated_reference_used = (
-        annotated_reference_requested
-        and (resolved_config.include_annotated_reference or edit_region_guide_used)
+    annotated_reference_used = annotated_reference_requested and (
+        resolved_config.include_annotated_reference or edit_region_guide_used
     )
     normalized_layout_reference = (
         _normalize_image_data_url(layout_reference_image_data_url)
@@ -494,6 +553,19 @@ def render_snapshot_image(
         and not annotated_reference_used
         and resolved_config.include_layout_2d_reference
         and normalized_layout_reference is not None
+    )
+    text_contract_used = resolved_config.text_contract_mode
+    strict_layout_used = resolved_config.strict_layout_mode
+    configured_text_contract_object_limit = resolved_config.text_contract_object_limit
+    text_contract_object_limit = (
+        min(
+            _MAX_TEXT_CONTRACT_OBJECT_LIMIT,
+            max(configured_text_contract_object_limit, len(visible_objects)),
+        )
+        if text_contract_used
+        and strict_layout_used
+        and configured_text_contract_object_limit > 0
+        else configured_text_contract_object_limit
     )
     simple_prompt_used = (
         render_mode in {"generate", "camera_rerender"}
@@ -515,6 +587,10 @@ def render_snapshot_image(
             user_prompt=user_prompt,
             preset_prompt=preset_prompt,
             preset_reference_images=preset_reference_images,
+            snapshot_payload=effective_snapshot_payload,
+            include_text_contract=text_contract_used,
+            text_contract_object_limit=text_contract_object_limit,
+            strict_layout_mode=strict_layout_used,
         )
         if simple_prompt_used
         else _build_final_user_prompt(
@@ -534,6 +610,11 @@ def render_snapshot_image(
             locked_geometry_atlases=normalized_locked_geometry_atlases,
             preset_reference_count=len(preset_reference_images),
             camera_transfer_reference_used=edit_camera_transfer_reference_used,
+            text_contract_used=text_contract_used,
+            include_edit_operation_dsl=resolved_config.include_edit_operation_dsl,
+            strict_layout_mode=strict_layout_used,
+            layout_guard_mask_used=layout_guard_mask_used,
+            layout_materialization_mode_used=layout_materialization_mode_used,
         )
     )
     simple_prompt_image_role_hint_used = simple_prompt_used
@@ -560,15 +641,22 @@ def render_snapshot_image(
             "aspect_ratio": aspect_ratio,
             "simple_prompt_used": simple_prompt_used,
             "simple_prompt_config": resolved_config.simple_prompt_mode,
-            "simple_prompt_image_role_hint_used": (
-                simple_prompt_image_role_hint_used
-            ),
+            "text_contract_used": text_contract_used,
+            "text_contract_config": resolved_config.text_contract_mode,
+            "text_contract_object_limit": text_contract_object_limit,
+            "include_edit_operation_dsl": resolved_config.include_edit_operation_dsl,
+            "disable_edit_mask": resolved_config.disable_edit_mask,
+            "strict_layout_used": strict_layout_used,
+            "strict_layout_config": resolved_config.strict_layout_mode,
+            "simple_prompt_image_role_hint_used": (simple_prompt_image_role_hint_used),
             "scene_reference_mode": resolved_scene_reference_mode,
             "layout_reference_enabled": layout_reference_enabled,
             "layout_reference_used": layout_reference_used,
             "annotated_reference_requested": annotated_reference_requested,
             "annotated_reference_used": annotated_reference_used,
             "edit_region_guide_used": edit_region_guide_used,
+            "layout_guard_mask_used": layout_guard_mask_used,
+            "layout_materialization_mode_used": layout_materialization_mode_used,
             "camera_transfer_reference_used": edit_camera_transfer_reference_used,
             "include_annotated_reference_config": (
                 resolved_config.include_annotated_reference
@@ -607,9 +695,7 @@ def render_snapshot_image(
             "locked_geometry_atlas_requested_count": (
                 locked_geometry_atlas_requested_count
             ),
-            "locked_geometry_atlas_used_count": len(
-                normalized_locked_geometry_atlases
-            ),
+            "locked_geometry_atlas_used_count": len(normalized_locked_geometry_atlases),
             "include_locked_geometry_references_config": (
                 resolved_config.include_locked_geometry_references
             ),
@@ -647,6 +733,9 @@ def render_snapshot_image(
                 "annotated_reference": summarize_image_data_url(
                     normalized_annotated_reference if annotated_reference_used else None
                 ),
+                "layout_guard_mask": summarize_image_data_url(
+                    normalized_layout_guard_mask if layout_guard_mask_used else None
+                ),
                 "layout_reference": summarize_image_data_url(
                     normalized_layout_reference if layout_reference_used else None
                 ),
@@ -676,7 +765,9 @@ def render_snapshot_image(
 
     active_system_prompt = (
         ""
-        if simple_prompt_used
+        if simple_prompt_used and not text_contract_used and not strict_layout_used
+        else _LAYOUT_MATERIALIZATION_EDIT_SYSTEM_PROMPT
+        if layout_materialization_mode_used
         else _CAMERA_TRANSFER_EDIT_SYSTEM_PROMPT
         if edit_camera_transfer_reference_used
         else _system_prompt_for_render_mode(render_mode)
@@ -692,11 +783,16 @@ def render_snapshot_image(
             depth_map_image_data_url=normalized_depth_map,
             edge_map_image_data_url=normalized_edge_map,
             segmentation_map_image_data_url=normalized_segmentation_map,
+            layout_guard_mask_image_data_url=(
+                normalized_layout_guard_mask if layout_guard_mask_used else None
+            ),
             annotated_reference_image_data_url=(
                 normalized_annotated_reference if annotated_reference_used else None
             ),
             camera_reference_image_data_url=(
-                structural_image_data_url if edit_camera_transfer_reference_used else None
+                structural_image_data_url
+                if edit_camera_transfer_reference_used
+                else None
             ),
             scene_reference_image_data_url=(
                 normalized_scene_reference if scene_reference_used else None
@@ -710,7 +806,10 @@ def render_snapshot_image(
             locked_geometry_atlases=normalized_locked_geometry_atlases,
             edit_operations=effective_operations,
             render_mode=render_mode,
-            disable_edit_mask=edit_camera_transfer_reference_used,
+            disable_edit_mask=(
+                resolved_config.disable_edit_mask
+                or (edit_camera_transfer_reference_used and not layout_guard_mask_used)
+            ),
             disable_edit_scope_validation=edit_camera_transfer_reference_used,
             locked_items=locked_items,
             openai_api_key=resolved_config.openai_api_key,
@@ -765,9 +864,14 @@ def render_snapshot_image(
             "streamed": streamed,
             "simple_prompt_used": simple_prompt_used,
             "simple_prompt_config": resolved_config.simple_prompt_mode,
-            "simple_prompt_image_role_hint_used": (
-                simple_prompt_image_role_hint_used
-            ),
+            "text_contract_used": text_contract_used,
+            "text_contract_config": resolved_config.text_contract_mode,
+            "text_contract_object_limit": text_contract_object_limit,
+            "include_edit_operation_dsl": resolved_config.include_edit_operation_dsl,
+            "disable_edit_mask": resolved_config.disable_edit_mask,
+            "strict_layout_used": strict_layout_used,
+            "strict_layout_config": resolved_config.strict_layout_mode,
+            "simple_prompt_image_role_hint_used": (simple_prompt_image_role_hint_used),
             "aspect_ratio": aspect_ratio,
             "source_image_mime_type": _extract_data_url_mime_type(
                 source_image_data_url
@@ -801,6 +905,8 @@ def render_snapshot_image(
             "annotated_reference_requested": annotated_reference_requested,
             "annotated_reference_used": annotated_reference_used,
             "edit_region_guide_used": edit_region_guide_used,
+            "layout_guard_mask_used": layout_guard_mask_used,
+            "layout_materialization_mode_used": layout_materialization_mode_used,
             "camera_transfer_reference_used": edit_camera_transfer_reference_used,
             "include_annotated_reference_config": (
                 resolved_config.include_annotated_reference
@@ -860,9 +966,7 @@ def render_snapshot_image(
             "locked_geometry_atlas_requested_count": (
                 locked_geometry_atlas_requested_count
             ),
-            "locked_geometry_atlas_used_count": len(
-                normalized_locked_geometry_atlases
-            ),
+            "locked_geometry_atlas_used_count": len(normalized_locked_geometry_atlases),
             "include_locked_geometry_references_config": (
                 resolved_config.include_locked_geometry_references
             ),
@@ -898,12 +1002,17 @@ def render_snapshot_image(
             "layout_lock_mode": layout_lock_mode,
             "simple_prompt_used": simple_prompt_used,
             "simple_prompt_config": resolved_config.simple_prompt_mode,
-            "simple_prompt_image_role_hint_used": (
-                simple_prompt_image_role_hint_used
-            ),
+            "text_contract_used": text_contract_used,
+            "text_contract_config": resolved_config.text_contract_mode,
+            "text_contract_object_limit": text_contract_object_limit,
+            "strict_layout_used": strict_layout_used,
+            "strict_layout_config": resolved_config.strict_layout_mode,
+            "simple_prompt_image_role_hint_used": (simple_prompt_image_role_hint_used),
             "annotated_reference_requested": annotated_reference_requested,
             "annotated_reference_used": annotated_reference_used,
             "edit_region_guide_used": edit_region_guide_used,
+            "layout_guard_mask_used": layout_guard_mask_used,
+            "layout_materialization_mode_used": layout_materialization_mode_used,
             "camera_transfer_reference_used": edit_camera_transfer_reference_used,
             "include_annotated_reference_config": (
                 resolved_config.include_annotated_reference
@@ -945,9 +1054,7 @@ def render_snapshot_image(
             "locked_geometry_atlas_requested_count": (
                 locked_geometry_atlas_requested_count
             ),
-            "locked_geometry_atlas_used_count": len(
-                normalized_locked_geometry_atlases
-            ),
+            "locked_geometry_atlas_used_count": len(normalized_locked_geometry_atlases),
             "include_locked_geometry_references_config": (
                 resolved_config.include_locked_geometry_references
             ),
@@ -975,6 +1082,8 @@ def render_snapshot_image_from_path(
     segmentation_map_image_data_url: str | None = None,
     layout_reference_image_data_url: str | None = None,
     annotated_reference_image_data_url: str | None = None,
+    layout_guard_mask_image_data_url: str | None = None,
+    layout_materialization_mode: bool = False,
     scene_reference_image_data_url: str | None = None,
     scene_reference_mode: SceneReferenceMode = "none",
     render_mode: RenderMode = "generate",
@@ -1017,6 +1126,8 @@ def render_snapshot_image_from_path(
         user_prompt=user_prompt,
         layout_reference_image_data_url=layout_reference_image_data_url,
         annotated_reference_image_data_url=annotated_reference_image_data_url,
+        layout_guard_mask_image_data_url=layout_guard_mask_image_data_url,
+        layout_materialization_mode=layout_materialization_mode,
         scene_reference_image_data_url=scene_reference_image_data_url,
         scene_reference_mode=scene_reference_mode,
         render_mode=render_mode,
@@ -1064,6 +1175,16 @@ def _normalize_openai_stream_partial_images(value: int | str | None) -> int:
     except (TypeError, ValueError):
         parsed = _DEFAULT_OPENAI_IMAGE_STREAM_PARTIAL_IMAGES
     return max(0, min(3, parsed))
+
+
+def _normalize_text_contract_object_limit(value: int | str | None) -> int:
+    try:
+        parsed = (
+            int(value) if value is not None else _DEFAULT_TEXT_CONTRACT_OBJECT_LIMIT
+        )
+    except (TypeError, ValueError):
+        parsed = _DEFAULT_TEXT_CONTRACT_OBJECT_LIMIT
+    return max(0, min(_MAX_TEXT_CONTRACT_OBJECT_LIMIT, parsed))
 
 
 def _geometry_references_used_payload(
@@ -1182,6 +1303,25 @@ def _build_openai_edit_mask_file(
     return ("mask.png", output.getvalue(), "image/png")
 
 
+def _build_openai_layout_guard_mask_file(
+    source_image_data_url: str,
+    *,
+    layout_guard_mask_image_data_url: str,
+) -> tuple[str, bytes, str] | None:
+    source_image = Image.open(BytesIO(_data_url_to_bytes(source_image_data_url)))
+    mask_image = Image.open(
+        BytesIO(_data_url_to_bytes(layout_guard_mask_image_data_url))
+    ).convert("RGBA")
+    if source_image.size != mask_image.size:
+        raise ValueError(
+            "Layout guard mask size must match source image size: "
+            f"source={source_image.size}, mask={mask_image.size}"
+        )
+    output = BytesIO()
+    mask_image.save(output, format="PNG")
+    return ("layout_guard_mask.png", output.getvalue(), "image/png")
+
+
 def _image_extension_for_mime_type(mime_type: str) -> str:
     normalized = mime_type.lower()
     if normalized == "image/jpeg":
@@ -1204,6 +1344,7 @@ def _generate_image_with_openai(
     depth_map_image_data_url: str | None,
     edge_map_image_data_url: str | None,
     segmentation_map_image_data_url: str | None,
+    layout_guard_mask_image_data_url: str | None,
     annotated_reference_image_data_url: str | None,
     camera_reference_image_data_url: str | None,
     scene_reference_image_data_url: str | None,
@@ -1236,17 +1377,26 @@ def _generate_image_with_openai(
     combined_prompt = "\n\n".join(
         part for part in (_string(system_prompt), _string(user_prompt)) if part
     )
-    geometry_references_used = any(
-        value is not None
-        for value in (
-            depth_map_image_data_url,
-            edge_map_image_data_url,
-            segmentation_map_image_data_url,
+    geometry_references_used = (
+        any(
+            value is not None
+            for value in (
+                depth_map_image_data_url,
+                edge_map_image_data_url,
+                segmentation_map_image_data_url,
+            )
         )
-    ) or bool(locked_geometry_references) or bool(locked_geometry_atlases)
+        or bool(locked_geometry_references)
+        or bool(locked_geometry_atlases)
+    )
     mask_file = (
         None
         if disable_edit_mask
+        else _build_openai_layout_guard_mask_file(
+            source_image_data_url,
+            layout_guard_mask_image_data_url=layout_guard_mask_image_data_url,
+        )
+        if layout_guard_mask_image_data_url is not None
         else _build_openai_edit_mask_file(
             source_image_data_url,
             edit_operations=edit_operations,
@@ -1414,6 +1564,9 @@ def _generate_image_with_openai(
         "openai_edit_geometry_locked" if geometry_references_used else "openai_edit"
     )
     image_result["generation_config_applied"] = True
+    image_result["layout_guard_mask_used"] = (
+        layout_guard_mask_image_data_url is not None and mask_file is not None
+    )
 
     if geometry_references_used and _geometry_validation_should_retry(validation):
         retry_prompt = _build_geometry_retry_prompt(combined_prompt, validation)
@@ -1588,6 +1741,7 @@ def _post_openai_images_edit(
         "size": size,
         "quality": quality,
         "aspect_ratio": aspect_ratio,
+        "elapsed_ms": elapsed_ms,
         "raw_response": {k: v for k, v in parsed.items() if k != "data"},
         "partial_image_count": 0,
     }
@@ -1755,6 +1909,7 @@ def _post_openai_images_edit_stream(
         "size": size,
         "quality": quality,
         "aspect_ratio": aspect_ratio,
+        "elapsed_ms": elapsed_ms,
         "raw_response": _redact_openai_stream_event(final_event),
         "partial_image_count": partial_image_count,
     }
@@ -2516,20 +2671,450 @@ def _build_simple_generate_user_prompt(
     user_prompt: str | None,
     preset_prompt: str,
     preset_reference_images: list[SnapshotPresetReferenceImage],
+    snapshot_payload: Mapping[str, object],
+    include_text_contract: bool,
+    text_contract_object_limit: int,
+    strict_layout_mode: bool,
 ) -> str:
     prompt_parts = [
         _build_simple_prompt_image_role_hint(preset_reference_images),
-        _string(user_prompt) or _DEFAULT_SIMPLE_USER_PROMPT,
     ]
-    if preset_prompt:
+    if include_text_contract:
         prompt_parts.append(
-            "Apply these selected presets as finish realism, material texture, "
-            "lighting/illumination, and exterior scenery visible through existing "
-            "openings only. They must not change architecture, openings, "
-            "built-ins, object colors, object shape, object count, object size, "
-            "camera, depth order, occlusion, or object placement:\n" + preset_prompt
+            _build_text_scene_contract_prompt(
+                snapshot_payload,
+                object_limit=text_contract_object_limit,
+            )
         )
+    photorealization_goal = (
+        _sanitize_generate_user_prompt(user_prompt)
+        if strict_layout_mode
+        else _string(user_prompt)
+    )
+    prompt_parts.append(photorealization_goal or _DEFAULT_SIMPLE_USER_PROMPT)
+    if preset_prompt:
+        prompt_parts.append(_build_preset_isolation_prompt(preset_prompt))
     return "\n\n".join(prompt_parts)
+
+
+def _sanitize_generate_user_prompt(user_prompt: str | None) -> str:
+    raw_prompt = _string(user_prompt)
+    if not raw_prompt:
+        return _STRICT_LAYOUT_USER_PROMPT
+
+    safe_sentences: list[str] = []
+    saw_layout_directive = False
+    for sentence in _prompt_sentences(raw_prompt):
+        normalized = sentence.lower()
+        if _is_image_role_sentence(normalized):
+            saw_layout_directive = True
+            continue
+        if _is_layout_design_sentence(normalized):
+            saw_layout_directive = True
+            if _is_finish_sentence(normalized):
+                safe_sentences.append(sentence)
+            continue
+        if _is_finish_sentence(normalized):
+            safe_sentences.append(sentence)
+
+    if safe_sentences:
+        return " ".join(safe_sentences)
+    if saw_layout_directive:
+        return _STRICT_LAYOUT_USER_PROMPT
+    return raw_prompt
+
+
+def _prompt_sentences(prompt: str) -> list[str]:
+    candidates = prompt.replace("\n", " ").split(".")
+    return [candidate.strip(" \t:-") for candidate in candidates if candidate.strip()]
+
+
+def _is_image_role_sentence(normalized_sentence: str) -> bool:
+    return normalized_sentence.startswith("image 1") or "target 3d layout/source" in (
+        normalized_sentence
+    )
+
+
+def _is_layout_design_sentence(normalized_sentence: str) -> bool:
+    layout_keywords = (
+        "design",
+        "arrange",
+        "include",
+        "add ",
+        "add a",
+        "place ",
+        "put ",
+        "create ",
+        "with a ",
+        "with an ",
+        "furniture",
+        "layout",
+        "room containing",
+    )
+    return any(keyword in normalized_sentence for keyword in layout_keywords)
+
+
+def _is_finish_sentence(normalized_sentence: str) -> bool:
+    finish_keywords = (
+        "photoreal",
+        "realistic",
+        "material",
+        "finish",
+        "texture",
+        "lighting",
+        "illumination",
+        "style",
+        "mood",
+        "scenery",
+        "exterior",
+        "window view",
+        "through existing",
+    )
+    return any(keyword in normalized_sentence for keyword in finish_keywords)
+
+
+def _build_preset_isolation_prompt(preset_prompt: str) -> str:
+    return (
+        "Preset isolation contract:\n"
+        "Apply the selected presets only as bounded finish controls: material "
+        "texture, lighting mood, illumination, and exterior scenery visible "
+        "through existing openings. Do not transfer room layout, furniture, "
+        "camera, crop, architecture, object count, object shape, object color, "
+        "object size, object placement, or depth order from preset references.\n"
+        + preset_prompt
+    )
+
+
+def _build_text_scene_contract_prompt(
+    snapshot_payload: Mapping[str, object],
+    *,
+    object_limit: int,
+) -> str:
+    normalized_limit = _normalize_text_contract_object_limit(object_limit)
+    canvas = _mapping(snapshot_payload.get("canvas"))
+    canvas_width_px = max(1.0, _float(canvas.get("widthPx"), 1.0))
+    canvas_height_px = max(1.0, _float(canvas.get("heightPx"), 1.0))
+    visible_objects = _extract_visible_objects(snapshot_payload)
+    room = _mapping(snapshot_payload.get("room"))
+    openings = _mapping(room.get("openings"))
+    doors = [
+        opening
+        for opening in _sequence(openings.get("doors"))
+        if isinstance(opening, Mapping)
+    ]
+    windows = [
+        opening
+        for opening in _sequence(openings.get("windows"))
+        if isinstance(opening, Mapping)
+    ]
+
+    prompt_parts = [
+        "Text-only scene contract from the current 3D snapshot. This metadata is "
+        "instructional and must not appear as visible text in the image.",
+        (
+            "Priority order: Image 1 visual evidence first, then this contract, "
+            "then style/preset goals. If any metadata conflicts with Image 1, "
+            "preserve Image 1."
+        ),
+        (
+            "Camera/crop lock: keep the same viewpoint, apparent field of view, "
+            "visible crop, object pixel scale, depth order, and occlusion. Do not "
+            "zoom out, widen the lens, reveal extra floor/walls, or shrink the "
+            "furniture in frame."
+        ),
+        (
+            f"Room shell lock: preserve the same room boundaries, wall panels, "
+            f"corner seams, {len(doors)} door(s), and {len(windows)} window(s)."
+        ),
+    ]
+
+    palette_line = _build_text_contract_palette_line(snapshot_payload)
+    if palette_line:
+        prompt_parts.append(palette_line)
+
+    object_count = len(visible_objects)
+    if object_count:
+        prompt_parts.append(
+            f"Visible object lock: preserve {object_count} visible object(s), "
+            "their count, identity, approximate screen position, scale, color, "
+            "silhouette, and relative depth."
+        )
+
+    object_lines = _build_text_contract_object_lines(
+        snapshot_payload,
+        object_limit=normalized_limit,
+        canvas_width_px=canvas_width_px,
+        canvas_height_px=canvas_height_px,
+    )
+    if object_lines:
+        prompt_parts.append(
+            "Salient visible objects to preserve:\n" + "\n".join(object_lines)
+        )
+
+    opening_lines = _build_text_contract_opening_lines(
+        doors=doors,
+        windows=windows,
+        canvas_width_px=canvas_width_px,
+        canvas_height_px=canvas_height_px,
+    )
+    if opening_lines:
+        prompt_parts.append("Opening placement reminders:\n" + "\n".join(opening_lines))
+
+    prompt_parts.append(
+        "Allowed change: only improve photorealistic finish, material realism, "
+        "lighting quality, and selected preset mood. Do not redesign, add "
+        "furniture, remove furniture, recolor locked objects, or add decor unless "
+        "already visible in Image 1."
+    )
+    return "\n".join(prompt_parts)
+
+
+def _build_text_contract_palette_line(
+    snapshot_payload: Mapping[str, object],
+) -> str:
+    room = _mapping(snapshot_payload.get("room"))
+    surface_payload = _mapping(room.get("surfaceColors"))
+    surface_lines = []
+    for label, key in (
+        ("walls", "wallColorHex"),
+        ("floor", "floorColorHex"),
+        ("ceiling", "ceilingColorHex"),
+    ):
+        color = _string(surface_payload.get(key))
+        if _is_hex_color(color):
+            surface_lines.append(f"{label}={color}")
+    object_lines = []
+    for object_id, payload in _top_visible_object_items(snapshot_payload, limit=8):
+        color = _string(payload.get("colorHex"))
+        if _is_hex_color(color):
+            object_lines.append(f"{object_id}={color}")
+    if not surface_lines and not object_lines:
+        return ""
+    parts = ["Palette lock:"]
+    if surface_lines:
+        parts.append("surfaces " + ", ".join(surface_lines))
+    if object_lines:
+        parts.append("objects " + ", ".join(object_lines))
+    return "; ".join(parts) + "."
+
+
+def _build_text_contract_object_lines(
+    snapshot_payload: Mapping[str, object],
+    *,
+    object_limit: int,
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> list[str]:
+    if object_limit <= 0:
+        return []
+    lines: list[str] = []
+    for object_id, payload in _top_visible_object_items(
+        snapshot_payload,
+        limit=object_limit,
+    ):
+        bbox = _normalized_screen_bbox(payload.get("screenBboxPx"))
+        dimensions = _mapping(payload.get("dimensionsMm"))
+        color = _string(payload.get("colorHex")) or "source-color"
+        material = _string(payload.get("material")) or "source-material"
+        position = _screen_position_phrase(
+            bbox,
+            canvas_width_px=canvas_width_px,
+            canvas_height_px=canvas_height_px,
+        )
+        bbox_text = _bbox_norm_text(
+            bbox,
+            canvas_width_px=canvas_width_px,
+            canvas_height_px=canvas_height_px,
+        )
+        size_text = _dimensions_text(dimensions)
+        distance = _float(payload.get("distanceToCameraM"), math.nan)
+        distance_text = (
+            f", distance_m={round(distance, 2)}" if math.isfinite(distance) else ""
+        )
+        lines.append(
+            "- "
+            f"{object_id}: label={_visible_object_name(payload)}, "
+            f"position={position}, bbox_norm={bbox_text}, color={color}, "
+            f"material={material}{size_text}{distance_text}"
+        )
+    return lines
+
+
+def _build_text_contract_opening_lines(
+    *,
+    doors: list[Mapping[str, object]],
+    windows: list[Mapping[str, object]],
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> list[str]:
+    lines: list[str] = []
+    for opening_kind, raw_openings in (("door", doors), ("window", windows)):
+        for index, opening in enumerate(raw_openings[:6], start=1):
+            opening_id = _string(
+                opening.get("id"),
+                fallback=f"{opening_kind}_{index}",
+            )
+            bbox = _normalized_screen_bbox(opening.get("screenBboxPx"))
+            position = _screen_position_phrase(
+                bbox,
+                canvas_width_px=canvas_width_px,
+                canvas_height_px=canvas_height_px,
+            )
+            bbox_text = _bbox_norm_text(
+                bbox,
+                canvas_width_px=canvas_width_px,
+                canvas_height_px=canvas_height_px,
+            )
+            lines.append(
+                f"- {opening_kind}:{opening_id}: position={position}, "
+                f"bbox_norm={bbox_text}"
+            )
+    return lines
+
+
+def _top_visible_object_items(
+    snapshot_payload: Mapping[str, object],
+    *,
+    limit: int,
+) -> list[tuple[str, Mapping[str, object]]]:
+    if limit <= 0:
+        return []
+    items = list(_extract_visible_objects(snapshot_payload).items())
+
+    def sort_key(item: tuple[str, Mapping[str, object]]) -> tuple[float, float, str]:
+        object_id, payload = item
+        bbox = _normalized_screen_bbox(payload.get("screenBboxPx"))
+        area = 0.0
+        if bbox is not None:
+            width = min(
+                _float(bbox.get("width"), 0.0),
+                _float(bbox.get("maxX"), 0.0),
+            )
+            height = min(
+                _float(bbox.get("height"), 0.0),
+                _float(bbox.get("maxY"), 0.0),
+            )
+            area = max(0.0, width) * max(0.0, height)
+        role_penalty = _visible_object_contract_penalty(payload)
+        distance = _float(payload.get("distanceToCameraM"), math.inf)
+        return (role_penalty, -area, distance, object_id)
+
+    return sorted(items, key=sort_key)[:limit]
+
+
+def _visible_object_contract_penalty(payload: Mapping[str, object]) -> float:
+    object_type = _string(payload.get("type")).lower()
+    object_name = _visible_object_name(payload).lower()
+    minor_keywords = (
+        "lamp",
+        "light",
+        "art",
+        "decor",
+        "cushion",
+        "pillow",
+        "plant",
+        "rug",
+        "laptop",
+    )
+    if any(
+        keyword in object_type or keyword in object_name for keyword in minor_keywords
+    ):
+        return 1.0
+    return 0.0
+
+
+def _screen_position_phrase(
+    bbox: Mapping[str, float] | None,
+    *,
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> str:
+    if bbox is None:
+        return "unknown"
+    center_x = (_float(bbox.get("minX"), 0.0) + _float(bbox.get("maxX"), 0.0)) / 2
+    center_y = (_float(bbox.get("minY"), 0.0) + _float(bbox.get("maxY"), 0.0)) / 2
+    x_ratio = center_x / max(1.0, canvas_width_px)
+    y_ratio = center_y / max(1.0, canvas_height_px)
+    horizontal = "left" if x_ratio < 0.33 else "right" if x_ratio > 0.67 else "center"
+    vertical = "upper" if y_ratio < 0.33 else "lower" if y_ratio > 0.67 else "middle"
+    return f"{vertical}-{horizontal}"
+
+
+def _bbox_norm_text(
+    bbox: Mapping[str, float] | None,
+    *,
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> str:
+    if bbox is None:
+        return "unknown"
+    x = _float(bbox.get("minX"), 0.0) / max(1.0, canvas_width_px)
+    y = _float(bbox.get("minY"), 0.0) / max(1.0, canvas_height_px)
+    width = _float(bbox.get("width"), 0.0) / max(1.0, canvas_width_px)
+    height = _float(bbox.get("height"), 0.0) / max(1.0, canvas_height_px)
+    return f"x={round(x, 3)},y={round(y, 3)},w={round(width, 3)},h={round(height, 3)}"
+
+
+def _dimensions_text(dimensions: Mapping[str, object]) -> str:
+    if not dimensions:
+        return ""
+    width = _float(dimensions.get("width"), 0.0)
+    depth = _float(dimensions.get("depth"), 0.0)
+    height = _float(dimensions.get("height"), 0.0)
+    if width <= 0 or depth <= 0 or height <= 0:
+        return ""
+    return f", size_mm={round(width)}x{round(depth)}x{round(height)}"
+
+
+def _build_edit_operation_contract_prompt(
+    edit_operations: list[SnapshotEditOperation],
+) -> str:
+    if not edit_operations:
+        return ""
+    lines = [
+        "Edit operation DSL:",
+        (
+            "Execute only the operations below. Regions/objects not listed here "
+            "are immutable unless camera transfer is explicitly active."
+        ),
+    ]
+    for index, operation in enumerate(edit_operations, start=1):
+        target_kind = "region" if operation.bbox_norm is not None else "object"
+        operation_type = _operation_type_label(operation.operation_type)
+        pieces = [
+            f"E{index}",
+            f"target={target_kind}:{operation.object_id}",
+            f"operation={operation_type}",
+        ]
+        if operation.object_name:
+            pieces.append(f"name={operation.object_name}")
+        if operation.bbox_norm is not None:
+            pieces.append(
+                "bbox_norm="
+                + json.dumps(
+                    dict(operation.bbox_norm),
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                )
+            )
+        if operation.target_color is not None:
+            pieces.append(f"target_color={operation.target_color}")
+        if operation.replacement_image_data_url is not None:
+            pieces.append("reference_image=appearance_only")
+        if operation.prompt is not None:
+            pieces.append(f"instruction={operation.prompt}")
+        lines.append("- " + "; ".join(pieces))
+    lines.append(
+        "For add/replace/recolor/remove, preserve placement, scale, perspective, "
+        "occlusion, and all surrounding pixels outside the target. For recolor, "
+        "change only the target object's finish/color while preserving handles, "
+        "panel seams, drawer lines, decorative motifs, visible grain/texture "
+        "structure, and any foreground or neighboring object crossing the box. "
+        "For add/replace/remove, any foreground or neighboring object that crosses, "
+        "touches, or partially occludes the target box is protected unless it is "
+        "the named target itself."
+    )
+    return "\n".join(lines)
 
 
 def _build_simple_prompt_image_role_hint(
@@ -2582,8 +3167,17 @@ def _build_final_user_prompt(
     locked_geometry_atlases: list[SnapshotLockedGeometryAtlas] | None = None,
     preset_reference_count: int = 0,
     camera_transfer_reference_used: bool = False,
+    text_contract_used: bool = False,
+    include_edit_operation_dsl: bool = True,
+    strict_layout_mode: bool = False,
+    layout_guard_mask_used: bool = False,
+    layout_materialization_mode_used: bool = False,
 ) -> str:
-    raw_user_prompt = _string(user_prompt)
+    raw_user_prompt = (
+        _sanitize_generate_user_prompt(user_prompt)
+        if strict_layout_mode and render_mode in {"generate", "camera_rerender"}
+        else _string(user_prompt)
+    )
     if render_mode in {"generate", "camera_rerender"}:
         geometry_reference_list = locked_geometry_references or []
         geometry_atlas_list = locked_geometry_atlases or []
@@ -2646,8 +3240,24 @@ def _build_final_user_prompt(
         )
 
     prompt_parts: list[str] = [
-        "Transform Image 1, which is the current rendered photo and the primary source image."
+        (
+            "Transform Image 1, which is the exact 3D source view and the primary "
+            "layout source."
+        )
+        if layout_materialization_mode_used
+        else "Transform Image 1, which is the current rendered photo and the primary source image."
     ]
+    geometry_reference_list = locked_geometry_references or []
+    geometry_atlas_list = locked_geometry_atlases or []
+    if layout_guard_mask_used:
+        prompt_parts.append(
+            "The edit mask is a layout guard: photorealize transparent editable "
+            "areas, and preserve opaque masked areas exactly. Use the mask to "
+            "avoid changing crop borders, trusted openings, and do-not-hallucinate "
+            "regions. If opaque protected pixels appear inside a drawn edit box, "
+            "they mark foreground or neighboring non-target objects that must stay "
+            "unchanged."
+        )
     next_image_number = 2
     if camera_transfer_reference_used:
         prompt_parts.append(
@@ -2656,6 +3266,30 @@ def _build_final_user_prompt(
             "depth order, occlusion, and visible room/object placement. Preserve "
             "Image 1's materials, object identity, colors, and realism unless "
             "changed by explicit edit operations or changed presets."
+        )
+        next_image_number += 1
+    if depth_map_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is a deterministic depth map from the same "
+            "3D camera. Use it only to preserve depth order, distance relationships, "
+            "foreground/background separation, and object scale. Do not render it as "
+            "texture, lighting, or material."
+        )
+        next_image_number += 1
+    if edge_map_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is a deterministic edge map from the same "
+            "3D source. Align wall seams, openings, crop-edge walls, furniture "
+            "silhouettes, TV/media outlines, and major object boundaries to it. Do "
+            "not render black edge lines in the final image."
+        )
+        next_image_number += 1
+    if segmentation_map_used:
+        prompt_parts.append(
+            f"Image {next_image_number} is a deterministic segmentation map from "
+            "the same 3D scene. Use flat color regions only to preserve object and "
+            "room-surface footprints, silhouettes, object count, and occlusion. Do "
+            "not copy colors from this map."
         )
         next_image_number += 1
     if layout_reference_used:
@@ -2667,20 +3301,62 @@ def _build_final_user_prompt(
         prompt_parts.append(
             "Preserve the current camera, room layout, architecture, openings, object count, and all unselected objects."
         )
-    prompt_parts.append(
-        "Immutable edit rule: pixels and objects outside the selected object or drawn edit boxes must remain unchanged in shape, position, scale, perspective, material identity, lighting relationship, and visibility unless a camera-transfer reference is explicitly provided."
-    )
-    if annotated_reference_used:
+    if layout_materialization_mode_used:
         prompt_parts.append(
-            f"Image {next_image_number} is the edit-region guide. "
-            "It shows colored bounding boxes drawn over the photo. Each box marks a region to edit; "
-            "the small label inside (e.g. R1, R2, R3) is the region ID that matches the instructions below. "
-            "Use the boxes and IDs only as your instruction map — they are never part of the scene. "
-            "The final output must be a clean photorealistic photo with NONE of the following: "
-            "no colored box outlines, no bounding rectangles, no region IDs, no label text, "
-            "no tinted overlays, no guide graphics, no annotations of any kind."
+            "Materialization rule: improve realism, materials, lighting, and surface "
+            "texture only. Do not change the source camera, crop, wall seams, "
+            "openings, object inventory, object placement, object scale, object "
+            "silhouettes, perspective, depth order, or occlusion."
         )
+    else:
+        prompt_parts.append(
+            "Immutable edit rule: pixels and objects outside the selected object or drawn edit boxes must remain unchanged in shape, position, scale, perspective, material identity, lighting relationship, and visibility unless a camera-transfer reference is explicitly provided."
+        )
+    if text_contract_used and include_edit_operation_dsl:
+        edit_contract_prompt = _build_edit_operation_contract_prompt(edit_operations)
+        if edit_contract_prompt:
+            prompt_parts.append(edit_contract_prompt)
+    if annotated_reference_used:
+        if layout_materialization_mode_used or camera_transfer_reference_used:
+            prompt_parts.append(
+                f"Image {next_image_number} is a structural geometry guide. It may "
+                "show semantic room-shell planes, sharpened wall/object edges, crop "
+                "guards, opening boxes, clean object anchors, and rejected noisy "
+                "anchors. Use it only to preserve the same camera, crop, wall planes, "
+                "shell corners, openings, object positions, scale, silhouettes, and "
+                "depth/crop relationships. The final output must not contain guide "
+                "colors, guide edges, colored boxes, labels, text, masks, overlays, "
+                "or annotations."
+            )
+        else:
+            prompt_parts.append(
+                f"Image {next_image_number} is the edit-region guide. "
+                "It shows colored bounding boxes drawn over the photo. Each box marks a region to edit; "
+                "the small label inside (e.g. R1, R2, R3) is the region ID that matches the instructions below. "
+                "Use the boxes and IDs only as your instruction map — they are never part of the scene. "
+                "The final output must be a clean photorealistic photo with NONE of the following: "
+                "no colored box outlines, no bounding rectangles, no region IDs, no label text, "
+                "no tinted overlays, no guide graphics, no annotations of any kind."
+            )
         next_image_number += 1
+    if geometry_atlas_list:
+        end_image_number = next_image_number + len(geometry_atlas_list) - 1
+        prompt_parts.append(
+            f"Images {next_image_number}-{end_image_number} are object geometry "
+            "atlas contact sheets from the clean 3D source. Each atlas cell maps to "
+            "an object id in the prompt. Use them only for exact silhouettes, "
+            "proportions, shelf/TV/media details, and object footprints. Do not "
+            "render atlas labels, borders, or material."
+        )
+        next_image_number = end_image_number + 1
+    if geometry_reference_list:
+        end_image_number = next_image_number + len(geometry_reference_list) - 1
+        prompt_parts.append(
+            f"Images {next_image_number}-{end_image_number} are object-level "
+            "geometry lock crops from the clean 3D source. Use them only to "
+            "preserve the listed object silhouettes and proportions."
+        )
+        next_image_number = end_image_number + 1
     if preset_reference_count > 0:
         end_image_number = next_image_number + preset_reference_count - 1
         if preset_reference_count == 1:
@@ -2730,6 +3406,12 @@ def _build_final_user_prompt(
     )
     if target_lock_prompt:
         prompt_parts.append(target_lock_prompt)
+    locked_geometry_prompt = _build_locked_geometry_reference_prompt(
+        geometry_reference_list,
+        locked_geometry_atlases=geometry_atlas_list,
+    )
+    if locked_geometry_prompt:
+        prompt_parts.append(locked_geometry_prompt)
     if raw_user_prompt:
         prompt_parts.append("Requested edit: " + raw_user_prompt)
     if preset_prompt:
@@ -2768,14 +3450,14 @@ def _build_final_user_prompt(
                     f"Drawn region id: {operation.object_id}. Reference image {replacement_index} belongs to this region.\n"
                     f"Add the referenced {operation.object_name or 'object'} inside the matching boxed region from the edit-region guide. "
                     "Fit it to that region's perspective, scale, and occlusion. "
-                    "Do not place the new object outside that region. Do not move architecture or existing main furniture outside the boxed region."
+                    "Do not place the new object outside that region. Do not cover, erase, redraw, or merge any existing object that crosses the box or is protected by the mask. Do not move architecture or existing main furniture outside the boxed region."
                 )
             elif operation.bbox_norm is not None:
                 prompt_parts.append(
                     f"Drawn region id: {operation.object_id}. Reference image {replacement_index} belongs to this region.\n"
                     f"Use reference image {replacement_index} only for the replacement appearance inside the matching boxed region from the edit-region guide. "
                     "Replace the object/content in that boxed region while preserving the region's placement, scale, perspective, and occlusion. Remove the old object/content in the box instead of duplicating it. "
-                    "Do not change architecture or main furniture outside the boxed region."
+                    "If another object crosses, overlaps, stands in front of, or touches the boxed region, preserve that other object exactly; it is not part of the replacement target. Do not change architecture or main furniture outside the boxed region."
                 )
                 replacement_index += 1
                 continue
@@ -2796,13 +3478,15 @@ def _build_final_user_prompt(
                 prompt_parts.append(
                     f"Drawn region id: {operation.object_id}.\n"
                     f"Change only the color/material of the object or surface inside the matching boxed region to {operation.target_color}. "
-                    "Keep structure, placement, shape, and everything outside the boxed region unchanged."
+                    "Keep its silhouette, footprint, perspective, panel gaps, drawer lines, handles, decorative motifs, visible grain/texture structure, and shadow/lighting continuity. "
+                    "If another object crosses, overlaps, stands in front of, or touches the boxed region, preserve that other object exactly; do not repaint, remove, or merge it into the target. "
+                    "Everything outside the intended target object must remain unchanged."
                 )
             else:
                 prompt_parts.append(
                     f"Selected object id: {operation.object_id}.\n"
                     f"Change only the color of the selected {operation.object_name} to {operation.target_color}. "
-                    "Keep its shape, material, placement, and all other objects unchanged."
+                    "Keep its silhouette, panel gaps, drawer lines, handles, decorative motifs, visible grain/texture structure, placement, and all other objects unchanged."
                 )
 
     return "\n\n".join(prompt_parts)
@@ -3384,7 +4068,14 @@ def _normalize_edit_operations(
         target_color = _string(operation.target_color) or None
         prompt = _string(operation.prompt) or None
         operation_type = operation.operation_type
-        if operation_type not in {"prompt", "add", "replace", "recolor", "remove", None}:
+        if operation_type not in {
+            "prompt",
+            "add",
+            "replace",
+            "recolor",
+            "remove",
+            None,
+        }:
             operation_type = None
         if operation_type is None:
             operation_type = (
