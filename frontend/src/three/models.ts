@@ -1,6 +1,6 @@
 import type { InventoryItem } from '../types';
 
-export type InventoryModelPreviewCalibration = {
+type InventoryModelPreviewCalibration = {
   version: number;
   status: 'calibrated' | 'needs_review' | 'failed';
   confidence: number;
@@ -41,9 +41,9 @@ export type GlbFitStrategy =
   | 'footprint-uniform'
   | 'wall-plane-uniform';
 
-export type GlbHorizontalAnchor = 'bbox-center' | 'bottom-center';
+type GlbHorizontalAnchor = 'bbox-center' | 'bottom-center';
 
-export type InventoryModelPreviewOverride = {
+type InventoryModelPreviewOverride = {
   enabled: boolean;
   contexts: string[];
   fitStrategy: GlbFitStrategy | null;
@@ -514,9 +514,9 @@ function resolveUrlFromFileEntries(
       continue;
     }
 
-    const fileKind = readString(entry.file_kind)?.toLowerCase();
-    const role = readString(entry.role)?.toLowerCase();
-    const mime = readString(entry.mime)?.toLowerCase();
+    const fileKind = readString(entry.file_kind)?.toLowerCase() ?? null;
+    const role = readString(entry.role)?.toLowerCase() ?? null;
+    const mime = readString(entry.mime)?.toLowerCase() ?? null;
     const urlLower = candidate.url.toLowerCase();
     const looksLikeModel =
       urlLower.endsWith('.glb') ||

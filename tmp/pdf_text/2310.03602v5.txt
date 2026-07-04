@@ -1,0 +1,1256 @@
+
+
+--- PAGE 1 ---
+Ctrl-Room: Controllable Text-to-3D Room Meshes Generation with Layout
+Constraints
+Chuan Fang1,2*, Yuan Dong3*, Kunming Luo1,2, Xiaotao Hu1,2, Rakesh Shrestha4, Ping Tan1,2†
+1 Hong Kong University of Science and Technology 2 LightIllusion, China.
+3 Alibaba Group 4Simon Fraser University, Canada.
+1cfangac@connect.ust.hk, 2dy283090@alibaba-inc.com, 3pingtan@ust.hk
+https://fangchuan.github.io/ctrl-room.github.io/
+The living room has eight walls.The room has a picture , a
+shelves and a cabinet.
+Abstract
+Multiple shelves Sofa set
+Text-driven 3D indoor scene generation is useful for
+gaming, film industry, and AR/VR applications. However,
+existing methods cannot faithfully capture the scene layout
+Multiple cabinets Text2Room TV and tv-stand Ours
+based on text descriptions, nor do they allow flexible editing
+The bedroom has eight walls. The room has two windows
+of individual objects in the room. To address these prob- and a bed .
+lems, we present Ctrl-Room, which can generate convinc-
+ing 3D rooms with designer-style layouts and high-fidelity
+Multiple beds and lamps Bed, nightstand and lamp
+textures from just a text prompt. Our key insight is to sepa-
+rate the modeling of layouts and appearance. Our proposed
+method consists of two stages: a Layout Generation Stage
+Multiple beds MVDiffusion TV and tv-stand Ours and an Appearance Generation Stage. The Layout Genera-
+(a) Comparison with Text2Room [12] and MVDiffusion [36].
+tion Stage trains a text-conditional diffusion model to learn
+The living room has eight walls. The room has a picture,
+the layout distribution with our holistic scene code parame-
+a shelves and a cabinet.
+terization. Next, the Appearance Generation Stage employs
+a fine-tuned ControlNet to produce a vivid panoramic im-
+age of the room guided by the 3D scene layout, then further
+upgrades to a panoramic NeRF model. Benefiting from the
+scene code parameterization, we can easily edit the gener-
+ated room model through our mask-guided editing module,
+without expensive edit-specific training. Extensive exper-
+iments on the Structured3D dataset demonstrate that our
+method outperforms existing methods in producing more
+reasonable, view-consistent, and editable 3D rooms from
+Replace the TV and TV stand
+text prompts.
+(b) Flexible editing by instruction or mouse clicks.
+Figure 1. We present Ctrl-Room to achieve fine-grained textured
+3D indoor room generation and editing. (a) compared with the
+1. Introduction Text2Room [12] and MVDiffusion[36], Ctrl-Room can generate
+rooms with more plausible 3D structures. (b) Ctrl-Room supports
+High-quality 3D indoor scenes play a crucial role across a
+flexible editing. Users can replace furniture items or change their
+wide array of applications, ranging from interior design and positions easily.
+video games to simulators for embodied AI. Traditionally,
+indoor scene generation presents unique challenges as they
+indoor scenes are crafted manually by professional artists,
+exhibit strong semantic layout constraints, such as neigh-
+which is both time-consuming and costly. Recent advance-
+boring walls are perpendicular and the TV set often faces a
+ments in generative models [5, 18, 22, 29] have attempted
+sofa, that are more complicated than objects.
+to simplify the creation of 3D models from textual descrip-
+tions, However, extending this capability to text-driven 3D Existing text-driven 3D indoor scene generation ap-
+5202
+peS
+42
+]VC.sc[
+5v20630.0132:viXra
+
+
+--- PAGE 2 ---
+proaches, such as Text2-Room [12] and Text2NeRF [46], our method enables flexible editing on the generated 3D
+are designed with an incremental framework. They cre- room. The user can replace or modify the size and posi-
+ate 3D indoor scenes by incrementally generating different tion of furniture items, e.g. replacing the TV and TV stand
+viewpoints frame-by-frame and reconstructing the 3D mesh as in Fig. 1 (b). Our method can update the room according
+of the room from these sub-view images. However, these to the edited room layout through our mask-guided editing
+approaches often fail to model the global layout of the room, module without expensive edit-specific training. The up-
+resulting in unconvincing results. As shown in the first row dated room appearance maintains consistency with the orig-
+of Fig. 1 (a), the result of Tex2Room exhibits repetitive ob- inal version while satisfying the user’s edits.
+jects, e.g. several cabinets in a living room, and does not fol-
+The main contributions of this paper are summarized as:
+low the furniture layout patterns. We refer to this problem
+as the ‘Penrose Triangle problem’, where a generated scene
+• To address the Penrose Triangle Problem, we design a
+has plausible 3D structures everywhere locally but lacks
+two-stage method for 3D room generation from pure text
+global consistency. Furthermore, prior approaches do not
+input, which separates the geometric layout generation
+offer user-friendly interaction, as the resulting 3D geometry
+and appearance generation. In this way, our method can
+and textures are not editable. Other method [16, 17, 30, 36]
+better capture the scene layout constraints in real-world
+represent the scene as a panorama image and generate it
+data and produce a vivid appearance simultaneously.
+from a text prompt. However, these works cannot guarantee
+• Within the separated layout and appearance generation,
+reasonable scene layouts. As shown on the middle row of
+we introduce novel techniques, including holistic scene
+Fig. 1 (a), a bedroom generated by MVDiffusion [36] con-
+code parametrization, layout-guided panorama genera-
+tains multiple beds, which violates room layout priors.
+tion, layout-guided panoramic NeRF, and a mask-guided
+To address these shortcomings, we propose a novel two- editing module to achieve high-quality and flexible 3D
+stage method to generate a high-fidelity and editable 3D room generation.
+room. The key insight is to separate the generation of 3D • Qualitative and quantitative experiments confirm that our
+geometric layouts from that of visual appearance, which al- method excels in producing more realistic and editable
+lows us to better capture the room layout and achieve vivid 3D rooms compared to existing approaches.
+textures at the same time. In the first stage, from text in-
+put, our method creates plausible scene layouts with var-
+ious furniture types and positions. Unlike previous scene
+2. Related Work
+synthesis methods [21, 34] that only focus on the furni-
+ture arrangement, our approach further considers walls with
+2.1. Text-based 3D Object Generation
+doors and windows, which play an essential role in the lay-
+out. To achieve this goal, we parameterize the room by a
+Early methods employ 3D datasets to train generative mod-
+holistic scene code, which represents a room as a set of ob-
+els. Text2Shape [4] learns a feature representation from
+jects. Each object is represented by a vector capturing its
+paired text and 3D data and uses GAN to generate 3D
+position, size, semantic class, and orientation. Based on
+shapes from the text. Point-E [19] and Shap-E [13] en-
+our compact parameterization, we design a diffusion model
+large the scope of the training dataset and employ a latent
+to learn the 3D room layout distribution from the Struc-
+diffusion model [24] for object generation. However, 3D
+tured3D dataset [48].
+datasets are scarce, which makes these methods difficult to
+Our method then generates the room appearance with the scale. More recent methods [5, 18, 19, 22, 39, 41] exploit
+guidance of the 3D room layout. We first generate a the powerful 2D text-to-image diffusion models [24, 26] for
+panorama using a text-to-image latent diffusion model, then 3D model generation. Typically, these methods generate
+iteratively upgrade the generated images to a NeRF model one or multiple 2D images in an incremental fashion and
+and generate additional novelty view panorama images. optimize the 3D model accordingly. DreamFusion [22] in-
+During the panorama generation, unlike previous text-to- troduces a loss based on probability density distillation and
+panorama works [6, 36], our method explicitly enforces optimizes a randomly initialized 3D model through gradient
+scene layout constraints and guarantees plausible 3D room descent. Magic3D [18] uses a coarse model to represent 3D
+structures and furniture arrangement. To achieve this goal, content and accelerates it using a sparse 3D hash grid struc-
+we convert the 3D layout synthesized in the first stage into a ture. To alleviate over-saturation and low-diversity prob-
+semantic segmentation map and feed it to a fine-tuned Con- lems, ProlificDreamer [41] models and optimizes the 3D
+trolNet [47] model to create the panorama image. We also parameters through variational score distillation. However,
+use this layout information to estimate scene depth and in- these methods are limited to 3D object generation and can-
+paint missing regions at novel viewpoints. not be directly extended to 3D scene generation which has
+Benefiting from the separation of layout and appearance, additional layout constraints.
+
+
+--- PAGE 3 ---
+Layout Generation Stage Interactive Editing
+Scene code noise
+The living room
+Wall
+has twelve walls. s Change position,
+The room has a QKV QKV QKV QKV size …
+cabinet and a Objects
+fridge .
+Text prompt Scene code diffusion Scene code Layout bounding box
+Appearance Generation Stage Loop-Consistent Equirectangular projection
+Sampling
+Panoramic
+NeRF
+Layout-guided PeRF Panorama ControlNet Semantic layout
+Figure 2. Framework overview. In Layout Generation Stage, we synthesize a scene code from the text input and convert it to a 3D bounding
+box representation to facilitate editing. In Appearance Generation Stage, we project the bounding boxes into a semantic segmentation map
+to guide the panorama synthesis. The panorama is then reconstructed into a panoramic NeRF (PeRF)[38]model with layout guidance.
+2.2. Text-based 3D Room Generation 3D Room Generation GAUDI [2] generates immersive
+3D indoor scenes rendered from a moving camera. It dis-
+Room Layout Synthesis Layout generation has been
+entangles the 3D representation and camera poses to en-
+greatly boosted by transformer-based methods. Layout-
+sure the consistency of the scene during camera move-
+Transformer [10] employs self-attention to capture relation-
+ment. CC3D [1] proposes a 3D-aware GAN for multi-
+ships between elements to accomplish layout completion.
+object scenes conditioned on a single semantic layout im-
+ATISS [21] proposes an autoregressive transformer to gen-
+age and is trained using posed multi-view RGB images.
+erate proper indoor scenes with only the room type and floor
+Another related line of work [28, 32, 43] deals with re-
+plan as the input. DiffuScene [34] and InstructScene [15]
+texturizing a given 3D scene. They employ 2D diffusion
+model a union of furniture as a fully connected scene graph
+models to stylize and further improve the given geometry.
+and propose a diffusion model to sample physically plausi-
+Text2Room [12] incrementally synthesizes nearby images
+ble scenes. While these methods generate reasonable furni-
+with a 2D diffusion model and recovers its depth maps to
+ture layouts, they do not consider the walls, doors, and win-
+assemble into a 3D room mesh. Unfortunately, it cannot
+dows which are crucial in the furniture arrangement. Thus
+handle the geometric and textural consistency among the
+they do not always generate realistic indoor environments.
+images, resulting in the ‘Penrose Triangle problem’. In our
+method, we take both geometry and appearance into consid-
+eration and create a more geometrically plausible 3D room.
+Panoramic Image Generation Another line of work [16,
+A concurrent work [28] also guides the 3D room mesh gen-
+17, 30] represent an indoor scene by a panorama image
+eration by leveraging the user-input scene layouts. In con-
+without modeling 3D shapes. These methods enjoy the ben-
+trast, our method is capable of synthesizing professional
+efits of abundant training data and produce vivid results.
+designer-style layouts solely from text prompts.
+COCO-GAN [16] produces a set of patches and assemble
+them into a panoramic image. InfinityGAN [17] uses the 3. Method
+information of two patches to generate the parts between
+them, to finally obtain a panoramic image. [30] proposes In order to achieve text-based 3D indoor scene generation,
+a 360-aware layout generator to produce furniture arrange- we propose Ctrl-Room. We first generate the room layout
+ments and uses this layout to synthesize a panoramic image from an input text and then generate the room appearance
+based on the input scene background. MVDiffusion [36] si- represented by panoramic images according to the layout,
+multaneously generates multi-view perspective images and followed by layout-guided panoramic NeRF [38] to gen-
+proposes a correspondence-aware attention block to main- erate the final 3D room. This mechanism solves the Pen-
+tain multi-view consistency, and then transfers these images rose Triangle Problem to generate physically plausible 3D
+to a panorama. These methods might suffer from incorrect rooms, while also enabling users to edit the scene layout
+room layout since they do not enforce layout constraints. interactively. The overall framework of our method is de-
+Furthermore, the results of these methods cannot be easily picted in Fig. 2, which consists of two stages: the Lay-
+edited, e.g. resizing or moving furniture around, because out Generation Stage and the Appearance Generation Stage.
+they do not maintain an object-level representation. In the Layout Generation Stage, we parameterize the in-
+
+
+--- PAGE 4 ---
+Figure 3. (a) A 3D scene S is represented by its scene code x = {o }N , where each wall or furniture item o is a row vector storing
+0 i i=1 i
+attributes like class label c , location l , size s , orientation r . (b) During the denoising process, we rotate both the input semantic layout
+i i i i
+panorama and the denoised image for γ degree at each step. Here we take γ = 90◦ for example.
+door scene with a holistic scene code and design a diffusion build a diffusion model to learn its distribution. A scene
+model to learn its distribution. Once the holistic scene code layout is a point in RN×D. The forward diffusion process
+is generated from text, we recover the room as a set of orien- is a discrete-time Markov chain in RN×D. Given a clean
+tated bounding boxes of walls and objects. Note that users scene code x , the diffusion process gradually adds Gaus-
+0
+can edit these bounding boxes by adjusting their semantic sian noise to x , until the resulting distribution is Gaussian,
+0
+types, positions, or scales, enabling the customization of 3D according to a pre-defined, linearly increased noise sched-
+room generations. In the Appearance Generation Stage, we ule β , ..., β :
+1 T
+obtain an RGB panorama through a conditioned image dif- √ √
+q(x |x ) := N (x ; α¯ x , (1 − α¯ )I) (1)
+fusion model to represent the room texture. Specifically, we t 0 t t 0 t
+project the generated layout bounding boxes into a semantic where α := 1 − β and α¯ := (cid:81)t α define the noise
+t t t r=1 r
+segmentation layout. We then fine-tune a pre-trained Con- level and decrease over the timestep t.
+trolNet [47] model to generate an RGB panorama from the The denoising network is trained to reverse the above pro-
+input semantic layout. To ensure loop consistency, we pro- cess by minimizing the training objectives which includes
+pose a loop-consistent sampling during the inference pro- the denoising objective L and a regularization term
+denoise
+cess. Finally, we integrate the layout and the panorama, L to penalize the penetration among objects and
+physical
+then generate a full 3D room through the layout-guided walls as follows,
+panoramic NeRF module [38]. This module progressively L = L + L , (2)
+denoise physical
+inpaints panoramas at new viewpoints using the fine-tuned L = E ∥ϵ − ϵ (x , t, y)∥2, (3)
+ControlNet. To extract meshes from reconstructed NeRF,
+denoise x0,t,y,ϵ θ t
+T
+we render depth maps of the new views and utilize truncated (cid:88)
+L = w ∗ (L + L ). (4)
+signed distance fusion (TSDF) to obtain the final mesh. physical t w−o o−o
+t=1
+where ϵ is the noise estimator which aims to find the noise
+3.1. Layout Generation Stage θ
+ϵ added into the input x . Here, y is the text embedding
+0
+Scene Code Definition. Different from previous methods of the input text prompts. The hyperparamter w is set to
+t
+[21, 34], we consider not only furniture but also walls, α¯ ∗ 0.1. L is the physical violation loss between walls
+t w−o
+doors, and windows to define the room layout. We employ and objects. We adopt the 3D IoU loss L in DiffuScene
+o−o
+a unified encoding of various objects. Specifically, given a to avoid intersection between furniture.
+3D scene S with m walls and n furniture items, we repre- The denoising network ϵ takes the scene code x , text
+θ t
+sent the scene layout as a holistic scene code x = {o }N , prompt y, and timestep t as input, and denoises them itera-
+0 i i=1
+where N = m + n. We encode each object o as a tively to get a clean scene code xˆ . Please refer to appendix
+j 0
+node with attributes including center location l ∈ R3, size Sec.1 for the details of our L and denoising network.
+i w−o
+s ∈ R3, orientation r ∈ R, class label c ∈ RC. The
+i i i 3.2. Appearance Generation Stage
+concatenation of these attributes characterizes each node as
+o = [c , l , s , r ]. As can be seen in Fig. 3 (a), we repre- Given an indoor scene layout, we seek to generate the
+i i i i i
+sent a scene layout as a tensor x ∈ RN×D, where D is the 3D textured room model. We achieve this goal by gen-
+0
+attribute dimension of a node. In all the data, we choose the erating panoramic images and reconstructing a panoramic
+normal direction of the largest wall as the ‘main direction’. NeRF (PeRF) model from these panoramas. During the
+For other objects, we take the angles between their front di- panorama generation, instead of incrementally generat-
+rections and the main direction as their rotations. We use ing multi-view images like [12], we generate the entire
+the one-hot encoding to represent their semantic types. panorama at once. We utilize ControlNet [47] to generate a
+Scene Code Diffusion. With the scene code definition, we high-fidelity panorama conditioned by the 3D scene layout.
+
+
+--- PAGE 5 ---
+Training Views ⨁ Add RGB-D views Layout-guided
+Panoramic NeRF Depth Estimation
+3.2.2 Layout-guided PeRF Generation
+Aligned RGB-D
+fitting Mask 𝑚!"#$!"% Layout-guided n In o p ve a l i n v t i e e d w Since a single panorama is only a partial observation of a
+Panorama Inpainting scene up to occlusions, lifting a single view into a 3D room
+render
+S ne a w m pled RGB Rendering 𝐼'! becomes complex. Fortunately, our generated layout pro-
+viewpoint vides valuable geometric and semantic information to lift
+2D occ grid Finetuned the 2D panorama into a 3D model. We propose the layout-
+Semantic map 𝑆&! ControlNet
+guided PeRF, which upgrades the generated panorama
+Inpaintedcontent aforementioned to a 3D panoramic NeRF [38], enabling
+3D Scene Layout D In e s p ta t n h c 𝐷 e & ! m & a p 𝑀&! multi-view consistent panorama generations guided by the
+scene layout. Specifically, we start with the layout-guided
+Figure 4. The Layout-guided PeRF takes the input panorama,
+aligned depth map, and normal map as initialization. Then, a depth estimation, which recovers the depth map using
+progressive inpainting module is introduced to generate consis- method [45] and then aligns it to the 3D scene layout lever-
+tent panoramic images at sampled novel views. The progressive aging its geometric information. This step corrects the
+inpainting module consists of the layout-guided panorama inpaint- biased depth prediction in the background (wall, ceiling,
+ing and the layout-guided depth estimation module. The final floor) and preserves objects’ shape in the foreground.
+RGB-D panoramic pairs are included as training views to finetune Then, we fit our layout-guided PeRF as illustrated in
+PeRF [38].
+Fig. 4. Specifically, we initialize the scene NeRF with the
+panorama I0, the aligned depth map D∗, and the normal
+map N ∗. We sample new viewpoints in the occupancy grid
+3.2.1 Layout-guided Panorama Generation
+that do not conflict with the initial furniture arrangement.
+At the i-th novel view, we render semantic map Si, depth
+l
+map Di, and instance map M i from the scene layout, these
+Fine-tuning ControlNet. ControlNet controls the im- l l
+are then combined with the panoramic rendering Ii and in-
+age generation of Stable Diffusion [24] model by an ex- r
+painting mask m obtained from the NeRF and fed to
+tra 2D input. To condition ControlNet on the scene lay- inpaint
+the layout-guided panorama inpainting module to generate
+out, we convert the bounding box representation into a 2D
+the novel view panorama. Using our fine-tuned Control-
+semantic layout panorama through equirectangular projec-
+Net, it achieves training-free panoramic inpainting, which
+tion. In this way, we get a pair of RGB and semantic lay-
+replaces pixels outside the inpainting mask m with
+out panoramic images for each scene. However, the pre- inpaint
+Ii and fill m based on the semantic map Si. Sub-
+trained ControlNet-Segmentation [9] is designed for per- r inpaint l
+sequently, after generating the novel view image, we apply
+spective images, and cannot be directly applied to panora-
+the layout-guided depth estimation and include it as train-
+mas. Thus, we fine-tune it with our pairwise RGB-Semantic
+ing views for PeRF following their framework [38]. More
+layout panoramas on the Structured3D [48]. As the vol-
+details and results can be found in the appendix Sec.2.
+ume of Structured3D is limited, we apply several augmenta-
+tion techniques for the training data, including standard left- 3.3. Mask-guided Editing
+right flipping, horizontal rotation, and Pano-Stretch [33].
+A user can modify the generated 3D room by changing the
+Loop-consistent Sampling. A panorama should be loop- position, semantic class, and size of object bounding boxes.
+consistent. In other words, its left and right should be The editing should achieve two goals, i.e. altering the con-
+seamlessly connected. Although the horizontal rotation in tent according to the user’s input, and maintaining appear-
+data augmentation may improve the model’s implicit un- ance consistency of the scene objects. We propose a mask-
+derstanding of the expected loop consistency, it lacks ex- guided image editing, including inpainting step and opti-
+plicit constraints and might still produce inconsistent re- mization step as illustrated Fig.6 in supplementary file. The
+sults. Therefore, we propose an explicit loop-consistent inpainting step fills in the modified area while preserving
+sampling mechanism in the denoising process of the latent the rest of the panoramic image. The optimization step fo-
+diffusion model. As shown in Fig. 3 (b), we rotate both the cuses on keeping the furniture’s appearance unchanged be-
+input layout panorama and the denoised image by γ degree fore and after movement and scaling operations.
+in the sampling process, which applies explicit constraints We explain our method by taking the example in Fig.6 in
+for the loop consistency during denoising. A concurrent supplementary file, where a chair’s position is moved. We
+work [42] also uses a similar method for panoramic out- denote the semantic panorama from the edited scene as
+painting. More qualitative results in supplementary Fig.8 S , then we derive the guidance masks based on its dif-
+edited
+and Fig.9 verify that our simple loop-consistent sampling ference from the original one S . The source mask m
+ori src
+method achieves good results without introducing addi- shows the position of the original chair, and the target mask
+tional learnable parameters. m indicates the location of the moved chair, and the in-
+tar
+
+
+--- PAGE 6 ---
+Figure 5. Qualitative comparison with previous works. For each method, we show a textured 3D mesh in the first row and two rendered
+images in the second row.
+painting mask m = {m|m ∈ m and m ∈/ m } room type, we use 80% of rooms for training and the re-
+inpaint src tar
+is the unoccluded region. We use xori to denote the orig- maining for testing. Following DiffuScene [34], we further
+0
+inal image. During the inpainting step, we replace pixels qualitatively evaluate our layout generation on 3D-FRONT
+outside the inpainting mask m with xori and store dataset [7].
+inpaint t
+m based on the edited semantic panorama S .
+inpaint edited Metrics: Follow previous work [21, 34], Frechet Inception
+This straightforward approach ensures that the region out-
+Distance (FID) [11] and Kernel inception distance (KID) [3]
+side the mask remains unchanged and the area inside the
+are used to measure the plausibility and diversity of 1,000
+mask is accurately inpainted. In the optimization step,
+synthesized scene layouts. We choose FID, CLIP Score
+drawing inspiration from DIFT [35], which has shown that
+(CS) [23], and Inception Score (IS) [27] to measure the im-
+learned features from the diffusion network enable strong
+age quality of generated panoramas. To compare the quality
+semantic correspondence, we ensure consistency between
+of 3D room models, we follow Text2Room [12] to render
+the original and moved furniture by requiring their latent
+images of the 3D room model and measure the CLIP Score
+features to be consistent. For more details of the Inpainting
+(CS) and Inception Score (IS). We also conduct a user study
+and Optimization Step, please refer to our supplementary
+and ask 61 users to score Perceptual Quality (PQ) and 3D
+file Sec.3.
+Structure Completeness (3DS) of the final room mesh on
+scores ranging from 1 to 5.
+4. Experiments
+More details about data preprocessing, experimental set-
+We evaluate Ctrl-Room on three tasks: layout generation, tings, and baseline implementations can be found in sup-
+panorama generation, and 3D Room generation. For those plementary file Sec.4 and Sec.5.
+panorama generation methods [6, 36], we recover its depth
+map using method [45] to reconstruct a textured mesh
+through Possion reconstruction [14] and MVS-texture [37]. 4.2. Comparison with Previous Methods
+We first describe the experimental settings and then vali-
+date our method by comparing it with previous methods 4.2.1 Qualitative Comparison
+quantitatively and qualitatively. We further show various
+scene editing results to demonstrate the flexible control of Fig. 5 shows some results generated by different methods.
+our method. The first row shows a textured 3D room model, and the sec-
+ond row shows some perspective renderings from the room
+4.1. Experiment Setup
+model. As we can see, Text2Light [6] fails to ensure the
+Dataset: We train and evaluate our method on the 3D in- loop consistency of the generated panorama, which leads
+door scene dataset Structured3D [48], which consists of to distorted geometry and unreasonable room model. Both
+3,500 houses with 21,773 rooms designed by professional MVDiffusion [36] and Text2Room [12] can generate vivid
+artists. A single panoramic image and 3D scene layout are local images as demonstrated by the perspective renderings
+provided in each room. We parse the scene layout using ori- in the second row. But they fail to capture the global room
+ented bounding boxes for common indoor room types like layout. These two methods often repeat a dominating ob-
+the bedroom, kitchen, living room, study, and bathroom. ject, e.g. the cabinet in the bedroom appears multiple times
+Then, we follow [40] to generate text prompts describing at different places and violate the room layout constraint.
+the scene layout. The filtered dataset for training and eval- In comparison, our method does not suffer from these prob-
+uation consists of 4,961 bedrooms, 1,848 kitchens, 3,039 lems and generates high-quality results. More examples are
+living rooms, 698 studies, and 1500 bathrooms. For each provided in the Fig.12 in supplementary file.
+
+
+--- PAGE 7 ---
+The bedroom has four The study has four walls.The The kitchen has four The living room has ten bed picture
+walls.The room has a room has a cabinet , a walls.The room has a fridge , walls.The room has two
+curtain chair
+window , a picture and a window and a chair .There is a window and a cabinet . cabinets and a window .
+bed . a desk next to the chair . table mirror
+lamp hood
+tv toilet
+cabinet fridge
+window shower
+sink pillow
+stove door
+Figure 6. Text-conditioned layout generation on Structured3D. Given the text prompt, our method synthesizes a plausible scene layout that
+matches the description. The generated layout is represented using different colors to indicate various object categories, such as blue for
+the sofa and brown for the chair. More results and semantic labels are provided in Fig.10 in supplementary file.
+Table 1. Quantitative Comparison of layout generation on 3D-FRONT. Note that DiffuScene-w-SC uses an additional network to learn a
+Shape Code for each furniture, facilitating the evaluation process to retrieve a more accurate CAD model for each furniture. Nevertheless,
+our method outperforms others in the common settings, where only the generated semantic class and size are used for retrieval.
+Livingroom Diningroom
+Method Retrieval from
+FID ↓ KID ↓ SCA FID ↓ KID ↓ SCA
+DiffuScene-w-SC [34] Shape Code 35.27 0.64 54.69 32.87 0.57 51.67
+ATISS [21] Semantic Bounding Box 40.45 4.57 63.48 36.61 1.90 55.44
+DiffuScene-wo-SC [34] Semantic Bounding Box 38.55 1.33 63.54 36.47 1.8 57.04
+Ours Semantic Bounding Box 36.0 1.4 56.42 34.78 1.3 54.37
+4.2.2 Layout Generation side of each column is two zoom-in views, and the right
+side is the fisheye view. Text2Light [6] suffers from serious
+Fig. 6 verifies that our layout generation results are plausi-
+inconsistency on the borders of the generated panorama. It
+ble and can offer reliable 3D scene layout constraints for the
+also shows a lot of unexpected objects in the image. MVD-
+following appearance generation stage. As shown in Fig. 6,
+iffusion [36] suffers from repetitive furniture and fails to
+our text-conditioned layout generation module can synthe-
+synthesize reasonable content for the target room type. In
+size natural and diverse typical indoor scenes. The size and
+contrast, our method obtains a plausible layout and vivid
+spatial location of the furniture are reasonable, and the rel-
+panorama from the given text prompt.
+ative positions between the furniture pieces are accurately
+Table 2 provides quantitative evaluations. We follow MVD-
+recovered. Additional objects not described in the text are
+iffusion [36] to crop perspective images from the generated
+automatically generated according to the scene prior.
+panoramas on the test split and evaluate the FID, CS, and IS
+Table 1 provides a quantitative evaluation against state-of-
+scores on the cropped multi-view images. In the left part of
+the-art scene synthesis methods including ATISS [21] and
+Table 2, our method achieves the best score in FID, which
+DiffuScene [34] on the 3D-FRONT. Following these meth-
+indicates that our method can better capture the room ap-
+ods, we rendered the generated scenes into 256 × 256 top-
+pearance because of its faithful recovery of the room layout.
+down orthographic images to compute the FID, KID, and
+However, our score on CS is slightly lower than MVDiffu-
+Scene Classification Accuracy (SCA) scores. To facilitate
+sion, which seems insensitive to the number of objects and
+this computation, ATISS, DiffuScene-wo-SC(without shape
+cannot reflect the room layout quality. The IS score depends
+code), and our method retrieve the most similar CAD model
+on the semantic diversity of the cropped images as captured
+in the 3D-FUTURE [8] for each object based on generated
+by an image classifier. Text2Light has the best IS score,
+semantic class and sizes. DiffuScene-w-SC uses an addi-
+since the generations contain unexpected objects.
+tional network to learn a shape code for each furniture to
+In Fig.8 of the supplementary file, we also study the perfor-
+choose a better 3D mesh model. Note that the SCA score is
+mance of our panorama generation module with and with-
+better when it is closer to 50%. We have excluded walls,
+out loop-consistent sampling mechanism, the ablation in-
+doors, and windows from our scene code representation
+dicates the loop-consistent sampling helps the generated
+to ensure a fair comparison. Table 1 shows our method
+panorama obtain better texture consistency.
+achieves results superior to that of ATISS and DiffuScene-
+wo-SC, indicating that our approach is capable of producing
+4.2.4 3D Room Generation
+more realistic and natural layouts of indoor scenes.
+We then compare the 3D room models in terms of their
+rendered images. Because of the expensive running time
+4.2.3 Panorama Generation
+of Text2Room [12], we only test on 12 examples for this
+Fig. 7 qualitatively evaluates our generated panoramic im- comparison. In this comparison, we further skip Text2light
+ages, the image is visualized in a panoramic image viewer and MVDiffusion since we have compared them on panora-
+to facilitate the user to check the global content. The left mas. As the room layout is better captured with a large
+
+
+--- PAGE 8 ---
+Figure 7. Qualitative comparison for panorama generation. More results are available in the Appendix.
+Table 2. Quantitative Comparison of panorama and mesh generation.
+Panorama Metrics 2D Rendering Metrics 3D Mesh User Study
+Method
+FID ↓ CS ↑ IS ↑ CS ↑ IS ↑ PQ↑ 3DS ↑
+Text2Light [6] 56.22 21.45 4.198 - - 2.732 2.747
+MVDiffusion [36] 34.76 23.93 3.21 - - 3.27 3.437
+Text2Room [12] - - - 25.90 2.90 2.487 2.588
+Ours 21.02 22.19 3.56 25.97 3.14 3.89 3.746
+4.3. Interactive Scene Editing
+We demonstrate the scene editing capability of our method
+in Fig. 8. In this case, we resize the TV and replace the
+chair in the generated results. Fig. 1 (b) shows examples of
+replacing the TV and TV stand. Our method can keep the
+visual appearance of the moved/resized objects unchanged
+after editing. More examples can be found in the appendix.
+5. Conclusion
+We present Ctrl-Room, a flexible method to achieve struc-
+turally plausible and editable 3D indoor scene generation.
+It consists of two stages, the layout generation stage and the
+appearance generation stage. In the layout generation stage,
+we design a scene code to parameterize the scene layout
+and learn a text-conditioned diffusion model for text-driven
+layout generation. In the appearance generation stage, we
+fine-tune a ControlNet model to generate a vivid panorama
+image of the room with the guidance of the layout. Finally,
+a high-quality 3D room with a structurally plausible lay-
+out and realistic textures can be generated via the layout-
+guided panoramic NeRF. We conduct extensive experiments
+to demonstrate that Ctrl-Room outperforms existing meth-
+Figure 8. Editing examples. (a) resize the TV, (b) replace the chair ods for 3D indoor scene generation both qualitatively and
+with a new one. quantitatively, and supports interactive 3D scene editing.
+FOV, we render 60 perspective images of each scene with a
+6. Limitation
+140◦ FOV and evaluate their CS and IS scores respectively.
+The results of this comparison are shown in the middle of There are still some limitations of Ctrl-Room. Firstly, we
+Table 2. Our method obtains better scores on both metrics only support single-room generation, thus we cannot pro-
+than Text2Room. duce large-scale indoor scenes with multiple rooms. A
+We further evaluate the quality of the textured 3D mesh promising direction is to learn a text-driven diffusion model
+model by user studies. The results of the user study are to produce more consistent RGB-D panorama images cross
+shown on the right of Table 2. Users prefer our method multiple rooms under the scene layout constraints. Sec-
+over others, for its clear room layout structure and furniture ondly, as we explore injecting 3D scene information into
+arrangement. pretrained 2D models, thus we rely on 3D labeled scene
+
+
+--- PAGE 9 ---
+dataset to drive the learning and fine-tuning process. Lever-
+aging scene datasets with only 2D labels to learn 3D pri-
+ors is also a promising direction. Thirdly, the generated
+3D model still contains artifacts and incomplete structures
+in invisible areas because of the occlusion and poor per-
+formance of the panoramic depth estimator. We leave the
+aforementioned limitations for our future efforts.
+
+
+--- PAGE 10 ---
+Ctrl-Room: Controllable Text-to-3D Room Meshes Generation with Layout
+Constraints
+Supplementary Material
+In the supplementary file, we first present more details about Text embedding U-Net Denoise Scene code
+our scene code diffusion model in Sec. 7, then we elaborate Input skip
+the layout-guided PeRF module and mask-guided editing encoding
+Transpose &
+method in Sec. 8 and Sec. 9, respectively. Next, we pro- Add noise skip
+vide our dataset pre-processing, text prompt generation, and
+implementation details in Sec. 10 and Sec. 11 respectively. Walls skip Cross attention
+Additional experiment results are also illustrated, including Self-attention
+Objects
+panorama generation comparisons in Sec. 12, room layout Residual block
+Scene code
+generations and room mesh comparisons in Sec. 13 and user
+studies in Sec. 14. Furthermore, we demonstrate that our Figure 9. The detailed structure of the scene code denoising net-
+work. We here take the bedroom for example to demonstrate
+scene code diffusion model can be trained with free-style
+the dataflow of the scene code denoiser. The scene code tensor
+text prompts in Sec. 15.
+x ∈ RN×D, where N = 23, D = 32.
+0
+7. Scene Code Denoising Network
+In the Layout Generation Stage, we use a holistic scene
+code to parameterize the indoor scene and design a diffu- K (cid:88)wall K (cid:88) object (cid:88) 8
+sion model to learn its distribution. Specifically, given a L = Relu[−(a x + b y + c z + d )]
+w−o i jp i jp i jp i
+3D scene S with N objects, we represent the scene layout
+i=1 j=1 p=1
+as a holistic scene code x 0 = {o i }N i=1 . We encode each ∗ 1( (cid:89) (x , y , z ) in w ).
+object o as a node with various attributes, i.e., center lo- jp jp jp i
+i
+cation l ∈ R3, size s ∈ R3, orientation r ∈ R, class wi
+i i i (8)
+label c ∈ RC. Each node is characterized by the concate-
+i Here, (a , b , c ) is the normal vector of wall w that points
+i i i i
+nation of these attributes as o i = [c i , l i , s i , r i ]. As shown in towards the room center. (cid:81) is the operator project-
+Fig. 9, our scene code denoising network of the layout dif- wi
+ing a point onto the plane defined by w . The plane
+i
+fusion model is built upon IDDPM [20]. The whole archi-
+equation of i-th wall is a x + b y + c z + d = 0 and
+i i i
+tecture of the layout diffusion model is similar to IDDPM, 1( (cid:81) (x , y , z ) in w ) indicates whether the projec-
+while we replace the upsample and downsample blocks with wi jp jp jp i
+tion of bounding box vertices (x , y , z ) of j-th object
+jp jp jp
+1D-convolution network in the U-Net, and insert attention
+is inside w . We skip some objects such as windows and
+i
+blocks after each residual block to capture both the global
+doors since they can intersect with walls. We adopt the 3D
+context among objects and the semantic context from the in-
+IoU loss L in DiffuScene [34] as follows,
+o−o
+put text prompt. The input encoding head processes differ- Kobject
+(cid:88)
+ent encoding of the node attributes, e.g., semantic class la- L = IoU(o , o ). (9)
+o−o i j
+bels, box centroid, and box orientation. After adding noise,
+oi,oj
+the input encoding is fed into the U-Net to obtain a denoised
+During the forward phase, as in IDDPM, we iteratively per-
+scene code. The training objectives includes the denoising
+form the denoising process and generate a scene code from
+objective L and a regularization term L to pe-
+denoise physical a partial scene textual description.
+nalize the penetration among objects and walls as follows,
+L = L denoise + L physical , (5) We further investigate how the physical regularization term
+L = E ∥ϵ − ϵ (x , t, y)∥2, (6) impacts the final 3D scene layout. In Fig. 10, we use
+denoise x0,t,y,ϵ θ t
+two text prompts for layout generation our layout diffusion
+T
+(cid:88) model trained with and without our physical regularization
+L = w ∗ (L + L ). (7)
+physical t w−o o−o
+term, respectively. As can be seen, the diffusion model
+t=1
+where ϵ is the noise estimator which aims to find the noise trained with the physical violation loss can effectively re-
+θ
+ϵ added into the input x . Here, y is the text embedding duce the occurrence of furniture penetrating walls, and also
+0
+of the input text prompts. The hyperparamter w is set to help to regulate the orientation of the sampled furniture, re-
+t
+α¯ ∗ 0.1. L is the physical violation loss between walls sulting in more reasonable layouts than the model without
+t w−o
+and objects. It is defined as follows, the physical regularization term.
+
+
+--- PAGE 11 ---
+The study has four walls.The room has a desk , a cabinet and a window . The study has four walls.The room has a desk , a window and a picture .
+Figure 10. Ablation study of the physical violation loss. Two text prompts of study are used for layout generation using our diffusion model
+trained without L (left) and with L (right), respectively. As a result, in the left sample, diffusion model without L
+physical physical physical
+generates a green desk that penetrates the wall. In the right sample, this phenomenon is alleviated and regulated after using the physical
+violation loss. Note that the sampling results of these two versions of diffusion models are slightly different since the denoise distribution
+is different even given the same text prompt.
+𝐷" 𝑁" mas. In this paper, we employ PeRF [38] as the 3D room
+❄
+model and progressively generate novel viewpoint panora-
+Normal
+Calculate
+mas with layout guidance to reconstruct the PeRF model.
+Pre M tra D in E ed- 𝐷! " 𝑁! " ℒ" ⨂ Lay
+T
+o
+o
+u
+a
+t-
+li
+G
+gn
+uid
+th
+e
+e
+d
+e
+D
+s
+e
+ti
+p
+m
+th
+ate
+E
+d
+st
+p
+im
+an
+a
+o
+t
+r
+i
+a
+o
+m
+n.
+ic depth map with the
+Input 🔥 Normal scene layout, a naive approach would be to directly com-
+Calculate
+pute scale and bias coefficients for the initial depth map D0.
+ℒ! ~ ⨂ However, as the scene layout consists of object bounding
+3D Scene layout
+boxes and can not provide pixel-level perfect depth super-
+vision, this method may lead to degraded depth predictions.
+To address this problem, we propose the panoramic geom-
+Background depth map 𝐷# "
+etry alignment module as depicted in Fig. 11. We use the
+renderings instance labels of furniture items to exclude the rendered
+depths within the furniture areas, retaining only the back-
+Depth map Instance map 𝑀" ground depth map (e.g., wall, ceiling, floor) denoted as D0.
+l
+We incorporate a consistency loss L to optimize the
+Figure 11. Our Layout-guided depth estimation. To align the esti- align
+pre-trained monocular depth estimator (MDE). This consis-
+mated depth map with the 3D scene layout, we render depth map
+tency loss is formulated as follows,
+and instance map from the 3D scene layout at current view. Then
+L = L ∗ w + L ∗ w , (10)
+we take the background depth (wall, ceiling, floor) as reference align d d n n
+to align the depth prediction by optimizing the pretrained MDE. L = L (D0, D0) ∗ (∼ M 0), (11)
+d 1 i l
+A en v s o u i r d e in th g e d n e o g r r m ad a e l c th o e ns M ist D en E c ’ y s o p f er e f a o c r h m o a b n j c e e ct a d t u o r b in je g ct th s e u o rf p a t c im e, iz w a e - L n = (cid:12) (cid:12)N 0 − N i 0(cid:12) (cid:12) ∗ M 0. (12)
+where L represents the smooth L1 loss of depth, L de-
+d n
+tion process.
+notes the absolute loss of normal, and w , w are weighting
+d n
+8. Layout-Guided Panoramic NeRF coefficients. D i 0 stands for the predicted depth of the MDE
+at i-th iteration. M 0 is the instance map denoting the fore-
+Since the generated panorama is a partial observation of ground, such that we only correct the predicted depth in the
+the room subject to occlusions, lifting the single view into background region while preserving normals in the furni-
+a 3D room becomes a complex problem. Here we adopt ture regions. After alignment, we obtain the optimal depth
+the Warp and Inpainting scheme to complete the 3D room map D∗ and normal map N ∗.
+progressively. After generating the panorama I0, we re- Layout-Guided Novel View Generation. PeRF [38] trains
+cover its depth map D0 using the state-of-the-art monocu- a panoramic neural radiance field using a single panorama.
+lar depth estimator (MDE) [45]. However, problems such To render novel view panoramas, it employs the Stable Dif-
+as scale ambiguity and large occlusions may lead to incom- fusion model [24] to inpaint 60 perspective images and
+plete 3D room reconstruction. Additionally, ensuring con- stitch them into a panorama. Although it produces consis-
+sistency in inpainted panoramas at new viewpoints poses tent renderings at nearby viewpoints, it struggles to synthe-
+another challenge. Fortunately, the scene layout generated size viewpoints that are far apart and involve large unoc-
+in the first stage offers crucial geometric and semantic guid- cluded regions. To address this limitation, we rely on the
+ance, which can help correct biased depth predictions and scene layout to guide the panorama inpainting to maintain
+guide the inpainting process to generate novel view panora- cross-view consistency.
+
+
+--- PAGE 12 ---
+Training Views
+⨁
+Add RGB-D views Layout-guided
+Depth Estimation
+Panoramic NeRF
+Aligned RGB-D
+Inpainted
+fitting
+novel view
+Mask 𝑚 !"#$!"% Layout-guided
+Panorama Inpainting
+render
+S
+ne
+a
+w
+m pled RGB Rendering 𝐼' !
+viewpoint
+2D occ grid Finetuned
+Semantic map 𝑆 & ! ControlNet
+Inpainted content
+Depth 𝐷 & ! &
+3D Scene Layout Instance map 𝑀 & !
+Figure 12. The Layout-guided PeRF takes the input panorama, aligned depth map and normal map as initialization. Then a progressive
+inpainting module is introduced to generate consistent panoramic images at the sampled novel views. The progressive inpainting module
+consists of the layout-guided panorama inpainting and the layout-guided depth estimation module. The final RGB-D panoramic pairs are
+included as training views to finetune PeRF [38].
+module to generate the novel view panorama. Using our
+fine-tuned ControlNet, it achieves training-free panoramic
+Semantic
+map inpainting, which replaces pixels outside the inpainting
+mask m with Ii and fill m based on the se-
+inpaint r inpaint
+mantic map Si. As demonstrated in Fig. 13, our result-
+l
+PeRF ing RGB panorama adheres to the semantic layout and
+seamlessly integrates with the visible regions, while that of
+PeRF [38] fails to generate reasonable content in the large
+occlusion areas. Subsequently, after generating the novel
+Ours view panorama, we apply the layout-guided depth estima-
+tion and include it as training views for PeRF following
+their framework [38].
+Figure 13. After the layout-guided panorama inpainting, Our
+generated panoramas at novel viewpoints adhere to the seman-
+9. Mask-Guided Editing
+tic layout and seamlessly integrate with the visible regions, while
+PeRF [38] fails to synthesize plausible content at those large-size
+To achieve consistent and seamless 3D scene editing, it
+occlusion areas.
+should achieve two goals, i.e. altering the content accord-
+ing to the user’s input, and maintaining appearance consis-
+tency for scene objects. We propose a mask-guided image
+As illustrated in Fig. 12, we initialize the scene NeRF with editing as illustrated in Fig. 14, where a chair’s position
+the panorama I0, the aligned depth map D∗ and normal is moved. In the following, we will explain our method
+map N ∗. We sample new viewpoints in the green area of with this example. We denote the semantic panorama from
+the occupancy grid that do not conflict with the initial furni- the edited scene as S , then we derive the guidance
+edited
+ture arrangement. At the i-th novel view, we render seman- masks based on its difference from the original one S .
+ori
+tic map Si, depth map Di and instance map M i from the The source mask m shows the position of the original
+l l l src
+scene layout, these are then combined with the panoramic chair, and the target mask m indicates the location of the
+tar
+rendering Ii and inpainting mask m obtained from moved chair, and the inpainting mask m = {m|m ∈
+r inpaint inpaint
+the NeRF and fed to the layout-guided panorama inpainting m and m ∈/ m } is the unoccluded region. Given
+src tar
+
+
+--- PAGE 13 ---
+Scene Layout Guidance Masks Source panorama Optimization block
+Source object feature
+User editing
+operation
+Optimization with
+Edited semantic map 𝑺)*!% Source Mask 𝒎&'( Inpainted panorama
+feature consistency
+panorama
+Target object feature
+generation Inpaint Mask 𝒎!"#$!"% Target Mask 𝒎%$'
+semantic map 𝑺+'!
+Fusion
+Source panorama Inpainting block Inpainted panorama Edited panorama
+Figure 14. Mask-guided Editing. After editing the scene bounding box, we derive guidance masks from the changes in the semantic
+layout panoramas. We fill in unoccluded regions and optimize the DIFT [35] features to keep the identity of moved objects unchanged.
+these guidance masks, our method includes two steps: the the denoising U-Net network, at timestep t. Then we con-
+inpainting step and the optimization step. We first fill in the struct a loss function using the latent features from source
+inpaint area by feeding the inpaint mask m and edited area m in source panorama xori and target area m in
+inpaint src 0 tar
+semantic panorama S to the inpainting step. Then, in inpainted panorama xˆnew.
+edited 0
+our optimization step, we optimize the DIFT [35] feature to For conciseness, we denote the target image xˆedit ini-
+0
+maintain the visual consistency of relocated objects. tialized by xˆnew. We first propagate the original image xori
+0 0
+Inpainting Step. Denoting the original image as xo 0 ri, we and xˆe 0 dit to get xo t ri and xˆe t dit at timestep t by diffusion
+replace pixels outside the inpainting mask m with
+inpaint process, respectively. At each iteration, we use the same
+xo t ri during the diffusion process. This simple strategy ControlNet model to denoise both xo t ri and xˆe t dit and ex-
+keeps the outside region unchanged. At each reverse dif- tract the latent features of them, denoted as F ori and F edit,
+fusion step, we compute: t t
+respectively. Based on the strong correspondence between
+xori ∼ N ( √ α¯ xori(1 − α¯ I)), (13) the features, the source mask area m src and the target area
+t t 0 t m in F ori and F edit need to have high similarity. Here,
+xnew ∼ N (µ (x , t, y, S ), Σ (x , t, y, S ))(14) tar t t
+t θ t edited θ t edited we utilize the cosine embedding loss to measure the simi-
+xˆnew = m ⊙ xnew + (1 − m ) ⊙ xori (15)
+t−1 inpaint t inpaint t larity, and define the optimization loss function as follows:
+6. Here, sg is the stop gradient operator, the gradient will
+where xori is obtained through propagating xori in dif-
+t 0 not be back-propagated for the term sg(F ori ⊙ m ). Then
+fusion process, and xnew is sampled from the fine-tuned t src
+t we minimize the loss iteratively. At each iteration, xˆedit is
+ControlNet model, which takes the edited semantic layout t
+updated by taking one gradient descent step with a learning
+panorama S and text prompt y as input. As the prop-
+edited rate η to minimize the loss L as,
+agated xori is unaware of the new content xnew, this may obj
+t t ∂L
+result in distracting boundaries of the inpainted area. To xˆk+1 = xˆk − η · obj (17)
+t t ∂xˆk
+better blend the new content xnew and its surrounding back- t
+t After M steps optimization, we apply the standard denois-
+ground xo t ri in the inpainted area, we update the computa- ing process to get the final result xˆedit.
+tion of xˆnew to, 0
+t−1
+xˆnew = m ⊙ xnew
+t−1 inpaint t 10. Dataset
++ (1 − m ) ⊙ (xori · λ + xnew · λ )
+inpaint t ori t+1 new
+(16) Structured3D dataset preprocessing Structured3D con-
+where λ and λ are hyper-parameters to adjust the sists of 3, 500 houses with 21, 773 rooms, where each room
+ori new
+weight for fusing the inpainted area and unchanged area. is designed by professional designers with rich 3D struc-
+The final result of inpainting is xˆnew. ture annotations, including the room planes, lines, junc-
+0
+Optimization Step. When the user moves the position tions, and orientated bounding box of most furniture, and
+of a furniture item, we need to keep its appearance un- photo-realistic 2D renderings of the room. In our work, we
+changed before and after the movement. The recent work, use the 3D orientated bounding boxes of furniture, 2D RGB
+DIFT [35], finds the learned features from the diffusion net- panorama, and 3D lines and planes of each room. While the
+work allow for strong semantic correspondence. Thus, we original dataset lacks semantic class labels for each furni-
+maintain the consistency between the original and moved ture bounding box. The dataset preprocessing aims to pro-
+furniture by requiring their latent features to be consistent. duce clean ground truth data for our layout generation mod-
+In particular, we extract latent features F l of the layer l in ule and appearance generation module.
+t
+
+
+--- PAGE 14 ---
+Figure 15. Example of object bounding box annotation.
+• Orientated Object Bounding Box Annotation. As mum numbers of walls are set to 4 and 20, and that of ob-
+the original dataset lacks semantic label for each orien- jects are set to 3 and 24 respectively. The number of walls
+tated object bounding box, we first unproject the RGB for valid kitchens, studies, and bathrooms is the same as
+panorama and depth map into a point cloud of the room, for bedrooms, while the objects number is between 3 and
+then manually annotate the object semantic class and 24. Thus, the number of scene nodes is N = 23 in bed-
+add more accurate object bounding boxes based on the rooms, N = 44 in living rooms, and N = 34 in kitchens,
+noisy annotation of the original version. As shown in studies, and bathrooms. After filtering, we get 4,961 bed-
+Fig. 15, by using labelCloud [25], three data annota- rooms, 3,039 living rooms, 1,848 kitchens, 638 studies,
+tors worked for 1200 hours to annotate 5,064 bedrooms, and 1,500 bathrooms.
+3,064 livingrooms, 2,289 kitchens, 698 studies, and 1,500 Text Prompt Generation We follow the SceneFormer [40]
+bathrooms, getting nearly 150K accurate orientated 3D to generate text prompts describing partial scene configura-
+bounding boxes across 25 object categories. tions. Each text prompt contains two to four sentences. The
+• Scene Node Encoding. We define our holistic scene code first sentence describes how many walls are in the room,
+based on a unified encoding of walls and object bounding then the second sentence describes two or three existing
+box. Each object o j is treated as a node with various at- furniture in the room. The following sentences mainly de-
+tributes, i.e., center location l i ∈ R3, size s i ∈ R3, orien- scribe the spatial relations among the furniture, please refer
+tation r i ∈ R, class label c i ∈ RC. The orientated bound- to SceneFormer [40] and DiffuScene [34] for more detailed
+ing box is off-the-shelf, we extract the inner walls based explanation of relation-describing sentences. In this way,
+on the line junctions and corners of the 3D room. Then we we can get some relation-describing sentences to depict the
+put the orientated object bounding boxes and walls into a partial scene. Finally, we randomly sampled zero to two
+compact scene code. Concretely, we define an additional relation-describing sentences to form the text prompt for 3D
+’empty’ object and pad it into scenes to have a fixed num- room generation.
+ber of object across scenes. Each object rotation angle is
+parametrized by a 2-d vector of cosine and sine values. 11. Implementation details
+Finally, each node is characterized by the concatenation
+of these attributes as o = [c , l , s , cosr , sinr ]. Training and inference details.
+i i i i i i
+• data filtering. We start by filtering out those problem- • In the layout generation stage, We train the scene code
+atic scenes such as rooms with wall number less than 4 or diffusion model on our processed typical indoor rooms
+larger than 20. We also remove those scenes with too few data of Structured3D [48] for 200, 000 steps. The frozen
+or too many objects. The number of walls of valid bed- text encoder we adopted is the same as Stable Diffu-
+rooms is between 4 and 10, and that of objects is between sion [24]. The training is performed using the AdamW
+3 and 13. As for living rooms, the minimum and maxi- optimizer with a batch size of 128 and a learning rate of
+
+
+--- PAGE 15 ---
+1e − 4, utilizing 2 A6000 GPUs. During the inference same panoramic reconstruction module as MVDiffusion.
+process, we utilize the DDIM [31] sampler with a step When evaluating the panoramic image quality, we adopt
+size of 200 to perform scene code denoising. the same processing as MVDiffusion to get multi-view
+• In the appearance generation stage, we fine-tune the perspective images of Text2Light.
+segmentation-conditional ControlNet model based on the • Text2Room [12]: Text2Room is the current state-of-the-
+pairwise semantic and RGB panorama of Structured3D. art and off-the-shelf method for 3D room mesh genera-
+The fine-tuning process is implemented on two A6000 tion. It utilizes 20 camera spots of a pre-defined trajectory
+GPUs for 150 epochs(about 3 days). In the inference to expand new areas as much as possible by generating 10
+phase, we generate high-fidelity and loop-consistent RGB images at each spot. Here We use its final fused poison
+panorama through DDIM sampler with 100 steps, rotat- mesh for 3D mesh comparison. For a fair comparison of
+ing both semantic layout panorama and the denoised im- 2D renderings evaluation, we only use the renderings at
+age for γ = 90◦ at each step. the origin of the final mesh.
+• As for the layout-guided panoramic NeRF module, we • Text2NeRF [46] generates 3D scenes from a text prompt
+set w = 0.6 and w = 0.4 for depth alignment loss. using NeRF as the 3D representation and leverages a
+d n
+During the NeRF fitting process, we randomly select 8 pre-trained text-to-image diffusion model and monocu-
+viewpoints for living room scenarios and 4 viewpoints lar depth estimation to constrain the 3D reconstruction.
+for other room types. The NeRF training settings are the However, we found it fails to reconstruct 360◦ scenes.
+same as PeRF [38]. We present some NeRF reconstructions from Text2NeRF
+• As for the mask-guided editing module, we utilize the stitched into panorama images in Fig.23. Note that only
+fine-tuned Control-Seg model to inpaint the background ∼154° horizontal field of view (FOV) and ∼113° vertical
+content and optimize the latents of the edited panorama. FOV is shown since the rest of the scene is not recon-
+In inpainting step, the weights used too fuse the unpainted structed by the method. Thus we skip the comparison
+area and unchanged area are set λ = 0.8, λ = 0.2 with this method.
+ori new
+. In the optimization step, the maximum iteration is To ensure a fair comparison, we render 60 perspective
+M = 50, the learning rate η for optimization is initial- images at the origin using the final textured meshes of all
+ized to 0.1 and then gradually decreases to 0.01. methods. The camera field of view is set to 140◦ to cap-
+ture scene layout information for evaluating the CS and IS
+11.1. Baseline Implementations scores. Additionally, we render corresponding geometric
+images in Fig. 20 to showcase the geometry quality.
+We provide implementation details for baseline methods in
+the following:
+12. Panorama Generation Comparison
+• MVDiffusion [36]: To get a high-resolution photo
+realistic panorama, MVDiffusion employs 8 branches In Fig. 16, we study the performance of our panorama
+of SD [24] model and correspondence-aware attention generation module with and without loop-consistent sam-
+mechanism to generate multi-view images simultane- pling mechanism, the ablation indicates the loop-consistent
+ously. We first fine-tune the pre-trained model of MVD- sampling helps the generated panorama obtain better tex-
+iffusion on Structured3D for 10 epochs(about 3 days). ture consistency. Fig. 17 presents additional results for
+Since each generated subview image of MVDiffusion is panorama generation. Given a simple partial-scene text
+at 512 × 512 resolution, the final panorama is pretty prompt, our approach obtains better RGB panorama than
+large. We resize the generated panorama of MVDif- that of Text2Light [6] and MVDiffusion [36], which
+fusion from 4096 × 2048 to 1024 × 512. Then the demonstrates the effectiveness of our well-designed frame-
+8 subview perspective images are extracted from the work. While Text2Light suffers from the inconsistent loop
+post-processed panorama using the same camera settings and unexpected content of the generated panorama, MVD-
+(FOV=90◦,rotation=45◦). The same operation is adopted iffusion fails to recover a reasonable room layout from the
+on our generated panoramic images. Finally, we combine text prompt.
+the panorama from MVDiffusion with the depth estima-
+tion [45] and Poisson reconstruction [14] module to create 13. Additional Qualitative Results
+a 3D mesh.
+• Text2Light [6]: Text2Light creates HDR panoramic im- In Fig. 18, we first visualize more generated room layouts
+ages from text using a multi-stage auto-regressive gener- generation of typical rooms in the format of semantic 3D
+ative model. We choose Text2Light as one of the baseline bounding boxes. Then, we show additional qualitative com-
+for our panorama generation and 3D room mesh gener- parison results between our method and baselines in Fig. 20.
+ation. We first generate RGB panoramas from the input We demonstrate more scene editing results of our method in
+text using Text2Light, then lift it into 3D mesh using the Fig. 19.
+
+
+--- PAGE 16 ---
+gnilpmaS-tnetsisnoCpooL-OW
+gnilpmaS-tnetsisnoCpooL-W
+Figure 16. Ablation of loop-consistent sampling examples. We rotate the generated panorama by 180◦ to better visualize the leftmost and
+rightmost content consistency.
+14. User Study and Andrea Tagliasacchi. Cc3d: Layout-conditioned
+generation of compositional 3d scenes. arXiv preprint
+Follow Text2Room [12], we conduct a user study and
+arXiv:2303.12074, 2023. 3
+ask n = 61 ordinary users to score the Perceptual Qual-
+[2] Miguel Angel Bautista, Pengsheng Guo, Samira Abnar, Wal-
+ity(PQ) and 3D Structure Completeness(3DS) of the gener-
+ter Talbott, Alexander Toshev, Zhuoyuan Chen, Laurent
+ated room on a scale of 1 − 5. Different from Text2room Dinh, Shuangfei Zhai, Hanlin Goh, Daniel Ulbricht, et al.
+which only demonstrates the perspective renderings of the Gaudi: A neural architect for immersive 3d scene genera-
+3D room, we directly show users the generated mesh to tion. NeurIPS, 35:25102–25116, 2022. 3
+get a global evaluation of the whole generated 3D room. [3] Mikołaj Bin´kowski, Danica J. Sutherland, Michael Arbel,
+We show an example of the presented interface of the user and Arthur Gretton. Demystifying mmd gans, 2021. 6
+study in Fig. 21. In total, we presented 40 top-down views [4] Kevin Chen, Christopher B Choy, Manolis Savva, An-
+from 10 scenes and report averaged results for each method. gel X Chang, Thomas Funkhouser, and Silvio Savarese.
+Users favor our approach, which emphasizes the superior- Text2shape: Generating shapes from natural language by
+ity of our more plausible geometry, along with the vivid learning joint embeddings. In ACCV, pages 100–116.
+Springer, 2019. 2
+texture.
+[5] Rui Chen, Yongwei Chen, Ningxin Jiao, and Kui Jia.
+15. Free style prompts Fantasia3d: Disentangling geometry and appearance for
+high-quality text-to-3d content creation. arXiv preprint
+We show the adaptability of our method by utilizing Large arXiv:2303.13873, 2023. 1, 2
+Language Model (LLM) GPT-4 Vision (GPT-4V) [44] to [6] Zhaoxi Chen, Guangcong Wang, and Ziwei Liu. Text2light:
+generate text captions from panorama images of Struc- Zero-shot text-driven hdr panorama generation. ACM TOG,
+tured3D [48] bedroom scenes. The prompt used for the 41(6):1–16, 2022. 2, 6, 7, 8
+LLM is as shown in Table 3. [7] Huan Fu, Bowen Cai, Lin Gao, Lingxiao Zhang, Jiaming
+We train and test with the LLM generated captions as Wang Cao Li, Zengqi Xun, Chengyue Sun, Rongfei Jia, Bin-
+conditioning for layout generation. Fig. 22 shows some re- qiang Zhao, and Hao Zhang. 3d-front: 3d furnished rooms
+with layouts and semantics, 2021. 6
+sults from the test set and corroborates our ability to pro-
+duce plausible 3D room layout following free-style test [8] Huan Fu, Bowen Cai, Lin Gao, Ling-Xiao Zhang, Jiaming
+Wang, Cao Li, Qixun Zeng, Chengyue Sun, Rongfei Jia, Bin-
+prompts.
+qiang Zhao, et al. 3d-front: 3d furnished rooms with layouts
+and semantics. In Proceedings of the IEEE/CVF Interna-
+References
+tional Conference on Computer Vision, pages 10933–10942,
+[1] Sherwin Bahmani, Jeong Joon Park, Despoina Paschali- 2021. 7
+dou, Xingguang Yan, Gordon Wetzstein, Leonidas Guibas, [9] github. Controlnetgithubmodel. https://github.
+
+
+--- PAGE 17 ---
+The bedroom has four walls. The room has a cabinet and a window.
+Inconsistent loop Repetitve cabinet Bed, table and window
+Unknown Repetitve cabinet Door
+furniture Text2Light MVDiffusion Ours
+The living room has ten walls. The room has a cabinet and a shelves .
+Unknown furniture Repetitve cabinet Sofa set and table
+Inconsistent loop
+Repetitve cabinet Corridor and doors
+Text2Light
+The study has four walls. The room has two cabinets and a window .
+Inconsistent loop Repetitve desks Cabinet
+Repetitive chairs Repetitve windows Cabinet, desk, and chair
+Text2Light MVDiffusion Ours
+The bathroom has four walls.The room has a sink , a mirror and a toilet .The toilet is to the right of the sink .
+Inconsistent loop Repetitve toilets Sink, mirror, and shower
+Unknown furniture Repetitve mirrors and Toilet
+Text2Light sinks MVDiffusion Ours
+Figure 17. Qualitative comparison for panorama generation. Generated panorama is visualized in a panoramic image viewer to facilitate
+the user to check the global content of panorama. The left side of each column is two zoom-in views, and the right side is the fisheye view.
+Text2Light [6] exists serious inconsistent problem on the border of the generated panorama, it also shows a lot of unexpected stuff in the
+image. MVDiffusion [36] fails to synthesize reasonable content for the target room type. In contrast, our method obtains layout plausible
+and vivid panorama from the given text prompt of partial scene.
+com/lllyasviel/ControlNet-v1-1-nightly# two time-scale update rule converge to a local nash equilib-
+controlnet-11-segmentation, 2023. 5 rium. NeurIPS, 30, 2017. 6
+[10] Kamal Gupta, Justin Lazarow, Alessandro Achille, Larry S [12] Lukas Ho¨llein, Ang Cao, Andrew Owens, Justin Johnson,
+Davis, Vijay Mahadevan, and Abhinav Shrivastava. Layout- and Matthias Nießner. Text2room: Extracting textured
+transformer: Layout generation and completion with self- 3d meshes from 2d text-to-image models. arXiv preprint
+attention. In ICCV, pages 1004–1014, 2021. 3 arXiv:2303.11989, 2023. 1, 2, 3, 4, 6, 7, 8
+[11] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, [13] Heewoo Jun and Alex Nichol. Shap-e: Generating condi-
+Bernhard Nessler, and Sepp Hochreiter. Gans trained by a tional 3d implicit functions. ArXiv, abs/2305.02463, 2023.
+
+
+--- PAGE 18 ---
+bed table tv window picture chair hood fridge shower pillow door night curtain lamp cabinet sink stove mirror toilet
+stanbd
+The bedroom has four walls.The room The living room has ten walls.The The kitchen has four walls.The The study has four walls.The The bathroom has six walls.The
+has a window , a picture and a bed . room has two cabinets and a room has a fridge , a window room has three cabinets . room has a shower and a
+window . and a hood . window .
+The living room has twelve walls.The room The kitchen has six walls.The The study has four walls.The The bathroom has four walls.The room
+The bedroom has eight walls. The room has two cabinets and a window .There is a room has a window , a sink and room has two cabinets and a has a shower and a window .The
+has a cabinet and two windows. lamp above the second cabinet . a hood . lamp . window is to the left of the shower.
+Figure 18. Additional room layout generations. In the bedroom, the bed is often attached to the wall, with a picture above it and a television
+in front of it. In the living room, there is often a double-seat sofa accompanied by a table and a single-seat sofa. The dining table is usually
+placed in a separate area of the living room, along with cabinets and chairs. In the kitchen, common furniture includes a stove, sink,
+fridge, and hood, which are all well-placed in the room. In the study, there is typically a desk accompanied by a chair and one or more
+bookshelves, and sometimes there is also a bed in the room. In the bathroom, there is usually a sink with a mirror, a toilet, and a shower.
+(a) Resize the sofa (b) Remove the chair
+Figure 19. Additional scene editing results. In each sub-figure, the left part is the original 3D room, the right part shows the final mesh
+after users’ interactive editing.
+2 [18] Chen-Hsuan Lin, Jun Gao, Luming Tang, Towaki Takikawa,
+[14] Michael Kazhdan, Matthew Bolitho, and Hugues Hoppe. Xiaohui Zeng, Xun Huang, Karsten Kreis, Sanja Fidler,
+Poisson surface reconstruction. In Proceedings of the fourth Ming-Yu Liu, and Tsung-Yi Lin. Magic3d: High-resolution
+Eurographics symposium on Geometry processing, page 0, text-to-3d content creation. In CVPR, pages 300–309, 2023.
+2006. 6 1, 2
+[15] Chenguo Lin and Yadong Mu. arXiv preprint [19] Alex Nichol, Heewoo Jun, Prafulla Dhariwal, Pamela
+arXiv:2402.04717, 2024. 3 Mishkin, and Mark Chen. Point-e: A system for generat-
+ing 3d point clouds from complex prompts. arXiv preprint
+[16] Chieh Hubert Lin, Chia-Che Chang, Yu-Sheng Chen, Da-
+arXiv:2212.08751, 2022. 2
+Cheng Juan, Wei Wei, and Hwann-Tzong Chen. Coco-gan:
+Generation by parts via conditional coordinating. In ICCV, [20] Alexander Quinn Nichol and Prafulla Dhariwal. Improved
+pages 4512–4521, 2019. 2, 3 denoising diffusion probabilistic models. In International
+[17] Chieh Hubert Lin, Hsin-Ying Lee, Yen-Chi Cheng, Sergey Conference on Machine Learning, pages 8162–8171. PMLR,
+Tulyakov, and Ming-Hsuan Yang. Infinitygan: To- 2021. 1
+wards infinite-pixel image synthesis. arXiv preprint [21] Despoina Paschalidou, Amlan Kar, Maria Shugrina, Karsten
+arXiv:2104.03963, 2021. 2, 3 Kreis, Andreas Geiger, and Sanja Fidler. Atiss: Autoregres-
+
+
+--- PAGE 19 ---
+The living room has twelve walls. The room has a cabinet and a fridge .
+Text2Light MVDiffusion Text2Room Ours
+The bedroom has four walls. The room has a window and a picture.
+Text2Light MVDiffusion Text2Room Ours
+The living room has ten walls. The room has a picture and a window.
+Text2Light MVDiffusion Text2Room Ours
+The study has four walls. The room has two cabinets and a window.
+Text2Light MVDiffusion Text2Room Ours
+Figure 20. Additional qualitative comparison with previous works.The first row shows a textured 3D room model, and the second row
+shows perspective colored renderings and geometric renderings from the room model.
+sive transformers for indoor scene synthesis. NeurIPS, 34: hall. Dreamfusion: Text-to-3d using 2d diffusion. arXiv
+12013–12026, 2021. 2, 3, 4, 6, 7 preprint arXiv:2209.14988, 2022. 1, 2
+[22] Ben Poole, Ajay Jain, Jonathan T Barron, and Ben Milden- [23] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+
+
+--- PAGE 20 ---
+Figure 21. User study interface. We provide users with multiple top-down images from different methods and ask users to rate the given
+3D meshes on a scale from 1 to 5, according to the criteria of Perceptual Quality and 3D Structure Completeness.
+A bed is positioned in the center with pillows on it and a A bed with pillows is in front of a window.
+night stand is next to it on each side. A night stand is to the right of the bed.
+A picture is above the bed on the wall. A lamp is on the night stand.
+A window with curtains is on the wall to the left of the bed. A picture is on the wall above the bed.
+A television is on the wall opposite the bed.
+Figure 22. Text-conditioned layout generation on Structured3D using GPT-4V text prompts. Our method synthesizes a plausible scene
+layout that matches the description.
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, et al. Photorealistic text-to-image diffusion models with deep
+Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learn- language understanding. NeurIPS, 35:36479–36494, 2022. 2
+ing transferable visual models from natural language super-
+[27] Tim Salimans, Ian Goodfellow, Wojciech Zaremba, Vicki
+vision. pages 8748–8763. PMLR, 2021. 6
+Cheung, Alec Radford, and Xi Chen. Improved techniques
+[24] Robin Rombach, Andreas Blattmann, Dominik Lorenz, for training gans. Advances in neural information processing
+Patrick Esser, and Bjo¨rn Ommer. High-resolution image syn- systems, 29, 2016. 6
+thesis with latent diffusion models. In CVPR, pages 10684–
+[28] Jonas Schult, Sam Tsai, Lukas Ho¨llein, Bichen Wu, Jialiang
+10695, 2022. 2, 5, 6
+Wang, Chih-Yao Ma, Kunpeng Li, Xiaofang Wang, Fe-
+[25] Christoph Sager, Patrick Zschech, and Niklas Kuhl. label- lix Wimbauer, Zijian He, et al. Controlroom3d: Room
+Cloud: A lightweight labeling tool for domain-agnostic 3d generation using semantic proxy rooms. arXiv preprint
+object detection in point clouds. Computer-Aided Design arXiv:2312.05208, 2023. 3
+and Applications, 19(6):1191–1206, 2022. 5
+[29] Junyoung Seo, Wooseok Jang, Min-Seop Kwak, Jaehoon
+[26] Chitwan Saharia, William Chan, Saurabh Saxena, Lala Ko, Hyeonsu Kim, Junho Kim, Jin-Hwa Kim, Jiyoung Lee,
+Li, Jay Whang, Emily L Denton, Kamyar Ghasemipour, and Seungryong Kim. Let 2d diffusion model know 3d-
+Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, consistency for robust text-to-3d generation. arXiv preprint
+
+
+--- PAGE 21 ---
+Table 3. Prompt for GPT-4V to generate captions from panorama images
+Describe what is displayed in the panoramic image succinctly in 3 or 4 sentences encoded in ASCII.
+Do not use lengthy or compound sentences. Do not mention that it is an image or a panoramic image.
+Do not describe the background, lighting, color palette or count the number of objects.
+Do not describe size like “small”, “large”, etc.
+Describe the relative positions of each objects in the scene using only these relationships: “on”, “above”,
+“surrounding”, “inside”, “left touching”, “right of”, “front touching”, ‘in front of”, “right touching”, “left
+of”, “behind touching”, “behind”, “next to”, “left of”, “right of”. Optionally, describe the object attributes
+(color, texture etc).
+In the description only use these objects: table, night stand, picture, door, cabinet, curtain, bathtub, bed,
+sink, fridge, shelves, window, lamp, chair, pillow, dresser, bookshelf, sofa, counter, desk, mirror, television,
+wall
+Figure 23. Text2NeRF results. The NeRF reconstructions are stitched into panorama images. Only 154° horizontal FOV and 113° vertical
+FOV is shown since the method was not able to reconstruct the rest of the scene.
+arXiv:2303.07937, 2023. 1 there be color! large-scale texturing of 3d reconstructions. In
+[30] Ka Chun Shum, Hong-Wing Pang, Binh-Son Hua, ECCV, pages 836–850. Springer, 2014. 6
+Duc Thanh Nguyen, and Sai-Kit Yeung. Conditional 360- [38] Guangcong Wang, Peng Wang, Zhaoxi Chen, Wenping
+degree image synthesis for immersive indoor scene decora- Wang, Chen Change Loy, and Ziwei Liu. Perf: Panoramic
+tion. arXiv preprint arXiv:2307.09621, 2023. 2, 3 neural radiance field from a single panorama. arXiv preprint
+arXiv:2310.16831, 2023. 3, 4, 5, 2, 6
+[31] Jiaming Song, Chenlin Meng, and Stefano Ermon.
+Denoising diffusion implicit models. arXiv preprint [39] Haochen Wang, Xiaodan Du, Jiahao Li, Raymond A Yeh,
+arXiv:2010.02502, 2020. 6 and Greg Shakhnarovich. Score jacobian chaining: Lifting
+pretrained 2d diffusion models for 3d generation. In CVPR,
+[32] Liangchen Song, Liangliang Cao, Hongyu Xu, Kai Kang,
+pages 12619–12629, 2023. 2
+Feng Tang, Junsong Yuan, and Yang Zhao. Roomdreamer:
+[40] Xinpeng Wang, Chandan Yeshwanth, and Matthias Nießner.
+Text-driven 3d indoor scene synthesis with coherent geome-
+Sceneformer: Indoor scene generation with transformers. In
+try and texture. arXiv preprint arXiv:2305.11337, 2023. 3
+2021 International Conference on 3D Vision (3DV), pages
+[33] Cheng Sun, Chi-Wei Hsiao, Min Sun, and Hwann-Tzong
+106–115. IEEE, 2021. 6, 5
+Chen. Horizonnet: Learning room layout with 1d represen-
+[41] Zhengyi Wang, Cheng Lu, Yikai Wang, Fan Bao, Chongxuan
+tation and pano stretch data augmentation. In CVPR, pages
+Li, Hang Su, and Jun Zhu. Prolificdreamer: High-fidelity and
+1047–1056, 2019. 5
+diverse text-to-3d generation with variational score distilla-
+[34] Jiapeng Tang, Yinyu Nie, Lev Markhasin, Angela Dai, Jus-
+tion. arXiv preprint arXiv:2305.16213, 2023. 2
+tus Thies, and Matthias Nießner. Diffuscene: Scene graph
+[42] Tianhao Wu, Chuanxia Zheng, and Tat-Jen Cham. Ipo-ldm:
+denoising diffusion probabilistic model for generative indoor
+Depth-aided 360-degree indoor rgb panorama outpainting
+scene synthesis. arXiv preprint arXiv:2303.14207, 2023. 2,
+via latent diffusion model. arXiv preprint arXiv:2307.03177,
+3, 4, 6, 7, 1, 5
+2023. 5
+[35] Luming Tang, Menglin Jia, Qianqian Wang, Cheng Perng [43] Bangbang Yang, Wenqi Dong, Lin Ma, Wenbo Hu, Xiao Liu,
+Phoo, and Bharath Hariharan. Emergent correspondence Zhaopeng Cui, and Yuewen Ma. Dreamspace: Dreaming
+from image diffusion. arXiv preprint arXiv:2306.03881, your room space with text-driven panoramic texture propa-
+2023. 6, 4 gation. arXiv preprint arXiv:2310.13119, 2023. 3
+[36] Shitao Tang, Fuyang Zhang, Jiacheng Chen, Peng Wang, and [44] Zhengyuan Yang, Linjie Li, Kevin Lin, Jianfeng Wang,
+Yasutaka Furukawa. Mvdiffusion: Enabling holistic multi- Chung-Ching Lin, Zicheng Liu, and Lijuan Wang. The dawn
+view image generation with correspondence-aware diffusion. of lmms: Preliminary explorations with gpt-4v(ision), 2023.
+arXiv preprint arXiv:2307.01097, 2023. 1, 2, 3, 6, 7, 8 7
+[37] Michael Waechter, Nils Moehrle, and Michael Goesele. Let [45] Ilwi Yun, Chanyong Shin, Hyunku Lee, Hyuk-Jae Lee, and
+
+
+--- PAGE 22 ---
+Chae Eun Rhee. Egformer: Equirectangular geometry-
+biased transformer for 360 depth estimation. In Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion, pages 6101–6112, 2023. 5, 6, 2
+[46] Jingbo Zhang, Xiaoyu Li, Ziyu Wan, Can Wang, and Jing
+Liao. Text2nerf: Text-driven 3d scene generation with neural
+radiance fields. arXiv preprint arXiv:2305.11588, 2023. 2, 6
+[47] Lvmin Zhang and Maneesh Agrawala. Adding conditional
+control to text-to-image diffusion models. arXiv preprint
+arXiv:2302.05543, 2023. 2, 4
+[48] Jia Zheng, Junfei Zhang, Jing Li, Rui Tang, Shenghua Gao,
+and Zihan Zhou. Structured3d: A large photo-realistic
+dataset for structured 3d modeling. In ECCV, pages 519–
+535. Springer, 2020. 2, 5, 6, 7

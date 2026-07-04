@@ -20,10 +20,10 @@ def load_config(app_config_path: str) -> RootConfig:
     Load the application configuration from a YAML file with environment variable expansion.
 
     Args:
-        config_path (str): Path to the YAML configuration file.
+        app_config_path: Path to the YAML configuration file.
 
     Returns:
-        dict: The loaded configuration dictionary.
+        The loaded and validated configuration.
 
     Raises:
         FileNotFoundError: If the configuration file does not exist.
@@ -41,7 +41,7 @@ def load_config(app_config_path: str) -> RootConfig:
                 f"Application configuration file not found: {full_path_app_config}"
             )
 
-        with open(full_path_app_config, "r") as f:
+        with open(full_path_app_config, encoding="utf-8") as f:
             raw_content = f.read()
 
         # Expand environment variables and load YAML content
@@ -52,8 +52,6 @@ def load_config(app_config_path: str) -> RootConfig:
         logger.info(
             "Configuration loaded and validated successfully: %s", full_path_app_config
         )
-
-        logger.info("Configuration loaded and validated successfully.")
         return validated_config
 
     except FileNotFoundError as e:
@@ -76,4 +74,4 @@ try:
     logger.info("Application configuration loaded from %s", config_file)
 except Exception as e:
     logger.critical("Failed to load application configuration: %s", e)
-    raise e
+    raise

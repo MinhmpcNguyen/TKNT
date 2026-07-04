@@ -25,52 +25,21 @@ def build_saved_layout_option_drafts(
     case_id: str,
     case_name: str,
     room_payload: object,
-    stylist_payload: object,
-    absolute_layout_payload: object,
     layout_variants_payload: object,
 ) -> list[SavedLayoutOptionDraft]:
     variants = _variant_records(layout_variants_payload)
-    if variants:
-        drafts: list[SavedLayoutOptionDraft] = []
-        for index, variant in enumerate(variants, start=1):
-            draft = _build_variant_draft(
-                case_id=case_id,
-                case_name=case_name,
-                option_index=index,
-                variant=variant,
-                room_payload=room_payload,
-            )
-            if draft is not None:
-                drafts.append(draft)
-        return drafts
-
-    styled = _json_object(stylist_payload)
-    if not styled:
-        return []
-    absolute_layout = _json_object(absolute_layout_payload) or {}
-    styled = _enrich_rotation_ccw(styled, absolute_layout)
-    floorplan = _build_floorplan(room_payload, styled, absolute_layout)
-    if floorplan is None:
-        return []
-    styled_floorplan = _apply_styled_room_appearance(floorplan, styled)
-    return [
-        SavedLayoutOptionDraft(
-            option_id="option_1",
-            option_index=1,
-            name="Option 1",
-            floorplan_json=styled_floorplan,
-            design_json=_build_design_json(styled, styled_floorplan),
-            styled_result_json=styled,
-            meta={
-                "source": "pipeline_autosave",
-                "source_pipeline_case_id": case_id,
-                "case_name": case_name,
-                "option_id": "option_1",
-                "option_index": 1,
-                "absolute_layout": absolute_layout,
-            },
+    drafts: list[SavedLayoutOptionDraft] = []
+    for index, variant in enumerate(variants, start=1):
+        draft = _build_variant_draft(
+            case_id=case_id,
+            case_name=case_name,
+            option_index=index,
+            variant=variant,
+            room_payload=room_payload,
         )
-    ]
+        if draft is not None:
+            drafts.append(draft)
+    return drafts
 
 
 def _build_variant_draft(
@@ -244,7 +213,9 @@ def _apply_styled_room_appearance(
             next_walls.append({**wall, "color_hex": wall_color} if wall else item)
         output["walls"] = next_walls
     doors = _apply_opening_colors(openings.get("doors"), opening_colors.get("doors"))
-    windows = _apply_opening_colors(openings.get("windows"), opening_colors.get("windows"))
+    windows = _apply_opening_colors(
+        openings.get("windows"), opening_colors.get("windows")
+    )
     output["openings"] = {
         "doors": doors,
         "windows": windows,
@@ -409,9 +380,9 @@ def _enrich_rotation_ccw(
         instance_id = _clean_string(record.get("instance_id")) or _clean_string(
             record.get("id")
         )
-        orientation = (by_id.get(instance_id or "") if instance_id else None) or by_bbox.get(
-            _bbox_key(record.get("bbox")) or ""
-        )
+        orientation = (
+            by_id.get(instance_id or "") if instance_id else None
+        ) or by_bbox.get(_bbox_key(record.get("bbox")) or "")
         if orientation is not None:
             record["rotation_ccw"] = orientation["rotation_ccw"]
             record["front_world"] = orientation["front_world"]
@@ -550,8 +521,7 @@ def _bbox_key(value: object) -> str | None:
     if not record:
         return None
     return ":".join(
-        str(_number(record.get(key)))
-        for key in ("min_x", "min_y", "max_x", "max_y")
+        str(_number(record.get(key))) for key in ("min_x", "min_y", "max_x", "max_y")
     )
 
 

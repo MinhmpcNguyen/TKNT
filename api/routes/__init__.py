@@ -1,3 +1,11 @@
-from api.routes import account, auth, inventory, pipeline
+from api.routes import account, admin, auth, billing, inventory, pipeline, snapshot_images
 
-__all__ = ["pipeline", "inventory", "auth", "account"]
+__all__ = [
+    "pipeline",
+    "snapshot_images",
+    "inventory",
+    "auth",
+    "account",
+    "admin",
+    "billing",
+]

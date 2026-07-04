@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -822,7 +821,7 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
         self.assertTrue(obj["droppable"])
         self.assertTrue(obj["keep_if_space_surplus"])
 
-    def test_target_if_viable_request_contract_floor_protects_minimum_support(
+    def test_target_if_viable_request_contract_keeps_minimum_soft_droppable(
         self,
     ) -> None:
         contract = _request_contract.sanitize_request_contract(
@@ -867,10 +866,58 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
         self.assertEqual(obj["min_keep"], 1)
         self.assertEqual(obj["max_keep"], 2)
         self.assertEqual(obj["request_contract_target_count"], 2)
+        self.assertFalse(obj["required"])
+        self.assertFalse(obj["protected"])
+        self.assertTrue(obj["droppable"])
+        self.assertTrue(obj["keep_if_space_surplus"])
+        self.assertEqual(obj["drop_order_bias"], "drop_late")
+
+    def test_must_keep_request_contract_protects_minimum_support(
+        self,
+    ) -> None:
+        contract = _request_contract.sanitize_request_contract(
+            {
+                "objects": [
+                    {
+                        "object_type": "nightstand",
+                        "intent": "must_keep",
+                        "min_keep": 1,
+                        "target_count": 1,
+                        "max_keep": 1,
+                        "evidence": "keep one nightstand",
+                        "reason": "explicit support requirement",
+                        "confidence": 0.9,
+                    }
+                ],
+                "groups": [],
+            },
+            brief_text="Keep one nightstand.",
+            available_object_types=["nightstand"],
+        )
+
+        obj = _tier_count_director._apply_request_contract_to_object(
+            {
+                "object_type": "nightstand",
+                "base_type": "nightstand",
+                "role": "support",
+                "required": False,
+                "protected": False,
+                "droppable": True,
+                "max_keep": 1,
+                "min_keep": 0,
+                "tier_count_explicit": False,
+                "keep_if_space_surplus": True,
+                "space_surplus_threshold": 0.45,
+                "drop_order_bias": "neutral",
+                "preserve_level": "medium",
+            },
+            request_contract=contract,
+        )
+
+        self.assertEqual(obj["min_keep"], 1)
         self.assertTrue(obj["required"])
         self.assertTrue(obj["protected"])
         self.assertFalse(obj["droppable"])
-        self.assertFalse(obj["keep_if_space_surplus"])
 
     def test_target_if_viable_support_gets_primary_budget_priority(self) -> None:
         priority = _tier_count_director._decision_priority(
@@ -1523,7 +1570,9 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
             "sofa",
         )
 
-    def test_fast_layout_mode_removes_support_items_for_primary_seed(self) -> None:
+    def test_minimal_furnishing_mode_removes_support_items_for_primary_seed(
+        self,
+    ) -> None:
         def fake_get_size_profiles(
             *, categories: list[str], tenant_id: str | None = None
         ) -> dict[str, Any]:
@@ -1563,21 +1612,13 @@ class TierCountDirectorArchitectureTest(unittest.TestCase):
             "estimate_budget": fake_estimate_budget,
         }
 
-        previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
-        os.environ["TKNT_LAYOUT_SPEED_MODE"] = "fast"
-        try:
-            result = TierCountDirector().generate(
-                description="Design a practical living room that should solve quickly.",
-                special_notes="Keep it airy and open.",
-                room_model_json=irregular_room,
-                user_intent_json={"user_input": {"style": "modern"}},
-                clusters_json=_living_seed_clusters(),
-            )
-        finally:
-            if previous is None:
-                os.environ.pop("TKNT_LAYOUT_SPEED_MODE", None)
-            else:
-                os.environ["TKNT_LAYOUT_SPEED_MODE"] = previous
+        result = TierCountDirector().generate(
+            description="Design a practical living room that should solve quickly.",
+            special_notes="Keep it airy and open.",
+            room_model_json=irregular_room,
+            user_intent_json={"user_input": {"style": "modern"}},
+            clusters_json=_living_seed_clusters(),
+        )
 
         self.assertEqual(result["status"], "OK")
         by_type = {

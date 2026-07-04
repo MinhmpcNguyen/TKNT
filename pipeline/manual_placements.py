@@ -212,7 +212,7 @@ def append_manual_placements_guidance(
     return f"{base_text.rstrip()}\n\n{manual_text}"
 
 
-def augment_cluster_forge_with_manual_placements(
+def augment_seed_relation_plan_with_manual_placements(
     cluster_output: dict[str, Any],
     manual_placements: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -347,43 +347,6 @@ def merge_manual_placements_into_styled_output(
         out.get("notes"),
         f"Rendered {len(manual_placements)} protected manual placement(s).",
     )
-    return out
-
-
-def merge_manual_placements_into_layout_variants(
-    layout_variants: dict[str, Any],
-    manual_placements: list[dict[str, Any]],
-) -> dict[str, Any]:
-    out = deepcopy(layout_variants)
-    if not manual_placements:
-        return out
-
-    variants = out.get("variants")
-    if not isinstance(variants, list):
-        return out
-
-    next_variants: list[dict[str, Any]] = []
-    for variant in variants:
-        if not isinstance(variant, dict):
-            continue
-        next_variant = dict(variant)
-        absolute_layout = next_variant.get("absolute_layout")
-        if isinstance(absolute_layout, dict):
-            next_variant["absolute_layout"] = (
-                merge_manual_placements_into_absolute_layout(
-                    absolute_layout,
-                    manual_placements,
-                )
-            )
-        styled_result = next_variant.get("styled_result")
-        if isinstance(styled_result, dict):
-            next_variant["styled_result"] = merge_manual_placements_into_styled_output(
-                styled_result,
-                manual_placements,
-            )
-        next_variants.append(next_variant)
-
-    out["variants"] = next_variants
     return out
 
 

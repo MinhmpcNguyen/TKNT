@@ -10,6 +10,7 @@ from typing import Any
 from db import PostgresAssetRepository, PostgresDesignKnowledgeRepository
 from db.models import AssetFilter, DesignKnowledgeFilter, TenantId
 from db.postgres import create_connection
+from services.auth_service import get_shared_inventory_tenant_id
 
 # ============================================================
 # Generic helpers
@@ -149,7 +150,7 @@ def _normalize_item(item: dict[str, Any]) -> _NormItem | None:
             R=R,
             raw=item,
         )
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         return None
 
 
@@ -423,7 +424,7 @@ def _rep_has_positive_dims(rep: Any) -> bool:
             and float(rep.get("W", 0)) > 0
             and float(rep.get("H", 0)) > 0
         )
-    except Exception:
+    except (TypeError, ValueError):
         return False
 
 
@@ -539,7 +540,7 @@ def get_size_profiles(
         profiles_payload = _sanitize_profiles_payload(profiles_payload)
 
     if not isinstance(profiles_payload, dict) or not profiles_payload:
-        inventory = _load_inventory_from_db(tenant_id or "demo_tenant")
+        inventory = _load_inventory_from_db(tenant_id or get_shared_inventory_tenant_id())
         profiles_payload = _build_size_profiles(inventory)
 
     profiles_by_category = (
@@ -634,7 +635,7 @@ def _available_area_m2(room_model: dict[str, Any]) -> float:
             return float(room_poly.area) / 1_000_000.0
         free = room_poly.difference(unary_union(obs_polys))
         return float(free.area) / 1_000_000.0
-    except Exception:
+    except (ImportError, KeyError, TypeError, ValueError):
         obs_area = 0.0
         for ob in obstacles:
             if not ob.get("hard", True):
@@ -1821,7 +1822,7 @@ def _cluster_has_live_anchor(
         try:
             if int(row.get(qty_field, 0)) > 0:
                 return True
-        except Exception:
+        except (TypeError, ValueError):
             continue
     return False
 

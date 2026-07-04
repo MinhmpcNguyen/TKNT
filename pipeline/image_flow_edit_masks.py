@@ -93,7 +93,9 @@ def object_scope_edit_mask_image(
                 and bool(target_tokens)
                 and _candidate_matches_target(candidate, target_tokens)
             )
-            if is_target or not _bbox_should_be_preserved(candidate_bbox, expanded_bbox):
+            if is_target or not _bbox_should_be_preserved(
+                candidate_bbox, expanded_bbox
+            ):
                 continue
             rejection_reason = _protection_rejection_reason(
                 candidate=candidate,
@@ -501,12 +503,9 @@ def _normalized_token(value: object) -> str:
     if text is None:
         return ""
     normalized_chars = [
-        character.lower() if character.isalnum() else "_"
-        for character in text.strip()
+        character.lower() if character.isalnum() else "_" for character in text.strip()
     ]
-    normalized = "_".join(
-        part for part in "".join(normalized_chars).split("_") if part
-    )
+    normalized = "_".join(part for part in "".join(normalized_chars).split("_") if part)
     parts = normalized.split("_")
     if parts and parts[-1].isdigit():
         parts = parts[:-1]

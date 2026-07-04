@@ -138,3 +138,6 @@ class ClusterForgeOutput(BaseModel):
     style_policy: dict[str, object] | None = None
     notes: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
+
+
+SeedRelationPlannerOutput = ClusterForgeOutput

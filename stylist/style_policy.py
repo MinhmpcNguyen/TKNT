@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
+from openai import OpenAIError
+
 from clients.llm_client import get_llm_client
 
 from config.llm_config import TextLLMConfig
@@ -368,7 +370,6 @@ def compile_style_policy(
             room_model_json=room_model_json,
             semantic_program_rules=semantic_program_rules,
             model_name=model_name,
-            require_llm=require_llm,
         )
     elif require_llm:
         raise ValueError(
@@ -582,7 +583,6 @@ def _try_llm_style_policy_seed(
     room_model_json: Mapping[str, Any] | None,
     semantic_program_rules: Mapping[str, Any] | None,
     model_name: str | None,
-    require_llm: bool,
 ) -> dict[str, Any]:
     payload = {
         "room_type": room_type,
@@ -636,14 +636,9 @@ def _try_llm_style_policy_seed(
                     parsed = _parse_json_object(raw_text)
                     _validate_style_policy_seed(parsed)
                     return parsed
-                except Exception as exc:
+                except (OpenAIError, KeyError, TypeError, ValueError) as exc:
                     last_error = exc
                     if _is_retryable_model_unavailable_error(exc):
-                        _record_llm_retry(
-                            stage="style_policy",
-                            model_name=candidate_model_name,
-                            reason="model_unavailable",
-                        )
                         logger.warning(
                             "Style policy model %s is temporarily unavailable.",
                             candidate_model_name,
@@ -656,11 +651,6 @@ def _try_llm_style_policy_seed(
                             exc,
                         )
                         break
-                    _record_llm_retry(
-                        stage="style_policy",
-                        model_name=candidate_model_name,
-                        reason="invalid_json_or_schema",
-                    )
                     candidate_messages.append(
                         {"role": "assistant", "content": raw_text}
                     )
@@ -683,14 +673,9 @@ def _try_llm_style_policy_seed(
                 f"attempting models: {', '.join(attempted_models)}"
             ) from last_error
         raise RuntimeError("Style policy compiler produced no model candidates.")
-    except Exception as exc:  # pragma: no cover - external LLM/network fallback
-        if require_llm:
-            logger.warning("Style policy strict LLM mode failed: %s", exc)
-            raise
-        logger.info(
-            "Style policy LLM seed skipped; using deterministic compiler: %s", exc
-        )
-        return {}
+    except (RuntimeError, ValueError) as exc:  # pragma: no cover - external LLM fallback
+        logger.warning("Style policy strict LLM mode failed: %s", exc)
+        raise
 
 
 def _deterministic_style_policy_seed(brief_text: str) -> dict[str, str]:
@@ -699,10 +684,6 @@ def _deterministic_style_policy_seed(brief_text: str) -> dict[str, str]:
         if any(keyword in text for keyword in keywords):
             return {"style_name": style_name}
     return {"style_name": "balanced"}
-
-
-def _record_llm_retry(*, stage: str, model_name: str, reason: str) -> None:
-    _ = (stage, model_name, reason)
 
 
 def _style_policy_model_attempt_order(

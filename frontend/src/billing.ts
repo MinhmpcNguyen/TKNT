@@ -14,8 +14,8 @@ export type BillingSettings = {
   totalPaidCredits: number;
 };
 
-export type SnapshotImageQuality = 'low' | 'medium' | 'high';
-export type SnapshotImageSize = '1024x1024' | '1024x1536' | '1536x1024';
+type SnapshotImageQuality = 'low' | 'medium' | 'high';
+type SnapshotImageSize = '1024x1024' | '1024x1536' | '1536x1024';
 
 export const DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES = 2;
 
@@ -73,7 +73,7 @@ function estimatePartialImageOverheadUsd(partialImages: number): number {
   );
 }
 
-export function createDefaultBillingSettings(now = new Date()): BillingSettings {
+function createDefaultBillingSettings(now = new Date()): BillingSettings {
   return {
     mode: 'per_use',
     monthlyPriceVnd: DEFAULT_MONTHLY_PRICE_VND,
@@ -166,11 +166,11 @@ function sanitizeBillingSettings(value: unknown): BillingSettings {
       defaults.monthlyPriceVnd
     ),
     monthlyCreditQuota: readPositiveInteger(
-      value.monthlyCreditQuota ?? value.monthlyImageQuota,
+      value.monthlyCreditQuota,
       defaults.monthlyCreditQuota
     ),
     monthlyCreditsUsed: readNonNegativeInteger(
-      value.monthlyCreditsUsed ?? value.monthlyImagesUsed,
+      value.monthlyCreditsUsed,
       defaults.monthlyCreditsUsed
     ),
     monthlyPeriodStartedAt:
@@ -182,15 +182,15 @@ function sanitizeBillingSettings(value: unknown): BillingSettings {
       defaults.paidCreditBalance
     ),
     perCreditPriceVnd: readPositiveInteger(
-      value.perCreditPriceVnd ?? value.perUsePriceVnd,
+      value.perCreditPriceVnd,
       defaults.perCreditPriceVnd
     ),
     totalMonthlyCredits: readNonNegativeInteger(
-      value.totalMonthlyCredits ?? value.totalMonthlyUses,
+      value.totalMonthlyCredits,
       defaults.totalMonthlyCredits
     ),
     totalPaidCredits: readNonNegativeInteger(
-      value.totalPaidCredits ?? value.totalPaidUses,
+      value.totalPaidCredits,
       defaults.totalPaidCredits
     ),
   };

@@ -9,7 +9,7 @@ import {
   updateSavedLayout,
 } from '../api';
 import { ROOM_TYPE_OPTIONS, normalizeRoomType, normalizeStyle } from '../options';
-import { useEditorStore } from '../store';
+import { SHARED_INVENTORY_TENANT_ID, useEditorStore } from '../store';
 import { LayoutVariant, Placement, Point, SavedLayoutRecord } from '../types';
 import { preparePipelineResultLayouts } from '../utils/pipelineLayouts';
 
@@ -18,52 +18,20 @@ const PIPELINE_POLL_TIMEOUT_SECONDS = Math.max(
   60,
   Math.floor(
     Number(
-      (import.meta as any).env?.VITE_PIPELINE_POLL_TIMEOUT_SECONDS ??
+      import.meta.env.VITE_PIPELINE_POLL_TIMEOUT_SECONDS ??
       DEFAULT_PIPELINE_POLL_TIMEOUT_SECONDS
     )
   )
 );
 const PARTIAL_LAYOUT_REFRESH_INTERVAL_MS = 1_500;
-const VISUAL_RELATION_IMAGE_MAX_CHARS = 4_500_000;
-type VisualRelationPlannerMode = 'shadow' | 'candidate';
-
-function visualRelationPlannerMode(): VisualRelationPlannerMode | null {
-  const raw = String(
-    (import.meta as any).env?.VITE_TKNT_VISUAL_RELATION_PLANNER_MODE ?? ''
-  )
-    .trim()
-    .toLowerCase();
-  return raw === 'shadow' || raw === 'candidate' ? raw : null;
-}
-
-function buildVisualRelationPlannerRequest(
-  captureFloorplanImage: () => string | null
-): Record<string, unknown> | null {
-  const mode = visualRelationPlannerMode();
-  if (mode === null) {
-    return null;
-  }
-  const floorplanImageDataUrl = captureFloorplanImage();
-  if (
-    !floorplanImageDataUrl ||
-    floorplanImageDataUrl.length > VISUAL_RELATION_IMAGE_MAX_CHARS ||
-    !floorplanImageDataUrl.startsWith('data:image/')
-  ) {
-    return null;
-  }
-  return {
-    enabled: true,
-    mode,
-    floorplan_image_data_url: floorplanImageDataUrl,
-  };
-}
+const LAYOUT_GENERATION_DIAGNOSTIC_HELP =
+  'Typical diagnostics include furniture that is too large for the room, blocked door or window clearance, insufficient circulation, or unsupported relations between requested objects. These diagnostics help the user understand why automatic layout generation failed and decide whether to relax optional requirements, change the room input, or continue with manual editing.';
 
 export const Toolbar: React.FC = () => {
   const {
     currentUser,
     design,
     floorplan,
-    tenantId,
     setDesign,
     setStyledResult,
     setViolations,
@@ -82,7 +50,6 @@ export const Toolbar: React.FC = () => {
     clearRunLogs,
     setRunStatus,
     setLastDesignMeta,
-    setAdditionRequests,
     setCaseId,
     setPipelineStage,
     layoutVariants,
@@ -102,7 +69,6 @@ export const Toolbar: React.FC = () => {
     styledResult,
     viewMode,
     setViewMode,
-    captureFloorplanImage,
   } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,14 +122,12 @@ export const Toolbar: React.FC = () => {
       });
     }
     const manualPlacements = collectManualPlacements(design?.placements ?? []);
-    const visualRelationPlanner = buildVisualRelationPlannerRequest(captureFloorplanImage);
     setLoading(true);
     setError(null);
     setProgressPercent(0);
     setProgressLabel('Starting layout generation');
     setReadyNotice(null);
     clearRunLogs();
-    setAdditionRequests([]);
     setRunStatus('Queued pipeline build', null);
     clearLayoutVariants();
     setActiveLayoutCaseId(null);
@@ -178,9 +142,9 @@ export const Toolbar: React.FC = () => {
     setViewMode('2d');
     try {
       const caseResp = await runPipeline({
-        user_id: currentUser?.id || tenantId || 'demo_user',
+        user_id: currentUser?.id || 'demo_user',
         input_payload: {
-          tenant_id: tenantId,
+          tenant_id: SHARED_INVENTORY_TENANT_ID,
           user_input: normalizedUserInput,
           floorplan_geometry: floorplan,
           constraints: {
@@ -195,13 +159,6 @@ export const Toolbar: React.FC = () => {
             window_direction: normalizedUserInput.window_direction,
           },
           manual_placements: manualPlacements,
-          ...(visualRelationPlanner
-            ? {
-                experimental: {
-                  visual_relation_planner: visualRelationPlanner,
-                },
-              }
-            : {}),
           max_iterations: 12,
         },
         case_name: normalizedUserInput.case_name.trim() || null,
@@ -268,9 +225,14 @@ export const Toolbar: React.FC = () => {
             linkedVariants.find(
               (variant) => variant.variant_id === prepared.selectedVariantId
             ) ?? linkedVariants[0];
+          const shouldExposePartialVariants = !options.finalize && linkedVariants.length > 1;
           setLayoutVariants(linkedVariants, primaryVariant.variant_id);
           if (shouldApplyLoadedDesign) {
             applyVariant(primaryVariant);
+          }
+          if (shouldExposePartialVariants) {
+            setVariantPickerOpen(true);
+            setViewMode('2d');
           }
           if (options.finalize) {
             setProgressPercent(100);
@@ -501,7 +463,6 @@ export const Toolbar: React.FC = () => {
             setVariantPickerOpen(true);
             setViewMode('2d');
           }}
-          disabled={loading}
         >
           Back to {layoutVariants.length} Layouts
         </button>
@@ -609,6 +570,11 @@ export const Toolbar: React.FC = () => {
         </div>
       )}
       {error && <span className="toolbar-status error">{error}</span>}
+      {error ? (
+        <span className="toolbar-diagnostics-help">
+          {LAYOUT_GENERATION_DIAGNOSTIC_HELP}
+        </span>
+      ) : null}
       {layoutError && <span className="toolbar-status error">{layoutError}</span>}
     </div>
   );
@@ -759,7 +725,7 @@ function computePipelineProgressPercent(status: {
     running: { start: 6, end: 10 },
     room_interpreter: { start: 10, end: 18 },
     stylist_style_policy: { start: 18, end: 24 },
-    cluster_forge: { start: 24, end: 32 },
+    seed_relation_planner: { start: 24, end: 32 },
     tier_count: { start: 32, end: 38 },
     cluster_output_merger: { start: 38, end: 42 },
     seed_concept_generator: { start: 42, end: 54 },

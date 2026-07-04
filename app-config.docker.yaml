@@ -43,12 +43,6 @@ services:
         name: "${OPENAI_PRIMARY_MODEL}"
       planner_adaptive_cluster_semantics_fallback_secondary:
         name: "${OPENAI_HELPER_MODEL}"
-      relation_planner_macro_concept_guidance_primary:
-        name: "${OPENAI_PRIMARY_MODEL}"
-      relation_planner_macro_concept_guidance_fallback_primary:
-        name: "${OPENAI_PRIMARY_MODEL}"
-      relation_planner_macro_concept_guidance_fallback_secondary:
-        name: "${OPENAI_HELPER_MODEL}"
       placer:
         name: "${OPENAI_PRIMARY_MODEL}"
       placer_fallback_primary:

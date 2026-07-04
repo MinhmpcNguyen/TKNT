@@ -43,12 +43,6 @@ services:
         name: gpt-5.4-mini
       planner_adaptive_cluster_semantics_fallback_secondary:
         name: gpt-5.4-mini
-      relation_planner_macro_concept_guidance_primary:
-        name: gpt-5.4-mini
-      relation_planner_macro_concept_guidance_fallback_primary:
-        name: gpt-5.4-mini
-      relation_planner_macro_concept_guidance_fallback_secondary:
-        name: gpt-5.4-mini
       placer:
         name: gpt-5.4-mini
       placer_fallback_primary:

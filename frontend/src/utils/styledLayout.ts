@@ -55,7 +55,7 @@ export function getPlacementPolygon(
   }));
 }
 
-export function getBboxFromPoints(points: Point[]): NumericBbox {
+function getBboxFromPoints(points: Point[]): NumericBbox {
   if (points.length === 0) {
     return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   }

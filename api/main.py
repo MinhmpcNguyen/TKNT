@@ -7,12 +7,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import account, auth, inventory, pipeline
+from api.routes import (
+    account,
+    admin,
+    auth,
+    billing,
+    inventory,
+    pipeline,
+    snapshot_images,
+)
 from config import root_config
 from config.logging_config import setup_logging
 from config.models import OpenAIModelGroupConfig
-from db.demo_data import ensure_demo_inventory_loaded
 from db.runtime_init import ensure_runtime_schema
+from db.shared_inventory_bootstrap import ensure_shared_inventory_loaded
 
 app = FastAPI(title="TKNT Pipeline API", version="0.2.0")
 logger = logging.getLogger(__name__)
@@ -20,53 +28,38 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 def _startup_logging() -> None:
-    # Ensure our internal logs (agents/RAG/search) show up when running via uvicorn.
+    # Ensure internal logs are configured when running via uvicorn.
     setup_logging()
     _initialize_runtime_schema()
     _log_runtime_profile()
 
 
 def _initialize_runtime_schema() -> None:
-    try:
-        ensure_runtime_schema()
-        loaded_count = ensure_demo_inventory_loaded()
-        if loaded_count:
-            logger.info("Loaded %d bundled demo inventory assets.", loaded_count)
-    except Exception as exc:
-        logger.exception("Runtime schema initialization skipped: %s", exc)
+    ensure_runtime_schema()
+    loaded_count = ensure_shared_inventory_loaded()
+    if loaded_count:
+        logger.info("Loaded %d bundled shared inventory assets.", loaded_count)
 
 
 def _log_runtime_profile() -> None:
     openai_config = root_config.services.openai
     semantic_enabled = root_config.services.semantic_search.enabled
-
-    if openai_config.azure:
-        primary_model, helper_model, embedding_model = _openai_model_names(
-            openai_config.models
-        )
-        logger.info(
-            "LLM provider: Azure OpenAI | primary=%s | helper=%s | embedding=%s",
-            primary_model,
-            helper_model,
-            embedding_model,
-        )
-    else:
-        primary_model, helper_model, embedding_model = _openai_model_names(
-            openai_config.models
-        )
-        logger.info(
-            "LLM provider: OpenAI-compatible API | primary=%s | helper=%s | embedding=%s",
-            primary_model,
-            helper_model,
-            embedding_model,
-        )
+    provider_label = "Azure OpenAI" if openai_config.azure else "OpenAI"
+    primary_model, helper_model, embedding_model = _openai_model_names(
+        openai_config.models
+    )
+    logger.info(
+        "LLM provider: %s | primary=%s | helper=%s | embedding=%s",
+        provider_label,
+        primary_model,
+        helper_model,
+        embedding_model,
+    )
 
     if semantic_enabled:
         logger.info("Knowledge retrieval: semantic search enabled.")
     else:
-        logger.info(
-            "Knowledge retrieval: semantic search disabled; lexical fallback search enabled."
-        )
+        logger.info("Knowledge retrieval: semantic search disabled.")
 
 
 def _openai_model_names(models: OpenAIModelGroupConfig) -> tuple[str, str, str]:
@@ -87,7 +80,10 @@ app.add_middleware(
 )
 
 app.include_router(pipeline.router)
+app.include_router(snapshot_images.router)
 app.include_router(auth.router)
+app.include_router(billing.router)
+app.include_router(admin.router)
 app.include_router(account.router)
 app.include_router(inventory.router)
 

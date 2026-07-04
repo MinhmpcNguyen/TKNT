@@ -13,6 +13,7 @@ import {
   vecToSide,
 } from './planOrientation';
 import {
+  type NumericBbox,
   getBboxCenter,
   getLocalFootprintFromWorldBbox,
   getNumericBbox,
@@ -33,6 +34,8 @@ type FloorplanPreparation = {
 };
 
 const REFILL_OBJECT_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
+const FLOOR_COVERING_WALL_CLEARANCE_MM = 40;
+const FLOOR_COVERING_MIN_SIZE_MM = 320;
 
 export function preparePipelineResultLayouts(params: {
   roomPayload: any;
@@ -71,7 +74,11 @@ export function preparePipelineResultLayouts(params: {
     shiftDy,
   );
   const styledFloorplan = applyStyledRoomAppearance(floorplan, shiftedStyledResult);
-  const design = buildDesignFromStyledLayout(shiftedStyledResult, styledFloorplan);
+  const postProcessedStyledResult = postProcessFloorCoverings(
+    shiftedStyledResult,
+    styledFloorplan,
+  );
+  const design = buildDesignFromStyledLayout(postProcessedStyledResult, styledFloorplan);
 
   const rawVariants = Array.isArray(resultPayload?.variants) ? resultPayload.variants : [];
   const variants = rawVariants
@@ -95,7 +102,7 @@ export function preparePipelineResultLayouts(params: {
 
   return {
     floorplan: styledFloorplan,
-    styledResult: shiftedStyledResult,
+    styledResult: postProcessedStyledResult,
     design,
     variants,
     selectedVariantId,
@@ -142,6 +149,14 @@ function prepareLayoutVariant(params: {
     shiftDy,
   );
   const styledFloorplan = applyStyledRoomAppearance(floorplan, shiftedStyledResult);
+  const postProcessedStyledResult = postProcessFloorCoverings(
+    shiftedStyledResult,
+    styledFloorplan,
+  );
+  const postProcessedAbsoluteLayout = postProcessFloorCoverings(
+    shiftedAbsoluteLayout,
+    styledFloorplan,
+  );
 
   return {
     variant_id: variantId,
@@ -170,10 +185,9 @@ function prepareLayoutVariant(params: {
           .map((item: unknown) => String(item ?? '').trim())
           .filter(Boolean)
       : [],
-    absolute_layout: shiftedAbsoluteLayout,
-    styled_result: shiftedStyledResult,
-    design: buildDesignFromStyledLayout(shiftedStyledResult, styledFloorplan),
-    cluster_previews: buildClusterPreviewsFromAbsoluteLayout(shiftedAbsoluteLayout),
+    absolute_layout: postProcessedAbsoluteLayout,
+    styled_result: postProcessedStyledResult,
+    design: buildDesignFromStyledLayout(postProcessedStyledResult, styledFloorplan),
   };
 }
 
@@ -188,53 +202,6 @@ function resolveSelectedVariantId(
     return selectedVariantId;
   }
   return variants[0]?.variant_id ?? null;
-}
-
-function buildClusterPreviewsFromAbsoluteLayout(
-  absoluteLayout: Record<string, unknown>,
-): Record<string, unknown> {
-  const objects = Array.isArray(absoluteLayout?.objects)
-    ? absoluteLayout.objects
-    : [];
-  const grouped = new Map<
-    string,
-    Array<{ x: number; y: number; w: number; h: number }>
-  >();
-
-  for (const row of objects) {
-    if (!row || typeof row !== 'object') {
-      continue;
-    }
-    const clusterId = String((row as any).cluster_id ?? '').trim();
-    const bbox = (row as any).bbox;
-    if (!clusterId || !bbox || typeof bbox !== 'object') {
-      continue;
-    }
-    const minX = Number((bbox as any).min_x ?? 0);
-    const minY = Number((bbox as any).min_y ?? 0);
-    const maxX = Number((bbox as any).max_x ?? minX);
-    const maxY = Number((bbox as any).max_y ?? minY);
-    const width = Math.max(1, maxX - minX);
-    const height = Math.max(1, maxY - minY);
-    const rects = grouped.get(clusterId) ?? [];
-    rects.push({ x: minX, y: minY, w: width, h: height });
-    grouped.set(clusterId, rects);
-  }
-
-  return Object.fromEntries(
-    Array.from(grouped.entries()).map(([clusterId, rects]) => [
-      clusterId,
-      {
-        payload: {
-          cluster_id: clusterId,
-          cluster_footprint: {
-            type: 'union_of_rects',
-            rects,
-          },
-        },
-      },
-    ]),
-  );
 }
 
 function buildFloorplanFromRoomArtifact(
@@ -666,6 +633,532 @@ function readString(value: unknown): string | null {
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function postProcessFloorCoverings(
+  layoutPayload: any,
+  floorplan: FloorplanGeometry | null,
+): any {
+  if (!isRecordValue(layoutPayload) || !floorplan) {
+    return layoutPayload;
+  }
+  const objects = layoutPayload.objects;
+  if (!Array.isArray(objects)) {
+    return layoutPayload;
+  }
+
+  let changed = false;
+  const processedObjects = objects.map((objectRow) => {
+    if (!isRecordValue(objectRow)) {
+      return objectRow;
+    }
+    const processedRow = postProcessFloorCoveringRow(objectRow, floorplan);
+    if (processedRow !== objectRow) {
+      changed = true;
+    }
+    return processedRow;
+  });
+
+  if (!changed) {
+    return layoutPayload;
+  }
+  return {
+    ...layoutPayload,
+    objects: processedObjects,
+  };
+}
+
+function postProcessFloorCoveringRow(
+  objectRow: Record<string, unknown>,
+  floorplan: FloorplanGeometry,
+): Record<string, unknown> {
+  if (!isFloorCoveringRow(objectRow) || isLockedLayoutObject(objectRow)) {
+    return objectRow;
+  }
+  const bbox = getNumericBbox(objectRow);
+  if (!isUsableBbox(bbox)) {
+    return objectRow;
+  }
+  const fittedBbox = fitFloorCoveringBboxToRoom(bbox, floorplan);
+  if (bboxAlmostEqual(bbox, fittedBbox)) {
+    return objectRow;
+  }
+  return transformLayoutObjectToBbox(objectRow, bbox, fittedBbox);
+}
+
+function isFloorCoveringRow(objectRow: Record<string, unknown>): boolean {
+  const categoryParts = [
+    objectRow.object_type,
+    objectRow.category,
+    objectRow.type,
+    isRecordValue(objectRow.manual_input)
+      ? objectRow.manual_input.object_type ??
+        objectRow.manual_input.category ??
+        objectRow.manual_input.type
+      : null,
+  ];
+  const category = categoryParts
+    .map((value) => (typeof value === 'string' ? value.toLowerCase() : ''))
+    .join(' ');
+  const collisionLayer =
+    typeof objectRow.collision_layer === 'string'
+      ? objectRow.collision_layer.trim().toLowerCase()
+      : '';
+  return (
+    collisionLayer === 'floor_underlay' ||
+    category.includes('rug') ||
+    category.includes('carpet') ||
+    category.includes('floor_mat') ||
+    category.includes('area_mat') ||
+    category.includes('runner')
+  );
+}
+
+function isLockedLayoutObject(objectRow: Record<string, unknown>): boolean {
+  if (objectRow.constraint_mode === 'locked') {
+    return true;
+  }
+  const manualInput = objectRow.manual_input;
+  return isRecordValue(manualInput) && manualInput.constraint_mode === 'locked';
+}
+
+function fitFloorCoveringBboxToRoom(
+  bbox: NumericBbox,
+  floorplan: FloorplanGeometry,
+): NumericBbox {
+  let best = pushBboxInsideWallClearance(bbox, floorplan);
+  if (floorCoveringBboxFits(best, floorplan)) {
+    return best;
+  }
+
+  for (let step = 1; step <= 18; step += 1) {
+    const scale = Math.max(0.52, 1 - step * 0.035);
+    const scaled = scaleBboxAroundCenter(best, scale, scale);
+    if (!isUsableBbox(scaled)) {
+      break;
+    }
+    const adjusted = pushBboxInsideWallClearance(scaled, floorplan);
+    if (floorCoveringBboxFits(adjusted, floorplan)) {
+      return adjusted;
+    }
+    best = adjusted;
+  }
+
+  return best;
+}
+
+function pushBboxInsideWallClearance(
+  bbox: NumericBbox,
+  floorplan: FloorplanGeometry,
+): NumericBbox {
+  const polygon = floorplan.room?.polygon_mm ?? [];
+  if (polygon.length < 3 || floorplan.walls.length === 0) {
+    return bbox;
+  }
+
+  let next = { ...bbox };
+  for (let pass = 0; pass < 4; pass += 1) {
+    let moved = false;
+    for (const wall of floorplan.walls) {
+      const constraint = getWallInteriorConstraint(wall, polygon, next);
+      if (!constraint) {
+        continue;
+      }
+      const requiredDistance =
+        Math.max(0, Number(wall.thickness_mm ?? 0)) / 2 +
+        FLOOR_COVERING_WALL_CLEARANCE_MM;
+      const minDistance = Math.min(
+        ...bboxCorners(next).map((corner) =>
+          dot(
+            {
+              x: corner.x - constraint.point.x,
+              y: corner.y - constraint.point.y,
+            },
+            constraint.interiorNormal,
+          ),
+        ),
+      );
+      if (minDistance + 1e-6 >= requiredDistance) {
+        continue;
+      }
+      const push = requiredDistance - minDistance;
+      next = translateBbox(next, {
+        x: constraint.interiorNormal.x * push,
+        y: constraint.interiorNormal.y * push,
+      });
+      moved = true;
+    }
+    if (!moved) {
+      break;
+    }
+  }
+  return next;
+}
+
+function getWallInteriorConstraint(
+  wall: Wall,
+  polygon: Point[],
+  bbox: NumericBbox,
+): { point: Point; interiorNormal: Point } | null {
+  const center = bboxCenter(bbox);
+  const projection = projectPointToSegment(center, wall.p1_mm, wall.p2_mm);
+  if (!projection || projection.t <= 1e-6 || projection.t >= 1 - 1e-6) {
+    return null;
+  }
+  const leftNormal = { x: -projection.dir.y, y: projection.dir.x };
+  return {
+    point: projection.point,
+    interiorNormal: interiorNormalForWall(projection.point, leftNormal, polygon),
+  };
+}
+
+function floorCoveringBboxFits(
+  bbox: NumericBbox,
+  floorplan: FloorplanGeometry,
+): boolean {
+  const polygon = floorplan.room?.polygon_mm ?? [];
+  if (polygon.length < 3) {
+    return true;
+  }
+  return (
+    bboxCorners(bbox).every((corner) => pointInPolygon(corner, polygon)) &&
+    bboxAlmostEqual(bbox, pushBboxInsideWallClearance(bbox, floorplan))
+  );
+}
+
+function transformLayoutObjectToBbox(
+  objectRow: Record<string, unknown>,
+  sourceBbox: NumericBbox,
+  targetBbox: NumericBbox,
+): Record<string, unknown> {
+  const center = bboxCenter(targetBbox);
+  const output: Record<string, unknown> = {
+    ...objectRow,
+    bbox: writeBboxRecord(objectRow.bbox, targetBbox),
+    center,
+  };
+  if (Object.prototype.hasOwnProperty.call(objectRow, 'x')) {
+    output.x = transformCoordinate(
+      objectRow.x,
+      sourceBbox.minX,
+      sourceBbox.maxX,
+      targetBbox.minX,
+      targetBbox.maxX,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(objectRow, 'y')) {
+    output.y = transformCoordinate(
+      objectRow.y,
+      sourceBbox.minY,
+      sourceBbox.maxY,
+      targetBbox.minY,
+      targetBbox.maxY,
+    );
+  }
+  output.polygon_ccw = transformPointArrayWithinBbox(
+    objectRow.polygon_ccw,
+    sourceBbox,
+    targetBbox,
+  );
+  output.polygon_mm = transformPointArrayWithinBbox(
+    objectRow.polygon_mm,
+    sourceBbox,
+    targetBbox,
+  );
+  output.rect = transformRectArrayWithinBbox(objectRow.rect, sourceBbox, targetBbox);
+  if (isRecordValue(objectRow.manual_input)) {
+    output.manual_input = transformManualInputWithinBbox(
+      objectRow.manual_input,
+      sourceBbox,
+      targetBbox,
+    );
+  }
+  return output;
+}
+
+function transformManualInputWithinBbox(
+  manualInput: Record<string, unknown>,
+  sourceBbox: NumericBbox,
+  targetBbox: NumericBbox,
+): Record<string, unknown> {
+  const widthScale = bboxWidth(targetBbox) / Math.max(1, bboxWidth(sourceBbox));
+  const depthScale = bboxDepth(targetBbox) / Math.max(1, bboxDepth(sourceBbox));
+  const next: Record<string, unknown> = {
+    ...manualInput,
+    position_mm: transformPointRecordWithinBbox(
+      manualInput.position_mm,
+      sourceBbox,
+      targetBbox,
+    ),
+  };
+  if (isRecordValue(manualInput.footprint_mm)) {
+    next.footprint_mm = {
+      ...manualInput.footprint_mm,
+      w: Math.max(
+        FLOOR_COVERING_MIN_SIZE_MM,
+        Number(manualInput.footprint_mm.w ?? 0) * widthScale,
+      ),
+      d: Math.max(
+        FLOOR_COVERING_MIN_SIZE_MM,
+        Number(manualInput.footprint_mm.d ?? 0) * depthScale,
+      ),
+    };
+  }
+  return next;
+}
+
+function transformPointArrayWithinBbox(
+  value: unknown,
+  sourceBbox: NumericBbox,
+  targetBbox: NumericBbox,
+): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((point) =>
+    transformPointRecordWithinBbox(point, sourceBbox, targetBbox),
+  );
+}
+
+function transformPointRecordWithinBbox(
+  value: unknown,
+  sourceBbox: NumericBbox,
+  targetBbox: NumericBbox,
+): unknown {
+  if (!isRecordValue(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    x: transformCoordinate(
+      value.x,
+      sourceBbox.minX,
+      sourceBbox.maxX,
+      targetBbox.minX,
+      targetBbox.maxX,
+    ),
+    y: transformCoordinate(
+      value.y,
+      sourceBbox.minY,
+      sourceBbox.maxY,
+      targetBbox.minY,
+      targetBbox.maxY,
+    ),
+  };
+}
+
+function transformRectArrayWithinBbox(
+  value: unknown,
+  sourceBbox: NumericBbox,
+  targetBbox: NumericBbox,
+): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((item, index) =>
+    index % 2 === 0
+      ? transformCoordinate(
+          item,
+          sourceBbox.minX,
+          sourceBbox.maxX,
+          targetBbox.minX,
+          targetBbox.maxX,
+        )
+      : transformCoordinate(
+          item,
+          sourceBbox.minY,
+          sourceBbox.maxY,
+          targetBbox.minY,
+          targetBbox.maxY,
+        ),
+  );
+}
+
+function transformCoordinate(
+  value: unknown,
+  sourceMin: number,
+  sourceMax: number,
+  targetMin: number,
+  targetMax: number,
+): unknown {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+  const sourceSpan = Math.max(1, sourceMax - sourceMin);
+  const ratio = (numeric - sourceMin) / sourceSpan;
+  return targetMin + ratio * (targetMax - targetMin);
+}
+
+function writeBboxRecord(value: unknown, bbox: NumericBbox): Record<string, unknown> {
+  return {
+    ...(isRecordValue(value) ? value : {}),
+    min_x: bbox.minX,
+    min_y: bbox.minY,
+    max_x: bbox.maxX,
+    max_y: bbox.maxY,
+  };
+}
+
+function isUsableBbox(bbox: NumericBbox): boolean {
+  return (
+    [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY].every(Number.isFinite) &&
+    bboxWidth(bbox) >= FLOOR_COVERING_MIN_SIZE_MM &&
+    bboxDepth(bbox) >= FLOOR_COVERING_MIN_SIZE_MM
+  );
+}
+
+function bboxCorners(bbox: NumericBbox): Point[] {
+  return [
+    { x: bbox.minX, y: bbox.minY },
+    { x: bbox.maxX, y: bbox.minY },
+    { x: bbox.maxX, y: bbox.maxY },
+    { x: bbox.minX, y: bbox.maxY },
+  ];
+}
+
+function bboxCenter(bbox: NumericBbox): Point {
+  return {
+    x: (bbox.minX + bbox.maxX) / 2,
+    y: (bbox.minY + bbox.maxY) / 2,
+  };
+}
+
+function bboxWidth(bbox: NumericBbox): number {
+  return Math.max(0, bbox.maxX - bbox.minX);
+}
+
+function bboxDepth(bbox: NumericBbox): number {
+  return Math.max(0, bbox.maxY - bbox.minY);
+}
+
+function translateBbox(bbox: NumericBbox, delta: Point): NumericBbox {
+  return {
+    minX: bbox.minX + delta.x,
+    minY: bbox.minY + delta.y,
+    maxX: bbox.maxX + delta.x,
+    maxY: bbox.maxY + delta.y,
+  };
+}
+
+function scaleBboxAroundCenter(
+  bbox: NumericBbox,
+  widthScale: number,
+  depthScale: number,
+): NumericBbox {
+  const center = bboxCenter(bbox);
+  const halfWidth = Math.max(
+    FLOOR_COVERING_MIN_SIZE_MM / 2,
+    (bboxWidth(bbox) * widthScale) / 2,
+  );
+  const halfDepth = Math.max(
+    FLOOR_COVERING_MIN_SIZE_MM / 2,
+    (bboxDepth(bbox) * depthScale) / 2,
+  );
+  return {
+    minX: center.x - halfWidth,
+    minY: center.y - halfDepth,
+    maxX: center.x + halfWidth,
+    maxY: center.y + halfDepth,
+  };
+}
+
+function bboxAlmostEqual(a: NumericBbox, b: NumericBbox, tolerance = 0.5): boolean {
+  return (
+    Math.abs(a.minX - b.minX) <= tolerance &&
+    Math.abs(a.minY - b.minY) <= tolerance &&
+    Math.abs(a.maxX - b.maxX) <= tolerance &&
+    Math.abs(a.maxY - b.maxY) <= tolerance
+  );
+}
+
+function projectPointToSegment(
+  point: Point,
+  start: Point,
+  end: Point,
+): { t: number; point: Point; dir: Point } | null {
+  const vx = end.x - start.x;
+  const vy = end.y - start.y;
+  const lengthSquared = vx * vx + vy * vy;
+  if (lengthSquared < 1e-6) {
+    return null;
+  }
+  const rawT =
+    ((point.x - start.x) * vx + (point.y - start.y) * vy) / lengthSquared;
+  const t = Math.max(0, Math.min(1, rawT));
+  const length = Math.sqrt(lengthSquared) || 1;
+  return {
+    t,
+    point: { x: start.x + t * vx, y: start.y + t * vy },
+    dir: { x: vx / length, y: vy / length },
+  };
+}
+
+function interiorNormalForWall(
+  boundaryPoint: Point,
+  leftNormal: Point,
+  polygon: Point[],
+): Point {
+  const eps = 1;
+  const leftTest = {
+    x: boundaryPoint.x + leftNormal.x * eps,
+    y: boundaryPoint.y + leftNormal.y * eps,
+  };
+  const rightTest = {
+    x: boundaryPoint.x - leftNormal.x * eps,
+    y: boundaryPoint.y - leftNormal.y * eps,
+  };
+  const leftInside = pointInPolygon(leftTest, polygon);
+  const rightInside = pointInPolygon(rightTest, polygon);
+  if (leftInside && !rightInside) {
+    return leftNormal;
+  }
+  if (rightInside && !leftInside) {
+    return { x: -leftNormal.x, y: -leftNormal.y };
+  }
+  const center = polygonCentroid(polygon);
+  const toCenter = {
+    x: center.x - boundaryPoint.x,
+    y: center.y - boundaryPoint.y,
+  };
+  return dot(toCenter, leftNormal) >= 0
+    ? leftNormal
+    : { x: -leftNormal.x, y: -leftNormal.y };
+}
+
+function polygonCentroid(points: Point[]): Point {
+  if (points.length === 0) {
+    return { x: 0, y: 0 };
+  }
+  const sum = points.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  );
+  return { x: sum.x / points.length, y: sum.y / points.length };
+}
+
+function dot(a: Point, b: Point): number {
+  return a.x * b.x + a.y * b.y;
+}
+
+function pointInPolygon(point: Point, polygon: Point[]): boolean {
+  if (polygon.length < 3) {
+    return true;
+  }
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersect =
+      yi > point.y !== yj > point.y &&
+      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 1e-9) + xi;
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function buildDesignFromStyledLayout(

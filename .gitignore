@@ -31,6 +31,7 @@ node_modules/
 
 # Project outputs
 logs/
+*.log
 outputs*/
 cases/*tenant_*/
 cases/user_*/
@@ -41,6 +42,7 @@ Thesis_LaTeX/
 
 # Local JSON outputs
 *.json
+!docs/code_annotations.json
 !evaluation/layout_benchmark/systems_ablation.json
 
 # Secrets (do not commit)

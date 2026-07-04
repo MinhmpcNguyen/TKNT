@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from psycopg import Error as PsycopgError
+
+from db.models import AssetFilter, TenantId
+from db.pg_assets import PostgresAssetRepository
+from services.auth_service import get_shared_inventory_tenant_id
 from stylist.room_essentials_seed import ROOM_SURFACE_GROUPS
-from stylist.tools import ListInventoryByTypes
+
+logger = logging.getLogger(__name__)
 
 STACK_GAP_MM = 50
 SUPPORT_INSET_MM = 40
@@ -359,10 +367,14 @@ def _load_inventory_profiles(
     if not candidate_types:
         return {}
     try:
-        payload = ListInventoryByTypes(
+        payload = _list_inventory_by_types(
             tenant_id=tenant_id, types=candidate_types, limit=200
         )
-    except Exception:
+    except (PsycopgError, RuntimeError, TypeError, ValueError) as exc:
+        logger.info(
+            "Inventory profile lookup failed; using default accessory dimensions: %s",
+            exc,
+        )
         return {}
 
     items = payload.get("items")
@@ -388,6 +400,111 @@ def _load_inventory_profiles(
                 continue
             profiles[normalized] = profile
     return profiles
+
+
+def _list_inventory_by_types(
+    *,
+    tenant_id: str | None,
+    types: list[str],
+    limit: int | None = 200,
+) -> dict[str, Any]:
+    resolved_tenant = tenant_id or get_shared_inventory_tenant_id()
+    requested_types = _stable_unique_strs(types)
+
+    repo = PostgresAssetRepository()
+    assets = list(repo.list_assets(AssetFilter(tenant_id=TenantId(resolved_tenant))))
+    normalized = _normalize_lookup_set(types)
+    results: list[dict[str, Any]] = []
+
+    for asset in assets:
+        asset_type = str(getattr(asset, "type", "") or "").strip()
+        asset_name = str(getattr(asset, "name", "") or "").strip()
+        raw_attrs = getattr(asset, "attributes", {}) or {}
+        attrs = dict(raw_attrs) if isinstance(raw_attrs, Mapping) else {}
+        category = str(attrs.get("category") or asset_type).strip()
+
+        if normalized:
+            candidates = {
+                asset_type.lower(),
+                category.lower(),
+                asset_name.lower(),
+            }
+            if candidates.isdisjoint(normalized):
+                continue
+
+        dims = _serialize_asset_dimensions(asset)
+        results.append(
+            {
+                "id": str(asset.id),
+                "inventory_id": str(asset.id),
+                "name": asset_name,
+                "type": category,
+                "asset_type": asset_type,
+                "style_tags": list(getattr(asset, "style_tags", []) or []),
+                "material": getattr(asset, "material", None),
+                "brand": getattr(asset, "brand", None),
+                "length_mm": dims["length_mm"] if isinstance(dims, dict) else None,
+                "width_mm": dims["width_mm"] if isinstance(dims, dict) else None,
+                "height_mm": dims["height_mm"] if isinstance(dims, dict) else None,
+                "dimensions": dims,
+                "attributes": attrs,
+            }
+        )
+
+    results.sort(
+        key=lambda row: (
+            str(row.get("type") or ""),
+            str(row.get("name") or ""),
+            str(row.get("inventory_id") or ""),
+        )
+    )
+
+    if isinstance(limit, int) and limit > 0:
+        results = results[:limit]
+
+    return {
+        "tenant_id": resolved_tenant,
+        "requested_types": requested_types,
+        "count": len(results),
+        "items": results,
+    }
+
+
+def _stable_unique_strs(values: list[str] | None) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _normalize_lookup_set(values: list[str] | None) -> set[str]:
+    return {
+        value.strip().lower()
+        for value in (values or [])
+        if isinstance(value, str) and value.strip()
+    }
+
+
+def _serialize_asset_dimensions(asset: Any) -> dict[str, int | None] | None:
+    dims = getattr(asset, "dimensions", None)
+    if dims is None:
+        return None
+
+    length_mm = getattr(dims, "length_mm", None)
+    width_mm = getattr(dims, "width_mm", None)
+    height_mm = getattr(dims, "height_mm", None)
+    return {
+        "length_mm": int(length_mm) if isinstance(length_mm, (int, float)) else None,
+        "width_mm": int(width_mm) if isinstance(width_mm, (int, float)) else None,
+        "height_mm": int(height_mm) if isinstance(height_mm, (int, float)) else None,
+    }
 
 
 def _profile_from_inventory_row(row: dict[str, Any]) -> _Profile | None:

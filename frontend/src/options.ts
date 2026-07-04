@@ -11,11 +11,11 @@ export const STYLE_OPTIONS = [
   { value: 'minimal', label: 'Minimal' },
 ] as const;
 
-export type RoomTypeOption = (typeof ROOM_TYPE_OPTIONS)[number]['value'];
-export type StyleOption = (typeof STYLE_OPTIONS)[number]['value'];
+type RoomTypeOption = (typeof ROOM_TYPE_OPTIONS)[number]['value'];
+type StyleOption = (typeof STYLE_OPTIONS)[number]['value'];
 
 export const DEFAULT_ROOM_TYPE: RoomTypeOption = 'living_room';
-export const DEFAULT_STYLE: StyleOption = 'modern';
+const DEFAULT_STYLE: StyleOption = 'modern';
 
 export function normalizeRoomType(value: string | null | undefined): RoomTypeOption {
   const key = String(value ?? '')

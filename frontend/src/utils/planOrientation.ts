@@ -143,8 +143,3 @@ export function resolvePlanObjectYawRad(params: {
 export function yawRadToPlanRotationDeg(yawRad: number): number {
   return normalizePlanRotationDeg((yawRad * 180) / Math.PI);
 }
-
-export function isCardinalPlanRotation(rotationDeg: number): boolean {
-  const normalized = normalizePlanRotationDeg(rotationDeg);
-  return normalized % 90 === 0;
-}

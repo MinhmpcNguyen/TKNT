@@ -17,7 +17,7 @@ def setup_logging(level: str | None = None) -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     _setup_console_log()
     _setup_all_log_file()
-    _setup_extra_loggers()
+    _setup_image_flow_log_file()
 
 
 def _ensure_run_id() -> str:
@@ -57,68 +57,14 @@ def _setup_console_log() -> None:
     root.addHandler(handler)
 
 
-def _setup_extra_loggers() -> None:
+def _setup_image_flow_log_file() -> None:
     base_dir = Path(os.getenv("LOG_DIR", "logs"))
     base_dir.mkdir(parents=True, exist_ok=True)
     run_id = _ensure_run_id()
 
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
-
-    rag_logger = logging.getLogger("rag")
-    rag_logger.setLevel(logging.INFO)
-    rag_logger.propagate = False
-
-    search_logger = logging.getLogger("search")
-    search_logger.setLevel(logging.INFO)
-    search_logger.propagate = False
-
-    self_loop_logger = logging.getLogger("self_loop")
-    self_loop_logger.setLevel(logging.INFO)
-    self_loop_logger.propagate = False
-
-    exchange_logger = logging.getLogger("agent_exchange")
-    exchange_logger.setLevel(logging.INFO)
-    exchange_logger.propagate = False
-
-    pairwise_logger = logging.getLogger("pairwise")
-    pairwise_logger.setLevel(logging.INFO)
-    pairwise_logger.propagate = False
-
     image_flow_logger = logging.getLogger("image_flow")
     image_flow_logger.setLevel(logging.INFO)
     image_flow_logger.propagate = False
-
-    rag_log_path = str((base_dir / f"rag_{run_id}.log").resolve())
-    if not _has_file_handler(rag_logger, rag_log_path):
-        rag_handler = logging.FileHandler(rag_log_path, encoding="utf-8")
-        rag_handler.setFormatter(formatter)
-        rag_logger.addHandler(rag_handler)
-
-    search_log_path = str((base_dir / f"search_{run_id}.log").resolve())
-    if not _has_file_handler(search_logger, search_log_path):
-        search_handler = logging.FileHandler(search_log_path, encoding="utf-8")
-        search_handler.setFormatter(formatter)
-        search_logger.addHandler(search_handler)
-
-    self_loop_path = str((base_dir / f"self_loop_{run_id}.log").resolve())
-    if not _has_file_handler(self_loop_logger, self_loop_path):
-        self_loop_handler = logging.FileHandler(self_loop_path, encoding="utf-8")
-        self_loop_handler.setFormatter(formatter)
-        self_loop_logger.addHandler(self_loop_handler)
-
-    exchange_path = str((base_dir / f"agent_exchange_{run_id}.log").resolve())
-    if not _has_file_handler(exchange_logger, exchange_path):
-        exchange_handler = logging.FileHandler(exchange_path, encoding="utf-8")
-        exchange_handler.setFormatter(formatter)
-        exchange_logger.addHandler(exchange_handler)
-
-    pairwise_path = str((base_dir / f"pairwise_{run_id}.log").resolve())
-    if not _has_file_handler(pairwise_logger, pairwise_path):
-        pairwise_handler = logging.FileHandler(pairwise_path, encoding="utf-8")
-        pairwise_handler.setFormatter(formatter)
-        pairwise_logger.addHandler(pairwise_handler)
 
     image_flow_path = str((base_dir / f"image_flow_{run_id}.jsonl").resolve())
     if not _has_file_handler(image_flow_logger, image_flow_path):

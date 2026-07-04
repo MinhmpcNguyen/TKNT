@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -10,191 +9,6 @@ from agent.seed_concept_generator import SeedConceptGenerator, solver_plan_from_
 
 
 class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
-    def test_llm_guidance_can_refine_macro_concept_bundle(self) -> None:
-        room_model = _room_model()
-        clusters = _clusters()
-
-        class _GuidanceClient:
-            def chat_completion(self, *_args, **_kwargs):
-                return SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            message=SimpleNamespace(
-                                content=(
-                                    '{"family_order":["zoned","open_center","focal_axis","daylight_oriented","edge_weighted"],'
-                                    '"concept_blueprints":[{"concept_family":"zoned",'
-                                    '"topology_policy":{"reserve_center_degree":"medium","wall_loading_bias":"zone_specific"},'
-                                    '"cluster_zone_overrides":[{"cluster_id":"main_seating","zone_assignment":"floating_center_zone","preferred_wall_side":"center","center_usage":"primary"},'
-                                    '{"cluster_id":"media","zone_assignment":"right_wall_zone","preferred_wall_side":"right_wall","center_usage":"none"}],'
-                                    '"notes":["Guided zoned concept."]}],'
-                                    '"notes":["Macro concept guidance applied."]}'
-                                )
-                            )
-                        )
-                    ]
-                )
-
-        with mock.patch.object(
-            seed_mod, "get_llm_client", return_value=_GuidanceClient()
-        ):
-            bundle = SeedConceptGenerator().generate_bundle(
-                room_model_json=room_model,
-                clusters_json=clusters,
-                target_count=5,
-                description="Keep the room airy and socially legible.",
-            )
-
-        self.assertEqual(bundle["controller"], "llm_guided_seed_concept_generator")
-        self.assertTrue(bundle["settings"]["llm_guided"])
-        self.assertEqual(bundle["concepts"][0]["concept_family"], "zoned")
-        zoned_concept = bundle["concepts"][0]
-        main_row = next(
-            row
-            for row in zoned_concept["cluster_zone_plan"]
-            if row["cluster_id"] == "main_seating"
-        )
-        media_row = next(
-            row
-            for row in zoned_concept["cluster_zone_plan"]
-            if row["cluster_id"] == "media"
-        )
-        self.assertEqual(main_row["zone_assignment"], "floating_center_zone")
-        self.assertEqual(main_row["center_usage"], "primary")
-        self.assertEqual(media_row["zone_assignment"], "right_wall_zone")
-        self.assertTrue(
-            any(
-                "LLM-guided SeedConceptGenerator refined macro concept blueprints"
-                in note
-                for note in bundle["notes"]
-            )
-        )
-
-    def test_llm_guidance_failure_raises_without_deterministic_fallback(self) -> None:
-        room_model = _room_model()
-        clusters = _clusters()
-
-        class _InvalidGuidanceClient:
-            def chat_completion(self, *_args, **_kwargs):
-                return SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            message=SimpleNamespace(content="not valid json")
-                        )
-                    ]
-                )
-
-        with (
-            mock.patch.object(
-                seed_mod,
-                "get_llm_client",
-                return_value=_InvalidGuidanceClient(),
-            ),
-            self.assertRaises(ValueError),
-        ):
-            SeedConceptGenerator().generate_bundle(
-                room_model_json=room_model,
-                clusters_json=clusters,
-                target_count=5,
-            )
-
-    def test_llm_guidance_rejects_duplicate_projected_physical_signatures(
-        self,
-    ) -> None:
-        room_model = _room_model()
-        clusters = _clusters()
-
-        class _DuplicateGuidanceClient:
-            def chat_completion(self, *_args, **_kwargs):
-                return SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            message=SimpleNamespace(
-                                content=(
-                                    '{"family_order":["zoned","daylight_oriented"],'
-                                    '"concept_blueprints":['
-                                    '{"concept_family":"zoned","intent_label":"social center",'
-                                    '"primary_cluster_region":{"zone_assignment":"floating_center_zone","preferred_wall_side":"center","center_usage":"primary"},'
-                                    '"secondary_cluster_region":{"zone_assignment":"right_wall_zone","preferred_wall_side":"right_wall","center_usage":"none"},'
-                                    '"support_region":{"zone_assignment":"left_wall_zone","preferred_wall_side":"left_wall","center_usage":"none"},'
-                                    '"preferred_wall_side":"","center_usage":"none","topology_policy":{"wall_loading_bias":"zone_specific"}},'
-                                    '{"concept_family":"daylight_oriented","intent_label":"renamed duplicate",'
-                                    '"primary_cluster_region":{"zone_assignment":"floating_center_zone","preferred_wall_side":"center","center_usage":"primary"},'
-                                    '"secondary_cluster_region":{"zone_assignment":"right_wall_zone","preferred_wall_side":"right_wall","center_usage":"none"},'
-                                    '"support_region":{"zone_assignment":"left_wall_zone","preferred_wall_side":"left_wall","center_usage":"none"},'
-                                    '"preferred_wall_side":"","center_usage":"none","topology_policy":{"wall_loading_bias":"balanced"}}],'
-                                    '"notes":[]}'
-                                )
-                            )
-                        )
-                    ]
-                )
-
-        with mock.patch.object(
-            seed_mod, "get_llm_client", return_value=_DuplicateGuidanceClient()
-        ):
-            bundle = SeedConceptGenerator().generate_bundle(
-                room_model_json=room_model,
-                clusters_json=clusters,
-                target_count=2,
-                description="Keep physical options genuinely distinct.",
-            )
-
-        validation = bundle["llm_guidance_validation"]
-        self.assertEqual(validation["accepted_concept_count"], 1)
-        self.assertEqual(validation["rejected_concept_count"], 1)
-        self.assertEqual(
-            validation["rejected_concepts"][0]["reason"],
-            "duplicate_projected_physical_signature",
-        )
-        self.assertEqual(len(bundle["concepts"]), 1)
-
-    def test_invalid_guided_topology_values_are_not_silently_accepted(self) -> None:
-        room_model = _room_model()
-        clusters = _clusters()
-
-        class _InvalidTopologyGuidanceClient:
-            def chat_completion(self, *_args, **_kwargs):
-                return SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            message=SimpleNamespace(
-                                content=(
-                                    '{"family_order":["zoned"],'
-                                    '"concept_blueprints":[{"concept_family":"zoned",'
-                                    '"intent_label":"invalid topology",'
-                                    '"primary_cluster_region":"floating_center_zone",'
-                                    '"secondary_cluster_region":"right_wall_zone",'
-                                    '"support_region":"left_wall_zone",'
-                                    '"preferred_wall_side":"right_wall",'
-                                    '"center_usage":"primary",'
-                                    '"topology_policy":{"wall_loading_bias":"segmented",'
-                                    '"entry_avoidance_strength":"opposite_entry",'
-                                    '"daylight_bias":"daylight_side"}}],'
-                                    '"notes":[]}'
-                                )
-                            )
-                        )
-                    ]
-                )
-
-        with mock.patch.object(
-            seed_mod, "get_llm_client", return_value=_InvalidTopologyGuidanceClient()
-        ):
-            bundle = SeedConceptGenerator().generate_bundle(
-                room_model_json=room_model,
-                clusters_json=clusters,
-                target_count=1,
-            )
-
-        sanitized_policy = bundle["llm_guidance"]["concept_blueprints"][0][
-            "topology_policy"
-        ]
-        self.assertEqual(sanitized_policy, {})
-        concept_policy = bundle["concepts"][0]["topology_policy"]
-        self.assertNotIn("segmented", set(concept_policy.values()))
-        self.assertNotIn("opposite_entry", set(concept_policy.values()))
-        self.assertNotIn("daylight_side", set(concept_policy.values()))
-
     def test_concepts_emit_operational_solver_guidance(self) -> None:
         room_model = _room_model()
         clusters = _clusters()
@@ -203,7 +17,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=5,
-            use_llm=False,
         )
 
         operational_zones = bundle["macro_region_map"]["protected_topology"][
@@ -362,7 +175,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
         )
 
         concept = bundle["concepts"][0]
@@ -394,7 +206,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=5,
-            use_llm=False,
         )
 
         concepts = bundle["concepts"]
@@ -462,7 +273,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
         )
 
         concept = bundle["concepts"][0]
@@ -530,7 +340,29 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
+        )
+
+        self.assertEqual(bundle["concepts"][0]["object_viewing_pairs"], [])
+
+    def test_generic_tv_evidence_does_not_create_view_target(self) -> None:
+        room_model = _bedroom_room_model()
+        clusters = _bedroom_media_clusters()
+        request_contract = clusters["request_contract"]
+        assert isinstance(request_contract, dict)
+        request_contract["groups"] = []
+        objects = request_contract["objects"]
+        assert isinstance(objects, list)
+        objects[1] = {
+            "object_type": "tv_console",
+            "intent": "must_keep",
+            "evidence": "a tv",
+            "relation_edges": [{"relation": "faces", "target": "bed"}],
+        }
+
+        bundle = SeedConceptGenerator().generate_bundle(
+            room_model_json=room_model,
+            clusters_json=clusters,
+            target_count=1,
         )
 
         self.assertEqual(bundle["concepts"][0]["object_viewing_pairs"], [])
@@ -576,7 +408,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
         )
 
         rows = {
@@ -610,7 +441,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
         )
 
         pair = bundle["concepts"][0]["object_viewing_pairs"][0]
@@ -652,7 +482,6 @@ class SeedConceptGeneratorArchitectureTest(unittest.TestCase):
             room_model_json=room_model,
             clusters_json=clusters,
             target_count=1,
-            use_llm=False,
         )
 
         pairs = bundle["concepts"][0]["object_viewing_pairs"]

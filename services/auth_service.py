@@ -16,13 +16,14 @@ from db.models import (
     UserAccount,
     UserAuthRecord,
     UserId,
+    UserRole,
 )
 from db.pg_user_content import PostgresUserContentRepository
 from db.runtime_init import ensure_user_content_schema
 
-DEFAULT_SHARED_INVENTORY_TENANT = os.getenv(
-    "TKNT_SHARED_INVENTORY_TENANT_ID", "demo_tenant"
-)
+_SHARED_INVENTORY_TENANT_ENV = "TKNT_SHARED_INVENTORY_TENANT_ID"
+_DEFAULT_SHARED_INVENTORY_TENANT = "demo_tenant"
+_ADMIN_EMAILS_ENV = "TKNT_ADMIN_EMAILS"
 DEFAULT_SESSION_TTL_DAYS = max(
     1,
     int(os.getenv("TKNT_AUTH_SESSION_TTL_DAYS", "30")),
@@ -45,7 +46,16 @@ class AuthenticatedSession:
 
 
 def get_shared_inventory_tenant_id() -> str:
-    return DEFAULT_SHARED_INVENTORY_TENANT
+    configured = os.getenv(
+        _SHARED_INVENTORY_TENANT_ENV,
+        _DEFAULT_SHARED_INVENTORY_TENANT,
+    ).strip()
+    return configured or _DEFAULT_SHARED_INVENTORY_TENANT
+
+
+def is_admin_email(email: str) -> bool:
+    normalized_email = email.strip().lower()
+    return normalized_email in _admin_email_allowlist()
 
 
 class AuthService:
@@ -63,6 +73,21 @@ class AuthService:
         password: str,
         display_name: str | None = None,
     ) -> AuthenticatedSession:
+        user = self.create_user(
+            email=email,
+            password=password,
+            display_name=display_name,
+        )
+        return self._create_session(user)
+
+    def create_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str | None = None,
+        role: UserRole = "user",
+    ) -> UserAccount:
         normalized_email = _normalize_email(email)
         normalized_display_name = _normalize_display_name(
             display_name, normalized_email
@@ -77,7 +102,9 @@ class AuthService:
             id=UserId(_build_user_id()),
             email=normalized_email,
             display_name=normalized_display_name,
-            tenant_id=TenantId(_build_tenant_id(normalized_email)),
+            tenant_id=TenantId(_build_account_scope_id(normalized_email)),
+            role=_resolve_user_role(normalized_email, role),
+            is_active=True,
         )
         salt = _generate_secret_token(24)
         password_hash = _hash_password(password=password, salt=salt)
@@ -88,7 +115,7 @@ class AuthService:
                 password_hash=password_hash,
             )
         )
-        return self._create_session(user)
+        return user
 
     def login_user(self, *, email: str, password: str) -> AuthenticatedSession:
         normalized_email = _normalize_email(email)
@@ -100,7 +127,11 @@ class AuthService:
         if not hmac.compare_digest(expected_hash, record.password_hash):
             raise AuthenticationError("Invalid email or password.")
 
-        return self._create_session(record.user)
+        if not record.user.is_active:
+            raise AuthenticationError("User account is deactivated.")
+
+        user = self._promote_allowlisted_admin(record.user)
+        return self._create_session(user)
 
     def logout(self, token: str) -> None:
         resolved = self.get_authenticated_session(token=token)
@@ -126,6 +157,10 @@ class AuthService:
         user = self._repository.get_user_by_id(session.user_id)
         if user is None:
             raise AuthenticationError("User account no longer exists.")
+        if not user.is_active:
+            raise AuthenticationError("User account is deactivated.")
+
+        user = self._promote_allowlisted_admin(user)
 
         self._repository.touch_session(session.id)
         refreshed_session = (
@@ -152,6 +187,17 @@ class AuthService:
         self._repository.create_session(session)
         return AuthenticatedSession(user=user, session=session, token=token)
 
+    def _promote_allowlisted_admin(self, user: UserAccount) -> UserAccount:
+        if user.role == "admin" or not is_admin_email(user.email):
+            return user
+        updated = self._repository.update_user_account(
+            user_id=user.id,
+            display_name=user.display_name,
+            role="admin",
+            is_active=user.is_active,
+        )
+        return updated or user
+
 
 def _normalize_email(value: str) -> str:
     normalized = value.strip().lower()
@@ -172,6 +218,21 @@ def _validate_password(password: str) -> None:
         raise AuthenticationError("Password must be at least 8 characters long.")
 
 
+def _resolve_user_role(email: str, requested_role: UserRole) -> UserRole:
+    if is_admin_email(email):
+        return "admin"
+    return requested_role
+
+
+def _admin_email_allowlist() -> set[str]:
+    raw_emails = os.getenv(_ADMIN_EMAILS_ENV, "")
+    return {
+        email.strip().lower()
+        for email in raw_emails.split(",")
+        if email.strip()
+    }
+
+
 def _build_user_id() -> str:
     return f"user_{secrets.token_hex(8)}"
 
@@ -180,11 +241,11 @@ def _build_session_id() -> str:
     return f"sess_{secrets.token_hex(12)}"
 
 
-def _build_tenant_id(email: str) -> str:
+def _build_account_scope_id(email: str) -> str:
     local_part = email.split("@", 1)[0]
     slug = re.sub(r"[^a-z0-9]+", "-", local_part.lower()).strip("-")
     slug = slug[:32] or "user"
-    return f"user_inventory_{slug}_{secrets.token_hex(4)}"
+    return f"account_scope_{slug}_{secrets.token_hex(4)}"
 
 
 def _generate_secret_token(length: int) -> str:

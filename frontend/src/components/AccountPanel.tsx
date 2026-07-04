@@ -548,8 +548,8 @@ function formatSavedLayoutCaseTitle(
     };
   }
 
-  const roomLabel = extractRoomLabel(normalizedTitle);
   const intentLabel = extractIntentLabel(normalizedTitle);
+  const roomLabel = intentLabel ? extractRoomLabel(normalizedTitle) : null;
   const displayTitle = truncateAtWordBoundary(
     roomLabel ?? normalizedTitle,
     MAX_CASE_PRIMARY_TITLE_LENGTH

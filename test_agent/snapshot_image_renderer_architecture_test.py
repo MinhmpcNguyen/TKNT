@@ -494,6 +494,7 @@ class SnapshotImageRendererArchitectureTest(unittest.TestCase):
                 },
                 config=snapshot_image_renderer.SnapshotImageRenderConfig(
                     simple_prompt_mode=True,
+                    strict_layout_mode=False,
                     openai_api_key="secret",
                     openai_image_model="gpt-image-2",
                     openai_image_size="1024x1024",
@@ -611,7 +612,7 @@ class SnapshotImageRendererArchitectureTest(unittest.TestCase):
         self.assertIn("Do not preserve the old camera", prompt)
         self.assertIn("Transform Image 1", prompt)
         self.assertIn("Image 2 is the sharp target 3D layout/camera reference", prompt)
-        self.assertIn("Image 3 is the edit-region guide", prompt)
+        self.assertIn("Image 3 is a structural geometry guide", prompt)
         self.assertIn("Image 4 is a changed preset reference only", prompt)
         self.assertIn("Remove the object or visual content", prompt)
         self.assertNotIn("Preserve room identity, materials, style continuity", prompt)

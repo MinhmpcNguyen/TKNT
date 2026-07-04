@@ -18,7 +18,6 @@ import {
   Placement,
   Point,
   SavedLayoutRecord,
-  TemplateItem,
   Violation,
   Wall,
   Window,
@@ -38,21 +37,7 @@ import {
   getWorldBboxFromPlacement,
 } from './utils/styledLayout';
 
-const DEFAULT_SHARED_TENANT_ID = 'demo_tenant';
-const DEMO_INVENTORY_TENANT_ID = 'demo_inventory_test';
-const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on']);
-
-const isDemoInventoryEnabled = () => {
-  const raw =
-    (import.meta as any).env?.TKNT_DEMO_INVENTORY_ENABLED ??
-    (import.meta as any).env?.VITE_TKNT_DEMO_INVENTORY_ENABLED ??
-    '';
-  return TRUE_ENV_VALUES.has(String(raw).trim().toLowerCase());
-};
-
-const DEFAULT_TENANT_ID = isDemoInventoryEnabled()
-  ? DEMO_INVENTORY_TENANT_ID
-  : DEFAULT_SHARED_TENANT_ID;
+export const SHARED_INVENTORY_TENANT_ID = 'demo_tenant';
 
 export type UserInput = {
   case_name: string;
@@ -70,10 +55,7 @@ export type UserInput = {
   window_direction: string;
 };
 
-export type FloorplanCaptureCallback = () => string | null;
-
 export type EditorState = {
-  tenantId: string;
   authResolved: boolean;
   authToken: string | null;
   currentUser: AuthUser | null;
@@ -88,8 +70,6 @@ export type EditorState = {
   viewMode: '2d' | '3d';
   caseId: string | null;
   pipelineStage: string | null;
-  clusterPreviews: Record<string, unknown>;
-  templates: TemplateItem[];
   violations: Violation[];
   selectedPlacementId: string | null;
   selectedCornerIndex: number | null;
@@ -103,10 +83,6 @@ export type EditorState = {
   runStatus: string | null;
   runIterations: number | null;
   lastDesignMeta: { iteration: number | null; attempt: number | null; receivedAt: number } | null;
-  snapshotEnabled: boolean;
-  floorplanCapture: FloorplanCaptureCallback | null;
-  additionRequests: Record<string, unknown>[];
-  threeDOpen: boolean;
   savedLayouts: SavedLayoutRecord[];
   savedRenders: GeneratedRenderRecord[];
   activeRootLayoutId: string | null;
@@ -114,7 +90,6 @@ export type EditorState = {
   activeSavedLayoutId: string | null;
   selectedSavedRenderId: string | null;
   billingSettings: BillingSettings;
-  setTenantId: (tenantId: string) => void;
   setAuthResolved: (resolved: boolean) => void;
   setAuthSession: (token: string, user: AuthUser) => void;
   clearAuthSession: () => void;
@@ -133,9 +108,6 @@ export type EditorState = {
   setViewMode: (mode: '2d' | '3d') => void;
   setCaseId: (caseId: string | null) => void;
   setPipelineStage: (stage: string | null) => void;
-  setClusterPreviews: (previews: Record<string, unknown>) => void;
-  updateClusterPreview: (clusterId: string, preview: unknown) => void;
-  setTemplates: (templates: TemplateItem[]) => void;
   setViolations: (violations: Violation[]) => void;
   selectPlacement: (placementId: string | null) => void;
   selectCorner: (index: number | null) => void;
@@ -151,20 +123,13 @@ export type EditorState = {
   updatePlacement: (placement: Placement) => void;
   removePlacement: (placementId: string) => void;
   removeOpening: (type: 'door' | 'window', id: string) => void;
-  setUserInput: (next: UserInput) => void;
   updateUserInput: (patch: Partial<UserInput>) => void;
   setRoomEditMode: (next: boolean) => void;
   setDrawWallMode: (next: boolean) => void;
-  setRunLogs: (logs: string[]) => void;
   appendRunLog: (line: string) => void;
   clearRunLogs: () => void;
   setRunStatus: (status: string | null, iterations?: number | null) => void;
   setLastDesignMeta: (meta: { iteration: number | null; attempt: number | null } | null) => void;
-  setSnapshotEnabled: (enabled: boolean) => void;
-  setFloorplanCapture: (capture: FloorplanCaptureCallback | null) => void;
-  captureFloorplanImage: () => string | null;
-  setAdditionRequests: (requests: Record<string, unknown>[]) => void;
-  setThreeDOpen: (open: boolean) => void;
   setSavedLayouts: (layouts: SavedLayoutRecord[]) => void;
   setSavedRenders: (renders: GeneratedRenderRecord[]) => void;
   upsertSavedRender: (render: GeneratedRenderRecord) => void;
@@ -172,7 +137,6 @@ export type EditorState = {
   setActiveLayoutCaseId: (caseId: string | null) => void;
   setActiveSavedLayoutId: (layoutId: string | null) => void;
   selectSavedRender: (renderId: string | null) => void;
-  setBillingSettings: (settings: BillingSettings) => void;
   updateBillingSettings: (patch: Partial<BillingSettings>) => void;
   consumeMonthlyImageCredits: (credits: number) => boolean;
   addPaidCredits: (credits: number) => void;
@@ -187,8 +151,92 @@ function normalizeUserInputOptions(userInput: UserInput): UserInput {
   };
 }
 
+function createDefaultUserInput(): UserInput {
+  return {
+    case_name: '',
+    description: 'Auto-generated layout',
+    room_type: DEFAULT_ROOM_TYPE,
+    style: 'japandi',
+    special_description: '',
+    feng_shui: '',
+    floor_area_m2: 0,
+    height: 2800,
+    shape_points: [],
+    location_floor: 1,
+    bathrooms: 1,
+    windows: 0,
+    window_direction: '',
+  };
+}
+
+function createWorkspaceResetState(): Pick<
+  EditorState,
+  | 'floorplan'
+  | 'baseFloorplan'
+  | 'design'
+  | 'styledResult'
+  | 'layoutVariants'
+  | 'selectedVariantId'
+  | 'variantPickerOpen'
+  | 'inventory'
+  | 'viewMode'
+  | 'caseId'
+  | 'pipelineStage'
+  | 'violations'
+  | 'selectedPlacementId'
+  | 'selectedCornerIndex'
+  | 'selectedWallId'
+  | 'selectedOpeningId'
+  | 'selectedOpeningType'
+  | 'userInput'
+  | 'roomEditMode'
+  | 'drawWallMode'
+  | 'runLogs'
+  | 'runStatus'
+  | 'runIterations'
+  | 'lastDesignMeta'
+  | 'savedLayouts'
+  | 'savedRenders'
+  | 'activeRootLayoutId'
+  | 'activeLayoutCaseId'
+  | 'activeSavedLayoutId'
+  | 'selectedSavedRenderId'
+> {
+  return {
+    floorplan: null,
+    baseFloorplan: null,
+    design: null,
+    styledResult: null,
+    layoutVariants: [],
+    selectedVariantId: null,
+    variantPickerOpen: false,
+    inventory: [],
+    viewMode: '2d',
+    caseId: null,
+    pipelineStage: null,
+    violations: [],
+    selectedPlacementId: null,
+    selectedCornerIndex: null,
+    selectedWallId: null,
+    selectedOpeningId: null,
+    selectedOpeningType: null,
+    userInput: createDefaultUserInput(),
+    roomEditMode: false,
+    drawWallMode: false,
+    runLogs: [],
+    runStatus: null,
+    runIterations: null,
+    lastDesignMeta: null,
+    savedLayouts: [],
+    savedRenders: [],
+    activeRootLayoutId: null,
+    activeLayoutCaseId: null,
+    activeSavedLayoutId: null,
+    selectedSavedRenderId: null,
+  };
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
-  tenantId: DEFAULT_TENANT_ID,
   authResolved: false,
   authToken: null,
   currentUser: null,
@@ -203,39 +251,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   viewMode: '2d',
   caseId: null,
   pipelineStage: null,
-  clusterPreviews: {},
-  templates: [],
   violations: [],
   selectedPlacementId: null,
   selectedCornerIndex: null,
   selectedWallId: null,
   selectedOpeningId: null,
   selectedOpeningType: null,
-  userInput: {
-    case_name: '',
-    description: 'Auto-generated layout',
-    room_type: DEFAULT_ROOM_TYPE,
-    style: 'japandi',
-    special_description: '',
-    feng_shui: '',
-    floor_area_m2: 0,
-    height: 2800,
-    shape_points: [],
-    location_floor: 1,
-    bathrooms: 1,
-    windows: 0,
-    window_direction: '',
-  },
+  userInput: createDefaultUserInput(),
   roomEditMode: false,
   drawWallMode: false,
   runLogs: [],
   runStatus: null,
   runIterations: null,
   lastDesignMeta: null,
-  snapshotEnabled: true,
-  floorplanCapture: null,
-  additionRequests: [],
-  threeDOpen: false,
   savedLayouts: [],
   savedRenders: [],
   activeRootLayoutId: null,
@@ -243,27 +271,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   activeSavedLayoutId: null,
   selectedSavedRenderId: null,
   billingSettings: loadBillingSettings(),
-  setTenantId: (tenantId) => set({ tenantId }),
   setAuthResolved: (authResolved) => set({ authResolved }),
   setAuthSession: (authToken, currentUser) =>
-    set({
-      authResolved: true,
-      authToken,
-      currentUser,
+    set((state) => {
+      const switchedUser = state.currentUser?.id !== currentUser.id;
+      return {
+        ...(switchedUser ? createWorkspaceResetState() : {}),
+        authResolved: true,
+        authToken,
+        currentUser,
+      };
     }),
   clearAuthSession: () =>
     set({
+      ...createWorkspaceResetState(),
       authResolved: true,
       authToken: null,
       currentUser: null,
-      tenantId: DEFAULT_TENANT_ID,
-      savedLayouts: [],
-      savedRenders: [],
-      activeRootLayoutId: null,
-      activeLayoutCaseId: null,
-      activeSavedLayoutId: null,
-      selectedSavedRenderId: null,
-      inventory: [],
     }),
   setFloorplan: (floorplan) => {
     const currentState = get();
@@ -381,10 +405,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setViewMode: (viewMode) => set({ viewMode }),
   setCaseId: (caseId) => set({ caseId }),
   setPipelineStage: (pipelineStage) => set({ pipelineStage }),
-  setClusterPreviews: (clusterPreviews) => set({ clusterPreviews }),
-  updateClusterPreview: (clusterId, preview) =>
-    set((state) => ({ clusterPreviews: { ...state.clusterPreviews, [clusterId]: preview } })),
-  setTemplates: (templates) => set({ templates }),
   setViolations: (violations) => set({ violations }),
   selectPlacement: (placementId) =>
     set({
@@ -552,14 +572,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedOpeningType: null,
     });
   },
-  setUserInput: (next) => set({ userInput: normalizeUserInputOptions(next) }),
   updateUserInput: (patch) => {
     const current = get().userInput;
     set({ userInput: normalizeUserInputOptions({ ...current, ...patch }) });
   },
   setRoomEditMode: (next) => set({ roomEditMode: next }),
   setDrawWallMode: (next) => set({ drawWallMode: next }),
-  setRunLogs: (logs) => set({ runLogs: logs }),
   appendRunLog: (line) =>
     set((state) => ({ runLogs: [...state.runLogs, line] })),
   clearRunLogs: () => set({ runLogs: [] }),
@@ -571,11 +589,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ? { iteration: meta.iteration ?? null, attempt: meta.attempt ?? null, receivedAt: Date.now() }
         : null,
     }),
-  setSnapshotEnabled: (enabled) => set({ snapshotEnabled: enabled }),
-  setFloorplanCapture: (floorplanCapture) => set({ floorplanCapture }),
-  captureFloorplanImage: () => get().floorplanCapture?.() ?? null,
-  setAdditionRequests: (requests) => set({ additionRequests: requests }),
-  setThreeDOpen: (open) => set({ threeDOpen: open }),
   setSavedLayouts: (savedLayouts) => set({ savedLayouts }),
   setSavedRenders: (savedRenders) => set({ savedRenders }),
   upsertSavedRender: (render) =>
@@ -587,11 +600,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setActiveLayoutCaseId: (activeLayoutCaseId) => set({ activeLayoutCaseId }),
   setActiveSavedLayoutId: (activeSavedLayoutId) => set({ activeSavedLayoutId }),
   selectSavedRender: (selectedSavedRenderId) => set({ selectedSavedRenderId }),
-  setBillingSettings: (settings) => {
-    const next = ensureCurrentBillingPeriod(settings);
-    saveBillingSettings(next);
-    set({ billingSettings: next });
-  },
   updateBillingSettings: (patch) =>
     set((state) => {
       const next = ensureCurrentBillingPeriod({

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
-import os
+import json
 import sys
 import types
 import unittest
@@ -34,41 +34,21 @@ def _stub_module(name: str, **attributes: object) -> None:
 
 
 _STUBBED_MODULE_NAMES = [
-    "agent.cluster_composer",
-    "agent.cluster_forge",
-    "agent.cluster_placer",
-    "agent.phase2_controller",
+    "agent.seed_relation_planner",
     "agent.room_interpreter",
     "agent.seed_concept_generator",
     "agent.solver.solver",
     "agent.stylist",
     "agent.tier_count_director",
-    "agent.visual_relation_object_solver",
-    "agent.visual_relation_planner",
-    "cluster_composer.merge",
-    "cluster_composer.outline",
+    "object_program.builder",
     "layout.grid_policy",
-    "pipeline.compose_feedback",
     "pipeline.dropped_inventory",
-    "pipeline.layout_eligibility",
     "pipeline.layout_variants",
     "pipeline.manual_placements",
-    "pipeline.seed_variant_policy",
 ]
 
 
-_stub_module(
-    "agent.cluster_composer",
-    ClusterComposer=object,
-    _build_cluster_output_from_placements=lambda **kwargs: kwargs,
-)
-_stub_module("agent.cluster_forge", ClusterForge=object)
-_stub_module("agent.cluster_placer", build_phase2_payload=lambda **kwargs: kwargs)
-_stub_module(
-    "agent.phase2_controller",
-    Phase2Controller=object,
-    build_phase2_preview_candidate=lambda **kwargs: {},
-)
+_stub_module("agent.seed_relation_planner", SeedRelationPlanner=object)
 _stub_module("agent.room_interpreter", RoomInterpreter=object)
 _stub_module(
     "agent.seed_concept_generator",
@@ -82,15 +62,9 @@ _stub_module(
     stylist_model_name_for_variant=lambda variant_index: "gpt-5.4-mini",
 )
 _stub_module("agent.tier_count_director", TierCountDirector=object)
-_stub_module("agent.visual_relation_object_solver", VisualRelationObjectSolver=object)
 _stub_module(
-    "agent.visual_relation_planner",
-    VisualRelationBundlePlanner=object,
-    VisualRelationPlanner=object,
-)
-_stub_module(
-    "cluster_composer.merge",
-    merge_cluster_outputs=lambda cluster_output, tier_output: {
+    "object_program.builder",
+    build_solver_object_program=lambda cluster_output, tier_output: {
         "clusters": [
             {
                 "cluster_id": "living",
@@ -106,49 +80,21 @@ _stub_module(
         ]
     },
 )
-_stub_module(
-    "cluster_composer.outline",
-    compute_cluster_outline=lambda cluster_result: cluster_result,
-)
 _stub_module("layout.grid_policy", GLOBAL_LAYOUT_GRID_MM=50)
 _stub_module(
-    "pipeline.compose_feedback",
-    apply_compose_backoff=lambda **kwargs: (kwargs.get("tier_output") or {}, [], False),
-    apply_variant_diversification=lambda **kwargs: (
-        kwargs.get("tier_output") or {},
-        [],
-        False,
-    ),
-    evaluate_composed_cluster_feasibility=lambda **kwargs: {"feasible": True},
-    evaluate_solver_cluster_feasibility=lambda **kwargs: {"feasible": True},
-)
-_stub_module(
     "pipeline.dropped_inventory",
-    collect_dropped_inventory=lambda **kwargs: {},
-    collect_seed_omitted_inventory=lambda **kwargs: {},
     controlled_accessory_refill=lambda **kwargs: (
         kwargs.get("absolute_layout") or {},
         {"refill_count": 0},
     ),
     dropped_inventory_payload=lambda value: value,
-    merge_dropped_inventory=lambda base, additions: {
-        **(base or {}),
-        **(additions or {}),
-    },
-    reintroduce_dropped_inventory=lambda **kwargs: (
-        kwargs.get("absolute_layout") or {},
-        {"inserted_count": 0},
-    ),
-)
-_stub_module(
-    "pipeline.layout_eligibility",
-    annotate_layout_coverage=lambda **kwargs: kwargs.get("absolute_layout") or {},
 )
 _stub_module(
     "pipeline.layout_variants",
     build_final_gallery_selection_summary=lambda **kwargs: {
         "selected_count": len(kwargs.get("selected") or []),
     },
+    core_anchor_layout_signature=lambda _layout: "",
     material_macro_layout_signature=lambda _layout: "",
     select_distinct_final_gallery_candidates=lambda **kwargs: kwargs.get("candidates")
     or [],
@@ -157,7 +103,7 @@ _stub_module(
     "pipeline.manual_placements",
     apply_manual_placements_to_tier_output=lambda layout, *_args, **_kwargs: layout,
     append_manual_placements_guidance=lambda text, *_args, **_kwargs: text,
-    augment_cluster_forge_with_manual_placements=lambda payload,
+    augment_seed_relation_plan_with_manual_placements=lambda payload,
     *_args,
     **_kwargs: payload,
     merge_manual_placements_into_absolute_layout=lambda layout,
@@ -170,37 +116,13 @@ _stub_module(
 )
 
 
-class _FakeBrief:
-    def __init__(self, source: str, model_name: str) -> None:
-        self.source = source
-        self.model_name = model_name
-        self.reason = f"Reason for {source}"
-        self.special_notes = f"Special notes for {source}"
-        self.focus_mode = "mixed"
-        self.center_open_preference = "medium"
-        self.support_cluster_behavior = "balanced"
-        self.distribution_mode = "balanced"
-        self.constraint_tokens = ("token",)
-
-
-_stub_module(
-    "pipeline.seed_variant_policy",
-    apply_seed_variant_policy=lambda relation_plan, planner_clusters_json, brief: {
-        **relation_plan,
-        "seed_variant_policy": {"source": brief.source},
-        "planner_seed_note": (
-            (planner_clusters_json.get("seed_layout_state") or {}).get("notes") or []
-        ),
-    },
-    build_seed_variant_briefs=lambda target_count: [
-        _FakeBrief("seed_stable", "gpt-5.4-mini"),
-        _FakeBrief("seed_open_center", "gpt-5.4-mini"),
-    ][: max(1, int(target_count))],
-)
-
 orchestrator = _load_module(
     "pipeline.orchestrator_for_architecture_test",
     "pipeline/orchestrator.py",
+)
+request_non_functional_refill = _load_module(
+    "pipeline.request_non_functional_refill_for_architecture_test",
+    "pipeline/request_non_functional_refill.py",
 )
 
 for _module_name in _STUBBED_MODULE_NAMES:
@@ -321,15 +243,25 @@ def _unsat_solver_output(
     offenders: list[str],
     raw_solution_count: int,
     anchor_candidate_counts: dict[str, int] | None = None,
+    failure_kind: str = "",
+    pairwise_incompatible_anchor_pairs: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     anchor_counts = anchor_candidate_counts or {"sleep_core": 6, "work_study": 36}
+    solver_debug: dict[str, object] = {
+        "raw_solution_count": raw_solution_count,
+        "anchor_candidate_counts": anchor_counts,
+    }
+    if failure_kind:
+        solver_debug["failure_kind"] = failure_kind
+    if pairwise_incompatible_anchor_pairs is not None:
+        solver_debug["pairwise_incompatible_anchor_pairs"] = (
+            pairwise_incompatible_anchor_pairs
+        )
     return {
         "status": "UNSAT",
+        "failure_kind": failure_kind,
         "offending_clusters": offenders,
-        "solver_debug": {
-            "raw_solution_count": raw_solution_count,
-            "anchor_candidate_counts": anchor_counts,
-        },
+        "solver_debug": solver_debug,
         "best_partial": {
             "verify_summary": {
                 "quality_gate_reasons": reasons,
@@ -363,6 +295,100 @@ def _ok_object_solver_output() -> dict[str, object]:
     }
 
 
+def _front_access_unsat_solver_output() -> dict[str, object]:
+    return {
+        "status": "UNSAT",
+        "solver_debug": {
+            "raw_solution_count": 24,
+            "anchor_candidate_counts": {"sleep_core": 5, "storage_core": 22},
+        },
+        "solver_degradation_report": {
+            "raw_solution_count": 24,
+            "top_quality_gate_reasons": [
+                {"reason": "front_access_zone_blocked", "count": 24}
+            ],
+        },
+        "best_partial": {
+            "verify_summary": {
+                "quality_gate_reasons": ["front_access_zone_blocked"],
+                "offending_clusters": ["sleep_core"],
+                "blocking_functional_geometry_issues": [
+                    {
+                        "cluster_id": "sleep_core",
+                        "object_id": "bed",
+                        "blocked_cluster_id": "storage_core",
+                        "blocked_object_id": "wardrobe",
+                        "reason": "front_access_zone_blocked",
+                        "overlap_ratio": 0.341,
+                        "overlap_area_mm2": 1100500,
+                    }
+                ],
+            }
+        },
+    }
+
+
+def _daylight_quality_unsat_solver_output() -> dict[str, object]:
+    return {
+        "status": "UNSAT",
+        "solver_debug": {
+            "raw_solution_count": 12,
+            "anchor_candidate_counts": {"storage_core": 8},
+        },
+        "solver_degradation_report": {
+            "raw_solution_count": 12,
+            "top_quality_gate_reasons": [
+                {"reason": "blocking_daylight_quality_overlap", "count": 12}
+            ],
+        },
+        "best_partial": {
+            "verify_summary": {
+                "quality_gate_reasons": ["blocking_daylight_quality_overlap"],
+                "offending_clusters": ["storage_core"],
+                "blocking_forbidden_region_issues": [
+                    {
+                        "cluster_id": "storage_core",
+                        "object_id": "wardrobe",
+                        "region_id": "window_1_daylight",
+                        "zone_type": "daylight_quality_blocking",
+                        "overlap_ratio": 0.42,
+                        "overlap_area_mm2": 420000,
+                    }
+                ],
+            }
+        },
+    }
+
+
+def _front_access_unsat_with_storage_wall_option() -> dict[str, object]:
+    output = _front_access_unsat_solver_output()
+    solver_debug = output["solver_debug"]
+    if not isinstance(solver_debug, dict):
+        raise AssertionError("solver_debug fixture must be a dict")
+    solver_debug["anchor_wall_options_by_cluster"] = {
+        "storage_core": {
+            "top": {
+                "valid_candidate_count": 3,
+                "front_inward_candidate_count": 2,
+                "wall_parallel_candidate_count": 2,
+                "best_score": 18250.0,
+                "best_candidate": {
+                    "front_inward_match": True,
+                    "long_axis_wall_parallel": True,
+                    "candidate_score": 18250.0,
+                },
+            },
+            "right": {
+                "valid_candidate_count": 0,
+                "front_inward_candidate_count": 0,
+                "wall_parallel_candidate_count": 0,
+                "reject_reason_counts": {"forbidden_overlap:entry_clearance": 4},
+            },
+        }
+    }
+    return output
+
+
 class _FakeObjectLevelSolver:
     def __init__(self, outputs: list[dict[str, object]]) -> None:
         self.outputs = list(outputs)
@@ -380,6 +406,55 @@ class _FakeObjectLevelSolver:
 
 
 class OrchestratorArchitectureTest(unittest.TestCase):
+    def test_partial_layout_variants_publish_every_completed_candidate(self) -> None:
+        original_selector = orchestrator.select_distinct_final_gallery_candidates
+        orchestrator.select_distinct_final_gallery_candidates = (
+            lambda *, candidates, max_variants: candidates[:1]
+        )
+        try:
+            with TemporaryDirectory() as tmp:
+                paths = orchestrator.CasePaths(
+                    case_id="case_partial_variants",
+                    root=Path(tmp),
+                )
+                candidates = [
+                    {
+                        "absolute_layout": {"objects": [{"object_id": "sofa"}]},
+                        "styled_result": {"objects": [{"instance_id": "sofa"}]},
+                        "source": "candidate_1",
+                        "hard_valid": True,
+                        "complete": True,
+                        "gallery_eligible": True,
+                    },
+                    {
+                        "absolute_layout": {"objects": [{"object_id": "desk"}]},
+                        "styled_result": {"objects": [{"instance_id": "desk"}]},
+                        "source": "candidate_2",
+                        "hard_valid": True,
+                        "complete": True,
+                        "gallery_eligible": True,
+                    },
+                ]
+
+                orchestrator._write_partial_layout_variants_artifact(
+                    paths=paths,
+                    final_candidates=candidates,
+                    target_final_count=3,
+                    ablation_mode="full",
+                )
+
+                payload = json.loads(paths.layout_variants.read_text())
+
+            self.assertTrue(payload["is_partial"])
+            self.assertEqual(payload["ready_count"], 2)
+            self.assertEqual(
+                [variant["source"] for variant in payload["variants"]],
+                ["candidate_1", "candidate_2"],
+            )
+            self.assertEqual(payload["selection_summary"], {"selected_count": 1})
+        finally:
+            orchestrator.select_distinct_final_gallery_candidates = original_selector
+
     def test_layout_variants_copy_orientation_into_styled_output(self) -> None:
         payload = orchestrator._build_layout_variants_payload_from_final_candidates(
             [
@@ -420,7 +495,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         for (
             object_type,
             spec,
-        ) in orchestrator._REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.items():
+        ) in request_non_functional_refill._REQUEST_NON_FUNCTIONAL_LAYOUT_SPECS.items():
             place_on = spec.get("place_on") if isinstance(spec, dict) else None
             if not isinstance(place_on, dict):
                 continue
@@ -461,6 +536,72 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             [f"candidate_{index}" for index in range(1, 6)],
         )
 
+    def test_core_anchor_diversity_repair_retargets_secondary_first(self) -> None:
+        concept = {
+            "concept_id": "concept_04",
+            "concept_family": "edge_weighted",
+            "cluster_zone_plan": [
+                {
+                    "cluster_id": "sleep_core",
+                    "zone_assignment": "quiet_private_deep_zone",
+                    "committed_region_ids": ["quiet_private_deep_zone"],
+                    "preferred_region_ids": ["quiet_private_deep_zone"],
+                    "scenario_role": "primary",
+                    "anchor_strength": "strong",
+                },
+                {
+                    "cluster_id": "storage_core",
+                    "zone_assignment": "right_wall_zone",
+                    "committed_region_ids": ["right_wall_zone"],
+                    "preferred_region_ids": [
+                        "right_wall_zone",
+                        "bottom_wall_zone",
+                        "left_wall_zone",
+                    ],
+                    "scenario_role": "support",
+                    "anchor_strength": "strong",
+                },
+                {
+                    "cluster_id": "media_optional",
+                    "zone_assignment": "right_wall_zone",
+                    "committed_region_ids": ["right_wall_zone"],
+                    "preferred_region_ids": ["right_wall_zone", "top_wall_zone"],
+                    "scenario_role": "secondary",
+                    "anchor_strength": "strong",
+                },
+            ],
+        }
+
+        repairs = orchestrator._build_core_anchor_diversity_repair_concepts(
+            concepts=[concept],
+            solved_bundles=[
+                {
+                    "planned_material_macro_signature": (
+                        "media_optional:right_wall_zone|"
+                        "sleep_core:quiet_private_deep_zone|"
+                        "storage_core:right_wall_zone"
+                    )
+                }
+            ],
+            selection_summary={
+                "returned_count": 5,
+                "core_anchor_distinct_candidate_count": 1,
+            },
+            target_final_count=5,
+        )
+
+        self.assertTrue(repairs)
+        rows = {row["cluster_id"]: row for row in repairs[0]["cluster_zone_plan"]}
+        self.assertEqual(
+            rows["sleep_core"]["zone_assignment"],
+            "quiet_private_deep_zone",
+        )
+        self.assertNotEqual(
+            rows["storage_core"]["zone_assignment"],
+            "right_wall_zone",
+        )
+        self.assertTrue(repairs[0]["core_anchor_diversity_repair_applied"])
+
     def test_select_final_styling_candidates_returns_empty_when_selector_empty(
         self,
     ) -> None:
@@ -484,74 +625,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
 
         self.assertEqual(selected, [])
 
-    def test_seed_retry_triggers_when_solver_gallery_diversity_collapses(self) -> None:
-        collapsed_summary = {
-            "returned_count": 2,
-            "macro_distinct_candidate_count": 1,
-            "visual_family_distinct_candidate_count": 2,
-            "fallback_near_distinct_count": 0,
-        }
-        healthy_summary = {
-            "returned_count": 5,
-            "macro_distinct_candidate_count": 5,
-            "visual_family_distinct_candidate_count": 5,
-            "fallback_near_distinct_count": 0,
-        }
-
-        self.assertTrue(
-            orchestrator._should_retry_seed_concepts(
-                collapsed_summary,
-                target_final_count=5,
-            )
-        )
-        self.assertFalse(
-            orchestrator._should_retry_seed_concepts(
-                healthy_summary,
-                target_final_count=5,
-            )
-        )
-
-    def test_seed_retry_feedback_includes_projected_physical_signatures(self) -> None:
-        feedback = orchestrator._seed_retry_feedback_from_selection(
-            seed_relation_plans={
-                "concepts": [
-                    {
-                        "concept_id": "concept_01",
-                        "concept_family": "zoned",
-                        "projected_physical_signature": "main:left|media:right",
-                    }
-                ]
-            },
-            candidates=[
-                {
-                    "source": "concept:concept_01",
-                    "macro_layout_signature": "macro_a",
-                }
-            ],
-            selected=[],
-            selection_summary={
-                "returned_count": 0,
-                "candidate_count": 1,
-                "macro_distinct_candidate_count": 1,
-                "visual_family_distinct_candidate_count": 1,
-                "fallback_near_distinct_count": 0,
-                "collapsed_macro_layouts": [],
-                "collapsed_visual_families": [],
-                "top_quality_gate_reasons": {"view_corridor_blocked": 2},
-            },
-            target_final_count=5,
-        )
-
-        self.assertEqual(
-            feedback["retry_reason"], "insufficient_distinct_solver_candidates"
-        )
-        self.assertEqual(
-            feedback["used_projected_physical_signatures"],
-            ["main:left|media:right"],
-        )
-        self.assertEqual(feedback["used_macro_layout_signatures"], ["macro_a"])
-
-    def test_run_case_uses_deterministic_seed_and_skips_llm_retry(self) -> None:
+    def test_run_case_uses_deterministic_seed_generation(self) -> None:
         class _FakeModelOutput:
             def __init__(self, payload: dict[str, object]) -> None:
                 self._payload = payload
@@ -577,7 +651,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
                     }
                 )
 
-        class _FakeClusterForge:
+        class _FakeSeedRelationPlanner:
             def generate(self, *_args: object, **_kwargs: object) -> _FakeModelOutput:
                 return _FakeModelOutput({"clusters": []})
 
@@ -598,14 +672,11 @@ class OrchestratorArchitectureTest(unittest.TestCase):
 
             def generate_bundle(self, **kwargs: object) -> dict[str, object]:
                 self.calls.append(dict(kwargs))
-                uses_llm = bool(kwargs.get("use_llm", True))
                 return {
                     "status": "OK",
                     "room_type": "bedroom",
-                    "controller": "llm_guided_seed_concept_generator"
-                    if uses_llm
-                    else "deterministic_seed_concept_generator",
-                    "settings": {"llm_guided": uses_llm},
+                    "controller": "deterministic_seed_concept_generator",
+                    "settings": {},
                     "concepts": [
                         {
                             "concept_id": "concept_01",
@@ -618,7 +689,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         concept_generators: list[_FakeSeedConceptGenerator] = []
         replacements = {
             "RoomInterpreter": _FakeRoomInterpreter,
-            "ClusterForge": _FakeClusterForge,
+            "SeedRelationPlanner": _FakeSeedRelationPlanner,
             "TierCountDirector": _FakeTierCountDirector,
             "SeedConceptGenerator": _FakeSeedConceptGenerator,
             "Stylist": _FakeStylist,
@@ -627,14 +698,10 @@ class OrchestratorArchitectureTest(unittest.TestCase):
                 payload,
                 None,
             ),
-            "merge_cluster_outputs": lambda _cluster_output, _tier_output: {
+            "build_solver_object_program": lambda _cluster_output, _tier_output: {
                 "clusters": []
             },
-            "_run_visual_relation_planner_experiment": lambda **_kwargs: {},
-            "_visual_relation_v2_must_stop": lambda _experiment: False,
-            "_visual_relation_candidate_bundles": lambda _experiment: [],
             "_solve_seed_concept_pool": lambda **_kwargs: [],
-            "_should_retry_seed_concepts": lambda *_args, **_kwargs: True,
         }
         originals = {name: getattr(orchestrator, name) for name in replacements}
         for name, replacement in replacements.items():
@@ -664,7 +731,8 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         generator = concept_generators[0]
         calls = generator.calls
         self.assertEqual(len(calls), 1)
-        self.assertIs(calls[0]["use_llm"], False)
+        self.assertEqual(calls[0]["target_count"], 5)
+        self.assertNotIn("description", calls[0])
 
     def test_semantic_cluster_member_dedupe_drops_duplicate_support_cluster(
         self,
@@ -727,87 +795,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             )
         )
 
-    def test_fast_layout_mode_caps_attempt_budgets(self) -> None:
-        previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
-        os.environ["TKNT_LAYOUT_SPEED_MODE"] = "fast"
-        try:
-            self.assertEqual(orchestrator._compose_attempt_limit(4), 2)
-            self.assertEqual(orchestrator._solver_attempt_limit(8), 3)
-            self.assertEqual(orchestrator._seed_diversification_attempt_limit(20), 8)
-        finally:
-            if previous is None:
-                os.environ.pop("TKNT_LAYOUT_SPEED_MODE", None)
-            else:
-                os.environ["TKNT_LAYOUT_SPEED_MODE"] = previous
-
-    def test_visual_relation_planner_v2_env_uses_macro_concept_version(self) -> None:
-        previous = os.environ.get("TKNT_VISUAL_RELATION_PLANNER")
-        os.environ["TKNT_VISUAL_RELATION_PLANNER"] = "v2"
-        try:
-            config = orchestrator._visual_relation_request_config(
-                {
-                    "experimental": {
-                        "visual_relation_planner": {
-                            "enabled": True,
-                            "mode": "shadow",
-                            "floorplan_image_data_url": "data:image/png;base64,abc",
-                        }
-                    }
-                }
-            )
-        finally:
-            if previous is None:
-                os.environ.pop("TKNT_VISUAL_RELATION_PLANNER", None)
-            else:
-                os.environ["TKNT_VISUAL_RELATION_PLANNER"] = previous
-
-        self.assertIsNotNone(config)
-        self.assertEqual(config["planner_version"], "v2")
-        self.assertEqual(
-            orchestrator._visual_relation_artifact_version("v2"),
-            "v2_macro_concept_bundle",
-        )
-
-    def test_visual_relation_planner_v2_skip_stops_before_deterministic(self) -> None:
-        artifact = orchestrator._visual_relation_skip_artifact(
-            mode="shadow",
-            reason="OpenAI error",
-            planner_version="v2_macro_concept_bundle",
-        )
-
-        self.assertTrue(orchestrator._visual_relation_v2_must_stop(artifact))
-        self.assertIn("generation stops", artifact["notes"][0])
-        self.assertFalse(
-            orchestrator._visual_relation_v2_must_stop(
-                {
-                    "mode": "shadow",
-                    "status": "SKIPPED",
-                    "planner_version": "v1_object_region",
-                }
-            )
-        )
-
-    def test_compose_status_feedback_keeps_room_overflow_offenders(self) -> None:
-        feedback = orchestrator._compose_status_only_feedback(
-            {
-                "feasible": False,
-                "offenders": [
-                    {
-                        "cluster_id": "main_seating_area",
-                        "reason": "CLUSTER_ENVELOPE_EXCEEDS_ROOM",
-                    }
-                ],
-            }
-        )
-
-        self.assertFalse(feedback["feasible"])
-        self.assertEqual(len(feedback["offenders"]), 1)
-        self.assertEqual(
-            feedback["offenders"][0]["reason"],
-            "CLUSTER_ENVELOPE_EXCEEDS_ROOM",
-        )
-
-    def test_log_cluster_forge_output_warns_on_duplicate_members(self) -> None:
+    def test_log_seed_relation_output_warns_on_duplicate_members(self) -> None:
         cluster_output = {
             "clusters": [
                 {
@@ -826,223 +814,15 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         }
 
         with self.assertLogs(orchestrator.logger, level="INFO") as captured:
-            orchestrator._log_cluster_forge_output(
+            orchestrator._log_seed_relation_output(
                 cluster_output,
                 context="primary",
             )
 
         joined = "\n".join(captured.output)
-        self.assertIn("Cluster forge primary produced 2 cluster(s).", joined)
+        self.assertIn("Seed relation planner primary produced 2 cluster(s).", joined)
         self.assertIn("duplicate members across clusters", joined)
         self.assertIn("chair", joined)
-
-    def test_fast_layout_mode_no_longer_splits_clusters_before_tier_count(
-        self,
-    ) -> None:
-        previous = os.environ.get("TKNT_LAYOUT_SPEED_MODE")
-        os.environ["TKNT_LAYOUT_SPEED_MODE"] = "fast"
-        try:
-            cluster_output, notes = orchestrator._speed_split_cluster_output(
-                room_output={
-                    "room": {
-                        "polygon_ccw": [
-                            {"x": 0, "y": 0},
-                            {"x": 6000, "y": 0},
-                            {"x": 6000, "y": 3000},
-                            {"x": 3500, "y": 3000},
-                            {"x": 3500, "y": 4000},
-                            {"x": 0, "y": 4000},
-                        ]
-                    }
-                },
-                cluster_output={
-                    "clusters": [
-                        {
-                            "cluster_id": "main_seating_area",
-                            "tag": "living",
-                            "members": [
-                                "sofa",
-                                "sectional_sofa",
-                                "armchair",
-                                "recliner",
-                                "coffee_table",
-                                "side_table",
-                                "tv_console",
-                            ],
-                            "anchors": ["sofa", "tv_console"],
-                            "hard_constraints": [
-                                {"type": "requires_access", "id": "sofa"},
-                                {"type": "requires_access", "id": "tv_console"},
-                            ],
-                            "soft_constraints": [
-                                {
-                                    "type": "prefer_facing",
-                                    "a": "sofa",
-                                    "b": "tv_console",
-                                }
-                            ],
-                            "cluster_rules": {
-                                "allowed_rotations": {
-                                    "sofa": [0, 90],
-                                    "tv_console": [0, 90],
-                                },
-                                "facing": {
-                                    "sofa": {"front": "bottom"},
-                                    "tv_console": {"front": "bottom"},
-                                },
-                            },
-                        }
-                    ]
-                },
-            )
-        finally:
-            if previous is None:
-                os.environ.pop("TKNT_LAYOUT_SPEED_MODE", None)
-            else:
-                os.environ["TKNT_LAYOUT_SPEED_MODE"] = previous
-
-        self.assertEqual(len(cluster_output["clusters"]), 1)
-        self.assertEqual(
-            cluster_output["clusters"][0]["cluster_id"], "main_seating_area"
-        )
-        self.assertEqual(notes, [])
-
-    def test_solver_backoff_allows_missing_hard_valid_candidates(self) -> None:
-        self.assertTrue(
-            orchestrator._solver_feasibility_allows_backoff(
-                {
-                    "offenders": [
-                        {
-                            "cluster_id": "main_seating_area",
-                            "reason": "SOLVER_HAS_NO_HARD_VALID_CANDIDATES",
-                        }
-                    ]
-                }
-            )
-        )
-
-    def test_plan_seed_variant_bundles_no_longer_requires_solver_output(self) -> None:
-        calls: list[dict[str, object]] = []
-
-        class _DummyConceptGenerator:
-            def generate_bundle(self, **kwargs):
-                calls.append(kwargs)
-                return {
-                    "status": "OK",
-                    "room_type": "living_room",
-                    "concepts": [
-                        {
-                            "concept_family": "focal_axis",
-                            "spatial_character": "Focal axis",
-                            "cluster_zone_plan": [],
-                        },
-                        {
-                            "concept_family": "open_center",
-                            "spatial_character": "Open center",
-                            "cluster_zone_plan": [],
-                        },
-                    ],
-                }
-
-        bundle = {
-            "cluster_outlines": {
-                "living": {
-                    "cluster_footprint": {
-                        "local_bbox": {
-                            "min_x": 0,
-                            "min_y": 0,
-                            "max_x": 900,
-                            "max_y": 1200,
-                        }
-                    },
-                    "orientation_meta": {
-                        "cluster_front_local": {"dx": 0, "dy": 1},
-                        "cluster_axis_local": {"dx": 1, "dy": 0},
-                    },
-                }
-            }
-        }
-        room_output = {
-            "room": {
-                "room_id": "room_1",
-                "polygon_ccw": [
-                    {"x": 0, "y": 0},
-                    {"x": 6000, "y": 0},
-                    {"x": 6000, "y": 4000},
-                    {"x": 0, "y": 4000},
-                ],
-            }
-        }
-
-        planned_bundles, payload = orchestrator._plan_seed_variant_bundles(
-            bundle=bundle,
-            room_output=room_output,
-            guidance_text="living room",
-            concept_generator=_DummyConceptGenerator(),
-            target_count=2,
-        )
-
-        self.assertEqual(len(planned_bundles), 2)
-        self.assertEqual(len(payload["variants"]), 2)
-        seed_notes = (calls[0]["clusters_json"].get("seed_layout_state") or {}).get(
-            "notes"
-        ) or []
-        self.assertIn("No macro seed layout has been solved yet", seed_notes[0])
-
-    def test_solve_planned_variant_bundle_uses_branch_relation_plan(self) -> None:
-        captured: dict[str, object] = {}
-
-        class _DummySolver:
-            def generate(self, **kwargs):
-                captured["relation_plan_json"] = kwargs.get("relation_plan_json")
-                return {
-                    "status": "OK",
-                    "cluster_transforms": [
-                        {"cluster_id": "living", "x": 1000, "y": 900, "rot": 0}
-                    ],
-                    "selected_variants": [
-                        {"cluster_id": "living", "variant_id": "living::base"}
-                    ],
-                    "notes": ["Solved concept branch."],
-                }
-
-        bundle = {
-            "seed_index": 2,
-            "relation_plan": {
-                "status": "OK",
-                "cluster_relations": [
-                    {
-                        "a": "living",
-                        "b": "media",
-                        "relation": "separate",
-                    }
-                ],
-            },
-            "cluster_outlines": {"living": {"cluster_footprint": {}}},
-            "cluster_output": {"clusters": []},
-            "merged_output": {"clusters": []},
-            "tier_output": {"decisions": []},
-            "notes": [],
-        }
-
-        solved_bundle = orchestrator._solve_planned_variant_bundle(
-            bundle=bundle,
-            room_output={"room": {"room_id": "room_1"}},
-            guidance_text="living room",
-            composer=object(),
-            solver=_DummySolver(),
-            max_attempts=1,
-        )
-
-        self.assertIsNotNone(solved_bundle)
-        self.assertEqual(
-            captured["relation_plan_json"],
-            bundle["relation_plan"],
-        )
-        self.assertEqual(
-            solved_bundle["solver_relation_plan"],
-            bundle["relation_plan"],
-        )
 
     def test_concept_repair_raw_zero_builds_zone_spread_without_topology_change(
         self,
@@ -1128,6 +908,130 @@ class OrchestratorArchitectureTest(unittest.TestCase):
         self.assertEqual(
             repaired_claims["avoid_regions"],
             ["door_1_entry_clearance"],
+        )
+
+    def test_anchor_pair_spread_repair_relaxes_less_primary_pair_member(
+        self,
+    ) -> None:
+        relation_plan = _repair_relation_plan()
+        prefs = relation_plan["anchor_region_preferences_by_cluster"]
+        storage_pref = deepcopy(prefs.pop("work_study"))
+        storage_pref.update(
+            {
+                "role_kind": "storage",
+                "scenario_role": "secondary",
+                "zone_assignment": "right_wall_zone",
+                "committed_region_ids": ["right_wall_zone"],
+                "preferred_region_ids": [
+                    "right_wall_zone",
+                    "edge_loading_zone",
+                    "bottom_wall_zone",
+                ],
+            }
+        )
+        prefs["storage_core"] = storage_pref
+        relation_plan["anchor_layout_hints_by_cluster"] = deepcopy(prefs)
+        relation_plan["macro_concept"]["cluster_zone_plan"] = [
+            {"cluster_id": "sleep_core", "zone_assignment": "right_wall_zone"},
+            {"cluster_id": "storage_core", "zone_assignment": "right_wall_zone"},
+        ]
+        relation_plan["object_orientations"] = [
+            {
+                "cluster_id": "storage_core",
+                "object_id": "wardrobe",
+                "target_region": "right_wall_zone",
+            }
+        ]
+        relation_plan["macro_constraints"]["anchor_region_constraints"] = [
+            {
+                "cluster_id": "storage_core",
+                "zone_assignment": "right_wall_zone",
+                "forbidden_region_ids": [
+                    "door_1_entry_clearance",
+                    "entry_to_center_corridor",
+                ],
+            }
+        ]
+        relation_plan["macro_constraints"]["protected_topology"] = [
+            {
+                "region": "door_1_entry_clearance",
+                "zone_type": "entry_landing",
+                "enforcement": "hard",
+            },
+            {
+                "region": "door_1_to_room_center_corridor",
+                "zone_type": "primary_circulation_corridor",
+                "enforcement": "hard_soft",
+            },
+        ]
+        original_relation_plan = deepcopy(relation_plan)
+
+        attempts = orchestrator._build_concept_repair_attempts(
+            concept=deepcopy(relation_plan["macro_concept"]),
+            relation_plan=relation_plan,
+            merged_output=_repair_merged_output(),
+            solver_output=_unsat_solver_output(
+                reasons=["layout_incomplete"],
+                offenders=["sleep_core", "storage_core"],
+                raw_solution_count=0,
+                anchor_candidate_counts={"sleep_core": 5, "storage_core": 11},
+                failure_kind="no_compatible_anchor_set",
+                pairwise_incompatible_anchor_pairs=[
+                    {
+                        "cluster_a": "sleep_core",
+                        "cluster_b": "storage_core",
+                        "candidate_pairs": 55,
+                        "non_overlap_pairs": 0,
+                        "overlap_pairs": 55,
+                    }
+                ],
+            ),
+        )
+
+        self.assertGreaterEqual(len(attempts), 1)
+        self.assertEqual(attempts[0].repair_id, "anchor_pair_spread")
+        self.assertEqual(relation_plan, original_relation_plan)
+        repaired_plan = attempts[0].relation_plan
+        repaired_storage = repaired_plan["anchor_region_preferences_by_cluster"][
+            "storage_core"
+        ]
+        self.assertEqual(repaired_storage["zone_assignment"], "edge_loading_zone")
+        self.assertEqual(
+            repaired_storage["committed_region_ids"], ["edge_loading_zone"]
+        )
+        self.assertEqual(repaired_storage["preferred_wall_side"], "")
+        self.assertEqual(repaired_storage["committed_wall_side"], "")
+        self.assertEqual(repaired_storage["anchor_strength"], "medium")
+        self.assertEqual(repaired_storage["placement_bias"], "balanced")
+        self.assertEqual(
+            repaired_storage["placement_behavior"]["wall_backing"],
+            "preferred",
+        )
+        self.assertEqual(
+            repaired_storage["placement_behavior"]["pose_flexibility"],
+            "medium",
+        )
+        self.assertEqual(
+            repaired_plan["anchor_layout_hints_by_cluster"]["storage_core"][
+                "zone_assignment"
+            ],
+            "edge_loading_zone",
+        )
+        self.assertEqual(
+            repaired_plan["object_orientations"][0]["target_region"],
+            "edge_loading_zone",
+        )
+        constraints = repaired_plan["macro_constraints"]["anchor_region_constraints"]
+        self.assertEqual(
+            constraints[0]["forbidden_region_ids"],
+            ["door_1_entry_clearance"],
+        )
+        topology = repaired_plan["macro_constraints"]["protected_topology"]
+        self.assertNotIn("softened_for_clusters", topology[0])
+        self.assertEqual(topology[1]["softened_for_clusters"], ["storage_core"])
+        self.assertEqual(
+            topology[1]["relaxation_reason"],
+            "anchor_pair_spread_corridor_softening_after_strict_solver_failure",
         )
 
     def test_concept_repair_functional_gate_relaxes_only_offending_cluster(
@@ -1303,7 +1207,7 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             ["bookshelf"],
         )
 
-    def test_storage_front_token_repair_only_updates_offending_storage(self) -> None:
+    def test_storage_front_token_repair_preserves_valid_storage_front(self) -> None:
         merged_output: dict[str, object] = {
             "clusters": [
                 {
@@ -1336,22 +1240,555 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             diagnostics={"offending_clusters": ["storage_core"]},
         )
 
+        self.assertFalse(changed)
+        clusters = merged_output["clusters"]
+        storage = clusters[0]
+        sleep = clusters[1]
+        self.assertEqual(
+            storage["object_program"]["object_specs_by_id"]["wardrobe"]["front"],
+            "top",
+        )
+        self.assertEqual(
+            storage["cluster_rules"]["facing"]["wardrobe"]["front"],
+            "top",
+        )
+        self.assertEqual(
+            sleep["object_program"]["object_specs_by_id"]["bed"]["front"],
+            "top",
+        )
+
+    def test_storage_front_token_repair_normalizes_missing_storage_front(self) -> None:
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "object_specs_by_id": {"wardrobe": {"front": "sideways"}},
+                    },
+                    "cluster_rules": {
+                        "facing": {"wardrobe": {}},
+                    },
+                },
+                {
+                    "cluster_id": "sleep_core",
+                    "anchors": ["bed"],
+                    "object_program": {
+                        "dominant_anchor_id": "bed",
+                        "object_specs_by_id": {"bed": {"front": "sideways"}},
+                    },
+                    "cluster_rules": {
+                        "facing": {"bed": {"front": "sideways"}},
+                    },
+                },
+            ]
+        }
+
+        changed = orchestrator._apply_storage_front_token_repair(
+            merged_output=merged_output,
+            diagnostics={"offending_clusters": ["storage_core", "sleep_core"]},
+        )
+
         self.assertTrue(changed)
         clusters = merged_output["clusters"]
         storage = clusters[0]
         sleep = clusters[1]
         self.assertEqual(
             storage["object_program"]["object_specs_by_id"]["wardrobe"]["front"],
-            "left",
+            "top",
         )
         self.assertEqual(
             storage["cluster_rules"]["facing"]["wardrobe"]["front"],
-            "left",
+            "top",
         )
         self.assertEqual(
             sleep["object_program"]["object_specs_by_id"]["bed"]["front"],
+            "sideways",
+        )
+
+    def test_anchor_pair_spread_does_not_rewrite_valid_storage_front(self) -> None:
+        relation_plan: dict[str, object] = {
+            "anchor_region_preferences_by_cluster": {
+                "sleep_core": {
+                    "zone_assignment": "left_wall_zone",
+                    "preferred_region_ids": ["left_wall_zone"],
+                    "anchor_strength": "strong",
+                    "role_kind": "sleep",
+                },
+                "storage_core": {
+                    "zone_assignment": "right_wall_zone",
+                    "preferred_region_ids": [
+                        "right_wall_zone",
+                        "edge_loading_zone",
+                    ],
+                    "preferred_wall_side": "right_wall",
+                    "anchor_strength": "strong",
+                    "placement_bias": "wall_backed",
+                    "placement_behavior": {
+                        "wall_backing": "required",
+                        "pose_flexibility": "low",
+                    },
+                    "role_kind": "storage",
+                },
+            },
+            "macro_concept": {
+                "cluster_zone_plan": [
+                    {"cluster_id": "sleep_core", "zone_assignment": "right_wall_zone"},
+                    {
+                        "cluster_id": "storage_core",
+                        "zone_assignment": "right_wall_zone",
+                    },
+                ],
+            },
+            "macro_constraints": {},
+        }
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "object_specs_by_id": {"wardrobe": {"front": "top"}},
+                    },
+                    "cluster_rules": {
+                        "facing": {"wardrobe": {"front": "top"}},
+                    },
+                }
+            ]
+        }
+
+        attempt = orchestrator._make_concept_repair_attempt(
+            repair_id="anchor_pair_spread",
+            concept=deepcopy(relation_plan["macro_concept"]),
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics={
+                "offending_clusters": ["storage_core"],
+                "pairwise_incompatible_anchor_pairs": [
+                    {
+                        "cluster_a": "sleep_core",
+                        "cluster_b": "storage_core",
+                        "candidate_pairs": 12,
+                        "non_overlap_pairs": 0,
+                    }
+                ],
+                "quality_gate_reasons": ["layout_incomplete"],
+            },
+            apply_anchor_pair_spread=True,
+            apply_primary_corridor_relaxation=False,
+            apply_zone_spread=False,
+            apply_functional_gate=False,
+            apply_required_support_relaxation=False,
+            apply_support_droppable=False,
+            zone_pileup_clusters=set(),
+        )
+
+        self.assertIsNotNone(attempt)
+        if attempt is None:
+            raise AssertionError("anchor_pair_spread should produce a repair attempt")
+        storage = attempt.merged_output["clusters"][0]
+        self.assertEqual(
+            storage["object_program"]["object_specs_by_id"]["wardrobe"]["front"],
             "top",
         )
+        self.assertEqual(
+            storage["cluster_rules"]["facing"]["wardrobe"]["front"],
+            "top",
+        )
+        self.assertNotIn(
+            "Normalized missing storage-anchor front metadata.",
+            attempt.notes,
+        )
+
+    def test_secondary_front_access_relaxation_softens_storage_not_bed(self) -> None:
+        relation_plan: dict[str, object] = {
+            "anchor_region_preferences_by_cluster": {
+                "sleep_core": {
+                    "zone_assignment": "right_wall_zone",
+                    "preferred_region_ids": ["right_wall_zone"],
+                    "role_kind": "sleep",
+                    "scenario_role": "primary",
+                },
+                "storage_core": {
+                    "zone_assignment": "edge_loading_zone",
+                    "preferred_region_ids": ["edge_loading_zone"],
+                    "role_kind": "storage",
+                    "scenario_role": "support",
+                },
+            },
+            "macro_concept": {"cluster_zone_plan": []},
+        }
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "sleep_core",
+                    "anchors": ["bed"],
+                    "object_program": {
+                        "dominant_anchor_id": "bed",
+                        "required_object_ids": ["bed"],
+                        "protected_ids": ["bed"],
+                    },
+                    "cluster_rules": {
+                        "access_requirements": [
+                            {"id": "bed", "type": "front_clearance", "required": True}
+                        ]
+                    },
+                },
+                {
+                    "cluster_id": "storage_core",
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "required_object_ids": ["wardrobe"],
+                        "protected_ids": ["wardrobe"],
+                    },
+                    "cluster_rules": {
+                        "access_requirements": [
+                            {
+                                "id": "wardrobe",
+                                "type": "front_clearance",
+                                "required": True,
+                            }
+                        ]
+                    },
+                },
+            ]
+        }
+        original_merged = deepcopy(merged_output)
+
+        attempt = orchestrator._make_concept_repair_attempt(
+            repair_id="secondary_front_access_relaxation",
+            concept=deepcopy(relation_plan["macro_concept"]),
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            diagnostics={
+                "quality_gate_reasons": ["front_access_zone_blocked"],
+                "front_access_blocking_pairs": [
+                    {
+                        "blocker_cluster_id": "sleep_core",
+                        "blocker_object_id": "bed",
+                        "blocked_cluster_id": "storage_core",
+                        "blocked_object_id": "wardrobe",
+                    }
+                ],
+            },
+            apply_anchor_pair_spread=False,
+            apply_primary_corridor_relaxation=False,
+            apply_zone_spread=False,
+            apply_functional_gate=False,
+            apply_required_support_relaxation=False,
+            apply_support_droppable=False,
+            apply_secondary_front_access_relaxation=True,
+            zone_pileup_clusters=set(),
+        )
+
+        self.assertIsNotNone(attempt)
+        if attempt is None:
+            raise AssertionError("secondary front access repair should be built")
+        self.assertEqual(merged_output, original_merged)
+        repaired_clusters = {
+            cluster["cluster_id"]: cluster
+            for cluster in attempt.merged_output["clusters"]
+        }
+        bed_access = repaired_clusters["sleep_core"]["cluster_rules"][
+            "access_requirements"
+        ][0]
+        wardrobe_access = repaired_clusters["storage_core"]["cluster_rules"][
+            "access_requirements"
+        ][0]
+        self.assertTrue(bed_access["required"])
+        self.assertFalse(wardrobe_access["required"])
+        self.assertEqual(
+            wardrobe_access["relaxation_reason"],
+            "front_access_pair_conflict_after_anchor_pair_spread",
+        )
+        self.assertEqual(
+            repaired_clusters["storage_core"]["object_program"]["required_object_ids"],
+            ["wardrobe"],
+        )
+        self.assertEqual(
+            repaired_clusters["storage_core"]["object_program"]["protected_ids"],
+            ["wardrobe"],
+        )
+
+    def test_secondary_storage_wall_rehome_runs_before_front_relaxation(self) -> None:
+        relation_plan: dict[str, object] = {
+            "anchor_region_preferences_by_cluster": {
+                "sleep_core": {
+                    "zone_assignment": "left_wall_zone",
+                    "preferred_region_ids": ["left_wall_zone"],
+                    "role_kind": "sleep",
+                    "scenario_role": "primary",
+                },
+                "storage_core": {
+                    "zone_assignment": "right_wall_zone",
+                    "committed_region_ids": ["right_wall_zone"],
+                    "preferred_region_ids": [
+                        "right_wall_zone",
+                        "top_wall_zone",
+                    ],
+                    "preferred_wall_side": "right_wall",
+                    "committed_wall_side": "right_wall",
+                    "anchor_strength": "strong",
+                    "placement_bias": "wall_backed",
+                    "placement_behavior": {
+                        "wall_backing": "required",
+                        "front_space": "required",
+                        "pose_flexibility": "low",
+                    },
+                    "role_kind": "storage",
+                    "scenario_role": "secondary",
+                },
+            },
+            "macro_concept": {
+                "cluster_zone_plan": [
+                    {
+                        "cluster_id": "storage_core",
+                        "zone_assignment": "right_wall_zone",
+                    }
+                ],
+            },
+            "macro_constraints": {
+                "anchor_region_constraints": [
+                    {
+                        "cluster_id": "storage_core",
+                        "zone_assignment": "right_wall_zone",
+                    }
+                ]
+            },
+        }
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "members": ["wardrobe"],
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "required_object_ids": ["wardrobe"],
+                        "protected_ids": ["wardrobe"],
+                    },
+                    "cluster_rules": {
+                        "access_requirements": [
+                            {
+                                "id": "wardrobe",
+                                "type": "front_clearance",
+                                "required": True,
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        original_relation_plan = deepcopy(relation_plan)
+        attempts = orchestrator._build_concept_repair_attempts(
+            concept=deepcopy(relation_plan["macro_concept"]),
+            relation_plan=relation_plan,
+            merged_output=merged_output,
+            solver_output=_front_access_unsat_with_storage_wall_option(),
+        )
+
+        self.assertTrue(attempts)
+        self.assertEqual(attempts[0].repair_id, "secondary_storage_wall_rehome")
+        repaired_plan = attempts[0].relation_plan
+        storage_pref = repaired_plan["anchor_region_preferences_by_cluster"][
+            "storage_core"
+        ]
+        self.assertEqual(storage_pref["zone_assignment"], "top_wall_zone")
+        self.assertEqual(storage_pref["committed_region_ids"], ["top_wall_zone"])
+        self.assertEqual(storage_pref["committed_wall_side"], "top_wall")
+        self.assertEqual(storage_pref["preferred_wall_side"], "top_wall")
+        self.assertEqual(storage_pref["anchor_strength"], "medium")
+        self.assertEqual(
+            storage_pref["placement_behavior"]["wall_backing"],
+            "preferred",
+        )
+        self.assertEqual(
+            storage_pref["placement_behavior"]["pose_flexibility"],
+            "medium",
+        )
+        storage = attempts[0].merged_output["clusters"][0]
+        self.assertTrue(storage["cluster_rules"]["access_requirements"][0]["required"])
+        self.assertEqual(relation_plan, original_relation_plan)
+
+    def test_repair_queue_chains_anchor_pair_to_secondary_front_access(self) -> None:
+        relation_plan: dict[str, object] = {
+            "anchor_region_preferences_by_cluster": {
+                "sleep_core": {
+                    "zone_assignment": "left_wall_zone",
+                    "preferred_region_ids": ["left_wall_zone"],
+                    "anchor_strength": "strong",
+                    "role_kind": "sleep",
+                    "scenario_role": "primary",
+                },
+                "storage_core": {
+                    "zone_assignment": "right_wall_zone",
+                    "preferred_region_ids": [
+                        "right_wall_zone",
+                        "edge_loading_zone",
+                    ],
+                    "preferred_wall_side": "right_wall",
+                    "anchor_strength": "strong",
+                    "placement_bias": "wall_backed",
+                    "placement_behavior": {
+                        "wall_backing": "required",
+                        "pose_flexibility": "low",
+                    },
+                    "role_kind": "storage",
+                    "scenario_role": "support",
+                },
+            },
+            "macro_concept": {
+                "cluster_zone_plan": [
+                    {"cluster_id": "sleep_core", "zone_assignment": "left_wall_zone"},
+                    {
+                        "cluster_id": "storage_core",
+                        "zone_assignment": "right_wall_zone",
+                    },
+                ],
+            },
+            "macro_constraints": {},
+        }
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "members": ["wardrobe"],
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "required_object_ids": ["wardrobe"],
+                        "protected_ids": ["wardrobe"],
+                    },
+                    "cluster_rules": {
+                        "access_requirements": [
+                            {
+                                "id": "wardrobe",
+                                "type": "front_clearance",
+                                "required": True,
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        solver = _FakeObjectLevelSolver(
+            [
+                _unsat_solver_output(
+                    reasons=["layout_incomplete"],
+                    offenders=["sleep_core", "storage_core"],
+                    raw_solution_count=0,
+                    anchor_candidate_counts={"sleep_core": 5, "storage_core": 8},
+                    failure_kind="no_compatible_anchor_set",
+                    pairwise_incompatible_anchor_pairs=[
+                        {
+                            "cluster_a": "sleep_core",
+                            "cluster_b": "storage_core",
+                            "candidate_pairs": 40,
+                            "non_overlap_pairs": 0,
+                            "overlap_pairs": 40,
+                        }
+                    ],
+                ),
+                _front_access_unsat_solver_output(),
+                _ok_object_solver_output(),
+            ]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept=deepcopy(relation_plan["macro_concept"]),
+            relation_plan=relation_plan,
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=merged_output,
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+
+        self.assertEqual(len(solve_result.bundles), 1)
+        self.assertEqual(len(solver.calls), 3)
+        bundle = solve_result.bundles[0]
+        self.assertEqual(
+            bundle["concept_repair_attempt"],
+            "secondary_front_access_relaxation",
+        )
+        repaired_merged = solver.calls[2]["merged_clusters_json"]
+        storage = repaired_merged["clusters"][0]
+        self.assertFalse(storage["cluster_rules"]["access_requirements"][0]["required"])
+
+    def test_secondary_daylight_quality_relaxation_marks_storage_object(self) -> None:
+        relation_plan: dict[str, object] = {
+            "anchor_region_preferences_by_cluster": {
+                "storage_core": {
+                    "zone_assignment": "right_wall_zone",
+                    "preferred_region_ids": ["right_wall_zone", "bottom_wall_zone"],
+                    "role_kind": "storage",
+                    "scenario_role": "support",
+                }
+            },
+            "macro_concept": {
+                "cluster_zone_plan": [
+                    {
+                        "cluster_id": "storage_core",
+                        "zone_assignment": "right_wall_zone",
+                    }
+                ],
+            },
+            "macro_constraints": {},
+        }
+        merged_output: dict[str, object] = {
+            "clusters": [
+                {
+                    "cluster_id": "storage_core",
+                    "members": ["wardrobe"],
+                    "anchors": ["wardrobe"],
+                    "object_program": {
+                        "dominant_anchor_id": "wardrobe",
+                        "required_object_ids": ["wardrobe"],
+                        "protected_ids": ["wardrobe"],
+                        "object_specs_by_id": {
+                            "wardrobe": {
+                                "object_id": "wardrobe",
+                                "category": "wardrobe",
+                                "protected": True,
+                                "droppable": False,
+                            }
+                        },
+                    },
+                    "cluster_rules": {},
+                }
+            ]
+        }
+        solver = _FakeObjectLevelSolver(
+            [_daylight_quality_unsat_solver_output(), _ok_object_solver_output()]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "edge_weighted"},
+            relation_plan=relation_plan,
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=merged_output,
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+
+        self.assertEqual(len(solve_result.bundles), 1)
+        self.assertEqual(len(solver.calls), 2)
+        repaired = solver.calls[1]["merged_clusters_json"]["clusters"][0]
+        object_program = repaired["object_program"]
+        self.assertEqual(object_program["protected_ids"], ["wardrobe"])
+        self.assertEqual(object_program["required_object_ids"], ["wardrobe"])
+        wardrobe = object_program["object_specs_by_id"]["wardrobe"]
+        self.assertTrue(wardrobe["daylight_quality_relaxed"])
 
     def test_object_level_variant_retry_uses_repair_when_initial_unsat(self) -> None:
         solver = _FakeObjectLevelSolver(
@@ -1392,6 +1829,56 @@ class OrchestratorArchitectureTest(unittest.TestCase):
             ],
             "right_wall_zone",
         )
+
+    def test_object_level_variant_invokes_anchor_pair_spread_repair(
+        self,
+    ) -> None:
+        solver = _FakeObjectLevelSolver(
+            [
+                _unsat_solver_output(
+                    reasons=["layout_incomplete"],
+                    offenders=["sleep_core", "work_study"],
+                    raw_solution_count=0,
+                    anchor_candidate_counts={"sleep_core": 5, "work_study": 8},
+                    failure_kind="no_compatible_anchor_set",
+                    pairwise_incompatible_anchor_pairs=[
+                        {
+                            "cluster_a": "sleep_core",
+                            "cluster_b": "work_study",
+                            "candidate_pairs": 40,
+                            "non_overlap_pairs": 0,
+                            "overlap_pairs": 40,
+                        }
+                    ],
+                ),
+                _ok_object_solver_output(),
+            ]
+        )
+
+        solve_result = orchestrator._solve_object_level_variant_bundle(
+            concept={"concept_id": "concept_01", "concept_family": "daylight"},
+            relation_plan=_repair_relation_plan(),
+            room_output={"room": {"room_id": "room_1"}},
+            cluster_output={"clusters": []},
+            tier_output={"decisions": []},
+            merged_output=_repair_merged_output(),
+            solver=solver,
+            manual_placements=None,
+            variant_index=1,
+            ablation_mode="full",
+        )
+        bundles = solve_result.bundles
+
+        self.assertEqual(len(bundles), 1)
+        self.assertEqual(len(solver.calls), 2)
+        self.assertTrue(bundles[0]["concept_repair_applied"])
+        self.assertEqual(bundles[0]["concept_repair_attempt"], "anchor_pair_spread")
+        repaired_relation = solver.calls[1]["relation_plan_json"]
+        repaired_work = repaired_relation["anchor_region_preferences_by_cluster"][
+            "work_study"
+        ]
+        self.assertEqual(repaired_work["zone_assignment"], "edge_loading_zone")
+        self.assertEqual(repaired_work["committed_region_ids"], ["edge_loading_zone"])
 
     def test_object_level_variant_ok_does_not_call_repair(self) -> None:
         solver = _FakeObjectLevelSolver([_ok_object_solver_output()])
@@ -1456,7 +1943,10 @@ class OrchestratorArchitectureTest(unittest.TestCase):
 
         self.assertEqual(solve_result.bundles, [])
         self.assertTrue(solve_result.failure_diagnostics)
-        self.assertLessEqual(len(solver.calls), 4)
+        self.assertLessEqual(
+            len(solver.calls),
+            orchestrator._CONCEPT_REPAIR_MAX_ATTEMPTS + 1,
+        )
 
     def test_no_concept_repair_ablation_skips_repair_attempts(self) -> None:
         solver = _FakeObjectLevelSolver(

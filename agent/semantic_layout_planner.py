@@ -38,11 +38,7 @@ from layout.semantic_roles import (
     is_seat_like,
     is_work_surface_like,
 )
-from prompt.semantic_layout_planner import (
-    SEMANTIC_LAYOUT_PLANNER_SYSTEM_PROMPT,
-    SEMANTIC_LAYOUT_PLANNER_USER_PROMPT,
-)
-from stylist.semantic_program_rules import get_compiled_semantic_room_rule
+from stylist.rules import get_compiled_semantic_room_rule
 from stylist.style_policy import apply_style_policy_to_semantic_program
 
 logger = logging.getLogger(__name__)
@@ -69,7 +65,6 @@ _REQUEST_CONTRACT_STAGE_NOTE = (
 @dataclass(frozen=True)
 class _AdaptiveStageSpec:
     model_config_keys: tuple[str, str, str]
-    default_model_chain: tuple[str, ...]
     system_prompt: str
     task_prompt: str
     output_contract: str
@@ -89,7 +84,6 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_request_contract_fallback_primary",
             "planner_adaptive_request_contract_fallback_secondary",
         ),
-        default_model_chain=(),
         system_prompt=(
             "You extract executable request intent for an interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -137,7 +131,6 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_room_rule_fallback_primary",
             "planner_adaptive_room_rule_fallback_secondary",
         ),
-        default_model_chain=(),
         system_prompt=(
             "You adapt semantic room rules for a deterministic interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -171,7 +164,6 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_candidate_overrides_fallback_primary",
             "planner_adaptive_candidate_overrides_fallback_secondary",
         ),
-        default_model_chain=(),
         system_prompt=(
             "You produce executable cluster candidate overrides for a deterministic planner. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -211,7 +203,6 @@ _ADAPTIVE_STAGE_SPECS: dict[str, _AdaptiveStageSpec] = {
             "planner_adaptive_cluster_semantics_fallback_primary",
             "planner_adaptive_cluster_semantics_fallback_secondary",
         ),
-        default_model_chain=(),
         system_prompt=(
             "You assign compact semantic intent for already-active clusters in a deterministic interior layout pipeline. "
             "Return exactly one JSON object. No markdown. No prose outside JSON. "
@@ -486,9 +477,6 @@ _ADAPTIVE_CLUSTER_SEMANTICS_RESPONSE_SCHEMA: dict[str, object] = {
 
 @dataclass(frozen=True)
 class SemanticLayoutPlanner:
-    system_prompt: str = SEMANTIC_LAYOUT_PLANNER_SYSTEM_PROMPT
-    prompt_template: str = SEMANTIC_LAYOUT_PLANNER_USER_PROMPT
-
     def generate(
         self,
         *,
@@ -619,123 +607,6 @@ class SemanticLayoutPlanner:
 
         if not use_llm or not candidates:
             return SemanticLayoutProgram.model_validate(deterministic_program)
-
-        try:
-            llm_payload = self._generate_llm_payload(
-                room_type=room_type,
-                brief_text=brief_text,
-                room_rules=room_rules,
-                affordance_summary=affordance_summary,
-                candidates=candidates,
-                deterministic_program=deterministic_program,
-                style_policy=style_policy,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-            )
-        except Exception as exc:
-            logger.warning(
-                "SemanticLayoutPlanner LLM pass failed; using deterministic program: %s",
-                exc,
-            )
-            return SemanticLayoutProgram.model_validate(deterministic_program)
-
-        merged = _validate_and_normalize_llm_program(
-            llm_payload=llm_payload,
-            deterministic_program=deterministic_program,
-            room_type=room_type,
-            room_rules=room_rules,
-            candidates=candidates,
-            affordance_summary=affordance_summary,
-        )
-        merged = apply_style_policy_to_semantic_program(merged, style_policy)
-        merged = _normalize_profile_semantic_program(
-            merged,
-            affordance_summary=affordance_summary,
-        )
-        return SemanticLayoutProgram.model_validate(merged)
-
-    def _generate_llm_payload(
-        self,
-        *,
-        room_type: str,
-        brief_text: str,
-        room_rules: Mapping[str, Any],
-        affordance_summary: Mapping[str, Any],
-        candidates: Sequence[Mapping[str, Any]],
-        deterministic_program: Mapping[str, Any],
-        style_policy: Mapping[str, Any] | None,
-        temperature: float,
-        top_p: float,
-        max_tokens: int | None,
-    ) -> dict[str, Any]:
-        prompt_payload = {
-            "room_type": room_type,
-            "brief": {"text": brief_text},
-            "room_affordance_summary": affordance_summary,
-            "canonical_global_rules": room_rules.get("global_program") or {},
-            "policy": room_rules.get("policy") or {},
-            "style_policy": dict(style_policy or {}),
-            "candidate_clusters": list(candidates)[:_CLUSTER_CANDIDATE_CAP],
-            "deterministic_seed_program": {
-                "active_clusters": deterministic_program.get("active_clusters") or [],
-                "global_layout_intent": deterministic_program.get(
-                    "global_layout_intent"
-                )
-                or {},
-                "macro_relations": deterministic_program.get("macro_relations") or {},
-            },
-            "limits": {
-                "relation_intent_cap_per_cluster": _RELATION_INTENT_CAP_PER_CLUSTER,
-                "zone_claim_cap_per_cluster": _ZONE_CLAIM_CAP_PER_CLUSTER,
-                "global_relation_cap": _GLOBAL_RELATION_CAP,
-                "degradation_steps_cap_per_cluster": _DEGRADATION_STEPS_CAP_PER_CLUSTER,
-                "llm_temperature": temperature,
-                "llm_top_p": top_p,
-            },
-        }
-        user_prompt = self.prompt_template.replace(
-            "{PAYLOAD_JSON}",
-            json.dumps(prompt_payload, ensure_ascii=True, indent=2),
-        )
-        messages: list[ChatMessage] = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        client = get_llm_client()
-        model_name = TextLLMConfig.agent_model("forge") or TextLLMConfig.agent_model(
-            "planner"
-        )
-        last_raw = ""
-        for attempt in range(2):
-            response = client.chat_completion(
-                messages,
-                model_key="primary",
-                model_name=model_name,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                response_mime_type=_RESPONSE_MIME_TYPE,
-            )
-            last_raw = _extract_content(response)
-            try:
-                return _parse_json(last_raw)
-            except ValueError:
-                if attempt == 1:
-                    raise
-                _record_llm_retry(
-                    stage="semantic_layout_planner.main",
-                    model_name=model_name,
-                    reason="invalid_json",
-                )
-                messages.append({"role": "assistant", "content": last_raw})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "Return valid strict JSON only, with no markdown or prose.",
-                    }
-                )
-        raise ValueError("SemanticLayoutPlanner returned invalid JSON")
 
     def _attach_llm_request_contract_if_enabled(
         self,
@@ -1122,7 +993,7 @@ def summarize_room_affordance(room_model_json: Mapping[str, Any]) -> dict[str, A
     }
 
 
-def semantic_program_to_cluster_forge_payload(
+def semantic_program_to_seed_relation_payload(
     semantic_program: Mapping[str, Any],
 ) -> dict[str, Any]:
     clusters: list[dict[str, Any]] = []
@@ -1200,6 +1071,9 @@ def semantic_program_to_cluster_forge_payload(
         "notes": list(semantic_program.get("notes") or []),
         "missing": list(semantic_program.get("missing") or []),
     }
+
+
+semantic_program_to_cluster_forge_payload = semantic_program_to_seed_relation_payload
 
 
 def _anchor_first_policy_for_active_cluster(
@@ -1784,82 +1658,6 @@ def _build_deterministic_program(
             "Planner output is cluster/bundle/zone level only; pose is left to downstream composer and solver.",
         ],
     }
-
-
-def _validate_and_normalize_llm_program(
-    *,
-    llm_payload: Mapping[str, Any],
-    deterministic_program: Mapping[str, Any],
-    room_type: str,
-    room_rules: Mapping[str, Any],
-    candidates: Sequence[Mapping[str, Any]],
-    affordance_summary: Mapping[str, Any],
-) -> dict[str, Any]:
-    _ = room_rules
-    allowed_candidates = {str(row.get("cluster_id")): row for row in candidates}
-    deterministic_by_id = {
-        str(row.get("cluster_id")): row
-        for row in deterministic_program.get("active_clusters") or []
-        if isinstance(row, Mapping)
-    }
-    raw_clusters = llm_payload.get("active_clusters")
-    active_clusters: list[dict[str, Any]] = []
-    if isinstance(raw_clusters, list):
-        for raw_cluster in raw_clusters:
-            if not isinstance(raw_cluster, Mapping):
-                continue
-            cluster_id = str(raw_cluster.get("cluster_id") or "").strip()
-            if cluster_id not in allowed_candidates:
-                continue
-            base = deterministic_by_id.get(cluster_id)
-            if base is None:
-                continue
-            merged = dict(base)
-            merged["layout_role"] = _require_layout_role(
-                raw_cluster.get("layout_role"),
-                context=f"semantic_layout_program cluster `{cluster_id}`",
-            )
-            if isinstance(raw_cluster.get("semantic_role"), str):
-                merged["semantic_role"] = str(raw_cluster["semantic_role"]).strip()
-            if isinstance(raw_cluster.get("zone_claims"), Mapping):
-                merged["zone_claims"] = _normalize_zone_claims(
-                    raw_cluster.get("zone_claims"),
-                    fallback=base.get("zone_claims"),
-                    affordance_summary=affordance_summary,
-                )
-            if isinstance(raw_cluster.get("relation_intents"), list):
-                merged["relation_intents"] = _normalize_relation_intents(
-                    raw_cluster.get("relation_intents"),
-                    allowed_cluster_ids=set(allowed_candidates),
-                )
-            if isinstance(raw_cluster.get("degradation_ladder"), list):
-                merged["degradation_ladder"] = _string_list(
-                    raw_cluster.get("degradation_ladder")
-                )[:_DEGRADATION_STEPS_CAP_PER_CLUSTER]
-            active_clusters.append(merged)
-    if not active_clusters:
-        return dict(deterministic_program)
-
-    out = dict(deterministic_program)
-    out["room_type"] = room_type
-    out["active_clusters"] = active_clusters
-    out["macro_relations"] = _build_macro_relations(
-        active_clusters=active_clusters,
-        room_type=room_type,
-        affordance_summary=affordance_summary,
-    )
-    out["controlled_degradation"] = _build_controlled_degradation(
-        active_clusters=active_clusters,
-        global_program=out.get("selection_constraints") or {},
-    )
-    profile_layout_trace = profile_layout_trace_for_active_clusters(
-        room_type=room_type,
-        active_clusters=active_clusters,
-    )
-    out["profile_layout_trace"] = profile_layout_trace
-    out["profile_shadow_trace"] = profile_layout_trace
-    out["confidence"] = max(float(out.get("confidence") or 0.75), 0.82)
-    return out
 
 
 def _require_layout_role(value: Any, *, context: str) -> str:
@@ -2623,10 +2421,7 @@ def _adaptive_stage_spec(stage_name: str) -> _AdaptiveStageSpec:
 
 def _adaptive_stage_model_chain(stage_name: str) -> list[str]:
     stage_spec = _adaptive_stage_spec(stage_name)
-    return TextLLMConfig.agent_model_chain(
-        stage_spec.model_config_keys,
-        stage_spec.default_model_chain,
-    )
+    return TextLLMConfig.agent_model_chain(stage_spec.model_config_keys)
 
 
 def _adaptive_stage_response_schema(stage_name: str) -> Mapping[str, object] | None:
@@ -3828,18 +3623,6 @@ def _uniq(values: Sequence[str]) -> list[str]:
     for value in values:
         if value and value not in out:
             out.append(value)
-    return out
-
-
-def _uniq_model_names(values: Sequence[str]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = value.strip().lower()
-        if not normalized or normalized in seen:
-            continue
-        out.append(value)
-        seen.add(normalized)
     return out
 
 

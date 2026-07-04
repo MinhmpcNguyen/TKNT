@@ -3,7 +3,7 @@
 // We intentionally avoid importing Three.js here. The caller passes the `THREE`
 // module (vendored) so this file stays bundler-friendly.
 
-export type ProxyBuildParams = {
+type ProxyBuildParams = {
   type: string;
   wM: number; // width in meters (X axis)
   dM: number; // depth in meters (Z axis)

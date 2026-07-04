@@ -10,9 +10,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-merge_cluster_outputs = importlib.import_module(
-    "cluster_composer.merge"
-).merge_cluster_outputs
+build_solver_object_program = importlib.import_module(
+    "object_program.builder"
+).build_solver_object_program
 
 
 def _decision(
@@ -57,7 +57,7 @@ def _decision(
 
 class ClusterMergeArchitectureTest(unittest.TestCase):
     def test_merge_materializes_quantity_instances_in_object_program(self) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "sleep_core",
@@ -105,7 +105,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
         cluster = merged["clusters"][0]
         object_program = cluster["object_program"]
 
@@ -138,7 +138,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         )
 
     def test_merge_routes_post_solver_accessory_out_of_solver_program(self) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "media_wall",
@@ -172,7 +172,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
 
         self.assertEqual(merged["active_cluster_ids"], ["media_wall"])
         self.assertEqual(merged["clusters"][0]["members"], ["tv_console"])
@@ -185,8 +185,8 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             "post_solver_accessory",
         )
 
-    def test_requested_bookshelf_is_required_support_not_protected_anchor(self) -> None:
-        cluster_forge = {
+    def test_target_if_viable_bookshelf_stays_droppable_support(self) -> None:
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "storage_core",
@@ -231,20 +231,21 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
         object_program = merged["clusters"][0]["object_program"]
 
-        self.assertIn("bookshelf", object_program["required_object_ids"])
-        self.assertEqual(object_program["required_support_ids"], ["bookshelf"])
-        self.assertEqual(object_program["relaxable_required_ids"], ["bookshelf"])
+        self.assertEqual(object_program["required_object_ids"], ["wardrobe"])
+        self.assertEqual(object_program["optional_object_ids"], ["bookshelf"])
+        self.assertEqual(object_program["required_support_ids"], [])
+        self.assertEqual(object_program["relaxable_required_ids"], [])
         self.assertEqual(object_program["protected_ids"], ["wardrobe"])
-        self.assertNotIn("bookshelf", object_program["droppable_ids"])
-        self.assertTrue(
+        self.assertEqual(object_program["droppable_ids"], ["bookshelf"])
+        self.assertFalse(
             object_program["object_specs_by_id"]["bookshelf"]["required_support"]
         )
 
     def test_merge_uses_min_keep_not_preserve_level_for_required_copies(self) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "activity_core",
@@ -281,7 +282,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
         object_program = merged["clusters"][0]["object_program"]
 
         self.assertEqual(
@@ -295,7 +296,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         )
 
     def test_merge_preserves_drop_actions_after_instance_expansion(self) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "kitchen_dining_core",
@@ -335,7 +336,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
         object_program = merged["clusters"][0]["object_program"]
 
         self.assertEqual(
@@ -349,17 +350,17 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         )
         self.assertEqual(
             object_program["droppable_ids"],
-            ["dining_chair_2"],
+            ["dining_chair", "dining_chair_2"],
         )
         self.assertEqual(
             object_program["protected_ids"],
-            ["dining_table", "dining_chair"],
+            ["dining_table"],
         )
 
-    def test_merge_reconciles_required_range_instances_without_protecting_extra_copy(
+    def test_merge_keeps_soft_range_instances_optional_and_droppable(
         self,
     ) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "sleep_core",
@@ -404,7 +405,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
         object_program = merged["clusters"][0]["object_program"]
         object_specs = object_program["object_specs_by_id"]
 
@@ -414,15 +415,86 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
         )
         self.assertEqual(
             object_program["required_object_ids"],
+            ["bed"],
+        )
+        self.assertEqual(
+            object_program["optional_object_ids"],
+            ["nightstand", "nightstand_2"],
+        )
+        self.assertEqual(object_program["protected_ids"], ["bed"])
+        self.assertEqual(
+            object_program["droppable_ids"],
+            ["nightstand", "nightstand_2"],
+        )
+        self.assertEqual(
+            set(object_program["protected_ids"]) & set(object_program["droppable_ids"]),
+            set(),
+        )
+        self.assertFalse(object_specs["nightstand"]["protected"])
+        self.assertTrue(object_specs["nightstand"]["droppable"])
+        self.assertFalse(object_specs["nightstand_2"]["protected"])
+        self.assertTrue(object_specs["nightstand_2"]["droppable"])
+
+    def test_merge_protects_only_minimum_copy_for_hard_range_request(
+        self,
+    ) -> None:
+        seed_relation_plan = {
+            "clusters": [
+                {
+                    "cluster_id": "sleep_core",
+                    "members": ["bed", "nightstand"],
+                    "anchors": ["bed"],
+                    "cluster_rules": {
+                        "semantic_placements": [
+                            {
+                                "id": "nightstand",
+                                "relative_to": "bed",
+                                "kind": "anchor_side",
+                                "side_options": ["head_left", "head_right"],
+                                "support_role": "side_support",
+                                "band_intent": "beside_base",
+                            },
+                        ],
+                        "anchor_first_policy": {
+                            "dominant_anchor_id": "bed",
+                            "protected_ids": ["bed", "nightstand"],
+                            "droppable_ids": ["nightstand"],
+                        },
+                    },
+                }
+            ],
+        }
+        tier_count = {
+            "decisions": [
+                _decision(
+                    "bed",
+                    role="dominant_anchor",
+                    min_keep=1,
+                    protected=True,
+                ),
+                _decision(
+                    "nightstand",
+                    quantity=2,
+                    min_keep=1,
+                    protected=True,
+                    droppable=True,
+                    request_contract_intent="must_keep",
+                    request_contract_target_count=2,
+                ),
+            ],
+        }
+
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
+        object_program = merged["clusters"][0]["object_program"]
+        object_specs = object_program["object_specs_by_id"]
+
+        self.assertEqual(
+            object_program["required_object_ids"],
             ["bed", "nightstand"],
         )
         self.assertEqual(object_program["optional_object_ids"], ["nightstand_2"])
         self.assertEqual(object_program["protected_ids"], ["bed", "nightstand"])
         self.assertEqual(object_program["droppable_ids"], ["nightstand_2"])
-        self.assertEqual(
-            set(object_program["protected_ids"]) & set(object_program["droppable_ids"]),
-            set(),
-        )
         self.assertTrue(object_specs["nightstand"]["protected"])
         self.assertFalse(object_specs["nightstand"]["droppable"])
         self.assertFalse(object_specs["nightstand_2"]["protected"])
@@ -431,7 +503,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
     def test_merge_drops_optional_surface_when_required_seat_was_budget_removed(
         self,
     ) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "work_study",
@@ -472,7 +544,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
 
         self.assertEqual(merged["clusters"], [])
         self.assertEqual(merged["active_cluster_ids"], [])
@@ -480,7 +552,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
     def test_merge_promotes_seat_when_hard_surface_was_requested(
         self,
     ) -> None:
-        cluster_forge = {
+        seed_relation_plan = {
             "clusters": [
                 {
                     "cluster_id": "work_study",
@@ -518,7 +590,7 @@ class ClusterMergeArchitectureTest(unittest.TestCase):
             ],
         }
 
-        merged = merge_cluster_outputs(cluster_forge, tier_count)
+        merged = build_solver_object_program(seed_relation_plan, tier_count)
 
         self.assertEqual(merged["active_cluster_ids"], ["work_study"])
         self.assertEqual(merged["clusters"][0]["members"], ["desk", "chair"])

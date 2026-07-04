@@ -23,7 +23,7 @@ class PostgresConfig:
         return f"postgresql://{self.user}:{password}@{self.host}:{self.port}/{self.database}"
 
 
-def load_postgres_config() -> PostgresConfig:
+def _load_postgres_config() -> PostgresConfig:
     return PostgresConfig(
         host=settings.PG_HOST,
         port=settings.PG_PORT,
@@ -34,7 +34,7 @@ def load_postgres_config() -> PostgresConfig:
 
 
 def create_connection(config: PostgresConfig | None = None) -> Connection[dict]:
-    resolved = config or load_postgres_config()
+    resolved = config or _load_postgres_config()
     if resolved.host.startswith("/"):
         return psycopg.connect(
             dbname=resolved.database,

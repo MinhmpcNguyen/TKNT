@@ -5,8 +5,15 @@ import os
 from config.settings import settings
 
 VECTOR_DIMENSIONS = settings.VECTOR_DIMS
-DEFAULT_SHARED_INVENTORY_TENANT = os.getenv(
-    "TKNT_SHARED_INVENTORY_TENANT_ID", "demo_tenant"
+_SHARED_INVENTORY_TENANT_ENV = "TKNT_SHARED_INVENTORY_TENANT_ID"
+_DEFAULT_SHARED_INVENTORY_TENANT = "demo_tenant"
+DEFAULT_SHARED_INVENTORY_TENANT = (
+    os.getenv(_SHARED_INVENTORY_TENANT_ENV, _DEFAULT_SHARED_INVENTORY_TENANT).strip()
+    or _DEFAULT_SHARED_INVENTORY_TENANT
+)
+DEFAULT_SHARED_INVENTORY_TENANT_SQL = DEFAULT_SHARED_INVENTORY_TENANT.replace(
+    "'",
+    "''",
 )
 
 
@@ -36,41 +43,6 @@ def get_schema_statements() -> list[str]:
         "ALTER TABLE assets ADD COLUMN IF NOT EXISTS width_mm DOUBLE PRECISION;",
         "ALTER TABLE assets ADD COLUMN IF NOT EXISTS height_mm DOUBLE PRECISION;",
         """
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'assets' AND column_name = 'length_cm'
-            ) THEN
-                UPDATE assets
-                SET length_mm = length_cm * 10
-                WHERE length_mm IS NULL AND length_cm IS NOT NULL;
-            END IF;
-            IF EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'assets' AND column_name = 'width_cm'
-            ) THEN
-                UPDATE assets
-                SET width_mm = width_cm * 10
-                WHERE width_mm IS NULL AND width_cm IS NOT NULL;
-            END IF;
-            IF EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'assets' AND column_name = 'height_cm'
-            ) THEN
-                UPDATE assets
-                SET height_mm = height_cm * 10
-                WHERE height_mm IS NULL AND height_cm IS NOT NULL;
-            END IF;
-        END $$;
-        """,
-        "ALTER TABLE assets DROP COLUMN IF EXISTS length_cm;",
-        "ALTER TABLE assets DROP COLUMN IF EXISTS width_cm;",
-        "ALTER TABLE assets DROP COLUMN IF EXISTS height_cm;",
-        """
         CREATE TABLE IF NOT EXISTS asset_files (
             id TEXT PRIMARY KEY,
             asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
@@ -83,6 +55,7 @@ def get_schema_statements() -> list[str]:
             bytes_size BIGINT,
             role TEXT,
             meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+            content_bytes BYTEA,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         """,
@@ -171,7 +144,7 @@ def get_runtime_asset_schema_statements() -> list[str]:
         "ALTER TABLE assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
         f"""
         UPDATE assets
-        SET tenant_id = '{DEFAULT_SHARED_INVENTORY_TENANT}'
+        SET tenant_id = '{DEFAULT_SHARED_INVENTORY_TENANT_SQL}'
         WHERE tenant_id IS NULL OR btrim(tenant_id) = '';
         """,
         """
@@ -187,6 +160,7 @@ def get_runtime_asset_schema_statements() -> list[str]:
             bytes_size BIGINT,
             role TEXT,
             meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+            content_bytes BYTEA,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         """,
@@ -199,6 +173,7 @@ def get_runtime_asset_schema_statements() -> list[str]:
         "ALTER TABLE asset_files ADD COLUMN IF NOT EXISTS bytes_size BIGINT;",
         "ALTER TABLE asset_files ADD COLUMN IF NOT EXISTS role TEXT;",
         "ALTER TABLE asset_files ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb;",
+        "ALTER TABLE asset_files ADD COLUMN IF NOT EXISTS content_bytes BYTEA;",
         "ALTER TABLE asset_files ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
         "CREATE INDEX IF NOT EXISTS idx_assets_tenant ON assets (tenant_id);",
         "CREATE INDEX IF NOT EXISTS idx_asset_files_asset_id ON asset_files (asset_id);",
@@ -237,10 +212,14 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             tenant_id TEXT NOT NULL UNIQUE,
             password_salt TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         """,
+        "ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';",
+        "ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;",
         """
         CREATE TABLE IF NOT EXISTS auth_sessions (
             id TEXT PRIMARY KEY,
@@ -251,6 +230,26 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             revoked_at TIMESTAMPTZ
         );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS billing_settings (
+            id TEXT PRIMARY KEY,
+            per_credit_price_vnd INTEGER NOT NULL,
+            monthly_price_vnd INTEGER NOT NULL,
+            monthly_credit_quota INTEGER NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """,
+        """
+        INSERT INTO billing_settings (
+            id,
+            per_credit_price_vnd,
+            monthly_price_vnd,
+            monthly_credit_quota
+        )
+        VALUES ('global', 5000, 299000, 100)
+        ON CONFLICT (id) DO NOTHING;
         """,
         """
         CREATE TABLE IF NOT EXISTS saved_layout_cases (
@@ -306,7 +305,6 @@ def get_runtime_user_content_schema_statements() -> list[str]:
             model_name TEXT NOT NULL,
             prompt TEXT NOT NULL,
             negative_prompt TEXT,
-            storage_path TEXT,
             root_layout_id TEXT,
             case_id TEXT,
             option_id TEXT,
@@ -320,10 +318,6 @@ def get_runtime_user_content_schema_statements() -> list[str]:
         """
         ALTER TABLE generated_renders
         ADD COLUMN IF NOT EXISTS image_bytes BYTEA;
-        """,
-        """
-        ALTER TABLE generated_renders
-        ALTER COLUMN storage_path DROP NOT NULL;
         """,
         "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS root_layout_id TEXT;",
         "ALTER TABLE generated_renders ADD COLUMN IF NOT EXISTS case_id TEXT;",
@@ -355,13 +349,4 @@ def get_runtime_schema_statements() -> list[str]:
         *get_runtime_asset_schema_statements(),
         *get_runtime_knowledge_schema_statements(),
         *get_runtime_user_content_schema_statements(),
-    ]
-
-
-def get_schema_notes() -> list[str]:
-    return [
-        "Change VECTOR_DIMENSIONS to match your embedding model.",
-        "Use TEXT ids to keep the schema tool-agnostic; the app should provide ids.",
-        "If you prefer UUIDs, switch id fields to UUID and add a UUID extension.",
-        "design_knowledge.tenant_id is optional to support shared/global knowledge.",
     ]

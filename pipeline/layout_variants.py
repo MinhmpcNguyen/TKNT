@@ -9,6 +9,7 @@ from typing import Any
 _HARD_REQUEST_INTENTS = {"must_keep", "must_try"}
 _SOLVER_OBJECT_PARTICIPATIONS = {"hard_solver_object", "soft_solver_object"}
 _POST_SOLVER_PARTICIPATIONS = {"post_solver_accessory", "ignored_unavailable"}
+_CORE_ANCHOR_CLUSTER_IDS = ("sleep_core", "storage_core", "media_optional")
 
 
 @dataclass(frozen=True)
@@ -28,12 +29,13 @@ class _VariantCandidate:
     notes: list[str] = field(default_factory=list)
     concept_signature: str = ""
     anchor_signature: str = ""
+    core_anchor_signature: str = ""
     macro_layout_signature: str = ""
     visual_family_signature: str = ""
     state_signature: str = ""
 
 
-_BackfillRank = tuple[int, int, int, int, int, int, int, int, float, int, int]
+_BackfillRank = tuple[int, int, int, int, int, int, int, int, int, float, int, int]
 
 
 def select_distinct_final_gallery_candidates(
@@ -77,6 +79,22 @@ def select_distinct_final_gallery_candidates(
         if any(
             _is_near_duplicate_layout(candidate.absolute_layout, row.absolute_layout)
             for row in selected_candidates
+        ):
+            continue
+        selected_core_anchor_signatures = {
+            row.core_anchor_signature
+            for row in selected_candidates
+            if row.core_anchor_signature
+        }
+        if (
+            selected_candidates
+            and candidate.core_anchor_signature
+            and candidate.core_anchor_signature in selected_core_anchor_signatures
+            and _pool_has_unseen_core_anchor_signature(
+                pool=pool,
+                selected_indices=selected_indices,
+                seen_core_anchor_signatures=selected_core_anchor_signatures,
+            )
         ):
             continue
 
@@ -133,8 +151,26 @@ def select_distinct_final_gallery_candidates(
     return selected[:target_count]
 
 
+def _pool_has_unseen_core_anchor_signature(
+    *,
+    pool: list[tuple[_VariantCandidate, dict[str, Any]]],
+    selected_indices: set[int],
+    seen_core_anchor_signatures: set[str],
+) -> bool:
+    return any(
+        index not in selected_indices
+        and candidate.core_anchor_signature
+        and candidate.core_anchor_signature not in seen_core_anchor_signatures
+        for index, (candidate, _raw) in enumerate(pool)
+    )
+
+
 def material_macro_layout_signature(layout: dict[str, Any]) -> str:
     return _macro_layout_signature(layout)
+
+
+def core_anchor_layout_signature(layout: dict[str, Any]) -> str:
+    return _core_anchor_layout_signature(layout)
 
 
 def _accept_gallery_candidate(
@@ -157,6 +193,7 @@ def _accept_gallery_candidate(
     raw["visual_family_signature"] = candidate.visual_family_signature
     raw["concept_signature"] = candidate.concept_signature
     raw["anchor_signature"] = candidate.anchor_signature
+    raw["core_anchor_signature"] = candidate.core_anchor_signature
     raw["request_coverage_score"] = candidate.request_coverage_score
     raw["gallery_selection_mode"] = mode
     selected.append(raw)
@@ -227,6 +264,16 @@ def _candidate_adds_backfill_diversity(
         for row in selected_candidates
         if row.macro_layout_signature
     }
+    selected_core_anchor_signatures = {
+        row.core_anchor_signature
+        for row in selected_candidates
+        if row.core_anchor_signature
+    }
+    if (
+        candidate.core_anchor_signature
+        and candidate.core_anchor_signature not in selected_core_anchor_signatures
+    ):
+        return True
     return bool(
         candidate.macro_layout_signature
         and candidate.macro_layout_signature not in selected_macro_signatures
@@ -270,6 +317,17 @@ def _candidate_backfill_rank_tuple(
             and candidate.macro_layout_signature not in selected_macro_signatures
         )
     )
+    selected_core_anchor_signatures = {
+        row.core_anchor_signature
+        for row in selected_candidates
+        if row.core_anchor_signature
+    }
+    core_anchor_is_new = int(
+        bool(
+            candidate.core_anchor_signature
+            and candidate.core_anchor_signature not in selected_core_anchor_signatures
+        )
+    )
     if selected_candidates:
         distance = min(
             _layout_distance_score(candidate.absolute_layout, row.absolute_layout)
@@ -287,6 +345,7 @@ def _candidate_backfill_rank_tuple(
     return (
         concept_is_new,
         anchor_is_new,
+        core_anchor_is_new,
         macro_layout_is_new,
         visual_family_is_new,
         distance,
@@ -335,6 +394,7 @@ def build_final_layout_variants_payload(
                 "visual_family_signature": candidate.visual_family_signature,
                 "concept_signature": candidate.concept_signature,
                 "anchor_signature": candidate.anchor_signature,
+                "core_anchor_signature": candidate.core_anchor_signature,
                 "gallery_selection_mode": str(raw.get("gallery_selection_mode") or ""),
                 "absolute_layout": deepcopy(candidate.absolute_layout),
                 "styled_result": deepcopy(candidate.styled_result)
@@ -376,8 +436,12 @@ def build_final_gallery_selection_summary(
     selected_macro_counts = _macro_signature_counts(selected_rows)
     candidate_visual_family_counts = _visual_family_signature_counts(candidate_rows)
     selected_visual_family_counts = _visual_family_signature_counts(selected_rows)
+    candidate_core_anchor_counts = _core_anchor_signature_counts(candidate_rows)
+    selected_core_anchor_counts = _core_anchor_signature_counts(selected_rows)
     candidate_macro_signatures = set(candidate_macro_counts)
     selected_macro_signatures = set(selected_macro_counts)
+    candidate_core_anchor_signatures = set(candidate_core_anchor_counts)
+    selected_core_anchor_signatures = set(selected_core_anchor_counts)
     candidate_visual_family_signatures = set(candidate_visual_family_counts)
     selected_visual_family_signatures = set(selected_visual_family_counts)
     planned_material_counts = _raw_signature_counts(
@@ -408,6 +472,17 @@ def build_final_gallery_selection_summary(
         for signature, candidate_count in sorted(candidate_macro_counts.items())
         if candidate_count > selected_macro_counts.get(signature, 0)
     ]
+    collapsed_core_anchor_layouts = [
+        {
+            "core_anchor_signature": signature,
+            "candidate_count": candidate_count,
+            "returned_count": selected_core_anchor_counts.get(signature, 0),
+            "collapsed_count": candidate_count
+            - selected_core_anchor_counts.get(signature, 0),
+        }
+        for signature, candidate_count in sorted(candidate_core_anchor_counts.items())
+        if candidate_count > selected_core_anchor_counts.get(signature, 0)
+    ]
     collapsed_visual_families = [
         {
             "visual_family_signature": signature,
@@ -433,6 +508,15 @@ def build_final_gallery_selection_summary(
         notes.append(
             "Final gallery backfilled near-distinct options after exhausting "
             "strongly distinct visual families."
+        )
+    if (
+        selected_rows
+        and requested >= 3
+        and len(selected_core_anchor_signatures) < min(requested, 3)
+    ):
+        notes.append(
+            "Final gallery core-anchor diversity is limited; selected options share "
+            "too many sleep/storage/media anchor zones."
         )
     material_macro_target = min(requested, 3) if requested >= 3 else requested
     diversity_degraded = (
@@ -486,6 +570,8 @@ def build_final_gallery_selection_summary(
         "top_quality_gate_reasons": _top_quality_gate_reasons(candidates),
         "macro_distinct_candidate_count": len(candidate_macro_signatures),
         "macro_distinct_returned_count": len(selected_macro_signatures),
+        "core_anchor_distinct_candidate_count": len(candidate_core_anchor_signatures),
+        "core_anchor_distinct_returned_count": len(selected_core_anchor_signatures),
         "planned_material_macro_distinct_candidate_count": len(planned_material_counts),
         "planned_material_macro_distinct_returned_count": len(
             selected_planned_material_counts
@@ -505,6 +591,7 @@ def build_final_gallery_selection_summary(
         "planned_material_macro_signature_counts": planned_material_counts,
         "actual_macro_layout_signature_counts": actual_material_counts,
         "collapsed_macro_layouts": collapsed_macro_layouts,
+        "collapsed_core_anchor_layouts": collapsed_core_anchor_layouts,
         "collapsed_visual_families": collapsed_visual_families,
         "notes": notes,
     }
@@ -556,6 +643,17 @@ def _macro_signature_counts(
     return counts
 
 
+def _core_anchor_signature_counts(rows: list[_VariantCandidate]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if not row.core_anchor_signature:
+            continue
+        counts[row.core_anchor_signature] = (
+            counts.get(row.core_anchor_signature, 0) + 1
+        )
+    return counts
+
+
 def _raw_signature_counts(
     rows: list[dict[str, Any]],
     key: str,
@@ -590,29 +688,6 @@ def _visual_family_signature_counts(
             counts.get(row.visual_family_signature, 0) + 1
         )
     return counts
-
-
-def build_layout_variants_artifact(
-    *,
-    candidates: list[dict[str, Any]],
-    max_variants: int = 5,
-    **_: Any,
-) -> dict[str, Any]:
-    return build_final_layout_variants_payload(
-        candidates=candidates,
-        max_variants=max_variants,
-    )
-
-
-def select_top_variant_candidates(
-    *,
-    candidates: list[dict[str, Any]],
-    max_variants: int,
-) -> list[dict[str, Any]]:
-    return select_distinct_final_gallery_candidates(
-        candidates=candidates,
-        max_variants=max_variants,
-    )
 
 
 def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
@@ -668,6 +743,11 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
     )
     anchor_signature = _anchor_signature(concept=concept, relation_plan=relation_plan)
     macro_signature = _macro_layout_signature(absolute_layout)
+    core_anchor_signature = str(
+        raw.get("core_anchor_signature")
+        or raw.get("core_anchor_layout_signature")
+        or ""
+    ).strip() or _core_anchor_layout_signature(absolute_layout)
     visual_family_signature = _visual_family_signature(absolute_layout)
     request_coverage_score = _request_coverage_score(raw, absolute_layout)
     return _VariantCandidate(
@@ -690,6 +770,7 @@ def _coerce_candidate(raw: dict[str, Any]) -> _VariantCandidate | None:
         notes=notes,
         concept_signature=concept_signature,
         anchor_signature=anchor_signature,
+        core_anchor_signature=core_anchor_signature,
         macro_layout_signature=macro_signature,
         visual_family_signature=visual_family_signature,
         state_signature=_absolute_layout_signature(absolute_layout),
@@ -970,7 +1051,24 @@ def _absolute_layout_signature(layout: dict[str, Any]) -> str:
 
 
 def _macro_layout_signature(layout: dict[str, Any]) -> str:
+    return _macro_layout_signature_for_clusters(layout, None)
+
+
+def _core_anchor_layout_signature(layout: dict[str, Any]) -> str:
+    return _macro_layout_signature_for_clusters(layout, set(_CORE_ANCHOR_CLUSTER_IDS))
+
+
+def _macro_layout_signature_for_clusters(
+    layout: dict[str, Any],
+    cluster_filter: set[str] | None,
+) -> str:
     boxes = _cluster_boxes(layout)
+    if cluster_filter is not None:
+        boxes = {
+            cluster_id: box
+            for cluster_id, box in boxes.items()
+            if cluster_id in cluster_filter
+        }
     if not boxes:
         return ""
     room = layout.get("room") if isinstance(layout.get("room"), dict) else {}

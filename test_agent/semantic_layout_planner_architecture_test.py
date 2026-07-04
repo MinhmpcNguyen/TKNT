@@ -317,7 +317,7 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
         self.assertEqual(program.profile_shadow_trace["mode"], "active")
         self.assertTrue(program.profile_shadow_trace["layout_traits_enabled"])
         cluster_payload = (
-            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+            semantic_layout_planner.semantic_program_to_seed_relation_payload(
                 program.model_dump()
             )
         )
@@ -388,7 +388,7 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             )
         )
         cluster_payload = (
-            semantic_layout_planner.semantic_program_to_cluster_forge_payload(program)
+            semantic_layout_planner.semantic_program_to_seed_relation_payload(program)
         )
         self.assertEqual(cluster_payload["clusters"][0]["tag"], "sleep")
         self.assertEqual(
@@ -433,12 +433,12 @@ class SemanticLayoutPlannerArchitectureTest(unittest.TestCase):
             )
 
         living_payload = (
-            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+            semantic_layout_planner.semantic_program_to_seed_relation_payload(
                 living.model_dump()
             )
         )
         kitchen_payload = (
-            semantic_layout_planner.semantic_program_to_cluster_forge_payload(
+            semantic_layout_planner.semantic_program_to_seed_relation_payload(
                 kitchen.model_dump()
             )
         )

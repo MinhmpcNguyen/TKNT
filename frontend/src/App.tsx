@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { clearStoredAuthToken, fetchInventory, getCurrentUser, listGeneratedRenders, listSavedLayouts, logoutUser } from './api';
+import {
+  clearStoredAuthToken,
+  fetchBillingSettings,
+  fetchInventory,
+  getCurrentUser,
+  listGeneratedRenders,
+  listSavedLayouts,
+  logoutUser,
+} from './api';
 import { AuthScreen } from './components/AuthScreen';
 import { AccountPanel } from './components/AccountPanel';
+import { AdminPanel } from './components/AdminPanel';
 import { Canvas2D } from './components/Canvas2D';
 import { LibraryPanel } from './components/LibraryPanel';
 import { ProfileModal } from './components/ProfileModal';
@@ -17,7 +26,6 @@ export const App: React.FC = () => {
   const {
     authResolved,
     currentUser,
-    tenantId,
     setAuthResolved,
     setAuthSession,
     clearAuthSession,
@@ -27,6 +35,7 @@ export const App: React.FC = () => {
     setSavedLayouts,
     setSavedRenders,
     appendRunLog,
+    updateBillingSettings,
     setViewMode,
     viewMode,
     layoutVariants,
@@ -38,11 +47,12 @@ export const App: React.FC = () => {
   const [leftDockOpen, setLeftDockOpen] = useState(true);
   const [rightDockOpen, setRightDockOpen] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   useEffect(() => {
     setFloorplan(sampleFloorplan as any);
     setBaseFloorplan(sampleFloorplan as any);
-  }, [setBaseFloorplan, setFloorplan]);
+  }, [currentUser?.id, setBaseFloorplan, setFloorplan]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +62,8 @@ export const App: React.FC = () => {
           id: 'eval_user',
           email: 'eval@local',
           display_name: 'Eval User',
-          tenant_id: tenantId,
+          role: 'user',
+          is_active: true,
         });
         setAuthResolved(true);
         setInventory([]);
@@ -60,7 +71,7 @@ export const App: React.FC = () => {
         setSavedRenders([]);
         setViewMode('3d');
         try {
-          const items = await fetchInventory(tenantId);
+          const items = await fetchInventory();
           if (cancelled) {
             return;
           }
@@ -112,8 +123,35 @@ export const App: React.FC = () => {
     setSavedLayouts,
     setSavedRenders,
     setViewMode,
-    tenantId,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBillingSettings = async () => {
+      try {
+        const settings = await fetchBillingSettings();
+        if (cancelled) {
+          return;
+        }
+        updateBillingSettings({
+          monthlyCreditQuota: settings.monthly_credit_quota,
+          monthlyPriceVnd: settings.monthly_price_vnd,
+          perCreditPriceVnd: settings.per_credit_price_vnd,
+        });
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+        const message =
+          loadError instanceof Error ? loadError.message : 'unknown error';
+        appendRunLog(`Billing settings load failed: ${message}`);
+      }
+    };
+    void loadBillingSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [appendRunLog, updateBillingSettings]);
 
   useEffect(() => {
     if (evalHooksEnabled) {
@@ -126,7 +164,7 @@ export const App: React.FC = () => {
     const loadWorkspace = async () => {
       try {
         const [items, layouts, renders] = await Promise.all([
-          fetchInventory(tenantId),
+          fetchInventory(),
           listSavedLayouts(),
           listGeneratedRenders(),
         ]);
@@ -161,7 +199,6 @@ export const App: React.FC = () => {
     setInventory,
     setSavedLayouts,
     setSavedRenders,
-    tenantId,
     evalHooksEnabled,
   ]);
 
@@ -210,10 +247,9 @@ export const App: React.FC = () => {
     <div className="app-root">
       <header className="app-header">
         <div>
-          <h1>TKNT Floorplan Editor</h1>
+          <h1>RoomFlow Floorplan Editor</h1>
           <p className="app-subtitle">
-            Shared inventory for everyone, plus your own GLB objects, saved layouts,
-            and render history.
+            Shared inventory for everyone, plus saved layouts and render history.
           </p>
         </div>
         <div className="app-account-actions">
@@ -225,12 +261,18 @@ export const App: React.FC = () => {
             <strong>{currentUser.display_name || currentUser.email}</strong>
             <span>{currentUser.email}</span>
           </button>
+          {currentUser.role === 'admin' ? (
+            <button onClick={() => setAdminOpen(true)} type="button">
+              Admin
+            </button>
+          ) : null}
           <button onClick={handleLogout} type="button">
             Log out
           </button>
         </div>
       </header>
       {profileOpen ? <ProfileModal onClose={() => setProfileOpen(false)} /> : null}
+      {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} /> : null}
       {bootError ? <div className="app-banner-error">{bootError}</div> : null}
       <Toolbar />
       <div className={workspaceClassName}>

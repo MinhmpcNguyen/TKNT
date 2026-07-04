@@ -2,30 +2,17 @@ from __future__ import annotations
 
 import json
 import sys
-import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-fake_ortools = types.ModuleType("ortools")
-fake_sat = types.ModuleType("ortools.sat")
-fake_python = types.ModuleType("ortools.sat.python")
-fake_cp_model = types.ModuleType("ortools.sat.python.cp_model")
-fake_cp_model.IntVar = object
-fake_cp_model.CpModel = object
-fake_cp_model.CpSolver = object
-fake_cp_model.OPTIMAL = 4
-fake_cp_model.FEASIBLE = 2
-sys.modules.setdefault("ortools", fake_ortools)
-sys.modules.setdefault("ortools.sat", fake_sat)
-sys.modules.setdefault("ortools.sat.python", fake_python)
-sys.modules.setdefault("ortools.sat.python.cp_model", fake_cp_model)
-
 from agent.solver.solver import (  # noqa: E402
+    _anchor_pair_compatibility_report,
     _anchor_pair_solution_score,
     _anchor_forbidden_overlap_exceeds_limit,
     _build_object_solver_world,
@@ -307,6 +294,58 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertTrue(candidates)
         self.assertTrue(all(candidate["rect"][0] >= 50 for candidate in candidates))
         self.assertIn(50, {candidate["rect"][0] for candidate in candidates})
+
+    def test_storage_wall_options_mark_front_inward_parallel_candidates(self) -> None:
+        room_model = _room_model()
+        cluster = _object_program_cluster(
+            cluster_id="storage_core",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1200, "W": 420, "H": 2200},
+        )
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "anchor_layout_hints_by_cluster": {
+                "storage_core": {
+                    "zone_assignment": "left_wall_zone",
+                    "preferred_region_ids": ["left_wall_zone"],
+                    "role_kind": "storage",
+                    "scenario_role": "secondary",
+                    "placement_behavior": {"wall_backing": "required"},
+                }
+            }
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        candidates = _generate_anchor_pose_candidates(
+            cluster_program=world["clusters_by_id"]["storage_core"],
+            room_model=room_model,
+            relation_plan=relation_plan,
+            world=world,
+            grid_mm=50,
+        )
+
+        self.assertTrue(candidates)
+        wall_options = world["_anchor_wall_options_by_cluster"]["storage_core"]
+        left_wall = wall_options["left"]
+        self.assertGreater(left_wall["valid_candidate_count"], 0)
+        self.assertGreater(left_wall["front_inward_candidate_count"], 0)
+        self.assertGreater(left_wall["wall_parallel_candidate_count"], 0)
+        best = left_wall["best_candidate"]
+        self.assertTrue(best["front_inward_match"])
+        self.assertTrue(best["long_axis_wall_parallel"])
+        self.assertGreater(best["storage_wall_fit_score"], 0.0)
+        rehome = left_wall["best_rehome_candidate"]
+        self.assertTrue(rehome["front_inward_match"])
+        self.assertTrue(rehome["long_axis_wall_parallel"])
 
     def test_interaction_quality_prefers_axial_view_target_over_bare_diagonal(
         self,
@@ -812,6 +851,213 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertTrue(verify["hard_valid"])
         self.assertEqual(verify["blocking_orientation_issues"], [])
 
+    def test_dominant_corner_wall_blocks_short_side_inward_front(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["object_program"]["object_specs_by_id"]["wardrobe"]["front"] = "left"
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ]
+        }
+        wardrobe = _materialize_object_row(cluster, "wardrobe", 4250, 0, 0)
+        world = {
+            "room_bbox": (0, 0, 6000, 4000),
+            "clusters_by_id": {"storage": cluster},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe]},
+            world=world,
+            room_model={},
+            relation_plan=relation_plan,
+        )
+
+        self.assertFalse(verify["hard_valid"])
+        self.assertEqual(
+            verify["blocking_orientation_issues"][0]["reason"],
+            "wall_contact_inward",
+        )
+        self.assertEqual(
+            verify["blocking_orientation_issues"][0]["desired_front_world"],
+            {"dx": 0.0, "dy": 1.0},
+        )
+        self.assertIn("front_inward_contract_failed", verify["quality_gate_reasons"])
+
+    def test_dominant_corner_wall_accepts_long_side_inward_front(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ]
+        }
+        wardrobe = _materialize_object_row(cluster, "wardrobe", 4250, 0, 0)
+        world = {
+            "room_bbox": (0, 0, 6000, 4000),
+            "clusters_by_id": {"storage": cluster},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe]},
+            world=world,
+            room_model={},
+            relation_plan=relation_plan,
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertEqual(verify["blocking_orientation_issues"], [])
+
+    def test_corner_wall_contact_tie_accepts_either_inward_front(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="storage_cabinet",
+            category="cabinet",
+            dims={"L": 600, "W": 600, "H": 1400},
+        )
+        cluster["object_program"]["object_specs_by_id"]["storage_cabinet"][
+            "front"
+        ] = "left"
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "storage_cabinet", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "storage_cabinet",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ]
+        }
+        cabinet = _materialize_object_row(cluster, "storage_cabinet", 5400, 0, 0)
+        world = {
+            "room_bbox": (0, 0, 6000, 4000),
+            "clusters_by_id": {"storage": cluster},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [cabinet]},
+            world=world,
+            room_model={},
+            relation_plan=relation_plan,
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertEqual(verify["blocking_orientation_issues"], [])
+
+    def test_anchor_candidates_reject_short_side_corner_inward_front(self) -> None:
+        room_model = {
+            "room": {
+                "room_id": "room_1",
+                "room_type": "bedroom",
+                "polygon_ccw": [
+                    {"x": 0, "y": 0},
+                    {"x": 6000, "y": 0},
+                    {"x": 6000, "y": 4000},
+                    {"x": 0, "y": 4000},
+                ],
+                "wall_thickness_mm": 0,
+            },
+            "regions": [
+                {
+                    "id": "top_right_wall",
+                    "bbox": {
+                        "min_x": 4250,
+                        "min_y": 0,
+                        "max_x": 6000,
+                        "max_y": 600,
+                    },
+                }
+            ],
+        }
+        cluster = _object_program_cluster(
+            cluster_id="storage",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1750, "W": 510, "H": 2020},
+        )
+        cluster["object_program"]["object_specs_by_id"]["wardrobe"]["front"] = "left"
+        cluster["cluster_rules"]["access_requirements"] = [
+            {"id": "wardrobe", "type": "front_clearance", "required": True}
+        ]
+        relation_plan = {
+            "anchor_region_preferences_by_cluster": {
+                "storage": {
+                    "zone_assignment": "top_right_wall",
+                    "committed_region_ids": ["top_right_wall"],
+                    "preferred_region_ids": ["top_right_wall"],
+                    "placement_behavior": {
+                        "wall_backing": "required",
+                        "front_space": "required",
+                    },
+                }
+            },
+            "object_orientations": [
+                {
+                    "cluster_id": "storage",
+                    "object_id": "wardrobe",
+                    "intents": ["back_to_wall"],
+                    "priority": "medium",
+                }
+            ],
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=relation_plan,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+
+        candidates = _generate_anchor_pose_candidates(
+            cluster_program=cluster,
+            room_model=room_model,
+            relation_plan=relation_plan,
+            world=world,
+            grid_mm=50,
+        )
+
+        self.assertTrue(candidates)
+        self.assertFalse(
+            any(
+                int(candidate["rot"]) == 0
+                and tuple(candidate["rect"]) == (4250, 0, 6000, 510)
+                for candidate in candidates
+            )
+        )
+
     def test_lounge_support_seat_faces_base(self) -> None:
         merged_clusters = {
             "clusters": [
@@ -918,6 +1164,111 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
                 ]
             },
         )
+
+    def test_optional_bedside_nightstand_drop_keeps_bed_layout_complete(self) -> None:
+        room_model = {
+            "room": {
+                "room_id": "room_1",
+                "room_type": "bedroom",
+                "polygon_ccw": [
+                    {"x": 0, "y": 0},
+                    {"x": 2200, "y": 0},
+                    {"x": 2200, "y": 2000},
+                    {"x": 0, "y": 2000},
+                ],
+                "wall_thickness_mm": 0,
+            },
+            "regions": [],
+        }
+        cluster = _object_program_cluster(
+            cluster_id="sleep_core",
+            object_id="bed",
+            category="bed",
+            dims={"L": 1960, "W": 1690, "H": 480},
+            support_edges=[
+                {
+                    "object_id": "nightstand",
+                    "relative_to": "bed",
+                    "side_options": ["head_left", "head_right"],
+                    "gap_min": 0,
+                    "gap_max": 100,
+                    "support_role": "side_support",
+                    "band_intent": "beside_base",
+                    "orientation": "same_direction",
+                }
+            ],
+        )
+        object_program = cluster["object_program"]
+        object_program["protected_ids"] = ["bed"]
+        object_program["droppable_ids"] = ["nightstand"]
+        object_program["required_object_ids"] = ["bed"]
+        object_program["optional_object_ids"] = ["nightstand"]
+        object_program["object_specs_by_id"]["nightstand"]["rep_dims_mm"] = {
+            "L": 430,
+            "W": 350,
+            "H": 530,
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan=None,
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+        anchor_solution = {
+            "anchor_solution": {
+                "sleep_core": {
+                    "cluster_id": "sleep_core",
+                    "object_id": "bed",
+                    "x": 120,
+                    "y": 155,
+                    "rot": 0,
+                    "rect": (120, 155, 2080, 1845),
+                    "candidate_score": 0.0,
+                }
+            },
+            "anchor_score": 0.0,
+            "dropped_inventory_by_cluster": {},
+        }
+
+        results = _place_support_objects_for_solution(
+            solution=anchor_solution,
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+            grid_mm=50,
+            max_solutions=4,
+        )
+
+        self.assertTrue(results)
+        placed_ids = {
+            str(row.get("object_id") or "")
+            for row in results[0]["placed_objects"]
+            if isinstance(row, dict)
+        }
+        self.assertEqual(placed_ids, {"bed"})
+        self.assertEqual(
+            results[0]["dropped_inventory_by_cluster"],
+            {
+                "sleep_core": [
+                    {"object_id": "nightstand", "reason": "support_slot_failed"}
+                ]
+            },
+        )
+        verify = _verify_object_level_solution(
+            solution={
+                "placed_objects": results[0]["placed_objects"],
+                "dropped_inventory_by_cluster": results[0][
+                    "dropped_inventory_by_cluster"
+                ],
+            },
+            world=world,
+            room_model=room_model,
+            relation_plan=None,
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertTrue(verify["complete"])
 
     def test_protected_support_keeps_repairable_dirty_slots(self) -> None:
         room_model, world, anchor_solution = self._support_slot_world(
@@ -1149,6 +1500,97 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
         self.assertEqual(
             result["solver_debug"]["anchor_candidate_counts"]["main_seating"], 0
         )
+
+    def test_no_compatible_anchor_set_reports_pairwise_overlap_diagnostics(
+        self,
+    ) -> None:
+        merged_clusters = {
+            "clusters": [
+                _object_program_cluster(
+                    cluster_id="sleep_core",
+                    object_id="bed",
+                    category="bed",
+                    dims={"L": 1800, "W": 900, "H": 600},
+                ),
+                _object_program_cluster(
+                    cluster_id="storage_core",
+                    object_id="wardrobe",
+                    category="wardrobe",
+                    dims={"L": 1600, "W": 600, "H": 2200},
+                ),
+            ]
+        }
+
+        def fake_anchor_candidates(
+            *,
+            cluster_program: dict[str, object],
+            room_model: dict[str, object],
+            relation_plan: dict[str, object] | None,
+            world: dict[str, object],
+            grid_mm: int,
+        ) -> list[dict[str, object]]:
+            _ = room_model, relation_plan, world, grid_mm
+            cluster_id = str(cluster_program.get("cluster_id") or "")
+            object_id = "bed" if cluster_id == "sleep_core" else "wardrobe"
+            rect = (
+                (1000, 1000, 2600, 2200)
+                if cluster_id == "sleep_core"
+                else (1200, 1100, 2500, 2300)
+            )
+            return [
+                {
+                    "cluster_id": cluster_id,
+                    "object_id": object_id,
+                    "category": object_id,
+                    "x": rect[0],
+                    "y": rect[1],
+                    "rot": 0,
+                    "rect": rect,
+                    "candidate_score": 0.0,
+                }
+            ]
+
+        with patch.dict(
+            solve_object_level_layout.__globals__,
+            {"_generate_anchor_pose_candidates": fake_anchor_candidates},
+        ):
+            result = solve_object_level_layout(
+                room_model=_room_model(),
+                merged_clusters=merged_clusters,
+                relation_plan={},
+                cluster_constraints=None,
+            )
+
+        self.assertEqual(result["status"], "UNSAT")
+        self.assertEqual(result["failure_kind"], "no_compatible_anchor_set")
+        report = result["solver_degradation_report"]
+        self.assertEqual(report["failure_kind"], "no_compatible_anchor_set")
+        incompatible = result["solver_debug"]["pairwise_incompatible_anchor_pairs"]
+        self.assertEqual(
+            incompatible,
+            [
+                {
+                    "cluster_a": "sleep_core",
+                    "cluster_b": "storage_core",
+                    "candidate_pairs": 1,
+                    "non_overlap_pairs": 0,
+                    "overlap_pairs": 1,
+                }
+            ],
+        )
+
+    def test_anchor_pair_compatibility_reports_non_overlapping_pairs(self) -> None:
+        report = _anchor_pair_compatibility_report(
+            anchor_order=["sleep_core", "storage_core"],
+            anchor_candidates_by_cluster={
+                "sleep_core": [{"rect": (0, 0, 1000, 1000)}],
+                "storage_core": [{"rect": (1500, 0, 2500, 1000)}],
+            },
+        )
+
+        self.assertEqual(report[0]["candidate_pairs"], 1)
+        self.assertEqual(report[0]["non_overlap_pairs"], 1)
+        self.assertEqual(report[0]["overlap_pairs"], 0)
 
     def test_object_rect_is_usable_rejects_blocking_protected_region(self) -> None:
         relation_plan = {
@@ -1917,6 +2359,66 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             "bookshelf",
         )
 
+    def test_softened_front_access_requirement_is_not_blocking(self) -> None:
+        cluster_program = {
+            "cluster_id": "storage_core",
+            "object_program": {
+                "object_specs_by_id": {
+                    "wardrobe": {
+                        "object_id": "wardrobe",
+                        "category": "wardrobe",
+                        "role": "dominant_anchor",
+                        "priority": "anchor",
+                        "rep_dims_mm": {"L": 1750, "W": 510, "H": 2020},
+                        "allowed_rotations": [180],
+                        "front": "top",
+                    },
+                    "bookshelf": {
+                        "object_id": "bookshelf",
+                        "category": "bookshelf",
+                        "role": "support",
+                        "priority": "support",
+                        "rep_dims_mm": {"L": 630, "W": 250, "H": 2220},
+                        "allowed_rotations": [270],
+                        "front": "top",
+                    },
+                }
+            },
+            "cluster_rules": {
+                "access_requirements": [
+                    {"id": "wardrobe", "type": "front_clearance", "required": True},
+                    {"id": "bookshelf", "type": "front_clearance", "required": False},
+                ]
+            },
+        }
+        wardrobe = _materialize_object_row(cluster_program, "wardrobe", 2400, 3450, 180)
+        bookshelf = _materialize_object_row(
+            cluster_program,
+            "bookshelf",
+            4250,
+            3200,
+            270,
+            relative_to="wardrobe",
+        )
+        world = {
+            "room_bbox": (0, 0, 4500, 4000),
+            "clusters_by_id": {"storage_core": cluster_program},
+            "protected_regions": [],
+            "cluster_forbidden_regions": [],
+        }
+
+        self.assertFalse(bookshelf["requires_front_access"])
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe, bookshelf]},
+            world=world,
+            room_model={},
+            relation_plan={},
+        )
+
+        self.assertTrue(verify["front_access_ok"])
+        self.assertNotIn("front_access_zone_blocked", verify["quality_gate_reasons"])
+        self.assertEqual(verify["blocking_functional_geometry_issues"], [])
+
     def test_geometry_repair_keeps_support_out_of_anchor_front_access(self) -> None:
         cluster_program = {
             "cluster_id": "kitchen_workflow_core",
@@ -2351,9 +2853,13 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             rows_by_key[("storage_core", "wardrobe")]["region_id"],
             "window_1_clearance",
         )
-        self.assertEqual(rows_by_key[("storage_core", "wardrobe")]["enforcement"], "hard")
+        self.assertEqual(
+            rows_by_key[("storage_core", "wardrobe")]["enforcement"], "hard"
+        )
 
-    def test_tall_visual_objects_auto_avoid_clearance_and_daylight_regions(self) -> None:
+    def test_tall_visual_objects_auto_avoid_clearance_and_daylight_regions(
+        self,
+    ) -> None:
         tall_cluster = _object_program_cluster(
             cluster_id="storage_core",
             object_id="wardrobe",
@@ -2379,6 +2885,85 @@ class ObjectLevelSolverOrientationTest(unittest.TestCase):
             {"window_1_clearance", "window_1_daylight"},
         )
         self.assertTrue(all(str(row["enforcement"]) == "hard" for row in object_rows))
+
+    def test_secondary_daylight_relaxation_keeps_window_clearance_hard(
+        self,
+    ) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage_core",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1600, "W": 600, "H": 2200},
+        )
+        cluster["object_program"]["object_specs_by_id"]["wardrobe"][
+            "daylight_quality_relaxed"
+        ] = True
+
+        rows = _collect_cluster_forbidden_regions(
+            clusters_by_id={"storage_core": cluster},
+            room_model=_room_model(),
+            relation_plan={},
+            region_index={
+                "window_1_clearance": (1000, 3850, 3000, 4000),
+                "window_1_daylight": (800, 2600, 3200, 4000),
+            },
+        )
+
+        rows_by_region = {str(row["region_id"]): row for row in rows}
+        self.assertEqual(rows_by_region["window_1_clearance"]["enforcement"], "hard")
+        self.assertEqual(rows_by_region["window_1_clearance"]["zone_type"], "window_clearance")
+        self.assertEqual(rows_by_region["window_1_daylight"]["enforcement"], "soft")
+        self.assertEqual(
+            rows_by_region["window_1_daylight"]["zone_type"],
+            "daylight_quality_soft",
+        )
+
+    def test_relaxed_secondary_daylight_overlap_is_soft_verify_issue(self) -> None:
+        cluster = _object_program_cluster(
+            cluster_id="storage_core",
+            object_id="wardrobe",
+            category="wardrobe",
+            dims={"L": 1600, "W": 600, "H": 2200},
+        )
+        cluster["object_program"]["object_specs_by_id"]["wardrobe"][
+            "daylight_quality_relaxed"
+        ] = True
+        room_model = {
+            "room": _room_model()["room"],
+            "regions": [
+                {
+                    "id": "window_1_daylight",
+                    "bbox": {
+                        "min_x": 800,
+                        "min_y": 2600,
+                        "max_x": 3200,
+                        "max_y": 4000,
+                    },
+                }
+            ],
+        }
+        world = _build_object_solver_world(
+            room_model=room_model,
+            merged_clusters={"clusters": [cluster]},
+            relation_plan={},
+            cluster_constraints=None,
+            grid_mm=50,
+        )
+        wardrobe = _materialize_object_row(cluster, "wardrobe", 1200, 3000, 0)
+
+        verify = _verify_object_level_solution(
+            solution={"placed_objects": [wardrobe]},
+            world=world,
+            room_model=room_model,
+            relation_plan={},
+        )
+
+        self.assertTrue(verify["hard_valid"])
+        self.assertEqual(verify["blocking_forbidden_region_issues"], [])
+        self.assertEqual(
+            verify["forbidden_region_issues"][0]["zone_type"],
+            "daylight_quality_soft",
+        )
 
     def test_tall_anchor_candidates_do_not_overlap_window_clearance(self) -> None:
         room_model = {

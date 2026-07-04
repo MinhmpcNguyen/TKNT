@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-import logging
 
 from psycopg.types.json import Jsonb
 
@@ -10,7 +9,6 @@ from db.models import (
     DesignKnowledgeEmbedding,
     DesignKnowledgeFilter,
     DesignKnowledgeId,
-    TenantId,
 )
 from db.pg_utils import (
     ConnectionFactory,
@@ -27,34 +25,6 @@ from db.postgres import create_connection
 class PostgresDesignKnowledgeRepository:
     def __init__(self, connection_factory: ConnectionFactory | None = None) -> None:
         self._connection_factory = connection_factory or create_connection
-
-    def create_knowledge(self, knowledge: DesignKnowledge) -> None:
-        query = """
-            INSERT INTO design_knowledge (
-                id,
-                tenant_id,
-                title,
-                content,
-                category,
-                tags,
-                source,
-                meta
-            )
-            VALUES (
-                %(id)s,
-                %(tenant_id)s,
-                %(title)s,
-                %(content)s,
-                %(category)s,
-                %(tags)s,
-                %(source)s,
-                %(meta)s
-            )
-        """
-        params = _knowledge_to_params(knowledge)
-        with self._connection_factory() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
 
     def upsert_knowledge(self, knowledge: DesignKnowledge) -> None:
         query = """
@@ -88,25 +58,6 @@ class PostgresDesignKnowledgeRepository:
                 source = EXCLUDED.source,
                 meta = EXCLUDED.meta,
                 updated_at = NOW()
-        """
-        params = _knowledge_to_params(knowledge)
-        with self._connection_factory() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-
-    def update_knowledge(self, knowledge: DesignKnowledge) -> None:
-        query = """
-            UPDATE design_knowledge
-            SET
-                tenant_id = %(tenant_id)s,
-                title = %(title)s,
-                content = %(content)s,
-                category = %(category)s,
-                tags = %(tags)s,
-                source = %(source)s,
-                meta = %(meta)s,
-                updated_at = NOW()
-            WHERE id = %(id)s
         """
         params = _knowledge_to_params(knowledge)
         with self._connection_factory() as conn:
@@ -166,56 +117,6 @@ class PostgresDesignKnowledgeRepository:
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
-
-    def search_knowledge_by_embedding(
-        self,
-        tenant_id: TenantId | None,
-        embedding: Sequence[float],
-        limit: int = 10,
-    ) -> Sequence[DesignKnowledge]:
-        logger = logging.getLogger("rag")
-        query = """
-            SELECT k.*
-            FROM design_knowledge_embeddings e
-            JOIN design_knowledge k ON k.id = e.knowledge_id
-            WHERE (%(tenant_id)s::text IS NULL OR k.tenant_id = %(tenant_id)s::text)
-            ORDER BY e.vector <-> %(vector)s::vector
-            LIMIT %(limit)s
-        """
-        params = {
-            "tenant_id": tenant_id,
-            "vector": vector_literal(embedding),
-            "limit": limit,
-        }
-        with self._connection_factory() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-                rows = cur.fetchall()
-        logger.info("Knowledge search returned %d rows", len(rows))
-        return [_row_to_knowledge(row) for row in rows]
-
-    def list_embeddings(
-        self, knowledge_ids: Sequence[DesignKnowledgeId]
-    ) -> dict[DesignKnowledgeId, list[float]]:
-        if not knowledge_ids:
-            return {}
-        query = """
-            SELECT knowledge_id, vector::float4[] AS vector
-            FROM design_knowledge_embeddings
-            WHERE knowledge_id = ANY(%(ids)s::text[])
-        """
-        params = {"ids": list(knowledge_ids)}
-        with self._connection_factory() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-                rows = cur.fetchall()
-        results: dict[DesignKnowledgeId, list[float]] = {}
-        for row in rows:
-            knowledge_id = to_str(row.get("knowledge_id"))
-            vector = row.get("vector") or []
-            if isinstance(vector, list):
-                results[knowledge_id] = [float(value) for value in vector]
-        return results
 
 
 def _knowledge_to_params(knowledge: DesignKnowledge) -> dict[str, object]:

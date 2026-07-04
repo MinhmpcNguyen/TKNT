@@ -1,0 +1,431 @@
+{
+  "status": "OK",
+  "room_type": "living_room",
+  "overall_score": 124,
+  "max_score": 233,
+  "normalized_score_0_100": 53.219,
+  "rules": [
+    {
+      "rule_id": "sofa/is_seating_center",
+      "name": "Sofa is seating center",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "dist_to_center_mm=1759.3 (threshold=3007.9)."
+    },
+    {
+      "rule_id": "sofa/faces_tv_or_main_view",
+      "name": "Sofa faces TV or main view",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "front_dir=(0.0, -1.0); dot_to_media=4090.0; media=tv_console."
+    },
+    {
+      "rule_id": "sofa/against_wall",
+      "name": "Sofa near a wall",
+      "weight": 7,
+      "earned": 0,
+      "status": "failed",
+      "details": "min_distance_to_wall_mm=400.0 (threshold=200)."
+    },
+    {
+      "rule_id": "sofa/not_blocking_main_path",
+      "name": "Sofa does not block main path",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "door_to_centroid_intersects=False."
+    },
+    {
+      "rule_id": "coffee_table/in_front_of_sofa",
+      "name": "Coffee table in front of sofa",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "dist_to_sofa_media_axis_mm=188.4 (tol=700)."
+    },
+    {
+      "rule_id": "coffee_table/centered_in_seating_cluster",
+      "name": "Coffee table centered in seating cluster",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "table_center_in_seat_union=False."
+    },
+    {
+      "rule_id": "coffee_table/not_too_far_from_sofa",
+      "name": "Coffee table not too far from sofa",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "gap_sofa_to_table_mm=40.0 (min=200, max=1200)."
+    },
+    {
+      "rule_id": "tv_console/opposite_sofa",
+      "name": "TV console opposite sofa",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "max_axis_overlap_ratio=0.566 (min=0.3); dist_mm=4193.3."
+    },
+    {
+      "rule_id": "tv_console/against_wall",
+      "name": "TV console near a wall",
+      "weight": 8,
+      "earned": 8,
+      "status": "passed",
+      "details": "min_distance_to_wall_mm=0.0 (threshold=200)."
+    },
+    {
+      "rule_id": "tv_console/not_blocking_window_or_path",
+      "name": "TV console does not block window or main path",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "issues=[]."
+    },
+    {
+      "rule_id": "tv/with_tv_console",
+      "name": "TV is placed with TV console / media wall",
+      "weight": 10,
+      "earned": 0,
+      "status": "failed",
+      "details": "No tv found."
+    },
+    {
+      "rule_id": "tv/opposite_sofa",
+      "name": "TV opposite sofa",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "Media object missing."
+    },
+    {
+      "rule_id": "tv/avoid_direct_window_glare",
+      "name": "TV avoids direct window glare",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "No tv found."
+    },
+    {
+      "rule_id": "ceiling_lamp/general_lighting",
+      "name": "Ceiling lamp provides general lighting",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "place_on={'target_instance_id': '__ceiling__', 'method': 'hang_on'}."
+    },
+    {
+      "rule_id": "ceiling_lamp/near_activity_center",
+      "name": "Ceiling lamp near living area center",
+      "weight": 8,
+      "earned": 8,
+      "status": "passed",
+      "details": "dist_mm=1079.0; threshold_mm=2673.7; diag_mm=6684.3."
+    },
+    {
+      "rule_id": "ceiling_lamp/not_paired_to_sofa_or_tv",
+      "name": "Ceiling lamp not tied to a single object",
+      "weight": 7,
+      "earned": 0,
+      "status": "failed",
+      "details": "over_anchor=True; padding_mm=500."
+    },
+    {
+      "rule_id": "curtain/with_window",
+      "name": "Curtain/blinds present when window exists",
+      "weight": 10,
+      "earned": 0,
+      "status": "failed",
+      "details": "No curtain/blinds found."
+    },
+    {
+      "rule_id": "curtain/influences_sofa_and_tv_placement",
+      "name": "Curtains constrain sofa/TV placement",
+      "weight": 8,
+      "earned": 8,
+      "status": "passed",
+      "details": "issues=[]."
+    },
+    {
+      "rule_id": "sofa/window_clearance",
+      "name": "Sofa does not block curtain zone",
+      "weight": 7,
+      "earned": 7,
+      "status": "passed",
+      "details": "min_sofa_to_window_mm=2712.1; clearance_ok=True."
+    },
+    {
+      "rule_id": "rug/under_sofa_and_coffee_table_cluster",
+      "name": "Rug under sofa + coffee table",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "No rug found."
+    },
+    {
+      "rule_id": "rug/part_of_seating_zone",
+      "name": "Rug belongs to seating area",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "No rug found."
+    },
+    {
+      "rule_id": "coffee_table/on_rug",
+      "name": "Coffee table stands on rug",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "No rug found."
+    },
+    {
+      "rule_id": "armchair/in_conversation_cluster",
+      "name": "Armchair is in seating cluster",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "dist_to_sofa_mm=1426.3; dist_to_coffee_table_mm=1661.1."
+    },
+    {
+      "rule_id": "armchair/diagonal_to_coffee_table",
+      "name": "Armchair placed near conversation area",
+      "weight": 7,
+      "earned": 7,
+      "status": "passed",
+      "details": "dist_to_table_mm=1661.1; dist_to_sofa_mm=1426.3; dist_to_tv_console_mm=4769.2."
+    },
+    {
+      "rule_id": "armchair/not_block_path",
+      "name": "Armchair does not block main path",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "door_to_centroid_intersects=False."
+    },
+    {
+      "rule_id": "side_table/next_to_seating",
+      "name": "Side table next to sofa or armchair",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "No side_table found."
+    },
+    {
+      "rule_id": "side_table/not_replacing_coffee_table",
+      "name": "Side table is not used as coffee table",
+      "weight": 7,
+      "earned": 0,
+      "status": "failed",
+      "details": "No side_table found."
+    }
+  ],
+  "object_instances": {
+    "sofa": [
+      "sofa"
+    ],
+    "coffee_table": [
+      "coffee_table"
+    ],
+    "tv_console": [
+      "tv_console"
+    ],
+    "ceiling_lamp": [
+      "ceiling_light_001"
+    ],
+    "armchair": [
+      "armchair"
+    ]
+  },
+  "oob": {
+    "status": "passed",
+    "scene_invalid": false,
+    "oob_rate": 0.0,
+    "checked_instance_ids": [
+      "armchair",
+      "coffee_table",
+      "floor_lamp",
+      "sofa",
+      "tv_console",
+      "air_conditioner_001",
+      "ceiling_light_001"
+    ],
+    "out_of_bounds_instance_ids": [],
+    "out_of_bounds_objects": [],
+    "details": "out_of_bounds=0/7."
+  },
+  "bbl": {
+    "status": "passed",
+    "mean_intersection_area_mm2": 0.0,
+    "pair_count": 6,
+    "checked_instance_ids": [
+      "sofa",
+      "coffee_table",
+      "tv_console",
+      "armchair"
+    ],
+    "details": "sum_intersection_area_mm2=0.0."
+  },
+  "numerical": {
+    "status": "passed",
+    "gt_spec": {
+      "sofa": {
+        "min": 1,
+        "max": 1
+      },
+      "coffee_table": {
+        "min": 1,
+        "max": 1
+      },
+      "tv_console": {
+        "min": 1,
+        "max": 1
+      },
+      "tv": {
+        "min": 1,
+        "max": 1
+      },
+      "ceiling_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "curtain": {
+        "min": 1,
+        "max": 1
+      },
+      "rug": {
+        "min": 1,
+        "max": 1
+      },
+      "armchair": {
+        "min": 1,
+        "max": 1
+      },
+      "side_table": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "pred_counts": {
+      "sofa": 1,
+      "coffee_table": 1,
+      "tv_console": 1,
+      "tv": 0,
+      "ceiling_lamp": 1,
+      "curtain": 0,
+      "rug": 0,
+      "armchair": 1,
+      "side_table": 0
+    },
+    "tp": 5,
+    "fp": 0,
+    "fn": 4,
+    "precision": 1.0,
+    "recall": 0.555556,
+    "accuracy": 0.0,
+    "comparison_accuracy": 0.5,
+    "comparisons": [
+      {
+        "left": "tv",
+        "right": "tv_console",
+        "predicted_relation": "less",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": false
+      },
+      {
+        "left": "coffee_table",
+        "right": "sofa",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": true
+      }
+    ],
+    "details": "pred_total=5; gt_total=9."
+  },
+  "numerical_reasoning": {
+    "status": "passed",
+    "gt_spec": {
+      "sofa": {
+        "min": 1,
+        "max": 1
+      },
+      "coffee_table": {
+        "min": 1,
+        "max": 1
+      },
+      "tv_console": {
+        "min": 1,
+        "max": 1
+      },
+      "tv": {
+        "min": 1,
+        "max": 1
+      },
+      "ceiling_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "curtain": {
+        "min": 1,
+        "max": 1
+      },
+      "rug": {
+        "min": 1,
+        "max": 1
+      },
+      "armchair": {
+        "min": 1,
+        "max": 1
+      },
+      "side_table": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "pred_counts": {
+      "sofa": 1,
+      "coffee_table": 1,
+      "tv_console": 1,
+      "tv": 0,
+      "ceiling_lamp": 1,
+      "curtain": 0,
+      "rug": 0,
+      "armchair": 1,
+      "side_table": 0
+    },
+    "tp": 5,
+    "fp": 0,
+    "fn": 4,
+    "precision": 1.0,
+    "recall": 0.555556,
+    "accuracy": 0.0,
+    "comparison_accuracy": 0.5,
+    "comparisons": [
+      {
+        "left": "tv",
+        "right": "tv_console",
+        "predicted_relation": "less",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": false
+      },
+      {
+        "left": "coffee_table",
+        "right": "sofa",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": true
+      }
+    ],
+    "details": "pred_total=5; gt_total=9."
+  }
+}

@@ -103,8 +103,6 @@ class OpenAIClient:
         message_list = list(messages)
         _ = fallback_model_names
         _ = thinking_level
-        _ = response_mime_type
-        _ = response_schema
 
         params: dict[str, object] = {
             "model": resolved_model_name,
@@ -159,8 +157,6 @@ class OpenAIClient:
                 api_version=OpenAIConfig.API_VERSION,
                 azure_endpoint=self._azure_endpoint,
             )
-        # if OpenAIConfig.BASE_URL:
-        #     return OpenAI(api_key=self._api_key, base_url=OpenAIConfig.BASE_URL)
         return OpenAI(api_key=self._api_key)
 
     def _build_model_map(self) -> dict[LLMModelKey, OpenAIModelConfig]:

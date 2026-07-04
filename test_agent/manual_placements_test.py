@@ -10,12 +10,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from pipeline.manual_placements import (  # noqa: E402
     apply_manual_placements_to_tier_output,
-    augment_cluster_forge_with_manual_placements,
+    augment_seed_relation_plan_with_manual_placements,
     build_manual_placements_guidance_text,
     merge_manual_placements_into_styled_output,
     prepare_input_payload_for_manual_placements,
 )
-from agent_schema.clusterF_schema import ClusterForgeOutput  # noqa: E402
+from agent_schema.clusterF_schema import SeedRelationPlannerOutput  # noqa: E402
 
 
 class ManualPlacementsTest(unittest.TestCase):
@@ -213,11 +213,11 @@ class ManualPlacementsTest(unittest.TestCase):
         }
 
         guidance = build_manual_placements_guidance_text(manual_placements)
-        augmented = augment_cluster_forge_with_manual_placements(
+        augmented = augment_seed_relation_plan_with_manual_placements(
             cluster_output,
             manual_placements,
         )
-        parsed = ClusterForgeOutput.model_validate(augmented)
+        parsed = SeedRelationPlannerOutput.model_validate(augmented)
 
         self.assertIn("EXISTING MANUAL OBJECTS FROM EDITOR", guidance)
         self.assertIn("desk", guidance)

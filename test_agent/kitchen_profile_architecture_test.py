@@ -12,8 +12,8 @@ if str(REPO_ROOT) not in sys.path:
 
 _semantic_layout_planner = importlib.import_module("agent.semantic_layout_planner")
 SemanticLayoutPlanner = _semantic_layout_planner.SemanticLayoutPlanner
-semantic_program_to_cluster_forge_payload = (
-    _semantic_layout_planner.semantic_program_to_cluster_forge_payload
+semantic_program_to_seed_relation_payload = (
+    _semantic_layout_planner.semantic_program_to_seed_relation_payload
 )
 _tier_count_director = importlib.import_module("agent.tier_count_director")
 TierCountDirector = _tier_count_director.TierCountDirector
@@ -96,7 +96,7 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
         self.assertEqual(core_objects["sink"]["role"], "workflow_anchor")
         self.assertEqual(core_objects["stove"]["role"], "workflow_anchor")
 
-        cluster_payload = semantic_program_to_cluster_forge_payload(payload)
+        cluster_payload = semantic_program_to_seed_relation_payload(payload)
         cluster_tags = {
             row["cluster_id"]: row["tag"] for row in cluster_payload["clusters"]
         }
@@ -127,7 +127,7 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             {row["type"] for row in dining["relation_intents"]},
         )
 
-        cluster_payload = semantic_program_to_cluster_forge_payload(payload)
+        cluster_payload = semantic_program_to_seed_relation_payload(payload)
         dining_payload = next(
             row
             for row in cluster_payload["clusters"]
@@ -163,7 +163,7 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             "drop_table_last",
         ]
 
-        cluster_payload = semantic_program_to_cluster_forge_payload(program)
+        cluster_payload = semantic_program_to_seed_relation_payload(program)
         dining_payload = next(
             row
             for row in cluster_payload["clusters"]
@@ -249,7 +249,7 @@ class KitchenProfileArchitectureTest(unittest.TestCase):
             )
             .model_dump()
         )
-        clusters_json = semantic_program_to_cluster_forge_payload(semantic_program)
+        clusters_json = semantic_program_to_seed_relation_payload(semantic_program)
         object_types = {
             member
             for cluster in clusters_json["clusters"]

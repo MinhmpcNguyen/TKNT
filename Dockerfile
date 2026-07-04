@@ -23,12 +23,12 @@ COPY agent /app/agent
 COPY agent_schema /app/agent_schema
 COPY assets_gen /app/assets_gen
 COPY clients /app/clients
-COPY cluster_composer /app/cluster_composer
 COPY cluster_placer /app/cluster_placer
 COPY config /app/config
 COPY constraint /app/constraint
 COPY db /app/db
 COPY layout /app/layout
+COPY object_program /app/object_program
 COPY pipeline /app/pipeline
 COPY prompt /app/prompt
 COPY query /app/query

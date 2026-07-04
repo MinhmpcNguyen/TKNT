@@ -34,44 +34,6 @@ type LabelPlacement = {
   };
 };
 
-export async function buildAnnotatedPerspectiveReferenceImageDataUrl(params: {
-  sourceImageDataUrl: string;
-  snapshot: ThreeSnapshotArtifact;
-}): Promise<string | null> {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const sourceImage = await loadImage(params.sourceImageDataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, sourceImage.naturalWidth || sourceImage.width);
-  canvas.height = Math.max(1, sourceImage.naturalHeight || sourceImage.height);
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return null;
-  }
-
-  context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-  context.fillStyle = 'rgba(0, 0, 0, 0.16)';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  const scaleX = canvas.width / Math.max(1, params.snapshot.canvas.widthPx);
-  const scaleY = canvas.height / Math.max(1, params.snapshot.canvas.heightPx);
-  params.snapshot.visibleObjects.forEach((object, index) => {
-    drawObjectAnnotation(context, {
-      object,
-      index,
-      scaleX,
-      scaleY,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-    });
-  });
-
-  drawGuideHeader(context, params.snapshot.visibleObjects.length);
-  return canvas.toDataURL('image/png');
-}
-
 export async function buildStructuralPerspectiveReferenceImageDataUrl(params: {
   sourceImageDataUrl: string;
   snapshot: ThreeSnapshotArtifact;
@@ -213,58 +175,6 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error('Unable to load perspective guide image.'));
     image.src = dataUrl;
   });
-}
-
-function drawObjectAnnotation(
-  context: CanvasRenderingContext2D,
-  params: {
-    object: VisibleSnapshotObject;
-    index: number;
-    scaleX: number;
-    scaleY: number;
-    canvasWidth: number;
-    canvasHeight: number;
-  }
-): void {
-  const { object, index, scaleX, scaleY, canvasWidth, canvasHeight } = params;
-  const color = GUIDE_COLORS[index % GUIDE_COLORS.length];
-  const label = `${String(index + 1).padStart(2, '0')} ${formatObjectLabel(object)}`;
-  const box = object.screenBboxPx;
-  const center = object.screenCenterPx;
-
-  const centerX = clamp(
-    (center?.x ?? (box ? box.minX + box.width / 2 : canvasWidth / 2)) * scaleX,
-    0,
-    canvasWidth
-  );
-  const centerY = clamp(
-    (center?.y ?? (box ? box.minY + box.height / 2 : canvasHeight / 2)) * scaleY,
-    0,
-    canvasHeight
-  );
-
-  context.save();
-  context.lineWidth = Math.max(3, Math.min(canvasWidth, canvasHeight) * 0.004);
-  context.strokeStyle = color;
-  context.fillStyle = withAlpha(color, 0.14);
-
-  if (box) {
-    const x = clamp(box.minX * scaleX, 0, canvasWidth);
-    const y = clamp(box.minY * scaleY, 0, canvasHeight);
-    const width = clamp(box.width * scaleX, 8, canvasWidth - x);
-    const height = clamp(box.height * scaleY, 8, canvasHeight - y);
-    context.fillRect(x, y, width, height);
-    context.strokeRect(x, y, width, height);
-    drawLabel(context, label, color, x, Math.max(4, y - 28), canvasWidth);
-  } else {
-    context.beginPath();
-    context.arc(centerX, centerY, 12, 0, Math.PI * 2);
-    context.fill();
-    context.stroke();
-    drawLabel(context, label, color, centerX + 14, centerY - 14, canvasWidth);
-  }
-
-  context.restore();
 }
 
 function drawEdgeHighlights(
@@ -864,47 +774,6 @@ function luminanceAt(
 ): number {
   const offset = (y * width + x) * 4;
   return data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
-}
-
-function drawLabel(
-  context: CanvasRenderingContext2D,
-  label: string,
-  color: string,
-  x: number,
-  y: number,
-  canvasWidth: number
-): void {
-  const fontSize = 22;
-  const paddingX = 8;
-  const paddingY = 5;
-  context.font = `700 ${fontSize}px sans-serif`;
-  const width = Math.ceil(context.measureText(label).width + paddingX * 2);
-  const height = fontSize + paddingY * 2;
-  const labelX = clamp(x, 4, Math.max(4, canvasWidth - width - 4));
-  const labelY = Math.max(4, y);
-
-  context.fillStyle = 'rgba(255, 255, 255, 0.94)';
-  context.fillRect(labelX, labelY, width, height);
-  context.strokeStyle = color;
-  context.lineWidth = 2;
-  context.strokeRect(labelX, labelY, width, height);
-  context.fillStyle = '#111827';
-  context.fillText(label, labelX + paddingX, labelY + fontSize + paddingY - 2);
-}
-
-function drawGuideHeader(
-  context: CanvasRenderingContext2D,
-  objectCount: number
-): void {
-  const label = `Same-camera object guide - ${objectCount} visible objects`;
-  context.save();
-  context.font = '700 22px sans-serif';
-  const width = Math.ceil(context.measureText(label).width + 24);
-  context.fillStyle = 'rgba(17, 24, 39, 0.82)';
-  context.fillRect(12, 12, width, 38);
-  context.fillStyle = '#ffffff';
-  context.fillText(label, 24, 38);
-  context.restore();
 }
 
 function formatObjectLabel(object: VisibleSnapshotObject): string {

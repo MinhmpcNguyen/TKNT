@@ -14,7 +14,8 @@ class AuthUserResponse(BaseModel):
     id: str
     email: str
     display_name: str | None = None
-    tenant_id: str
+    role: str
+    is_active: bool
 
 
 class AuthSessionResponse(BaseModel):
@@ -41,7 +42,7 @@ def register(
 ) -> AuthSessionResponse:
     try:
         session = auth_service.register_user(
-            email=str(request.email),
+            email=request.email,
             password=request.password,
             display_name=request.display_name,
         )
@@ -57,7 +58,7 @@ def login(
 ) -> AuthSessionResponse:
     try:
         session = auth_service.login_user(
-            email=str(request.email),
+            email=request.email,
             password=request.password,
         )
     except AuthenticationError as exc:
@@ -72,14 +73,16 @@ def me(user: UserAccount = Depends(get_current_user)) -> AuthUserResponse:
 
 @router.post("/logout")
 def logout(
-    user: UserAccount = Depends(get_current_user),
+    _user: UserAccount = Depends(get_current_user),
     token: str | None = Depends(get_optional_access_token),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, bool]:
-    del user
     if token is None:
         raise HTTPException(status_code=400, detail="Missing access token.")
-    auth_service.logout(token)
+    try:
+        auth_service.logout(token)
+    except AuthenticationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     return {"ok": True}
 
 
@@ -95,5 +98,6 @@ def _serialize_user(user: UserAccount) -> AuthUserResponse:
         id=str(user.id),
         email=user.email,
         display_name=user.display_name,
-        tenant_id=str(user.tenant_id),
+        role=user.role,
+        is_active=user.is_active,
     )

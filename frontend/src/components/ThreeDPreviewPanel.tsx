@@ -3,10 +3,9 @@ import { createPortal, flushSync } from 'react-dom';
 import {
   fetchRenderPresets,
   getGeneratedRenderDetail,
-  renderSnapshotImageStream,
+  renderSnapshotImage,
   updateGeneratedRenderMeta,
   type SnapshotImageEditOperation,
-  type SnapshotImagePartialImageEvent,
   type SnapshotImageQuality,
   type SnapshotImageLockedGeometryAtlas,
   type SnapshotImagePresetOption,
@@ -17,7 +16,6 @@ import {
   type SnapshotImageSize,
 } from '../api';
 import {
-  DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES,
   buildPaymentReference,
   estimateImageRenderCredits,
   formatVnd,
@@ -64,7 +62,6 @@ import {
   getInventoryDimensionsMm,
   isReintroducedIdentifier,
   isShelfLikePreviewType,
-  isUserGeneratedPreviewItem,
   resolveInventoryItemForPreview,
   resolveWallHungPreviewDepthMm,
   type InventoryPreviewResolution,
@@ -142,7 +139,7 @@ type ObjectVisualDiagnostic = {
 type RenderPresetGroupName = 'styles' | 'lights' | 'sceneries';
 type CameraPresetGroupName = 'mid' | 'ceiling';
 type ImageRenderAction = 'generate' | 'edit' | 'camera_rerender';
-type StreamPreviewPhase = 'source' | 'partial' | 'final';
+type RenderPreviewPhase = 'source';
 type RoomPointMm = {
   x: number;
   y: number;
@@ -2579,6 +2576,7 @@ function buildSavedRenderSnapshotArtifact(
       visibleObjectCount: visibleObjects.length,
       raycastVisibleObjectCount: 0,
       projectedFallbackObjectCount: visibleObjects.length,
+      projectedFallbackObjectIds: visibleObjects.map((object) => object.id),
       openingBboxMissingCount: 0,
       openingIdsMissingBbox: [],
       reasons: ['saved_render_metadata_without_live_raycast'],
@@ -3060,9 +3058,9 @@ type EditBoxDraft = {
 type ObjectAppearanceReference = ObjectReplacementReference & {
   rootLayoutId: string | null;
   sourceRenderId: string | null;
-  prompt?: string | null;
-  operationType?: EditBoxMode | null;
-  bboxNorm?: EditBoxRect | null;
+  prompt: string | null;
+  operationType: EditBoxMode | null;
+  bboxNorm: EditBoxRect | null;
 };
 
 type SnapshotImageRenderStateMeta = {
@@ -3514,10 +3512,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
     useState<SnapshotImageSize>('1536x1024');
   const [streamPreviewImageDataUrl, setStreamPreviewImageDataUrl] =
     useState<string | null>(null);
-  const [streamPreviewMeta, setStreamPreviewMeta] =
-    useState<SnapshotImagePartialImageEvent | null>(null);
   const [streamPreviewPhase, setStreamPreviewPhase] =
-    useState<StreamPreviewPhase | null>(null);
+    useState<RenderPreviewPhase | null>(null);
   const [lastRenderedSnapshot, setLastRenderedSnapshot] =
     useState<ThreeSnapshotArtifact | null>(null);
   const [, setLastRenderedSnapshotImageDataUrl] =
@@ -3580,7 +3576,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const renderCreditEstimate = useMemo(
     () =>
       estimateImageRenderCredits({
-        partialImages: DEFAULT_IMAGE_RENDER_PARTIAL_IMAGES,
+        partialImages: 0,
         quality: renderQuality,
         size: renderSize,
       }),
@@ -3593,11 +3589,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
     : renderedSnapshotImage?.image.data_url ?? null;
   const activeRenderIsFinal = renderedSnapshotImage !== null && !isStreamPreviewVisible;
   const streamPreviewChipLabel =
-    streamPreviewPhase === 'partial'
-      ? `Partial ${streamPreviewMeta?.partial_image_index ?? 1}`
-      : streamPreviewPhase === 'final'
-        ? 'Final received'
-        : 'Source preview';
+    streamPreviewPhase === 'source' ? 'Source preview' : 'Rendering';
 
   useEffect(() => {
     cameraPresetsRef.current = cameraPresets;
@@ -3703,42 +3695,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
       consumePaidCredits,
       requestBillingPayment,
     ]
-  );
-
-  const buildRenderStreamHandlers = useCallback(
-    (actionLabel: string) => ({
-      onError: ({ message }: { message: string }) => {
-        setRenderStatus({
-          tone: 'error',
-          text: message,
-        });
-      },
-      onPartialImage: (event: SnapshotImagePartialImageEvent) => {
-        setStreamPreviewImageDataUrl(event.image_data_url);
-        setStreamPreviewMeta(event);
-        setStreamPreviewPhase('partial');
-        setRenderStatus({
-          tone: 'neutral',
-          text: `${actionLabel} preview ${event.partial_image_index} streaming...`,
-        });
-      },
-      onCompleted: (event: SnapshotImageRenderApiResponse) => {
-        setStreamPreviewImageDataUrl(event.render.image.data_url);
-        setStreamPreviewMeta(null);
-        setStreamPreviewPhase('final');
-        setRenderStatus({
-          tone: 'neutral',
-          text: `${actionLabel} final image received. Preparing workspace...`,
-        });
-      },
-      onStatus: ({ message }: { message: string; attempt: string | null }) => {
-        setRenderStatus({
-          tone: 'neutral',
-          text: message,
-        });
-      },
-    }),
-    []
   );
 
   useEffect(() => {
@@ -4519,13 +4475,17 @@ export const ThreeDPreviewPanel: React.FC = () => {
     setIsCapturing(true);
     setCaptureStatus({
       tone: 'neutral',
-      text: 'Capturing a sharp clean 3D view...',
+      text: 'Capturing clean 3D view and instance outline overlay...',
     });
 
     try {
-      const { snapshotArtifact, cleanSnapshotImageDataUrl } =
-        await captureCurrentViewportSnapshot();
+      const {
+        snapshotArtifact,
+        cleanSnapshotImageDataUrl,
+        instanceOutlineOverlayImageDataUrl,
+      } = await captureCurrentAiSnapshot();
       const pngBlob = dataUrlToBlob(cleanSnapshotImageDataUrl);
+      const overlayPngBlob = dataUrlToBlob(instanceOutlineOverlayImageDataUrl);
       const jsonBlob = new Blob([JSON.stringify(snapshotArtifact, null, 2)], {
         type: 'application/json',
       });
@@ -4535,11 +4495,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
       );
 
       downloadBlob(pngBlob, `${fileStem}.png`);
+      downloadBlob(overlayPngBlob, `${fileStem}_instance_outline_overlay.png`);
       downloadBlob(jsonBlob, `${fileStem}.json`);
 
       setCaptureStatus({
         tone: 'success',
-        text: `Saved sharp clean 3D PNG and JSON with ${snapshotArtifact.visibleObjectCount} visible objects.`,
+        text: `Saved clean 3D PNG, instance outline overlay PNG, and JSON with ${snapshotArtifact.visibleObjectCount} visible objects.`,
       });
     } catch (captureError) {
       setCaptureStatus({
@@ -4878,7 +4839,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
     flushSync(() => {
       setActiveImageRenderAction('generate');
       setStreamPreviewImageDataUrl(null);
-      setStreamPreviewMeta(null);
       setStreamPreviewPhase(null);
       setRenderStatus({
         tone: 'neutral',
@@ -4900,7 +4860,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
       });
       const {
         snapshotArtifact,
-        snapshotImageDataUrl,
         cleanSnapshotImageDataUrl,
         depthMapImageDataUrl,
         edgeMapImageDataUrl,
@@ -4909,12 +4868,11 @@ export const ThreeDPreviewPanel: React.FC = () => {
       } =
         await captureCurrentAiSnapshot();
       setStreamPreviewImageDataUrl(cleanSnapshotImageDataUrl);
-      setStreamPreviewMeta(null);
       setStreamPreviewPhase('source');
       notifyRenderFocus();
       setRenderStatus({
         tone: 'neutral',
-        text: 'Sending source preview to OpenAI and waiting for partial frames...',
+        text: 'Sending source preview to OpenAI...',
       });
       await waitForNextPaint();
       const appearanceMemoryOperations = buildAppearanceMemoryOperations(snapshotArtifact);
@@ -4922,16 +4880,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
         imageDataUrl: cleanSnapshotImageDataUrl,
         snapshot: snapshotArtifact,
       });
-      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImageStream(
+      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
           snapshotPayload: snapshotArtifact as Record<string, unknown>,
           snapshotImageDataUrl: cleanSnapshotImageDataUrl,
           depthMapImageDataUrl,
           edgeMapImageDataUrl,
           segmentationMapImageDataUrl,
-          layoutReferenceImageDataUrl: null,
-          annotatedReferenceImageDataUrl:
-            instanceOutlineOverlayImageDataUrl || snapshotImageDataUrl,
+          annotatedReferenceImageDataUrl: instanceOutlineOverlayImageDataUrl,
           sceneReferenceImageDataUrl: null,
           sceneReferenceMode: 'none',
           userPrompt: '',
@@ -4945,8 +4901,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           lockedGeometryAtlases,
           imageQuality: renderQuality,
           imageSize: renderSize,
-        },
-        buildRenderStreamHandlers('Generation')
+        }
       );
       const renderState = buildRenderStateMeta({
         snapshotArtifact,
@@ -4962,7 +4917,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
       );
       setRenderedSnapshotImage(renderWithState);
       setStreamPreviewImageDataUrl(null);
-      setStreamPreviewMeta(null);
       setStreamPreviewPhase(null);
       notifyRenderFocus();
       setLastRenderedSnapshot(snapshotArtifact);
@@ -5027,7 +4981,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
     flushSync(() => {
       setActiveImageRenderAction(action);
       setStreamPreviewImageDataUrl(renderedSnapshotImage.image.data_url);
-      setStreamPreviewMeta(null);
       setStreamPreviewPhase('source');
       setRenderStatus({
         tone: 'neutral',
@@ -5093,11 +5046,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
         readRenderStateFromResult(renderedSnapshotImage)?.raw_user_prompt ??
         renderedSnapshotImage.request.raw_user_prompt ??
         null;
-      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImageStream(
+      const renderResult: SnapshotImageRenderApiResponse = await renderSnapshotImage(
         {
           snapshotPayload: targetSnapshotArtifact as unknown as Record<string, unknown>,
           snapshotImageDataUrl: cleanSnapshotImageDataUrl,
-          layoutReferenceImageDataUrl: null,
           annotatedReferenceImageDataUrl: editBoxGuideImageDataUrl,
           sceneReferenceImageDataUrl: null,
           sceneReferenceMode: editDelta.cameraChanged
@@ -5117,8 +5069,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
           editOperations,
           imageQuality: renderQuality,
           imageSize: renderSize,
-        },
-        buildRenderStreamHandlers(action === 'camera_rerender' ? 'Camera' : 'Edit')
+        }
       );
       const renderState = buildRenderStateMeta({
         snapshotArtifact: targetSnapshotArtifact,
@@ -5138,9 +5089,9 @@ export const ThreeDPreviewPanel: React.FC = () => {
         memoryBoxes,
         targetSnapshotArtifact
       );
-      const memoryEntries = (
-        await Promise.all(
-          editedObjectsForMemory.map(async ({ object, box }) => {
+        const memoryEntries = (
+          await Promise.all(
+          editedObjectsForMemory.map(async ({ object, box }): Promise<ObjectAppearanceReference | null> => {
             const imageDataUrl =
               box.imageDataUrl && (box.mode === 'replace' || box.mode === 'add')
                 ? box.imageDataUrl
@@ -5176,7 +5127,6 @@ export const ThreeDPreviewPanel: React.FC = () => {
       };
       setRenderedSnapshotImage(renderWithState);
       setStreamPreviewImageDataUrl(null);
-      setStreamPreviewMeta(null);
       setStreamPreviewPhase(null);
       notifyRenderFocus();
       setLastRenderedSnapshot(targetSnapshotArtifact);
@@ -5685,7 +5635,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
         const wallPts = roomPts.length >= 2 ? roomPts : floorPts;
         const wallsRaw = activeFloorplan.walls ?? [];
-        const walls =
+        const walls: FloorplanGeometry['walls'] =
           wallsRaw.length > 0
             ? wallsRaw
             : wallPts.length >= 2
@@ -5702,7 +5652,10 @@ export const ThreeDPreviewPanel: React.FC = () => {
           if (!wallId) continue;
           wallOpacityById.set(wallId, clamp(Number(wall.opacity ?? 1), 0, 1));
         }
-        const openings =
+        const openings: FloorplanGeometry['openings'] | {
+          doors?: any[];
+          windows?: any[];
+        } =
           activeFloorplan.openings ??
           styledResult?.room?.openings ?? {
             doors: [],
@@ -6451,25 +6404,17 @@ export const ThreeDPreviewPanel: React.FC = () => {
           const modelDescriptor = inventoryModelDescriptor ?? fallbackModelDescriptor;
           const isFallbackModelDescriptor =
             modelDescriptor !== null && modelDescriptor === fallbackModelDescriptor;
-          const preserveGeneratedMeshShape = isUserGeneratedPreviewItem(
-            obj.inventoryResolution.item
-          );
           const stretchWallHungToLayoutBox =
             isWallHung &&
-            isShelfLikePreviewType(obj.type) &&
-            !preserveGeneratedMeshShape;
+            isShelfLikePreviewType(obj.type);
           if (GLTFLoader && modelDescriptor) {
             const resolvedFitStrategy = isWallHung
               ? stretchWallHungToLayoutBox
                 ? 'wall-plane'
-                : preserveGeneratedMeshShape
-                  ? 'wall-plane-uniform'
-                  : 'wall-plane-uniform-or-proxy'
+                : 'wall-plane-uniform-or-proxy'
               : supportsPlacedObjects
                 ? 'footprint'
-                : preserveGeneratedMeshShape
-                  ? 'footprint-uniform'
-                  : 'footprint-uniform-or-proxy';
+                : 'footprint-uniform-or-proxy';
             const previewOverride = applyInventoryModelPreviewOverride({
               descriptor: modelDescriptor,
               context: 'panel',
@@ -6503,8 +6448,8 @@ export const ThreeDPreviewPanel: React.FC = () => {
                 hM: previewOverride.hM,
                 fitStrategy: previewOverride.fitStrategy,
                 colorHex: obj.colorHex,
-                preserveMaterialTextures: preserveGeneratedMeshShape,
-                minimumHorizontalAspectRatio: preserveGeneratedMeshShape ? 0.45 : null,
+                preserveMaterialTextures: false,
+                minimumHorizontalAspectRatio: null,
                 horizontalAnchor: method === 'on_top' ? 'bottom-center' : 'bbox-center',
               })
               .then((model) => {
@@ -7070,6 +7015,12 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
   const controlsSlot =
     typeof document === 'undefined' ? null : document.getElementById('three-controls-slot');
+  const imageRenderLoadingLabel =
+    activeImageRenderAction === 'edit'
+      ? 'Editing image...'
+      : activeImageRenderAction === 'camera_rerender'
+        ? 'Re-rendering image...'
+        : 'Generating image...';
 
   const threePanelHeader = (
     <div className="three-panel-header">
@@ -7566,6 +7517,16 @@ export const ThreeDPreviewPanel: React.FC = () => {
   return (
     <div className="three-panel">
       {controlsSlot ? createPortal(threePanelHeader, controlsSlot) : threePanelHeader}
+      {isRenderingImage ? (
+        <div
+          className="image-render-screen-loading"
+          role="status"
+          aria-label={imageRenderLoadingLabel}
+          aria-live="polite"
+        >
+          <span className="image-render-screen-spinner" aria-hidden="true" />
+        </div>
+      ) : null}
       <div className="three-panel-body">
         <div ref={containerRef} className="three-panel-canvas" />
         {!error && showThreeLoadingOverlay ? (
@@ -7708,7 +7669,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                     {streamPreviewChipLabel}
                   </span>
                   <span className="three-render-chip fallback">
-                    Streaming {renderQuality} {renderSize}
+                    Rendering {renderQuality} {renderSize}
                   </span>
                 </>
               )}
@@ -7722,7 +7683,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
                   alt={
                     activeRenderIsFinal
                       ? 'Generated architectural render from the current 3D snapshot'
-                      : 'Streaming architectural render preview'
+                      : 'Architectural render source preview'
                   }
                   draggable={false}
                 />

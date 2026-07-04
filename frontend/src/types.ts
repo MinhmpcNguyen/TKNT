@@ -6,6 +6,7 @@ export type Room = {
   room_id: string;
   name: string;
   polygon_mm: Point[];
+  polygon_ccw?: Point[] | null;
   floor_color_hex?: string | null;
 };
 
@@ -22,9 +23,12 @@ export type Wall = {
 
 export type Door = {
   door_id: string;
+  id?: string | null;
   wall_id?: string | null;
   start_mm: Point;
   end_mm: Point;
+  asset_id?: string | null;
+  material?: string | null;
   color_hex?: string | null;
   leaf_width_mm?: number | null;
   hinge_side?: 'left' | 'right' | null;
@@ -34,9 +38,12 @@ export type Door = {
 
 export type Window = {
   window_id: string;
+  id?: string | null;
   wall_id?: string | null;
   start_mm: Point;
   end_mm: Point;
+  asset_id?: string | null;
+  material?: string | null;
   color_hex?: string | null;
   sill_height_mm?: number | null;
   height_mm?: number | null;
@@ -59,6 +66,8 @@ export type PlacementConstraintMode = 'free' | 'pinned' | 'locked';
 
 export type Placement = {
   placement_id: string;
+  id?: string | null;
+  object_id?: string | null;
   asset_id: string;
   category: string;
   position_mm: Point;
@@ -100,11 +109,24 @@ export type InventoryItem = {
   attributes?: Record<string, unknown> | null;
 };
 
+export type UserRole = 'user' | 'admin';
+
 export type AuthUser = {
   id: string;
   email: string;
   display_name?: string | null;
-  tenant_id: string;
+  role: UserRole;
+  is_active: boolean;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  role: UserRole;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type SavedLayoutRecord = {
@@ -138,17 +160,26 @@ export type GeneratedRenderRecord = {
   file_url: string;
 };
 
-export type TemplateItem = {
-  template_id: string;
-  name: string;
-  room_type?: string | null;
-  supported_shapes: string[];
-  style_tags: string[];
-};
-
 export type DesignPlanV1 = {
   floorplan_geometry: FloorplanGeometry;
   placements: Placement[];
+};
+
+export type LayoutResultRoom = Record<string, unknown> & {
+  polygon_mm?: Point[] | null;
+  polygon_ccw?: Point[] | null;
+  openings?: {
+    doors?: unknown[];
+    windows?: unknown[];
+  } | null;
+  surfaces?: Record<string, unknown> | null;
+};
+
+export type LayoutResultPayload = Record<string, unknown> & {
+  room?: LayoutResultRoom | null;
+  objects?: unknown[] | null;
+  solver_debug?: Record<string, unknown> | null;
+  verify_summary?: Record<string, unknown> | null;
 };
 
 export type LayoutVariant = {
@@ -163,10 +194,9 @@ export type LayoutVariant = {
   coverage_ratio?: number;
   missing_cluster_ids?: string[];
   notes: string[];
-  absolute_layout: Record<string, unknown>;
-  styled_result: Record<string, unknown>;
+  absolute_layout: LayoutResultPayload;
+  styled_result: LayoutResultPayload;
   design: DesignPlanV1 | null;
-  cluster_previews?: Record<string, unknown>;
   saved_layout_id?: string | null;
   saved_layout_case_id?: string | null;
 };

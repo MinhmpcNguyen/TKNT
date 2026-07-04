@@ -53,6 +53,22 @@ def to_optional_float(value: object | None) -> float | None:
     raise ValueError("Expected float-compatible value.")
 
 
+def to_bool(value: object | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n", "off"}:
+            return False
+    raise ValueError("Expected bool-compatible value.")
+
+
 def to_optional_bytes(value: object | None) -> bytes | None:
     if value is None:
         return None

@@ -1883,10 +1883,6 @@ def _bounds_from_points(points: Sequence[Point2D]) -> Bounds2D:
     return Bounds2D(min(xs), min(ys), max(xs), max(ys))
 
 
-def _count_phrase(count: int, *, singular: str, plural: str) -> str:
-    return f"{count} {singular if count == 1 else plural}"
-
-
 def _comma_join(values: Sequence[str]) -> str:
     filtered = [value.strip() for value in values if value and value.strip()]
     if not filtered:

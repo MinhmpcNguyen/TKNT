@@ -34,6 +34,14 @@ type PreviewScene = {
   viewBox: string;
 };
 
+type LayoutDiagnosticSummary = {
+  explanation: string;
+  items: string[];
+};
+
+const LAYOUT_DIAGNOSTIC_EXPLANATION =
+  'Typical diagnostics include furniture that is too large for the room, blocked door or window clearance, insufficient circulation, or unsupported relations between requested objects. These diagnostics help the user understand why automatic layout generation failed and decide whether to relax optional requirements, change the room input, or continue with manual editing.';
+
 export const LayoutVariantsGallery: React.FC = () => {
   const layoutVariants = useEditorStore((state) => state.layoutVariants);
   const selectedVariantId = useEditorStore((state) => state.selectedVariantId);
@@ -99,6 +107,10 @@ export const LayoutVariantsGallery: React.FC = () => {
             !hasBlockingIssues && (variant.gallery_eligible ?? variant.hard_valid);
           const badgeLabel =
             variant.complete === false ? 'Incomplete' : isEligible ? 'Valid' : 'Needs review';
+          const diagnostics = buildLayoutDiagnosticSummary(variant, {
+            hasBlockingIssues,
+            isEligible,
+          });
           return (
             <button
               key={variant.variant_id}
@@ -165,6 +177,19 @@ export const LayoutVariantsGallery: React.FC = () => {
                     ))}
                   </div>
                 ) : null}
+                {diagnostics ? (
+                  <div className="layout-variant-diagnostics">
+                    <div className="layout-variant-diagnostics-title">Diagnostics</div>
+                    <p>{diagnostics.explanation}</p>
+                    {diagnostics.items.length > 0 ? (
+                      <ul>
+                        {diagnostics.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </button>
           );
@@ -180,7 +205,12 @@ function variantHasBlockingFunctionalIssues(variant: LayoutVariant): boolean {
   if (Number.isFinite(blockingCount) && blockingCount > 0) {
     return true;
   }
-  return hasNonEmptyIssueList(verifySummary?.blocking_protected_region_issues);
+  return (
+    hasNonEmptyIssueList(verifySummary?.blocking_protected_region_issues) ||
+    hasNonEmptyIssueList(verifySummary?.blocking_forbidden_region_issues) ||
+    hasNonEmptyIssueList(verifySummary?.blocking_orientation_issues) ||
+    hasNonEmptyIssueList(verifySummary?.blocking_functional_geometry_issues)
+  );
 }
 
 function getVariantVerifySummary(variant: LayoutVariant): Record<string, unknown> | null {
@@ -200,6 +230,134 @@ function getVariantVerifySummary(variant: LayoutVariant): Record<string, unknown
 
 function hasNonEmptyIssueList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
+}
+
+function buildLayoutDiagnosticSummary(
+  variant: LayoutVariant,
+  status: { hasBlockingIssues: boolean; isEligible: boolean },
+): LayoutDiagnosticSummary | null {
+  const items = collectLayoutDiagnosticItems(variant);
+  const shouldShow =
+    items.length > 0 ||
+    variant.complete === false ||
+    !variant.hard_valid ||
+    !status.isEligible ||
+    status.hasBlockingIssues;
+  if (!shouldShow) {
+    return null;
+  }
+  return {
+    explanation: LAYOUT_DIAGNOSTIC_EXPLANATION,
+    items: items.slice(0, 5),
+  };
+}
+
+function collectLayoutDiagnosticItems(variant: LayoutVariant): string[] {
+  const items: string[] = [];
+  const missingClusterIds = uniqueStrings(variant.missing_cluster_ids ?? []);
+  if (missingClusterIds.length > 0) {
+    items.push(
+      `Missing required furniture groups: ${missingClusterIds
+        .map(formatDiagnosticToken)
+        .join(', ')}.`,
+    );
+  }
+  if (variant.complete === false && missingClusterIds.length === 0) {
+    items.push('The solver returned an incomplete layout.');
+  }
+  if (!variant.hard_valid) {
+    items.push('Hard geometry checks did not pass.');
+  }
+  const verifySummary = getVariantVerifySummary(variant);
+  if (verifySummary) {
+    appendVerifySummaryDiagnostics(items, verifySummary);
+  }
+  return uniqueStrings(items);
+}
+
+function appendVerifySummaryDiagnostics(
+  items: string[],
+  verifySummary: Record<string, unknown>,
+): void {
+  const blockingIssueCount = toFiniteNumber(verifySummary.blocking_issue_count);
+  if (blockingIssueCount !== null && blockingIssueCount > 0) {
+    items.push(`${blockingIssueCount} blocking issue(s) detected by solver checks.`);
+  }
+
+  const qualityGateReasons = uniqueStrings(
+    arrayFromUnknown(verifySummary.quality_gate_reasons),
+  );
+  for (const reason of qualityGateReasons.slice(0, 3)) {
+    items.push(`Quality gate: ${formatDiagnosticToken(reason)}.`);
+  }
+
+  appendIssueCountDiagnostic(
+    items,
+    verifySummary.blocking_protected_region_issues,
+    'Door, window, or protected clearance is blocked.',
+  );
+  appendIssueCountDiagnostic(
+    items,
+    verifySummary.blocking_forbidden_region_issues,
+    'A furniture item is in a forbidden room region.',
+  );
+  appendIssueCountDiagnostic(
+    items,
+    verifySummary.blocking_orientation_issues,
+    'A requested facing or orientation relation is unsupported.',
+  );
+  appendIssueCountDiagnostic(
+    items,
+    verifySummary.blocking_functional_geometry_issues,
+    'Circulation, front access, or functional spacing is blocked.',
+  );
+
+  const verifyMissingClusters = uniqueStrings(
+    arrayFromUnknown(verifySummary.missing_cluster_ids),
+  );
+  if (verifyMissingClusters.length > 0) {
+    items.push(
+      `Missing solver clusters: ${verifyMissingClusters
+        .map(formatDiagnosticToken)
+        .join(', ')}.`,
+    );
+  }
+}
+
+function appendIssueCountDiagnostic(
+  items: string[],
+  value: unknown,
+  label: string,
+): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    return;
+  }
+  items.push(`${label} (${value.length})`);
+}
+
+function arrayFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => String(item ?? '').trim())
+    .filter((item) => item.length > 0);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function formatDiagnosticToken(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildPreviewScene(variant: LayoutVariant): PreviewScene {
@@ -245,10 +403,10 @@ function buildPreviewScene(variant: LayoutVariant): PreviewScene {
 }
 
 function buildPreviewObjectRows(variant: LayoutVariant): any[] {
-  const absoluteObjects = Array.isArray(variant.absolute_layout?.objects)
+  const absoluteObjects: any[] = Array.isArray(variant.absolute_layout?.objects)
     ? variant.absolute_layout.objects
     : [];
-  const styledObjects = Array.isArray(variant.styled_result?.objects)
+  const styledObjects: any[] = Array.isArray(variant.styled_result?.objects)
     ? variant.styled_result.objects
     : [];
   if (absoluteObjects.length === 0) {

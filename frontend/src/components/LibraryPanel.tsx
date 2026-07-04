@@ -58,10 +58,6 @@ export const LibraryPanel: React.FC = () => {
       );
   }, [inventory, roomType, roomTypeFilter, searchQuery, styleFilter]);
 
-  const sharedInventory = visibleInventory.filter(
-    (item) => item.attributes?.ownership_scope !== 'owned'
-  );
-
   useEffect(() => {
     const hasActiveFilter =
       searchQuery.trim() !== '' || styleFilter.trim() !== '' || roomTypeFilter !== 'all';
@@ -105,12 +101,12 @@ export const LibraryPanel: React.FC = () => {
       <div className="library-list">
         {inventory.length === 0 ? (
           <p className="muted">No inventory loaded yet.</p>
-        ) : sharedInventory.length === 0 ? (
+        ) : visibleInventory.length === 0 ? (
           <p className="muted">No inventory matches the current filters.</p>
         ) : (
           <LibrarySection
             isOpen={isSharedOpen}
-            items={sharedInventory}
+            items={visibleInventory}
             label="Shared inventory"
             onToggle={() => setIsSharedOpen((current) => !current)}
           />
@@ -158,8 +154,6 @@ const LibrarySection: React.FC<{
 
 const LibraryItem: React.FC<{ item: InventoryItem }> = ({ item }) => {
   const roomStyle = useEditorStore((state) => state.userInput.style);
-  const ownershipScope =
-    item.attributes?.ownership_scope === 'owned' ? 'Your asset' : 'Shared asset';
   return (
     <div
       className="library-item"
@@ -175,9 +169,7 @@ const LibraryItem: React.FC<{ item: InventoryItem }> = ({ item }) => {
       <InventoryThumbnail item={item} preferredStyle={roomStyle} />
       <div className="library-item-copy">
         <div className="library-name">{item.name}</div>
-        <div className="library-meta">
-          {item.category} · {ownershipScope}
-        </div>
+        <div className="library-meta">{item.category} · Shared asset</div>
       </div>
     </div>
   );

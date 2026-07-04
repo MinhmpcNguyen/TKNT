@@ -6,7 +6,9 @@ from typing import Literal, NewType, TypeAlias
 
 from pydantic import BaseModel, Field, field_validator
 
-JsonValue: TypeAlias = str | int | float | bool | None | list[object] | dict[str, object]
+JsonValue: TypeAlias = (
+    str | int | float | bool | None | list[object] | dict[str, object]
+)
 
 AssetId = NewType("AssetId", str)
 AssetFileId = NewType("AssetFileId", str)
@@ -20,8 +22,9 @@ GeneratedRenderId = NewType("GeneratedRenderId", str)
 
 AssetType = Literal["FURNITURE", "TEMPLATE"]
 FileKind = Literal["IMAGE", "SVG", "JSON", "PREVIEW", "TEXTURE", "MODEL"]
-StorageProvider = Literal["s3", "minio", "gcs", "azure_blob", "local"]
-RenderSource = Literal["snapshot_render", "object_prompt_reference", "object_image_upload"]
+StorageProvider = Literal["s3", "minio", "gcs", "azure_blob", "local", "database"]
+RenderSource = Literal["snapshot_render"]
+UserRole = Literal["user", "admin"]
 
 
 class AssetDimensions(BaseModel):
@@ -76,6 +79,7 @@ class AssetFile(BaseModel):
     bytes_size: int | None = None
     role: str | None = None
     meta: dict[str, JsonValue] = Field(default_factory=dict)
+    content_bytes: bytes | None = None
 
     @field_validator("width_px", "height_px", "bytes_size")
     @classmethod
@@ -137,6 +141,8 @@ class UserAccount(BaseModel):
     email: str
     display_name: str | None = None
     tenant_id: TenantId
+    role: UserRole = "user"
+    is_active: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -155,6 +161,25 @@ class AuthSession(BaseModel):
     expires_at: datetime | None = None
     last_seen_at: datetime | None = None
     revoked_at: datetime | None = None
+
+
+class BillingSettings(BaseModel):
+    per_credit_price_vnd: int
+    monthly_price_vnd: int
+    monthly_credit_quota: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_validator(
+        "per_credit_price_vnd",
+        "monthly_price_vnd",
+        "monthly_credit_quota",
+    )
+    @classmethod
+    def _positive_int(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Billing settings must be positive.")
+        return value
 
 
 class SavedLayoutCase(BaseModel):
@@ -190,7 +215,6 @@ class GeneratedRender(BaseModel):
     model_name: str
     prompt: str
     negative_prompt: str | None = None
-    storage_path: str | None = None
     root_layout_id: SavedLayoutId | None = None
     case_id: SavedLayoutCaseId | None = None
     option_id: str | None = None

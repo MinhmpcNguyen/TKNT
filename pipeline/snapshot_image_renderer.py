@@ -2503,41 +2503,6 @@ def _aspect_ratio_value(value: str) -> float:
     return width / height
 
 
-def _remove_supplemental_image_prompt_references(prompt: str) -> str:
-    prompt_parts: list[str] = []
-    for paragraph in prompt.split("\n\n"):
-        if paragraph.startswith("Object appearance memory:"):
-            continue
-        cleaned_lines = [
-            line
-            for line in paragraph.splitlines()
-            if not _line_references_supplemental_image(line)
-        ]
-        cleaned_paragraph = "\n".join(cleaned_lines).strip()
-        if cleaned_paragraph:
-            prompt_parts.append(cleaned_paragraph)
-    return "\n\n".join(prompt_parts)
-
-
-def _line_references_supplemental_image(line: str) -> bool:
-    if line.startswith("Image ") and (
-        "same-camera labeled structural guide" in line
-        or "previously rendered same-room reference" in line
-        or "labeled 3D target-view reference" in line
-        or "user-drawn edit-region guide" in line
-        or "deterministic depth map" in line
-        or "deterministic edge map" in line
-        or "deterministic segmentation map" in line
-    ):
-        return True
-    return line.startswith("The top-down layout image is supplemental")
-
-
-def _payload_json_size_bytes(payload: Mapping[str, object]) -> int:
-    encoded = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
-    return len(encoded)
-
-
 def _collect_inline_image_summaries(value: object) -> list[dict[str, object]]:
     summaries: list[dict[str, object]] = []
     if isinstance(value, Mapping):
@@ -2569,13 +2534,6 @@ def _collect_inline_image_summaries(value: object) -> list[dict[str, object]]:
         for item in value:
             summaries.extend(_collect_inline_image_summaries(item))
     return summaries
-
-
-def _truncate_text(value: str, *, limit: int = 240) -> str:
-    normalized = " ".join(value.split())
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: limit - 3] + "..."
 
 
 def _build_preset_prompt(preset_selection: Mapping[str, object] | None) -> str:
@@ -4485,13 +4443,6 @@ def _serialize_edit_operation(operation: SnapshotEditOperation) -> dict[str, obj
         "replacement_image_provided": operation.replacement_image_data_url is not None,
         "target_color": operation.target_color,
     }
-
-
-def _normalize_user_prompt(user_prompt: str | None) -> str:
-    normalized = _string(user_prompt)
-    if normalized:
-        return normalized
-    return _DEFAULT_USER_PROMPT
 
 
 def _resolve_canvas_aspect_ratio(snapshot_payload: Mapping[str, object]) -> str:

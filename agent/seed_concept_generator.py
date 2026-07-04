@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-import json
-import logging
-from collections.abc import Callable, Collection, Mapping, Sequence
+import re
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal
 
-from clients.base_client import ChatMessage
-from clients.llm_client import get_llm_client
-from config.llm_config import TextLLMConfig
 from layout.room_profiles.registry import profile_room_type_for_objects
 from layout.variant_family import SLEEP_VARIANT_FAMILIES
-
-logger = logging.getLogger(__name__)
 
 ConceptFamily = Literal[
     "focal_axis",
@@ -40,61 +34,6 @@ DEDUPE_THRESHOLD = 0.75
 MIN_CONCEPT_DISTANCE = 0.25
 MAX_VARIANT_FAMILIES_PER_CLUSTER = 4
 MIN_VARIANT_FAMILIES_PER_CLUSTER = 2
-_RESPONSE_MIME_TYPE = "application/json"
-_GUIDANCE_LLM_TEMPERATURE = 0.2
-_GUIDANCE_LLM_TOP_P = 0.9
-_GUIDED_STAGE_NOTE = (
-    "LLM-guided SeedConceptGenerator refined macro concept blueprints while "
-    "deterministic validation and solver projection remained active."
-)
-_CENTER_USAGE_VALUES = {"none", "partial", "primary", "open_reserved"}
-_GUIDED_WALL_SIDES = {
-    "",
-    "center",
-    "window_side",
-    "top_wall",
-    "right_wall",
-    "bottom_wall",
-    "left_wall",
-}
-_GUIDED_TOPOLOGY_POLICY_KEYS = {
-    "reserve_center_degree",
-    "wall_loading_bias",
-    "daylight_bias",
-    "entry_avoidance_strength",
-    "secondary_zone_placement_bias",
-}
-_GUIDED_TOPOLOGY_POLICY_ALLOWED_VALUES: dict[str, frozenset[str]] = {
-    "reserve_center_degree": frozenset({"medium", "high", "very_high"}),
-    "wall_loading_bias": frozenset(
-        {
-            "balanced",
-            "balanced_edge",
-            "focal_wall_first",
-            "perimeter_heavy",
-            "zone_specific",
-        }
-    ),
-    "daylight_bias": frozenset(
-        {
-            "avoid_blocking",
-            "primary_support_preferred",
-            "role_based",
-            "secondary_cluster_preferred",
-            "support_allowed",
-        }
-    ),
-    "entry_avoidance_strength": frozenset({"medium", "high"}),
-    "secondary_zone_placement_bias": frozenset(
-        {
-            "daylight_if_not_focal",
-            "edge_recede",
-            "focal_edge",
-            "perimeter",
-            "separate_support_zone",
-        }
-    ),
-}
 _FIT_CHECKED_REQUIRED_REGION_IDS: frozenset[str] = frozenset()
 _VIEW_TARGET_VIEWER_PRIORITY: tuple[str, ...] = (
     "bed",
@@ -140,60 +79,6 @@ _ENTRY_SUPPORT_OBJECT_TOKENS: frozenset[str] = frozenset(
         "shoe_storage",
         "umbrella_stand",
     }
-)
-
-
-@dataclass(frozen=True)
-class _MacroConceptGuidanceSpec:
-    model_config_keys: tuple[str, str, str]
-    default_model_chain: tuple[str, ...]
-    system_prompt: str
-    task_prompt: str
-    output_contract: str
-    repair_prompt: str
-
-
-_MACRO_CONCEPT_GUIDANCE_SPEC = _MacroConceptGuidanceSpec(
-    model_config_keys=(
-        "relation_planner_macro_concept_guidance_primary",
-        "relation_planner_macro_concept_guidance_fallback_primary",
-        "relation_planner_macro_concept_guidance_fallback_secondary",
-    ),
-    default_model_chain=(),
-    system_prompt=(
-        "You refine macro layout concept blueprints for a deterministic interior "
-        "layout planner. Return exactly one JSON object. No markdown. No prose "
-        "outside JSON. Use only the provided concept families, cluster ids, and "
-        "macro region ids."
-    ),
-    task_prompt=(
-        "Increase macro-concept diversity without breaking solver stability. "
-        "Adjust concept family order, topology bias, and physical cluster-to-zone "
-        "steering for this exact room, brief, and semantic cluster set. Favor "
-        "legible, plausible alternatives over novelty for its own sake. Avoid "
-        "concepts that only rename the same physical wall/zone layout."
-    ),
-    output_contract=(
-        "Top-level keys: `family_order`, `concept_blueprints`, `notes`. "
-        "`family_order` must contain only provided concept families. "
-        "`concept_blueprints` must be a list of guidance entries. Each entry must "
-        "contain `concept_family`, `intent_label`, `primary_cluster_region`, "
-        "`secondary_cluster_region`, `support_region`, `preferred_wall_side`, "
-        "`center_usage`, and `topology_policy`. "
-        "`topology_policy` may only set: `reserve_center_degree`, "
-        "`wall_loading_bias`, `daylight_bias`, `entry_avoidance_strength`, "
-        "`secondary_zone_placement_bias`. Region fields may be either a macro "
-        "region id string or an object with `zone_assignment`, "
-        "`preferred_wall_side`, and `center_usage`. Use only provided macro "
-        "region ids. Never assign any cluster to `keep_open_center`. Choose "
-        "physically distinct primary/secondary/support regions so Seed can emit "
-        "`material_macro_signature_target` and committed anchor targets for the "
-        "solver."
-    ),
-    repair_prompt=(
-        "Return exactly one valid JSON object with top-level keys "
-        "`family_order`, `concept_blueprints`, and `notes`. No markdown."
-    ),
 )
 
 
@@ -257,7 +142,7 @@ class RegionCandidate:
 
 @dataclass(frozen=True)
 class SeedConceptGenerator:
-    """LLM-guided topology-aware macro concept generator.
+    """Deterministic topology-aware macro concept generator.
 
     It works at zone-claim and room topology level, then emits solver-compatible
     projections as an adapter layer.
@@ -269,13 +154,6 @@ class SeedConceptGenerator:
         room_model_json: Mapping[str, object],
         clusters_json: Mapping[str, object],
         target_count: int = 5,
-        description: str | None = None,
-        special_notes: str | None = None,
-        use_llm: bool = True,
-        temperature: float = _GUIDANCE_LLM_TEMPERATURE,
-        top_p: float = _GUIDANCE_LLM_TOP_P,
-        max_tokens: int | None = None,
-        retry_feedback: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         room_model = _unwrap_room_model(room_model_json)
         room_type = _room_type(room_model)
@@ -290,31 +168,6 @@ class SeedConceptGenerator:
             cluster_programs=cluster_programs,
             macro_regions=_macro_regions_from_map(macro_region_map),
         )
-        guidance_notes: list[str] = []
-        guidance_bundle: dict[str, object] | None = None
-        controller = (
-            "llm_guided_seed_concept_generator"
-            if use_llm
-            else "deterministic_seed_concept_generator"
-        )
-        if use_llm and cluster_programs and region_candidates:
-            guidance_bundle = self._generate_macro_concept_guidance(
-                room_model=room_model,
-                room_type=room_type,
-                clusters_json=clusters_json,
-                cluster_programs=cluster_programs,
-                macro_region_map=macro_region_map,
-                region_candidates=region_candidates,
-                style_policy=style_policy,
-                description=description,
-                special_notes=special_notes,
-                retry_feedback=retry_feedback,
-                target_count=target_count,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-            )
-            guidance_notes.extend(_string_list(guidance_bundle.get("notes")))
         concepts = _instantiate_concept_families(
             room_model=room_model,
             room_type=room_type,
@@ -324,13 +177,6 @@ class SeedConceptGenerator:
             style_policy=style_policy,
             target_count=target_count,
             object_viewing_pairs=object_viewing_pairs,
-            guidance_bundle=guidance_bundle,
-        )
-        concepts, guidance_validation = _validate_guided_concept_diversity(
-            concepts=concepts,
-            guidance_bundle=guidance_bundle,
-            target_count=max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
-            retry_feedback=retry_feedback,
         )
 
         status = "OK" if concepts and cluster_programs else "UNSAT"
@@ -338,14 +184,11 @@ class SeedConceptGenerator:
             "Relation planning is absorbed into semantic zone claims and macro concept generation.",
             "Concepts do not place exact coordinates; MacroClusterSolver owns pose search.",
         ]
-        if guidance_bundle is not None:
-            notes.insert(0, _GUIDED_STAGE_NOTE)
-        notes.extend(note for note in guidance_notes if note not in notes)
         return {
             "status": status,
             "room_id": _room_id(room_model),
             "room_type": room_type,
-            "controller": controller,
+            "controller": "deterministic_seed_concept_generator",
             "settings": {
                 "macro_region_cap": MACRO_REGION_CAP,
                 "concept_family_count": len(CONCEPT_FAMILIES),
@@ -353,7 +196,6 @@ class SeedConceptGenerator:
                 "max_assignment_candidates_per_concept": MAX_ASSIGNMENT_CANDIDATES_PER_CONCEPT,
                 "dedupe_threshold": DEDUPE_THRESHOLD,
                 "min_concept_distance": MIN_CONCEPT_DISTANCE,
-                "llm_guided": guidance_bundle is not None,
             },
             "style_policy": style_policy,
             "macro_region_map": macro_region_map,
@@ -365,216 +207,7 @@ class SeedConceptGenerator:
             ],
             "concepts": concepts,
             "notes": notes,
-            "llm_guidance": guidance_bundle or {},
-            "llm_guidance_validation": guidance_validation,
         }
-
-    def generate(
-        self,
-        *,
-        room_model_json: Mapping[str, object],
-        clusters_json: Mapping[str, object],
-        description: str | None = None,
-        special_notes: str | None = None,
-        model_name: str | None = None,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-    ) -> dict[str, object]:
-        _ = model_name
-        family = _family_from_text(special_notes)
-        bundle = self.generate_bundle(
-            room_model_json=room_model_json,
-            clusters_json=clusters_json,
-            target_count=len(CONCEPT_FAMILIES),
-            description=description,
-            special_notes=special_notes,
-            use_llm=True,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        concepts = [
-            concept
-            for concept in bundle.get("concepts", [])
-            if isinstance(concept, dict)
-        ]
-        concept = next(
-            (item for item in concepts if item.get("concept_family") == family),
-            concepts[0] if concepts else None,
-        )
-        room_model = _unwrap_room_model(room_model_json)
-        if not isinstance(concept, dict):
-            return _empty_solver_plan(room_model)
-        return _concept_to_solver_plan(
-            concept=concept,
-            room_model=room_model,
-            room_type=str(bundle.get("room_type") or _room_type(room_model_json)),
-        )
-
-    def _generate_macro_concept_guidance(
-        self,
-        *,
-        room_model: Mapping[str, object],
-        room_type: str,
-        clusters_json: Mapping[str, object],
-        cluster_programs: Sequence[ClusterProgram],
-        macro_region_map: Mapping[str, object],
-        region_candidates: Sequence[RegionCandidate],
-        style_policy: Mapping[str, object],
-        description: str | None,
-        special_notes: str | None,
-        retry_feedback: Mapping[str, object] | None,
-        target_count: int,
-        temperature: float,
-        top_p: float,
-        max_tokens: int | None,
-    ) -> dict[str, object]:
-        payload = {
-            "room_type": room_type,
-            "description": (description or "").strip(),
-            "special_notes": (special_notes or "").strip(),
-            "target_count": max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
-            "style_policy": style_policy,
-            "cluster_programs": [
-                {
-                    "cluster_id": cluster.cluster_id,
-                    "semantic_role": cluster.semantic_role,
-                    "layout_role": cluster.layout_role,
-                    "role_kind": cluster.role_kind,
-                    "priority": cluster.priority,
-                    "zone_claims": dict(cluster.zone_claims),
-                    "object_ids": list(cluster.object_ids),
-                }
-                for cluster in cluster_programs
-            ],
-            "macro_regions": [
-                {
-                    "region_id": region.get("region_id"),
-                    "region_type": region.get("region_type"),
-                    "tags": region.get("tags"),
-                }
-                for region in _sequence_or_empty(macro_region_map.get("regions"))
-                if isinstance(region, Mapping)
-            ],
-            "top_region_candidates_by_cluster": _top_region_candidates_by_cluster(
-                region_candidates
-            ),
-            "available_concept_families": list(CONCEPT_FAMILIES),
-            "guidance_contract_version": "v2_physical_diversity",
-            "deterministic_family_order": list(
-                _style_ranked_concept_families(style_policy)
-            ),
-            "clusters_json_summary": _guided_clusters_summary(clusters_json),
-            "room_topology_summary": _guided_room_summary(room_model, macro_region_map),
-        }
-        if isinstance(retry_feedback, Mapping) and retry_feedback:
-            payload["retry_feedback"] = _compact_retry_feedback(retry_feedback)
-        guidance = self._call_macro_concept_guidance_stage(
-            prompt_payload=payload,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            response_validator=lambda response: _sanitize_macro_concept_guidance(
-                response,
-                target_count=max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
-                available_families=CONCEPT_FAMILIES,
-                cluster_ids={cluster.cluster_id for cluster in cluster_programs},
-                region_ids=_available_macro_region_ids(macro_region_map),
-            ),
-        )
-        return _sanitize_macro_concept_guidance(
-            guidance,
-            target_count=max(1, min(int(target_count), len(CONCEPT_FAMILIES))),
-            available_families=CONCEPT_FAMILIES,
-            cluster_ids={cluster.cluster_id for cluster in cluster_programs},
-            region_ids=_available_macro_region_ids(macro_region_map),
-        )
-
-    def _call_macro_concept_guidance_stage(
-        self,
-        *,
-        prompt_payload: Mapping[str, object],
-        temperature: float,
-        top_p: float,
-        max_tokens: int | None,
-        response_validator: Callable[[dict[str, object]], object] | None = None,
-    ) -> dict[str, object]:
-        stage_spec = _MACRO_CONCEPT_GUIDANCE_SPEC
-        user_prompt = (
-            "Task:\n"
-            f"{stage_spec.task_prompt}\n\n"
-            "Output Contract:\n"
-            f"{stage_spec.output_contract}\n\n"
-            "Rules:\n"
-            "- Return exactly one JSON object.\n"
-            "- No markdown.\n"
-            "- No commentary outside JSON.\n"
-            "- Do not omit required keys.\n\n"
-            "Payload:\n"
-            f"{json.dumps(prompt_payload, ensure_ascii=True, indent=2)}"
-        )
-        base_messages: list[ChatMessage] = [
-            {"role": "system", "content": stage_spec.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        client = get_llm_client()
-        model_chain = _seed_concept_guidance_model_chain()
-        last_error: Exception | None = None
-        for model_index, model_name in enumerate(model_chain):
-            messages = list(base_messages)
-            fallback_model_names = model_chain[model_index + 1 :]
-            try:
-                last_raw = ""
-                for attempt in range(2):
-                    response = client.chat_completion(
-                        messages,
-                        model_key="primary",
-                        model_name=model_name,
-                        fallback_model_names=fallback_model_names,
-                        temperature=temperature,
-                        top_p=top_p,
-                        max_tokens=max_tokens,
-                        response_mime_type=_RESPONSE_MIME_TYPE,
-                    )
-                    last_raw = _extract_llm_content(response)
-                    try:
-                        parsed = _parse_guidance_json(last_raw)
-                        if response_validator is not None:
-                            response_validator(parsed)
-                        return parsed
-                    except ValueError as exc:
-                        if attempt == 1:
-                            raise ValueError(
-                                "macro concept guidance validation failed on "
-                                f"{model_name}: {exc}"
-                            ) from exc
-                        _record_llm_retry(
-                            stage="seed_concept_generator.macro_concept_guidance",
-                            model_name=model_name,
-                            reason="invalid_json_or_schema",
-                        )
-                        messages.append({"role": "assistant", "content": last_raw})
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"{stage_spec.repair_prompt}\n"
-                                    f"Validation error: {exc}"
-                                ),
-                            }
-                        )
-            except Exception as exc:
-                last_error = exc
-                if model_index == len(model_chain) - 1:
-                    break
-                logger.warning(
-                    "SeedConceptGenerator guidance failed on model %s; retrying with %s: %s",
-                    model_name,
-                    model_chain[model_index + 1],
-                    exc,
-                )
-        if last_error is not None:
-            raise last_error
-        raise ValueError("macro concept guidance produced no response")
 
 
 def solver_plan_from_concept(
@@ -897,6 +530,11 @@ def _object_viewing_pairs_from_request_contract(
             )
             if pair_types is None:
                 continue
+            if not _relation_edge_has_explicit_viewing_evidence(
+                edge=edge,
+                row=row,
+            ):
+                continue
             viewer_type, normalized_target_type = pair_types
             add_pair(
                 viewer_type=viewer_type,
@@ -912,6 +550,32 @@ def _object_viewing_pairs_from_request_contract(
                 relation=relation,
             )
     return out
+
+
+def _relation_edge_has_explicit_viewing_evidence(
+    *,
+    edge: Mapping[object, object],
+    row: Mapping[str, object],
+) -> bool:
+    evidence_parts = [
+        edge.get("evidence"),
+        edge.get("reason"),
+        edge.get("source"),
+        row.get("evidence"),
+        row.get("reason"),
+    ]
+    evidence = " ".join(str(item or "").strip().lower() for item in evidence_parts)
+    if not evidence.strip():
+        return True
+    if re.search(
+        r"\b(face|faces|facing|faced|view|views|viewing|watch|watching|toward|"
+        r"towards|opposite)\b",
+        evidence,
+    ):
+        return True
+    if re.search(r"\bfrom\s+(the\s+)?(bed|sofa|seat|chair|seating)\b", evidence):
+        return True
+    return False
 
 
 def _viewing_relation_from_edge(value: object) -> str | None:
@@ -1883,23 +1547,17 @@ def _instantiate_concept_families(
     style_policy: Mapping[str, object],
     target_count: int,
     object_viewing_pairs: Sequence[Mapping[str, object]],
-    guidance_bundle: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
-    family_order = _concept_family_order(
-        style_policy=style_policy,
-        guidance_bundle=guidance_bundle,
-    )
+    family_order = _style_ranked_concept_families(style_policy)
     concept_count = max(1, min(int(target_count), len(family_order)))
     primary_cluster_id = _primary_cluster_id(cluster_programs)
     secondary_cluster_id = _secondary_cluster_id(cluster_programs, primary_cluster_id)
-    guidance_by_family = _guidance_by_family(guidance_bundle)
     concepts: list[dict[str, object]] = []
     for index, family in enumerate(family_order[:concept_count], start=1):
         scenario = _macro_scenario_for_family(family)
-        family_guidance = guidance_by_family.get(family, {})
-        topology_policy = _merge_topology_policy_guidance(
-            _topology_policy_for_family(family, style_policy=style_policy),
-            family_guidance=family_guidance,
+        topology_policy = _topology_policy_for_family(
+            family,
+            style_policy=style_policy,
         )
         cluster_zone_plan = [
             _cluster_zone_assignment(
@@ -1921,14 +1579,7 @@ def _instantiate_concept_families(
             primary_cluster_id=primary_cluster_id,
             secondary_cluster_id=secondary_cluster_id,
         )
-        cluster_zone_plan = _apply_family_guidance_to_cluster_zone_plan(
-            family=family,
-            cluster_programs=cluster_programs,
-            baseline_cluster_zone_plan=baseline_cluster_zone_plan,
-            family_guidance=family_guidance,
-            primary_cluster_id=primary_cluster_id,
-            secondary_cluster_id=secondary_cluster_id,
-        )
+        cluster_zone_plan = [dict(row) for row in baseline_cluster_zone_plan]
         cluster_zone_plan = _apply_zone_forbidden_guardrails(
             room_model=room_model,
             macro_region_map=macro_region_map,
@@ -2010,8 +1661,6 @@ def _instantiate_concept_families(
                 family,
                 style_policy=style_policy,
             ),
-            "llm_guided": bool(family_guidance),
-            "guidance_notes": list(_string_list(family_guidance.get("notes"))),
             "material_macro_signature_target": _material_macro_signature_target(
                 cluster_zone_plan
             ),
@@ -2028,315 +1677,6 @@ def _instantiate_concept_families(
             concept["pre_solve_design_softening"] = design_softening
         concepts.append(concept)
     return concepts
-
-
-def _concept_family_order(
-    *,
-    style_policy: Mapping[str, object],
-    guidance_bundle: Mapping[str, object] | None,
-) -> tuple[ConceptFamily, ...]:
-    default_order = list(_style_ranked_concept_families(style_policy))
-    if not isinstance(guidance_bundle, Mapping):
-        return tuple(default_order)
-    guided_families: set[str] = set()
-    for item in _sequence_or_empty(guidance_bundle.get("concept_blueprints")):
-        if not isinstance(item, Mapping):
-            continue
-        family = _clean_str(item.get("concept_family"))
-        if family is not None:
-            guided_families.add(family)
-    if not guided_families:
-        return ()
-    raw_order = _string_list(guidance_bundle.get("family_order"))
-    ordered = [
-        family
-        for family in raw_order
-        if family in CONCEPT_FAMILIES
-        and family in default_order
-        and family in guided_families
-    ]
-    for family in CONCEPT_FAMILIES:
-        if family not in ordered:
-            ordered.append(family)
-    ordered = [family for family in ordered if family in guided_families]
-    return tuple(ordered[: len(CONCEPT_FAMILIES)])  # type: ignore[return-value]
-
-
-def _guidance_by_family(
-    guidance_bundle: Mapping[str, object] | None,
-) -> dict[ConceptFamily, Mapping[str, object]]:
-    if not isinstance(guidance_bundle, Mapping):
-        return {}
-    out: dict[ConceptFamily, Mapping[str, object]] = {}
-    for item in _sequence_or_empty(guidance_bundle.get("concept_blueprints")):
-        if not isinstance(item, Mapping):
-            continue
-        family = _clean_str(item.get("concept_family"))
-        if family not in CONCEPT_FAMILIES:
-            continue
-        out[family] = item  # type: ignore[assignment]
-    return out
-
-
-def _merge_topology_policy_guidance(
-    base_policy: Mapping[str, object],
-    *,
-    family_guidance: Mapping[str, object],
-) -> dict[str, object]:
-    merged = dict(base_policy)
-    guided_policy = _mapping_or_empty(family_guidance.get("topology_policy"))
-    for key in _GUIDED_TOPOLOGY_POLICY_KEYS:
-        value = _clean_str(guided_policy.get(key))
-        if value is not None:
-            merged[key] = value
-    return merged
-
-
-def _apply_family_guidance_to_cluster_zone_plan(
-    *,
-    family: ConceptFamily,
-    cluster_programs: Sequence[ClusterProgram],
-    baseline_cluster_zone_plan: Sequence[Mapping[str, object]],
-    family_guidance: Mapping[str, object],
-    primary_cluster_id: str | None,
-    secondary_cluster_id: str | None,
-) -> list[dict[str, object]]:
-    rows = [dict(row) for row in baseline_cluster_zone_plan]
-    if not family_guidance:
-        return rows
-
-    clusters_by_id = {cluster.cluster_id: cluster for cluster in cluster_programs}
-    baseline_by_cluster = {
-        str(row.get("cluster_id")): dict(row)
-        for row in baseline_cluster_zone_plan
-        if _clean_str(row.get("cluster_id")) is not None
-    }
-    guided_overrides = _guided_cluster_zone_overrides(
-        family_guidance=family_guidance,
-        cluster_programs=cluster_programs,
-        primary_cluster_id=primary_cluster_id,
-        secondary_cluster_id=secondary_cluster_id,
-    )
-    for override in guided_overrides:
-        if not isinstance(override, Mapping):
-            continue
-        cluster_id = _clean_str(override.get("cluster_id"))
-        zone_assignment = _clean_str(override.get("zone_assignment"))
-        if cluster_id is None or zone_assignment is None:
-            continue
-        row = _zone_row_by_cluster(rows, cluster_id)
-        cluster = clusters_by_id.get(cluster_id)
-        baseline_row = baseline_by_cluster.get(cluster_id)
-        if row is None or cluster is None or baseline_row is None:
-            continue
-        if zone_assignment == "keep_open_center":
-            continue
-        if zone_assignment in _string_list(row.get("forbidden_region_ids")):
-            continue
-        _apply_zone_assignment_to_row(
-            row=row,
-            cluster=cluster,
-            family=family,
-            zone_assignment=zone_assignment,
-        )
-        center_usage = _guided_center_usage(
-            raw_value=override.get("center_usage"),
-            cluster_id=cluster_id,
-            primary_cluster_id=primary_cluster_id,
-        )
-        row["center_usage"] = center_usage
-        preferred_wall_side = _guided_wall_side(
-            raw_value=override.get("preferred_wall_side"),
-            fallback=str(baseline_row.get("preferred_wall_side") or ""),
-        )
-        row["preferred_wall_side"] = preferred_wall_side
-        if bool(row.get("scenario_locked")):
-            row["required_region_ids"] = _required_region_ids_for_assignment(
-                zone_assignment=zone_assignment,
-                scenario_role=str(row.get("scenario_role") or ""),
-            )
-        row["placement_bias"] = _placement_bias(
-            zone_assignment,
-            str(row.get("wall_claim") or "none"),
-            center_usage,
-        )
-        row["guidance_applied"] = True
-    return _stabilize_guided_cluster_zone_plan(
-        rows=rows,
-        baseline_by_cluster=baseline_by_cluster,
-        primary_cluster_id=primary_cluster_id,
-        secondary_cluster_id=secondary_cluster_id,
-    )
-
-
-def _guided_cluster_zone_overrides(
-    *,
-    family_guidance: Mapping[str, object],
-    cluster_programs: Sequence[ClusterProgram],
-    primary_cluster_id: str | None,
-    secondary_cluster_id: str | None,
-) -> list[Mapping[str, object]]:
-    overrides: list[Mapping[str, object]] = []
-    seen_clusters: set[str] = set()
-    for override in _sequence_or_empty(family_guidance.get("cluster_zone_overrides")):
-        if not isinstance(override, Mapping):
-            continue
-        cluster_id = _clean_str(override.get("cluster_id"))
-        if cluster_id is None:
-            continue
-        overrides.append(override)
-        seen_clusters.add(cluster_id)
-
-    role_fields = (
-        ("primary", primary_cluster_id, "primary_cluster_region"),
-        ("secondary", secondary_cluster_id, "secondary_cluster_region"),
-    )
-    for role, cluster_id, field_name in role_fields:
-        role_override = _role_region_override(
-            cluster_id=cluster_id,
-            role=role,
-            value=family_guidance.get(field_name),
-            global_preferred_wall_side=family_guidance.get("preferred_wall_side"),
-            global_center_usage=family_guidance.get("center_usage"),
-        )
-        if role_override and cluster_id not in seen_clusters:
-            overrides.append(role_override)
-            seen_clusters.add(str(cluster_id))
-
-    support_region = family_guidance.get("support_region")
-    for cluster in cluster_programs:
-        if cluster.cluster_id in {primary_cluster_id, secondary_cluster_id}:
-            continue
-        role_override = _role_region_override(
-            cluster_id=cluster.cluster_id,
-            role="support",
-            value=support_region,
-            global_preferred_wall_side=family_guidance.get("preferred_wall_side"),
-            global_center_usage=family_guidance.get("center_usage"),
-        )
-        if role_override and cluster.cluster_id not in seen_clusters:
-            overrides.append(role_override)
-            seen_clusters.add(cluster.cluster_id)
-    return overrides
-
-
-def _role_region_override(
-    *,
-    cluster_id: str | None,
-    role: str,
-    value: object,
-    global_preferred_wall_side: object,
-    global_center_usage: object,
-) -> dict[str, object] | None:
-    if cluster_id is None:
-        return None
-    region_payload = _mapping_or_empty(value)
-    zone_assignment = _clean_str(region_payload.get("zone_assignment"))
-    if zone_assignment is None:
-        zone_assignment = _clean_str(region_payload.get("region_id"))
-    if zone_assignment is None:
-        zone_assignment = _clean_str(value)
-    if zone_assignment is None:
-        return None
-    preferred_wall_side = _role_guidance_value(
-        region_payload.get("preferred_wall_side"),
-        fallback=global_preferred_wall_side,
-        role=role,
-    )
-    center_usage = _role_guidance_value(
-        region_payload.get("center_usage"),
-        fallback=global_center_usage,
-        role=role,
-    )
-    return {
-        "cluster_id": cluster_id,
-        "zone_assignment": zone_assignment,
-        "preferred_wall_side": preferred_wall_side,
-        "center_usage": center_usage,
-    }
-
-
-def _role_guidance_value(
-    value: object,
-    *,
-    fallback: object,
-    role: str,
-) -> object:
-    if _clean_str(value) is not None:
-        return value
-    fallback_mapping = _mapping_or_empty(fallback)
-    role_value = fallback_mapping.get(role)
-    if _clean_str(role_value) is not None:
-        return role_value
-    return fallback
-
-
-def _guided_center_usage(
-    *,
-    raw_value: object,
-    cluster_id: str,
-    primary_cluster_id: str | None,
-) -> str:
-    value = str(raw_value or "").strip()
-    if value not in _CENTER_USAGE_VALUES:
-        return "primary" if cluster_id == primary_cluster_id else "none"
-    if cluster_id != primary_cluster_id and value in {"primary", "open_reserved"}:
-        return "partial"
-    return value
-
-
-def _guided_wall_side(*, raw_value: object, fallback: str) -> str:
-    value = str(raw_value or "").strip()
-    if value in _GUIDED_WALL_SIDES:
-        return value
-    return fallback
-
-
-def _stabilize_guided_cluster_zone_plan(
-    *,
-    rows: Sequence[dict[str, object]],
-    baseline_by_cluster: Mapping[str, Mapping[str, object]],
-    primary_cluster_id: str | None,
-    secondary_cluster_id: str | None,
-) -> list[dict[str, object]]:
-    stabilized = [dict(row) for row in rows]
-    primary_center_owner = False
-    for row in stabilized:
-        cluster_id = _clean_str(row.get("cluster_id"))
-        if cluster_id is None:
-            continue
-        if str(row.get("zone_assignment") or "") == "keep_open_center":
-            baseline = baseline_by_cluster.get(cluster_id)
-            if baseline is not None:
-                row.update(dict(baseline))
-            continue
-        center_usage = str(row.get("center_usage") or "none")
-        if cluster_id == primary_cluster_id:
-            if center_usage == "primary":
-                primary_center_owner = True
-            elif center_usage not in {"partial", "none", "open_reserved"}:
-                row["center_usage"] = "primary"
-                primary_center_owner = True
-        elif center_usage in {"primary", "open_reserved"}:
-            row["center_usage"] = "partial"
-    if not primary_center_owner and primary_cluster_id is not None:
-        row = _zone_row_by_cluster(stabilized, primary_cluster_id)
-        if row is not None:
-            row["center_usage"] = "primary"
-
-    if primary_cluster_id and secondary_cluster_id:
-        primary_row = _zone_row_by_cluster(stabilized, primary_cluster_id)
-        secondary_row = _zone_row_by_cluster(stabilized, secondary_cluster_id)
-        baseline_secondary = baseline_by_cluster.get(secondary_cluster_id)
-        if (
-            primary_row is not None
-            and secondary_row is not None
-            and primary_row.get("zone_assignment")
-            == secondary_row.get("zone_assignment")
-            and baseline_secondary is not None
-        ):
-            secondary_row.update(dict(baseline_secondary))
-    return stabilized
 
 
 def _cluster_zone_assignment(
@@ -3227,25 +2567,6 @@ def _anchor_region_preferences_by_cluster(
     return out
 
 
-def _ensure_placement_behavior_by_cluster(
-    preferences_by_cluster: Mapping[str, object],
-    *,
-    cluster_zone_plan: Sequence[Mapping[str, object]],
-) -> dict[str, dict[str, object]]:
-    out: dict[str, dict[str, object]] = {
-        str(cluster_id): dict(row)
-        for cluster_id, row in preferences_by_cluster.items()
-        if isinstance(row, Mapping)
-    }
-    for row in cluster_zone_plan:
-        cluster_id = _clean_str(row.get("cluster_id"))
-        if cluster_id is None:
-            continue
-        target = out.setdefault(cluster_id, {})
-        target["placement_behavior"] = _placement_behavior_contract(row)
-    return out
-
-
 def _anchor_region_preferences_for_solver(
     preferences_by_cluster: Mapping[str, object],
     *,
@@ -3923,12 +3244,8 @@ def _concept_to_solver_plan(
             "Preserve entry landing, primary corridor, and declared center openness before support clusters compete for space.",
         ],
         "notes": [
-            (
-                f"Generated by {'LLM-guided' if bool(concept.get('llm_guided')) else 'deterministic'} "
-                f"SeedConceptGenerator family={family}."
-            ),
+            (f"Generated by deterministic SeedConceptGenerator family={family}."),
             "Legacy relation fields are a solver projection of the macro concept, not the planning source of truth.",
-            *_string_list(concept.get("guidance_notes")),
         ],
         "missing": [],
     }
@@ -4103,23 +3420,6 @@ def _concept_object_orientations_for_solver(
             continue
         out.append(dict(item))
     return out
-
-
-def _empty_solver_plan(room_model: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "status": "UNSAT",
-        "room_id": _room_id(room_model),
-        "cluster_affinities": [],
-        "cluster_orientations": [],
-        "object_orientations": [],
-        "cluster_relations": [],
-        "cluster_directional_relations": [],
-        "circulation_plan": {"main_paths": [], "keep_open_regions": []},
-        "layout_intent_profile": None,
-        "placement_guidelines": [],
-        "notes": ["No macro concept could be generated."],
-        "missing": [],
-    }
 
 
 def _macro_region_to_dict(region: MacroRegion) -> dict[str, object]:
@@ -4751,77 +4051,6 @@ def _material_macro_target_token(*, region: str, wall_side: str) -> str:
     return token
 
 
-def _validate_guided_concept_diversity(
-    *,
-    concepts: Sequence[dict[str, object]],
-    guidance_bundle: Mapping[str, object] | None,
-    target_count: int,
-    retry_feedback: Mapping[str, object] | None,
-) -> tuple[list[dict[str, object]], dict[str, object]]:
-    if not isinstance(guidance_bundle, Mapping):
-        return list(concepts), {
-            "status": "not_applicable",
-            "accepted_concept_count": len(concepts),
-            "rejected_concept_count": 0,
-            "target_count": max(1, int(target_count)),
-        }
-
-    accepted: list[dict[str, object]] = []
-    rejected: list[dict[str, object]] = []
-    seen_signatures: dict[str, str] = {}
-    for concept in concepts:
-        concept = dict(concept)
-        signature = _projected_physical_signature(concept)
-        concept["projected_physical_signature"] = signature
-        duplicate_of = seen_signatures.get(signature)
-        if duplicate_of is not None:
-            rejected.append(
-                {
-                    "concept_id": concept.get("concept_id"),
-                    "concept_family": concept.get("concept_family"),
-                    "projected_physical_signature": signature,
-                    "duplicate_of": duplicate_of,
-                    "reason": "duplicate_projected_physical_signature",
-                }
-            )
-            continue
-        seen_signatures[signature] = str(concept.get("concept_id") or "")
-        accepted.append(concept)
-
-    status = "OK" if accepted else "REJECTED"
-    retry_reason = ""
-    if isinstance(retry_feedback, Mapping):
-        retry_reason = str(retry_feedback.get("retry_reason") or "").strip()
-    validation = {
-        "status": status,
-        "contract_version": "v2_physical_diversity",
-        "target_count": max(1, int(target_count)),
-        "accepted_concept_count": len(accepted),
-        "rejected_concept_count": len(rejected),
-        "projected_physical_signature_count": len(seen_signatures),
-        "rejected_concepts": rejected,
-        "retry_reason": retry_reason,
-    }
-    return accepted, validation
-
-
-def _projected_physical_signature(concept: Mapping[str, object]) -> str:
-    rows: list[str] = []
-    for row in _sequence_or_empty(concept.get("cluster_zone_plan")):
-        if not isinstance(row, Mapping):
-            continue
-        cluster_id = _clean_str(row.get("cluster_id"))
-        if cluster_id is None:
-            continue
-        zone = _physical_region_class(row.get("zone_assignment"))
-        wall_side = _clean_str(row.get("preferred_wall_side")) or ""
-        center_usage = _clean_str(row.get("center_usage")) or "none"
-        wall_claim = _clean_str(row.get("wall_claim")) or "none"
-        rows.append(f"{cluster_id}:{zone}:{wall_side}:{center_usage}:{wall_claim}")
-    rows.sort()
-    return "|".join(rows)
-
-
 def _physical_region_class(value: object) -> str:
     region_id = str(value or "").strip().lower()
     if not region_id:
@@ -4847,331 +4076,6 @@ def _physical_region_class(value: object) -> str:
     if "entry" in region_id or "door" in region_id or "corridor" in region_id:
         return "entry_path"
     return region_id
-
-
-def _compact_retry_feedback(value: Mapping[str, object]) -> dict[str, object]:
-    allowed_keys = (
-        "retry_reason",
-        "requested_count",
-        "returned_count",
-        "macro_distinct_candidate_count",
-        "visual_family_distinct_candidate_count",
-        "fallback_near_distinct_count",
-        "collapsed_macro_layouts",
-        "collapsed_visual_families",
-        "used_projected_physical_signatures",
-        "used_macro_layout_signatures",
-        "top_quality_gate_reasons",
-    )
-    out: dict[str, object] = {}
-    for key in allowed_keys:
-        if key not in value:
-            continue
-        item = value[key]
-        if isinstance(item, list):
-            out[key] = item[:6]
-        elif isinstance(item, dict):
-            out[key] = dict(list(item.items())[:10])
-        else:
-            out[key] = item
-    return out
-
-
-def _seed_concept_guidance_model_chain() -> tuple[str, ...]:
-    return tuple(
-        TextLLMConfig.agent_model_chain(
-            _MACRO_CONCEPT_GUIDANCE_SPEC.model_config_keys,
-            _MACRO_CONCEPT_GUIDANCE_SPEC.default_model_chain,
-        )
-    )
-
-
-def _record_llm_retry(*, stage: str, model_name: str | None, reason: str) -> None:
-    _ = (stage, model_name, reason)
-
-
-def _available_macro_region_ids(macro_region_map: Mapping[str, object]) -> set[str]:
-    region_ids: set[str] = set()
-    for item in _sequence_or_empty(macro_region_map.get("regions")):
-        if not isinstance(item, Mapping):
-            continue
-        region_id = _clean_str(item.get("region_id"))
-        if region_id is not None:
-            region_ids.add(region_id)
-    return region_ids
-
-
-def _top_region_candidates_by_cluster(
-    region_candidates: Sequence[RegionCandidate],
-) -> dict[str, list[dict[str, object]]]:
-    out: dict[str, list[dict[str, object]]] = {}
-    for candidate in region_candidates:
-        rows = out.setdefault(candidate.cluster_id, [])
-        if len(rows) >= 3:
-            continue
-        rows.append(_region_candidate_to_dict(candidate))
-    return out
-
-
-def _guided_clusters_summary(clusters_json: Mapping[str, object]) -> dict[str, object]:
-    clusters = _extract_clusters_map(clusters_json)
-    return {
-        "cluster_ids": sorted(clusters),
-        "semantic_cluster_ids": sorted(_semantic_clusters_by_id(clusters_json)),
-        "style_name": _clean_str(_extract_style_policy(clusters_json).get("style_name"))
-        or "",
-    }
-
-
-def _guided_room_summary(
-    room_model: Mapping[str, object],
-    macro_region_map: Mapping[str, object],
-) -> dict[str, object]:
-    room = _mapping_or_empty(room_model.get("room"))
-    protected = _mapping_or_empty(macro_region_map.get("protected_topology"))
-    return {
-        "room_id": _room_id(room_model),
-        "polygon_vertex_count": len(_sequence_or_empty(room.get("polygon_ccw"))),
-        "protected_regions": {
-            "entry_landing_zones": _string_list(protected.get("entry_landing_zones")),
-            "primary_circulation_corridors": _string_list(
-                protected.get("primary_circulation_corridors")
-            ),
-            "center_openness_regions": _string_list(
-                protected.get("center_openness_regions")
-            ),
-        },
-    }
-
-
-def _extract_llm_content(response: object) -> str:
-    choices = getattr(response, "choices", None)
-    if isinstance(choices, Sequence) and choices:
-        message = getattr(choices[0], "message", None)
-        content = getattr(message, "content", None)
-        if isinstance(content, str):
-            return content
-    raise ValueError("SeedConceptGenerator guidance response missing message content")
-
-
-def _parse_guidance_json(raw: str) -> dict[str, object]:
-    text = raw.strip()
-    if text.startswith("```"):
-        parts = text.split("```")
-        for idx in range(1, len(parts), 2):
-            candidate = parts[idx].strip()
-            if candidate.startswith("json"):
-                candidate = candidate[4:].lstrip()
-            if candidate.startswith("{") and candidate.endswith("}"):
-                text = candidate
-                break
-    if not text.startswith("{"):
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end > start:
-            text = text[start : end + 1]
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("SeedConceptGenerator guidance returned invalid JSON") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("SeedConceptGenerator guidance JSON must be an object")
-    return payload
-
-
-def _sanitize_macro_concept_guidance(
-    payload: Mapping[str, object],
-    *,
-    target_count: int,
-    available_families: Sequence[ConceptFamily],
-    cluster_ids: set[str],
-    region_ids: set[str],
-) -> dict[str, object]:
-    family_order = [
-        family
-        for family in _string_list(payload.get("family_order"))
-        if family in available_families
-    ]
-    for family in available_families:
-        if family not in family_order:
-            family_order.append(family)
-    family_order = family_order[: len(available_families)]
-
-    concept_blueprints: list[dict[str, object]] = []
-    seen_families: set[str] = set()
-    for item in _sequence_or_empty(payload.get("concept_blueprints")):
-        if not isinstance(item, Mapping):
-            continue
-        family = _clean_str(item.get("concept_family"))
-        if family not in available_families or family in seen_families:
-            continue
-        primary_region = _sanitize_role_region_guidance(
-            item.get("primary_cluster_region"),
-            region_ids=region_ids,
-        )
-        secondary_region = _sanitize_role_region_guidance(
-            item.get("secondary_cluster_region"),
-            region_ids=region_ids,
-        )
-        support_region = _sanitize_role_region_guidance(
-            item.get("support_region"),
-            region_ids=region_ids,
-        )
-        concept_blueprints.append(
-            {
-                "concept_family": family,
-                "intent_label": _clean_str(item.get("intent_label")) or family,
-                "primary_cluster_region": primary_region,
-                "secondary_cluster_region": secondary_region,
-                "support_region": support_region,
-                "preferred_wall_side": _sanitize_role_scalar_or_mapping(
-                    item.get("preferred_wall_side"),
-                    allowed_values=_GUIDED_WALL_SIDES,
-                    default_value="",
-                ),
-                "center_usage": _sanitize_role_scalar_or_mapping(
-                    item.get("center_usage"),
-                    allowed_values=_CENTER_USAGE_VALUES,
-                    default_value="none",
-                ),
-                "topology_policy": _sanitize_guided_topology_policy(
-                    item.get("topology_policy")
-                ),
-                "cluster_zone_overrides": _sanitize_cluster_zone_overrides(
-                    item.get("cluster_zone_overrides"),
-                    cluster_ids=cluster_ids,
-                    region_ids=region_ids,
-                ),
-                "notes": _string_list(item.get("notes")),
-            }
-        )
-        seen_families.add(family)
-        if len(concept_blueprints) >= max(1, target_count):
-            break
-
-    return {
-        "family_order": family_order,
-        "concept_blueprints": concept_blueprints,
-        "notes": _string_list(payload.get("notes")),
-    }
-
-
-def _sanitize_guided_topology_policy(value: object) -> dict[str, object]:
-    policy = _mapping_or_empty(value)
-    out: dict[str, object] = {}
-    for key in _GUIDED_TOPOLOGY_POLICY_KEYS:
-        text = _clean_str(policy.get(key))
-        allowed_values = _GUIDED_TOPOLOGY_POLICY_ALLOWED_VALUES.get(key)
-        if text is not None and allowed_values is not None and text in allowed_values:
-            out[key] = text
-    return out
-
-
-def _sanitize_role_region_guidance(
-    value: object,
-    *,
-    region_ids: set[str],
-) -> dict[str, object]:
-    payload = _mapping_or_empty(value)
-    zone_assignment = _clean_str(payload.get("zone_assignment"))
-    if zone_assignment is None:
-        zone_assignment = _clean_str(payload.get("region_id"))
-    if zone_assignment is None:
-        zone_assignment = _clean_str(value)
-    if (
-        zone_assignment is None
-        or zone_assignment not in region_ids
-        or zone_assignment == "keep_open_center"
-    ):
-        return {}
-    return {
-        "zone_assignment": zone_assignment,
-        "preferred_wall_side": _sanitize_scalar_value(
-            payload.get("preferred_wall_side"),
-            allowed_values=_GUIDED_WALL_SIDES,
-            default_value="",
-        ),
-        "center_usage": _sanitize_scalar_value(
-            payload.get("center_usage"),
-            allowed_values=_CENTER_USAGE_VALUES,
-            default_value="none",
-        ),
-    }
-
-
-def _sanitize_role_scalar_or_mapping(
-    value: object,
-    *,
-    allowed_values: Collection[str],
-    default_value: str,
-) -> object:
-    payload = _mapping_or_empty(value)
-    if payload:
-        out: dict[str, str] = {}
-        for role in ("primary", "secondary", "support"):
-            out[role] = _sanitize_scalar_value(
-                payload.get(role),
-                allowed_values=allowed_values,
-                default_value=default_value,
-            )
-        return out
-    return _sanitize_scalar_value(
-        value,
-        allowed_values=allowed_values,
-        default_value=default_value,
-    )
-
-
-def _sanitize_scalar_value(
-    value: object,
-    *,
-    allowed_values: Collection[str],
-    default_value: str,
-) -> str:
-    text = str(value or "").strip()
-    if text in allowed_values:
-        return text
-    return default_value
-
-
-def _sanitize_cluster_zone_overrides(
-    value: object,
-    *,
-    cluster_ids: set[str],
-    region_ids: set[str],
-) -> list[dict[str, object]]:
-    out: list[dict[str, object]] = []
-    seen_clusters: set[str] = set()
-    for item in _sequence_or_empty(value):
-        if not isinstance(item, Mapping):
-            continue
-        cluster_id = _clean_str(item.get("cluster_id"))
-        zone_assignment = _clean_str(item.get("zone_assignment"))
-        if (
-            cluster_id is None
-            or cluster_id not in cluster_ids
-            or cluster_id in seen_clusters
-            or zone_assignment is None
-            or zone_assignment not in region_ids
-            or zone_assignment == "keep_open_center"
-        ):
-            continue
-        center_usage = str(item.get("center_usage") or "").strip()
-        if center_usage not in _CENTER_USAGE_VALUES:
-            center_usage = "none"
-        preferred_wall_side = str(item.get("preferred_wall_side") or "").strip()
-        if preferred_wall_side not in _GUIDED_WALL_SIDES:
-            preferred_wall_side = ""
-        out.append(
-            {
-                "cluster_id": cluster_id,
-                "zone_assignment": zone_assignment,
-                "preferred_wall_side": preferred_wall_side,
-                "center_usage": center_usage,
-            }
-        )
-        seen_clusters.add(cluster_id)
-    return out
 
 
 def _primary_from_concept(
@@ -5281,22 +4185,6 @@ def _dedupe_keep_open(rows: Sequence[Mapping[str, object]]) -> list[dict[str, ob
 def _priority_text(value: object) -> str:
     text = str(value or "medium").strip().lower()
     return text if text in {"high", "medium", "low"} else "medium"
-
-
-def _family_from_text(text: str | None) -> ConceptFamily:
-    lowered = str(text or "").lower()
-    for family in CONCEPT_FAMILIES:
-        if family in lowered or family.replace("_", "-") in lowered:
-            return family
-    if "open center" in lowered:
-        return "open_center"
-    if "edge" in lowered or "perimeter" in lowered:
-        return "edge_weighted"
-    if "daylight" in lowered or "window" in lowered:
-        return "daylight_oriented"
-    if "zoned" in lowered or "separate support" in lowered:
-        return "zoned"
-    return "focal_axis"
 
 
 def _uniq(values: Sequence[str]) -> list[str]:

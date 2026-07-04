@@ -16,13 +16,7 @@ import httpx
 JSONScalar: TypeAlias = None | bool | int | float | str
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 EditOperationType = Literal["prompt", "add", "replace", "recolor", "remove"]
-VisualPreflightProfile = Literal[
-    "classic",
-    "room_shell",
-    "object_anchors",
-    "edit_scope",
-    "edit_object_scope",
-]
+VisualPreflightProfile = Literal["edit_object_scope"]
 
 _MODEL_ENV = "TKNT_IMAGE_FLOW_PREFLIGHT_MODEL"
 _BASE_URL_ENV = "TKNT_IMAGE_FLOW_PREFLIGHT_OPENAI_BASE_URL"
@@ -316,7 +310,9 @@ def _edit_operation_scope_lock_lines(
 ) -> list[str]:
     lines: list[str] = []
     for index, operation in enumerate(edit_operations, start=1):
-        target = operation.object_name or operation.object_id or f"manual target {index}"
+        target = (
+            operation.object_name or operation.object_id or f"manual target {index}"
+        )
         action = _edit_operation_action_phrase(operation)
         bbox = _bbox_norm_phrase(operation.bbox_norm)
         lines.append(
@@ -488,13 +484,13 @@ def _model() -> str:
 
 def _base_url() -> str:
     raw_value = (
-        os.getenv(_BASE_URL_ENV)
-        or os.getenv(_OPENAI_BASE_URL_ENV)
-        or _DEFAULT_BASE_URL
+        os.getenv(_BASE_URL_ENV) or os.getenv(_OPENAI_BASE_URL_ENV) or _DEFAULT_BASE_URL
     )
     clean = raw_value.strip() if isinstance(raw_value, str) else ""
-    if not clean or clean in {"v1", "/v1"} or (
-        clean.startswith("${") and clean.endswith("}")
+    if (
+        not clean
+        or clean in {"v1", "/v1"}
+        or (clean.startswith("${") and clean.endswith("}"))
     ):
         return _DEFAULT_BASE_URL
     if "://" not in clean:

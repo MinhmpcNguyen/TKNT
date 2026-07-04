@@ -32,12 +32,6 @@ export const UserInputPanel: React.FC = () => {
   const hadLayoutRef = useRef(hasLayout);
 
   useEffect(() => {
-    if (roomTypeValue !== userInput.room_type || styleValue !== userInput.style) {
-      updateUserInput({ room_type: roomTypeValue, style: styleValue });
-    }
-  }, [roomTypeValue, styleValue, updateUserInput, userInput.room_type, userInput.style]);
-
-  useEffect(() => {
     if (!hadLayoutRef.current && hasLayout) {
       setIsOpen(false);
     }

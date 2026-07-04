@@ -196,7 +196,7 @@ The ablation switch lives in `pipeline/ablation_modes.py`. `no_capacity_control`
 | `full` | Baseline | Current TKNT pipeline. |
 | `minimal_room_context` | Room interpreter context | Preserves geometry/openings/obstacles, strips derived affordance/guidance context before downstream planning. |
 | `no_style_policy` | Style policy | Uses neutral/base style policy. |
-| `no_semantic_layout_planner` | Cluster forge semantic planner | Calls `ClusterForge.generate(..., use_semantic_planner=False)`. |
+| `no_semantic_layout_planner` | Seed relation planner semantic planner | Calls `SeedRelationPlanner.generate(..., use_semantic_planner=False)`. |
 | `no_request_contract` | Request contract | Removes request-contract annotations before tier count, merge, solving, and refill. |
 | `no_tier_capacity` | Tier/count capacity control | Forces zero/omitted tier decisions active before solving without skipping accessory refill. |
 | `single_concept` | Concept count/gallery generation | Generates and solves one final concept. |

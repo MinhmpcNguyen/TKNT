@@ -511,7 +511,7 @@ class SnapshotPromptCompilerArchitectureTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "TV console is along the east wall, facing west toward the room center"
+                "TV console with integrated flat-screen TV is along the east wall, facing west toward the room center"
                 in fact
                 for fact in object_facts
             )
@@ -523,7 +523,7 @@ class SnapshotPromptCompilerArchitectureTest(unittest.TestCase):
             )
         )
         self.assertIn(
-            "The media shelf sits in front of the TV console.",
+            "The media shelf sits in front of the TV console with integrated flat-screen TV.",
             spatial_relation_facts,
         )
         self.assertIn(

@@ -952,11 +952,14 @@ def _write_request_awareness_diagnostics(
     input_path: Path,
     benchmark_case: Mapping[str, object] | None,
 ) -> None:
-    cluster_forge = _load_json_mapping(source_dir / "cluster_forge.json")
+    seed_relation_path = source_dir / "seed_relation_planner.json"
+    if not seed_relation_path.exists():
+        seed_relation_path = source_dir / "cluster_forge.json"
+    seed_relation = _load_json_mapping(seed_relation_path)
     cluster_merger = _load_json_mapping(source_dir / "cluster_output_merger.json")
     tier_count = _load_json_mapping(source_dir / "tier_count_director.json")
 
-    semantic_program = _mapping(cluster_forge.get("semantic_layout_program"))
+    semantic_program = _mapping(seed_relation.get("semantic_layout_program"))
     if not semantic_program:
         semantic_program = _mapping(cluster_merger.get("semantic_layout_program"))
     if not semantic_program:
@@ -978,7 +981,7 @@ def _write_request_awareness_diagnostics(
             _mapping(benchmark_case).get("expected") if benchmark_case else None
         ),
         "source_files": {
-            "cluster_forge": str(source_dir / "cluster_forge.json"),
+            "seed_relation_planner": str(seed_relation_path),
             "cluster_output_merger": str(source_dir / "cluster_output_merger.json"),
             "tier_count_director": str(source_dir / "tier_count_director.json"),
         },

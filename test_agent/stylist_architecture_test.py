@@ -111,94 +111,12 @@ class _FakeClient:
 fake_llm_module.get_llm_client = lambda *args, **kwargs: _FakeClient()
 sys.modules["clients.llm_client"] = fake_llm_module
 
-fake_tools_module = types.ModuleType("stylist.tools")
-
-
-def _fake_list_inventory_by_types(
-    *,
-    tenant_id: str | None,
-    types: list[str],
-    limit: int | None = 200,
-) -> dict[str, object]:
-    _ = tenant_id, types, limit
-    return {
-        "items": [
-            {
-                "id": "inv_desk_lamp",
-                "type": "desk_lamp",
-                "asset_type": "desk_lamp",
-                "dimensions": {
-                    "length_mm": 220,
-                    "width_mm": 220,
-                    "height_mm": 480,
-                },
-            },
-            {
-                "id": "inv_laptop",
-                "type": "laptop",
-                "asset_type": "laptop",
-                "dimensions": {
-                    "length_mm": 350,
-                    "width_mm": 240,
-                    "height_mm": 20,
-                },
-            },
-            {
-                "id": "inv_rug",
-                "type": "rug",
-                "asset_type": "rug",
-                "dimensions": {
-                    "length_mm": 1800,
-                    "width_mm": 1200,
-                    "height_mm": 10,
-                },
-            },
-            {
-                "id": "inv_pet_bed",
-                "type": "pet_bed",
-                "asset_type": "pet_bed",
-                "dimensions": {
-                    "length_mm": 700,
-                    "width_mm": 550,
-                    "height_mm": 180,
-                },
-            },
-            {
-                "id": "inv_curtain",
-                "type": "curtain",
-                "asset_type": "curtain",
-                "dimensions": {
-                    "length_mm": 1800,
-                    "width_mm": 140,
-                    "height_mm": 1800,
-                },
-            },
-            {
-                "id": "inv_ceiling_light",
-                "type": "ceiling_light",
-                "asset_type": "ceiling_light",
-                "dimensions": {
-                    "length_mm": 450,
-                    "width_mm": 450,
-                    "height_mm": 180,
-                },
-            },
-        ]
-    }
-
-
-fake_tools_module.ListInventoryByTypes = _fake_list_inventory_by_types
-fake_tools_module.TOOL_REGISTRY = {}
-fake_tools_module.TOOL_SCHEMAS = []
-sys.modules["stylist.tools"] = fake_tools_module
-
 _stylist = importlib.import_module("agent.stylist")
 _deterministic_layout = importlib.import_module("stylist.deterministic_layout")
 Stylist = _stylist.Stylist
 
 
 class _OpenAIStyleConfig:
-    PROVIDER = "openai"
     STRICT_SINGLE_TEXT_MODEL = ""
 
     @classmethod

@@ -218,7 +218,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
               <div className="profile-identity-copy">
                 <strong>{currentUser?.display_name || currentUser?.email}</strong>
                 <span>{currentUser?.email}</span>
-                <span>Tenant: {currentUser?.tenant_id}</span>
               </div>
             </section>
 
@@ -345,54 +344,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
               </div>
             </div>
 
-            <div className="billing-dev-grid">
-              <label>
-                <span>Monthly price</span>
-                <input
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={billingSettings.monthlyPriceVnd}
-                  onChange={(event) =>
-                    updateBillingSettings({
-                      monthlyPriceVnd: clampInteger(event.target.value, 1000),
-                    })
-                  }
-                />
-              </label>
-              <label>
-                <span>Monthly credit quota</span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={billingSettings.monthlyCreditQuota}
-                  onChange={(event) =>
-                    updateBillingSettings({
-                      monthlyCreditQuota: clampInteger(event.target.value, 1),
-                      monthlyCreditsUsed: Math.min(
-                        billingSettings.monthlyCreditsUsed,
-                        clampInteger(event.target.value, 1)
-                      ),
-                    })
-                  }
-                />
-              </label>
-              <label>
-                <span>Credit price</span>
-                <input
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={billingSettings.perCreditPriceVnd}
-                  onChange={(event) =>
-                    updateBillingSettings({
-                      perCreditPriceVnd: clampInteger(event.target.value, 1000),
-                    })
-                  }
-                />
-              </label>
-            </div>
           </section>
         </div>
       </div>

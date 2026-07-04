@@ -46,10 +46,10 @@ export const AuthScreen: React.FC = () => {
       <div className="auth-card">
         <div className="auth-card-header">
           <div>
-            <h1>TKNT Floorplan Editor</h1>
+            <h1>RoomFlow Floorplan Editor</h1>
             <p>
-              Sign in to save layouts, keep your image renders, and add custom 3D
-              objects beside the shared inventory.
+              Sign in to save layouts, keep your image renders, and use the shared
+              inventory.
             </p>
           </div>
           <div className="auth-mode-toggle">

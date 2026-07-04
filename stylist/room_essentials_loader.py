@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from typing import Protocol
 
 from db.models import DesignKnowledge, TenantId
-from db.repositories import DesignKnowledgeRepository
 from stylist.room_essentials_seed import ROOM_ESSENTIALS_SEED
+
+
+class DesignKnowledgeRepository(Protocol):
+    def upsert_knowledge(self, knowledge: DesignKnowledge) -> None: ...
 
 
 def load_room_essentials(

@@ -1,0 +1,509 @@
+[001] Reviewer Rewrite Notes
+[002] AI-Assisted Interior Layout Design and Visualization System
+[003] Role: Thầy giáo phản biện đọc từ đầu đến cuối, tập trung vào các đoạn còn lủng củng, chưa rõ, khó hiểu, hoặc cần diễn đạt lại để mạch lạc hơn.
+[004] How to use this file: Mỗi note gồm vị trí, vấn đề phản biện, và phiên bản viết lại đầy đủ bằng tiếng Anh. Các đoạn rewrite có thể copy trực tiếp vào báo cáo rồi chỉnh lại reference/format nếu cần.
+[005] Important: File này không đánh dấu mọi câu có thể tối ưu. Nó tập trung vào những chỗ tôi sẽ yêu cầu sửa nếu đọc với vai trò phản biện.
+[006] Summary: 74 notes total: High = 13, Medium = 51, Low = 10.
+[007] <TABLE>
+      High: Cần sửa trước khi nộp hoặc dễ bị phản biện hỏi. | Medium: Nên sửa để rõ hơn, mạch lạc hơn. | Low: Tối ưu văn phong/hình thức.
+[008] Front matter and Abstract
+[009] Note 1. Abstract, page ii
+[010] Priority: Medium
+[011] Current text / marker: "Interior layout design is difficult for non-professional users because it requires both semantic understanding and spatial reasoning."
+[012] Reviewer note: Câu mở đầu đúng ý nhưng hơi chung. Phản biện có thể hỏi cụ thể "semantic understanding" là hiểu cái gì và "spatial reasoning" là suy luận cái gì trong đồ án này. Nên nêu ngay các loại quyết định cụ thể để mở abstract mạnh hơn.
+[013] Suggested rewrite / action:
+[014] Interior layout design is difficult for non-professional users because a useful design must connect a user's natural-language intent with physical room constraints. A system must understand what furniture the user wants, decide which objects are necessary, place them inside the room boundary, keep doors and windows usable, preserve circulation, and provide visual feedback that remains consistent with the editable layout.
+[015] Note 2. Abstract, page ii
+[016] Priority: Medium
+[017] Current text / marker: "A snapshot-guided image flow converts selected 3D previews into realistic rendered images..."
+[018] Reviewer note: Cụm "snapshot-guided image flow" là thuật ngữ chính của đồ án nhưng xuất hiện khá nhanh. Nên viết rõ snapshot đến từ đâu và nó dùng để giữ cái gì.
+[019] Suggested rewrite / action:
+[020] For visualization, the system uses the selected 3D preview as a layout reference. The browser captures a snapshot of the room shell, camera view, openings, and visible furniture. This snapshot, together with structured preservation constraints, guides the image model to create a realistic render while keeping the main spatial structure and unedited objects consistent with the editable layout.
+[021] Note 3. Abstract, page ii
+[022] Priority: Low
+[023] Current text / marker: "benchmark-oriented evaluation covering layout validity, request following, arrangement quality, stability, image layout fidelity, preset fidelity, and edit fidelity."
+[024] Reviewer note: Danh sách metric dài, dễ đọc như liệt kê thuật ngữ. Nên gom thành hai nhóm tương ứng với hai bài toán để abstract trôi hơn.
+[025] Suggested rewrite / action:
+[026] The evaluation is organized around the two outputs of the system. For layouts, it measures geometric validity, request following, arrangement quality, valid object count, and stability. For generated and edited images, it measures layout fidelity, preset fidelity, edit success, and preservation of unrelated structure.
+[027] Chapter 1 - Introduction
+[028] Note 4. Section 1.1, first paragraph
+[029] Priority: Medium
+[030] Current text / marker: "Interior layout design is a practical need in Vietnam’s urban housing context..."
+[031] Reviewer note: Đoạn mở bài có số liệu nhưng mối nối từ giao dịch nhà ở sang nhu cầu layout còn hơi nhanh. Nên viết theo chuỗi nguyên nhân: giao dịch/moving -> cần mua đồ/sắp xếp -> nếu layout sai thì phát sinh sửa đổi.
+[032] Suggested rewrite / action:
+[033] Interior layout design is a practical need in Vietnam's urban housing context. In 2024, the Ministry of Construction reported about 125,545 successful apartment and individual-house transactions [1]. After moving into a new apartment, renting a room, or reorganizing an existing space, users often need to decide where beds, wardrobes, sofas, desks, storage units, and media furniture should be placed. These decisions affect furniture cost, circulation space, and daily usability. If the initial layout is made without checking room boundaries, openings, and furniture dimensions, users may have to revise the design before purchasing furniture or implementing the room arrangement.
+[034] Note 5. Section 1.1, architect/designer paragraph
+[035] Priority: Medium
+[036] Current text / marker: "...this workflow can be heavier than necessary..."
+[037] Reviewer note: "heavier than necessary" hơi khẩu ngữ và chưa nói rõ "heavier" ở điểm nào. Nên diễn đạt học thuật hơn: quá nhiều bước/chi phí/thời gian so với giai đoạn khám phá ban đầu.
+[038] Suggested rewrite / action:
+[039] Hiring an architect or an interior designer is appropriate when a project requires final drawings, construction documents, and professional visualizations. However, this process may be more complex than necessary for users who only want to explore early layout ideas. Professional interior design normally involves quotation, consultation, proposal preparation, and several revision cycles before a mature design direction is available. At the early exploration stage, users may only need a lightweight tool that can quickly propose a plausible layout and allow them to revise it before deciding whether professional refinement is needed.
+[040] Note 6. Section 1.1, first problem paragraph
+[041] Priority: High
+[042] Current text / marker: "how to help non-professional apartment or room users create an initial furniture layout by themselves"
+[043] Reviewer note: Cụm "apartment or room users" không tự nhiên. Đoạn cũng có nhiều ý quan trọng nên cần mạch hơn: đối tượng -> nhu cầu -> yêu cầu kỹ thuật -> yêu cầu edit.
+[044] Suggested rewrite / action:
+[045] This situation leads to the first problem addressed in this thesis: supporting non-professional users in creating an initial furniture layout by themselves. The target users include people arranging their own bedrooms or living rooms, apartment users comparing furniture options, and small accommodation owners who need a quick spatial concept before professional refinement. For these users, a useful layout must do more than place objects inside a room. It must respect the room boundary, furniture dimensions, doors, windows, collision avoidance, and basic circulation. It should also remain editable because early requirements are often incomplete and may change after the user sees the first design.
+[046] Note 7. Section 1.1, visualization paragraph
+[047] Priority: Medium
+[048] Current text / marker: "The second problem is visualization."
+[049] Reviewer note: Đoạn này đúng nhưng câu đầu hơi đột ngột. Nên gắn trực tiếp với hạn chế của layout 2D và tác dụng của render.
+[050] Suggested rewrite / action:
+[051] The second problem is visualization. A top-down layout is useful for checking positions and distances, but it does not fully show how the room may feel in practice. From a 2D plan alone, users may still find it difficult to imagine materials, color harmony, lighting, depth, and overall atmosphere. A rendered perspective image helps them evaluate whether the selected layout is visually acceptable before they continue revising the design or purchasing furniture.
+[052] Note 8. Section 1.2, first paragraph
+[053] Priority: Medium
+[054] Current text / marker: "Current AI-based solutions can be grouped into several directions..."
+[055] Reviewer note: Đoạn phân loại hiện có hợp lý nhưng chưa nối rõ với hai mục tiêu của thesis. Nên kết thúc bằng khoảng trống nghiên cứu/application gap.
+[056] Suggested rewrite / action:
+[057] Current AI-based solutions can be grouped into three main directions. Prompt-based image tools are useful for visual inspiration, but they usually return pixels rather than editable room objects. LLM-based layout planners can translate a text brief into object lists or spatial relations, but direct coordinate prediction does not reliably guarantee geometric validity. Hybrid research systems combine language understanding with placement or optimization modules, yet many of them stop at layout generation or 3D scene synthesis rather than supporting a complete user workflow with room input, manual editing, 3D preview, render generation, and later revision. This gap motivates the objectives of this thesis.
+[058] Note 9. Section 1.2, limitation about visualization
+[059] Priority: Medium
+[060] Current text / marker: "This leaves a gap for layout-conditioned visualization based on editable design data."
+[061] Reviewer note: Ý tốt nhưng nên nói rõ "layout-conditioned" là gì theo ngữ cảnh đồ án: render phải sinh từ layout đang edit được, không phải từ prompt độc lập.
+[062] Suggested rewrite / action:
+[063] This leaves an application gap for visualization that is directly conditioned on editable design data. In the target workflow, the user should be able to modify a 2D/3D layout and then generate a render from that exact layout. The render should improve appearance and realism, but it should not change the room shell, camera view, major furniture arrangement, or fixed openings without user intent.
+[064] Note 10. Section 1.2, objectives paragraph
+[065] Priority: Medium
+[066] Current text / marker: "The first objective is to build a system... The second objective is..."
+[067] Reviewer note: Đoạn mục tiêu rõ nhưng còn giống mô tả sản phẩm chung. Nên nhấn output kiểm chứng được: structured layout, editable state, layout-consistent render.
+[068] Suggested rewrite / action:
+[069] From these observations, the thesis defines two main objectives. The first objective is to build a system that generates an initial furniture layout from a user brief and explicit room geometry. The layout must be stored as structured room-and-object data so that the system can validate it, display it in 2D/3D, and allow later manual editing. The second objective is to generate realistic visualization images from the selected layout. The visualization should help the user understand the design while preserving the main room structure, camera view, openings, and furniture arrangement.
+[070] Note 11. Section 1.3, first paragraph
+[071] Priority: Medium
+[072] Current text / marker: "Based on the limitations above, this thesis follows a hybrid solution direction."
+[073] Reviewer note: "solution direction" hơi lỏng. Nên gọi là hybrid architecture/workflow và nêu rõ vì sao tách module.
+[074] Suggested rewrite / action:
+[075] Based on the limitations above, this thesis adopts a hybrid architecture with separated responsibilities. The system does not ask a single generative model to solve the entire design problem. Instead, it separates the workflow into language understanding, geometric layout solving, interactive editing, 3D preview, and image generation. This separation is necessary because each subproblem has a different failure mode: language models can misunderstand geometry, while image-generation models can create attractive but non-editable or layout-inconsistent images.
+[076] Note 12. Section 1.3, semantic planning paragraph
+[077] Priority: High
+[078] Current text / marker: "A multi-agent pipeline means a sequence of specialized reasoning stages..."
+[079] Reviewer note: Câu định nghĩa multi-agent hơi chen ngang và có thể làm người đọc hỏi agent nào, output nào, kiểm soát ra sao. Nên viết thành đoạn mô tả luồng thay vì định nghĩa khô.
+[080] Suggested rewrite / action:
+[081] To improve spatial reliability, the system uses the language model for semantic interpretation rather than final coordinate generation. The planning pipeline is decomposed into specialized stages that analyze the user brief, identify required and optional furniture, infer style intent, and propose object relations. These stages produce a request contract that records required, preferred, optional, and forbidden objects and relations. The contract is then passed to a deterministic geometric solver, which represents the room boundary, doors, windows, and furniture footprints explicitly and checks containment, collision avoidance, opening usability, and circulation.
+[082] Note 13. Section 1.3, contribution paragraph
+[083] Priority: Medium
+[084] Current text / marker: "The contribution is not the image-generation model itself."
+[085] Reviewer note: Ý này rất cần giữ, nhưng đoạn hiện tại hơi dài. Nên chia đóng góp thành ba ý có quan hệ với nhau để tránh bị phản biện hỏi đóng góp chính xác là gì.
+[086] Suggested rewrite / action:
+[087] The main contribution of the thesis is an integrated workflow for early-stage interior layout design and visualization. The contribution is not the image-generation model itself. It lies in three connected parts: a shared editable representation that links the solver, 2D editor, 3D preview, and renderer; a constraint-validation and layout-solving pipeline that turns semantic requirements into usable furniture arrangements; and a snapshot-guided rendering and editing workflow with evaluation support. Together, these parts help users obtain both spatial control and realistic visual feedback for living rooms and bedrooms.
+[088] Chapter 2 - Requirement Survey and Analysis
+[089] Note 14. Chapter 2 opening paragraph
+[090] Priority: Low
+[091] Current text / marker: "Based on that problem definition, this chapter surveys existing solution directions..."
+[092] Reviewer note: Đoạn mở chương ổn nhưng hơi dài. Nên nói gọn: khảo sát -> yêu cầu -> use case.
+[093] Suggested rewrite / action:
+[094] Chapter 1 defined two connected needs: editable furniture layout generation and layout-consistent visualization. This chapter turns those needs into system requirements. It first reviews existing AI-assisted interior design approaches, then identifies the practical gaps that the proposed system must address, and finally specifies the functional and non-functional requirements of TKNT.
+[095] Note 15. Section 2.1 title and first paragraph
+[096] Priority: Low
+[097] Current text / marker: "Status Survey"
+[098] Reviewer note: "Status Survey" nghe hơi dịch trực tiếp từ tiếng Việt. Trong báo cáo tiếng Anh, "Related Work Survey" hoặc "Survey of Existing Approaches" tự nhiên hơn.
+[099] Suggested rewrite / action:
+[100] Suggested section title: "Survey of Existing Approaches". Suggested opening: "AI-assisted interior design has been explored through prompt-based image generation, LLM-based layout planning, hybrid layout-generation systems, and layout-conditioned image generation or editing. This section reviews these directions from the viewpoint of the proposed system requirements: natural-language input, spatially valid placement, editable layout state, layout-consistent rendering, and controlled image editing."
+[101] Note 16. Section 2.1.1, final paragraph
+[102] Priority: Medium
+[103] Current text / marker: "Such a layout must preserve explicit object identities, dimensions, positions, and orientations..."
+[104] Reviewer note: Đoạn lặp lại nhiều ý của đoạn ngay trước. Nên nén để tránh cảm giác kéo dài.
+[105] Suggested rewrite / action:
+[106] Therefore, prompt-based image generation is useful for inspiration but insufficient as the main design state. Early-stage interior design requires a representation that preserves object identities, dimensions, positions, and orientations so that the user can continue refining the room as an editable layout.
+[107] Note 17. Section 2.1.5, Table 2.1
+[108] Priority: Medium
+[109] Current text / marker: Table row "Proposed system" / "Design requirement for the proposed system"
+[110] Reviewer note: Bảng so sánh các approach nhưng lại có một dòng là chính hệ thống đề xuất. Dòng này hữu ích nhưng nên đổi nhãn để tránh bị hiểu là đang so sánh TKNT như một approach ngang hàng với related work.
+[111] Suggested rewrite / action:
+[112] Suggested table row label: "Resulting design requirement". Suggested row content: "Integrate semantic planning, geometric solving, editable layout state, 3D preview, snapshot-guided rendering, and evaluation in one workflow, instead of treating them as separate outputs."
+[113] Note 18. Section 2.2, actor paragraph
+[114] Priority: Medium
+[115] Current text / marker: "The system may also call external AI services... but these services are treated as supporting components rather than human actors..."
+[116] Reviewer note: Ý đúng nhưng hơi dài và lẫn use case với architecture. Nên viết ngắn hơn để không làm rối phần use case.
+[117] Suggested rewrite / action:
+[118] The use case model includes three human actors. A Guest can register or log in. A User is an authenticated actor who performs the main design workflow, including room creation, manual editing, automatic layout generation, 3D preview, render generation, image editing, and artifact management. An Admin maintains shared system data such as user accounts and furniture records. External AI services are not modeled as actors; they are described later in the sequence and architecture diagrams as supporting components.
+[119] Note 19. Figures 2.1-2.6
+[120] Priority: High
+[121] Current text / marker: Use case diagrams across pages 21-24
+[122] Reviewer note: Các sơ đồ use case khá nhỏ, nhiều chữ khó đọc, và thuật ngữ chưa thống nhất: "Generate 3D image" nên là "Generate 3D preview". Nếu phản biện nhìn hình trước khi đọc chữ, họ dễ hiểu nhầm hệ thống sinh ảnh 3D thay vì preview 3D từ layout.
+[123] Suggested rewrite / action:
+[124] Suggested correction: enlarge each diagram or combine them into fewer clearer figures. Rename the use case "Generate 3D image" to "Generate 3D preview". Add include/extend only where necessary, for example: "Generate perspective image" includes "Generate 3D preview" because the render is derived from a selected camera view. Keep the text below Figure 2.1 as: "The general diagram emphasizes that TKNT is not only an image-generation tool. It starts from room geometry, creates editable layout data, and uses that layout as the source for 3D preview and perspective rendering."
+[125] Note 20. Section 2.2.2, decomposed use case paragraph
+[126] Priority: Medium
+[127] Current text / marker: "The use case AI-assisted room design is decomposed into several sub-use cases..."
+[128] Reviewer note: Đoạn này tốt nhưng có thể rõ hơn nếu nêu điều kiện phụ thuộc: render phụ thuộc layout đã chọn, image edit phụ thuộc render đã sinh.
+[129] Suggested rewrite / action:
+[130] The use case AI-assisted room design is decomposed into the sub-use cases that form one complete design session. The user first creates or loads a room, defines doors and windows, and then either designs the layout manually or requests automatic layout generation. After a layout is selected, the user can edit it, preview it in 3D, generate a perspective image from the selected camera view, refine the generated image through localized editing, and save the resulting layout or render artifacts. This decomposition shows that visualization is derived from the selected editable layout, rather than generated independently from text.
+[131] Note 21. Section 2.3 opening paragraph
+[132] Priority: High
+[133] Current text / marker: "Simpler management functions that do not affect the main thesis contribution can be described more briefly or moved to an appendix if needed."
+[134] Reviewer note: Câu này không nên xuất hiện trong bản nộp chính thức vì nghe như ghi chú nội bộ cho người viết. Nên thay bằng câu mô tả phạm vi use case.
+[135] Suggested rewrite / action:
+[136] This section specifies the main use cases of the system. Each specification includes the use case name, description, actor, precondition, main event flow, alternative flow, and postcondition. The detailed descriptions focus on the functions that support the thesis workflow: room creation, layout editing, automatic layout generation, 3D preview, render generation, localized image editing, saved artifacts, and administrator data management.
+[137] Note 22. Tables 2.2-2.10
+[138] Priority: Medium
+[139] Current text / marker: Main flow cells contain all steps in one paragraph
+[140] Reviewer note: Các bước main flow đang nằm trong một ô dài nên khó đọc. Về nội dung vẫn ổn, nhưng nên xuống dòng hoặc dùng numbered list trong ô để hội đồng dễ quét nhanh.
+[141] Suggested rewrite / action:
+[142] Suggested format inside each Main flow cell: "1. The user requests automatic layout generation.
+[143] 2. The system sends the room geometry, openings, brief, and inventory scope to the backend pipeline.
+[144] 3. The semantic planning stage extracts required objects, optional objects, style intent, and object relations.
+[145] 4. The room modeling stage derives geometric constraints.
+[146] 5. The solver generates and validates candidate layouts.
+[147] 6. The system returns layout variants with diagnostics.
+[148] 7. The user reviews the variants and selects one as the working layout."
+[149] Note 23. Section 2.4, NFR-08 Performance
+[150] Priority: Medium
+[151] Current text / marker: "target interaction latency below 100 ms"
+[152] Reviewer note: Yêu cầu 100 ms cụ thể nhưng không nói đo bằng cách nào. Nếu không có số liệu đo trong Chapter 7 hoặc 6, phản biện có thể hỏi bằng chứng. Nên chuyển thành mục tiêu thiết kế hoặc thêm cách đo.
+[153] Suggested rewrite / action:
+[154] Manual editing should feel immediate in the browser. As a design target, ordinary drag, rotate, and selection operations should update the 2D workspace within about 100 ms on typical laptop hardware. Long-running layout-generation and image-generation tasks may take longer, but the system should report progress within a few seconds and provide a clear retry path if the provider or network fails.
+[155] Chapter 3 - Theoretical Background and Technologies
+[156] Note 24. Section 3.1, equation paragraph
+[157] Priority: Medium
+[158] Current text / marker: "L = (P, G, O, A)"
+[159] Reviewer note: Biểu diễn tốt, nhưng đoạn nên nói ngay vì sao chọn 2D-first chứ không chọn 3D-first. Điều này giúp kết nối với solver và frontend.
+[160] Suggested rewrite / action:
+[161] The layout representation used in this thesis is a compact 2D-first scene model. The 2D floor plan is treated as the structural source of truth because containment, collision, opening clearance, and circulation can be checked reliably in top-down geometry. The 3D preview and image-generation workflow are then derived from this shared representation. A layout is written as L = (P, G, O, A), where P is the room polygon in millimeters, G is the set of door and window openings attached to wall edges, O is the set of furniture objects, and A stores style, material, and rendering metadata.
+[162] Note 25. Section 3.2, hard constraints paragraph
+[163] Priority: High
+[164] Current text / marker: "path(gk, center(Proom)) is unblocked"
+[165] Reviewer note: Ràng buộc đường đi từ opening đến room center là heuristic quan trọng nhưng cần giải thích là xấp xỉ, không phải kiểm tra đầy đủ mọi tuyến đi trong phòng. Nếu không, phản biện có thể hỏi vì sao chỉ kiểm tra đến tâm phòng.
+[166] Suggested rewrite / action:
+[167] The circulation constraint is implemented as a practical approximation rather than a complete human-path planner. The system checks whether a representative path or corridor from each usable opening toward the main room area is blocked by large furniture footprints. This check is sufficient for rejecting obvious failures, such as a wardrobe blocking the only door, but it does not model every possible walking trajectory inside the room.
+[168] Note 26. Section 3.2, objective function paragraph
+[169] Priority: Medium
+[170] Current text / marker: "The ϕm terms penalize feasibility violations... Hard-constraint penalties dominate..."
+[171] Reviewer note: Đoạn vừa nói hard constraints reject invalid candidates, vừa nói hard penalties dominate. Cần làm rõ: reject trước, score sau; penalty dùng cho near-valid/diagnostic hoặc ranking.
+[172] Suggested rewrite / action:
+[173] The solver first applies hard feasibility checks to reject layouts that are physically unusable. For candidates that pass these checks, the objective function ranks the remaining layouts by soft design preferences such as wall anchoring, visibility, adjacency, balance, and circulation. In implementation, severe feasibility violations are either rejected directly or assigned a very large penalty during repair and diagnostics. Soft terms are normalized to comparable ranges so that one preference, such as wall anchoring, does not overwhelm basic usability.
+[174] Note 27. Section 3.3, first paragraph
+[175] Priority: Medium
+[176] Current text / marker: "room interpretation, style-policy compilation, semantic cluster generation..."
+[177] Reviewer note: Danh sách stage quá dài, làm người đọc bị ngợp trước khi biết ba nhóm chính. Nên gom thành nhóm như Chapter 4.
+[178] Suggested rewrite / action:
+[179] Large language models are used as reasoning components rather than direct coordinate generators. The planning pipeline decomposes the task into three groups of stages. The first group interprets the room and user brief. The second group converts style intent, required objects, optional objects, and object relations into structured JSON artifacts. The third group prepares solver-ready concepts and selects final gallery variants after geometric validation. This structure makes the LLM output inspectable, replayable, and suitable for ablation, while leaving coordinate decisions to the solver.
+[180] Note 28. Figure 3.3 and explanation
+[181] Priority: Medium
+[182] Current text / marker: Conceptual Transformer architecture
+[183] Reviewer note: Hình Transformer khá lớn và có thể bị hỏi: hệ thống có train Transformer không? Đoạn giải thích đã có nhưng nên viết mạnh hơn rằng đây là background, không phải module tự triển khai.
+[184] Suggested rewrite / action:
+[185] Figure 3.3 is included only as conceptual background for modern LLMs, not as a claim that the thesis trains or modifies a Transformer model. It explains why pretrained language models are suitable for interpreting design briefs and object relations. The implemented contribution is the structured planning and validation workflow built around provider LLM calls, not a new language-model architecture.
+[186] Note 29. Section 3.5, first paragraph
+[187] Priority: Medium
+[188] Current text / marker: "The current experiments use gpt-image-2..."
+[189] Reviewer note: Đoạn dùng tên model cụ thể trong nền tảng lý thuyết. Nên tách rõ: model là provider black box trong implementation; lý thuyết là conditional/diffusion-style generation nói chung.
+[190] Suggested rewrite / action:
+[191] The image-generation workflow converts a 3D blockout into a more realistic interior visualization. In the implemented experiments, the provider image model is treated as a black-box text-and-image-conditioned generator. Because its internal architecture is not public, this thesis does not make claims about the provider model itself. The theoretical background is used only to explain the general class of conditional image-generation methods that motivate the workflow.
+[192] Note 30. Section 3.6, evaluation metrics overview
+[193] Priority: Medium
+[194] Current text / marker: "For ablation cases where the four primary layout scores do not fully expose..."
+[195] Reviewer note: Đoạn này đi khá sâu vào thiết kế thí nghiệm của Chapter 7. Trong Chapter 3 nên chỉ nêu khái niệm metric và chuyển chi tiết sang Chapter 7.
+[196] Suggested rewrite / action:
+[197] The evaluation uses two groups of metrics. Layout metrics check whether a generated layout is geometrically valid, follows the user request, forms a usable room arrangement, and contains enough usable furniture. Image metrics check whether a generated or edited render preserves the selected layout, follows visual presets, performs the requested edit, and avoids unintended changes. Chapter 7 defines the exact scoring protocol, weights, benchmark cases, and ablation-specific stability metrics.
+[198] Note 31. Section 3.7
+[199] Priority: Low
+[200] Current text / marker: "Web Technologies Used in the System"
+[201] Reviewer note: Phần này thuộc công nghệ triển khai, trùng với Chapter 6. Nếu giữ ở Chapter 3 thì nên đổi vai trò: chỉ giới thiệu ngắn công nghệ, không mô tả thiết kế hệ thống.
+[202] Suggested rewrite / action:
+[203] The system is implemented as a web application because the target workflow requires interactive editing, long-running AI calls, and persistent artifacts. The frontend uses React, Canvas, and Three.js for 2D editing and 3D preview. The backend uses FastAPI for API endpoints and server-sent events for progress reporting. PostgreSQL stores users, inventory, saved layouts, and generated renders. Chapter 6 describes how these technologies are organized into the final software architecture.
+[204] Chapter 4 - Automatic Layout Design
+[205] Note 32. Chapter 4 opening paragraph
+[206] Priority: Low
+[207] Current text / marker: "The goal is not only to produce a plausible list of furniture items..."
+[208] Reviewer note: Đoạn mở ổn nhưng nên nhấn "Problem 1" là đầu ra editable layout, không phải render. Điều này giúp tách Chapter 4 và 5.
+[209] Suggested rewrite / action:
+[210] Chapter 4 presents the solution for Problem 1: generating an editable furniture layout from the user's design requirements and room geometry. The goal is not only to produce a plausible object list, but to produce a structured layout that can be validated against spatial constraints and reused by later modules. The output of this chapter is therefore the authoritative design state for 2D editing, 3D preview, and layout-conditioned image rendering.
+[211] Note 33. Figure 4.1 and following explanation
+[212] Priority: High
+[213] Current text / marker: Overall processing flow for automatic editable layout generation
+[214] Reviewer note: Hình 4.1 chứa nhiều module nhỏ, chữ trong hình khó đọc khi in. Đoạn văn giải thích khá tốt nhưng cần nói rõ hình này là data flow, không phải class diagram hay agent diagram.
+[215] Suggested rewrite / action:
+[216] Figure 4.1 summarizes the execution order of the automatic layout-generation pipeline. The pipeline is divided into five module groups. Room interpretation normalizes the design case and fixed room geometry. Semantic planning compiles style preferences, functional clusters, request priorities, and tier/count decisions. The layout-program group merges these decisions into anchor-first concepts and solver relation plans. Geometric solving places the objects, repairs near-valid candidates, and scores feasible layouts. Finalization restores eligible accessories, binds inventory and style metadata, and selects a small gallery of distinct editable variants.
+[217] Note 34. Section 4.1, running example paragraph
+[218] Priority: Medium
+[219] Current text / marker: "A running example is used throughout this chapter."
+[220] Reviewer note: Running example nên xuất hiện trước hoặc ngay sau input description, thay vì sau JSON output. Người đọc sẽ dễ theo dõi hơn nếu example dẫn dắt các module.
+[221] Suggested rewrite / action:
+[222] The chapter uses one running example to make the pipeline concrete. The example brief is: "compact guest bedroom with a bed, wardrobe, desk, and a small vanity near the window." The room is a 4.0 m by 3.2 m rectangle with one door on the south wall and one window on the north wall. The semantic modules infer that the bed and wardrobe are required, the desk is strongly preferred, and the vanity is preferred if space allows. The room model converts the door and window into clearance and daylight zones. The object program turns these requirements into anchors and support objects, and the solver searches for placements that keep the door clear, avoid overlap, and preserve circulation.
+[223] Note 35. Section 4.2, input example
+[224] Priority: Medium
+[225] Current text / marker: "openings": ["door_1", "window_1"]
+[226] Reviewer note: Ví dụ input quá rút gọn: nếu openings chỉ là id thì chưa thể hiểu solver biết cửa ở đâu. Nên thêm tọa độ/tường hoặc giải thích đây là compact example.
+[227] Suggested rewrite / action:
+[228] A compact input example is shown below. In the actual implementation, each opening id is linked to wall-edge metadata, width, type, and position. The shortened example only shows the fields needed to understand the data flow.
+[229] {
+[230] "brief": "compact bedroom with a bed, wardrobe and desk",
+[231] "room": {
+[232] "polygon_mm": [[0,0], [4000,0], [4000,3200], [0,3200]],
+[233] "openings": [
+[234] {"id": "door_1", "type": "door", "wall": "south", "span_mm": [600,1500]},
+[235] {"id": "window_1", "type": "window", "wall": "north", "span_mm": [1800,2800]}
+[236] ]
+[237] },
+[238] "inventory_scope": ["bed", "wardrobe", "desk", "chair"]
+[239] }
+[240] Note 36. Section 4.4, room modeling representation
+[241] Priority: Medium
+[242] Current text / marker: "The room layout is represented as: L = (P, G, O, A)"
+[243] Reviewer note: Biểu diễn này đã được giới thiệu ở Chapter 3. Viết lại đầy đủ trong Chapter 4 gây lặp. Nên nhắc lại ngắn và tập trung vào transformation của module.
+[244] Suggested rewrite / action:
+[245] The room modeling module uses the compact representation introduced in Section 3.1, where a layout is represented by the room polygon, fixed openings, placed objects, and metadata. In Chapter 4, the focus is not the notation itself but the transformation from user-drawn geometry into solver-ready constraints. From the raw polygon and opening segments, the module derives clearance zones, wall-anchor candidates, circulation targets, and daylight-related hints.
+[246] Note 37. Section 4.5, solver explanation
+[247] Priority: High
+[248] Current text / marker: "The solver follows an anchor-first heuristic search. The current implementation is not a learned optimizer..."
+[249] Reviewer note: Ý tốt nhưng cần trình bày như một quyết định thiết kế, tránh nghe như biện hộ. Nên giải thích vì sao deterministic heuristic phù hợp với mục tiêu đồ án.
+[250] Suggested rewrite / action:
+[251] The solver uses an anchor-first heuristic search. This design is intentionally deterministic rather than learned: the implementation enumerates candidate anchor positions and orientations, repairs near-valid placements when possible, and ranks feasible layouts with rule-based scores. This choice makes the solver easier to inspect and debug. It also fits the thesis goal because the system needs reliable editable layouts, not a black-box optimizer whose failures are difficult to explain.
+[252] Note 38. Section 4.5, Algorithm 1
+[253] Priority: Medium
+[254] Current text / marker: Algorithm steps shown as plain text
+[255] Reviewer note: Algorithm đang giống đoạn code thường, chưa có định dạng algorithm rõ ràng. Nên đặt caption và thêm câu trước/sau nói input-output.
+[256] Suggested rewrite / action:
+[257] The solver procedure can be summarized as Algorithm 1. The algorithm first enumerates anchors for required objects, then attaches dependent objects, repairs near-valid layouts, and finally scores feasible candidates.
+[258] Algorithm 1: Anchor-first geometric search for editable layout generation
+[259] Input: room model, object program, inventory dimensions
+[260] Output: ranked candidate layouts
+[261] 1. Generate wall, corner, center, and relation-based anchor targets.
+[262] 2. Enumerate orientations for primary anchor objects.
+[263] 3. Place required anchors and reject hard-constraint violations.
+[264] 4. Attach support objects from relation templates.
+[265] 5. Repair near-valid candidates by shifting objects within allowed zones.
+[266] 6. Add optional accessories only after blocking furniture is valid.
+[267] 7. Score feasible candidates with soft objectives.
+[268] 8. Keep ranked candidates and diagnostics for gallery selection.
+[269] Note 39. Section 4.6, gallery selector paragraph
+[270] Priority: Medium
+[271] Current text / marker: "filtered by a layout signature that records anchor walls, major object orientation, and main circulation pattern"
+[272] Reviewer note: "layout signature" là thuật ngữ mới nhưng chưa định nghĩa. Nên giải thích nó là key để loại duplicate layout.
+[273] Suggested rewrite / action:
+[274] The gallery selector converts many feasible solver candidates into a small set of user-facing variants. It first rejects candidates below the hard-validity threshold. Near-valid candidates are kept only when repair removes the violations. The remaining candidates are sorted by score and filtered by a layout signature that records anchor walls, major object orientations, and the main circulation pattern. This signature acts as a duplicate filter, so the gallery does not show several layouts that differ only by a small coordinate shift. After filtering, the selector attaches inventory, material, style, and diagnostic metadata so that the user can compare a few distinct options rather than a long list of nearly identical candidates.
+[275] Chapter 5 - Image Generation and Editing
+[276] Note 40. Chapter 5 opening paragraph
+[277] Priority: Low
+[278] Current text / marker: "Problem 2 is the generation and editing of visualization images from an editable layout."
+[279] Reviewer note: Đoạn mở đúng nhưng hơi ngắn. Nên nhắc lại quan hệ với Chapter 4: layout là source of truth.
+[280] Suggested rewrite / action:
+[281] Problem 2 is the generation and editing of visualization images from an editable layout. The goal is not only to create attractive interior images. The render should remain traceable to the selected layout from Chapter 4, including camera view, room shell, major furniture, openings, and relative object positions. In this workflow, the editable layout remains the structural source of truth, while the generated image is a visual interpretation of that layout.
+[282] Note 41. Section 5.1, output JSON example
+[283] Priority: Medium
+[284] Current text / marker: "provider_variant": "single_edit_edge_silhouette_guided"
+[285] Reviewer note: Tên internal variant quá kỹ thuật và có dấu gạch dưới dài. Trong main thesis nên dùng tên dễ đọc, còn internal id để phụ chú.
+[286] Suggested rewrite / action:
+[287] The final output is a render artifact linked back to the layout. In the thesis text, the workflow variant should be named in a reader-facing form, such as "edge/silhouette-guided render". The internal provider id can be mentioned only when needed for reproducibility.
+[288] {
+[289] "render_id": "render_2026_001",
+[290] "source_layout_id": "candidate_07",
+[291] "workflow_variant": "edge_silhouette_guided_render",
+[292] "image_path": "renders/render_2026_001.png",
+[293] "preservation_targets": ["room_shell", "openings", "major_furniture"],
+[294] "metadata": {"runtime_s": 60.8, "input_tokens": 4078}
+[295] }
+[296] Note 42. Section 5.1.1, snapshot conditioning paragraph
+[297] Priority: Medium
+[298] Current text / marker: "The provider receives the selected 3D view and related guides rather than a text prompt alone."
+[299] Reviewer note: Đoạn này ổn nhưng nên nói rõ contribution không phải train model, mà là cách đóng gói evidence từ layout.
+[300] Suggested rewrite / action:
+[301] This technique is motivated by conditional image-generation research, where spatial evidence such as edges, depth, or segmentation improves output control [16]. TKNT applies the same principle at the workflow level. The provider receives the selected 3D view, edge or silhouette guides, visible-object metadata, and preservation instructions rather than a text prompt alone. The thesis does not claim that the provider model is retrained or that a ControlNet-style conditioning branch is exposed. The implemented contribution is a snapshot-guided provider workflow built around the editable layout.
+[302] Note 43. Section 5.1.2, practical effect paragraph
+[303] Priority: Medium
+[304] Current text / marker: "The practical effect can be understood as a small ablation."
+[305] Reviewer note: "small ablation" nghe không tự nhiên ở phần solution. Nên nói là so sánh request form và chuyển ablation thật sang Chapter 7.
+[306] Suggested rewrite / action:
+[307] The practical effect can be explained by comparing two request forms. Without a scene contract, the prompt may only ask the model to make the room "warm minimalist", which leaves object count, opening placement, and camera framing underspecified. With the scene and visible-object contracts, the request explicitly states which objects, openings, and spatial relations must remain stable and which visual properties may change. The expected improvement is therefore not exact geometric rendering, but fewer unnecessary changes to object count, room shell, and camera view. Chapter 7 evaluates this effect through the image-flow variants.
+[308] Note 44. Figures 5.3-5.6
+[309] Priority: Medium
+[310] Current text / marker: Real create-flow and edit-flow examples
+[311] Reviewer note: Các hình minh họa quan trọng nhưng ảnh trong trang hơi nhỏ. Với luận văn, hình trước/sau cần đủ lớn để phản biện nhìn được object nào được giữ và object nào thay đổi.
+[312] Suggested rewrite / action:
+[313] Suggested figure action: enlarge the source snapshot, guide, and generated render panels, or split Figure 5.3 into two figures: one for the guidance inputs and one for the generated result. For Figure 5.5, mark the target region more clearly and add a short sentence before the figure: "The orange target region indicates where the add operation is allowed; the rest of the room is protected by preservation constraints."
+[314] Note 45. Section 5.2.1, edit request paragraph
+[315] Priority: Low
+[316] Current text / marker: "The edit request is connected to an object id, region, bounding box, or mask whenever possible."
+[317] Reviewer note: Đoạn rõ, nhưng có thể đọc mượt hơn nếu tách mask và bbox thành hai mức tin cậy.
+[318] Suggested rewrite / action:
+[319] Each edit request is connected to a target scope whenever possible. The target may come from a selected layout object, a visible-object box in the snapshot, or a manual region selected by the user on the render. When the target can be localized reliably, the system uses a mask. When localization is weaker, it falls back to a normalized bounding box and a textual target description. This scope reduces ambiguity because the image model is told both what to change and where the change should occur.
+[320] Note 46. Section 5.2.3, limitation paragraph
+[321] Priority: Medium
+[322] Current text / marker: "The image output has an important limitation."
+[323] Reviewer note: Đây là đoạn rất tốt để phòng phản biện, nhưng nên viết rõ drift được xử lý như failure, không phải update layout.
+[324] Suggested rewrite / action:
+[325] The generated or edited render is a visual artifact, not the structural source of truth. The editable layout remains the authoritative design state. If an image drifts in camera framing, room geometry, object identity, or opening position, the drift is treated as a rendering failure rather than a valid layout update. The current system can save and evaluate such renders, but it does not automatically synchronize image-only edits back into the editable 2D layout.
+[326] Chapter 6 - System Construction
+[327] Note 47. Chapter 6 opening paragraph
+[328] Priority: Low
+[329] Current text / marker: "This chapter presents the implemented system..."
+[330] Reviewer note: Đoạn mở chương nên nói rõ Chapter 6 khác Chapter 4-5 ở chỗ implementation, không phải thuật toán.
+[331] Suggested rewrite / action:
+[332] This chapter presents the implemented system that supports the two solution chapters. It describes the software architecture, package organization, detailed design, application-building results, and deployment configuration. Chapters 4 and 5 focus on the layout and image workflows, while this chapter explains how those workflows are implemented as a web application with a frontend, backend, database, external AI services, and persistent artifacts.
+[333] Note 48. Section 6.1.2, overall design paragraph
+[334] Priority: Medium
+[335] Current text / marker: "The overall design can be read as a pipeline."
+[336] Reviewer note: Câu "can be read as" hơi lỏng. Nên khẳng định kiến trúc là pipeline data flow và nêu input/output rõ.
+[337] Suggested rewrite / action:
+[338] The overall design follows a pipeline data flow. The user enters the room, style, and design requirements in the frontend. The frontend sends the prepared floor-plan geometry, openings, room type, and brief to the backend. The backend creates a case folder, records metadata and stage status, runs the layout pipeline, and returns final layout variants. The frontend converts the selected variant into the common DesignPlanV1 structure, displays it in 2D and 3D, and optionally sends a 3D snapshot to the image-rendering workflow.
+[339] Note 49. Section 6.2.2, backend pipeline design
+[340] Priority: High
+[341] Current text / marker: Long paragraph listing run_case, RoomInterpreter, Stylist, ClusterForge, TierCountDirector...
+[342] Reviewer note: Đoạn quá nhiều tên module nội bộ, người phản biện chưa xem code sẽ khó theo. Nên viết theo stage chức năng; tên module cụ thể đưa vào phụ chú hoặc sơ đồ.
+[343] Suggested rewrite / action:
+[344] The backend auto-fill flow is implemented as a sequence of stages controlled by the pipeline orchestrator. The first stage prepares the case: it loads manual placements, creates a case id, writes metadata, and normalizes the room input. The second stage performs semantic planning: it interprets the room, compiles style preferences, generates object clusters, extracts request priorities, and decides object counts. The third stage converts the semantic output into a solver-ready object program with anchors, relations, and constraints. The fourth stage runs the geometric solver to search for absolute object placements using the room boundary, openings, furniture footprints, manual constraints, and relation plans. The final stage selects gallery-eligible variants, attaches inventory and style metadata, writes artifacts, and returns the selectable payload to the frontend.
+[345] Note 50. Section 6.2.2, diversity repair paragraph
+[346] Priority: Medium
+[347] Current text / marker: "If candidate diversity collapses, material macro diversification repair can solve additional committed anchor targets."
+[348] Reviewer note: Câu này rất khó hiểu, giống tên function/code hơn là mô tả thiết kế. Nên diễn giải bằng ngôn ngữ hệ thống.
+[349] Suggested rewrite / action:
+[350] If the final candidates are too similar, the pipeline attempts to create additional valid variants by changing high-level anchor choices, such as the wall used by the bed or sofa, the main media-wall direction, or the circulation pattern. This repair step is used only after the solver has found valid layouts. Its purpose is not to improve one layout locally, but to make the gallery contain meaningfully different options for user comparison.
+[351] Note 51. Section 6.2.3, renderer variants paragraph
+[352] Priority: Medium
+[353] Current text / marker: "the system can run several ablation variants..."
+[354] Reviewer note: Ablation variants thuộc Chapter 7, còn Section 6.2.3 nên mô tả user-facing modes. Có thể nhắc ablation ngắn thôi.
+[355] Suggested rewrite / action:
+[356] The renderer supports three user-facing modes: generating a new render from a selected 3D snapshot, editing an existing render with a localized request, and re-rendering from a different camera view. The evaluation code can additionally run ablation variants of the generation workflow, such as text-only prompting, text contracts, visual preflight, and locked-geometry references. These variants are used for Chapter 7 experiments, while the user-facing workflow exposes only the selected generation and editing controls.
+[357] Note 52. Section 6.3.2, Table 6.3 caption
+[358] Priority: High
+[359] Current text / marker: "Table 6.3: 3 summarizes the implementation size and main delivered artifacts."
+[360] Reviewer note: Caption bị lỗi nghiêm trọng: "Table 6.3: 3 summarizes". Đây là lỗi hình thức dễ bị phát hiện. Cần sửa caption và đoạn dẫn.
+[361] Suggested rewrite / action:
+[362] Table 6.3 summarizes the implementation scope and the main delivered artifacts. The line counts are approximate source-code counts for the thesis workspace, excluding dependency folders such as node_modules and Python environment directories. They are reported only to show which system parts were delivered; algorithmic quality is evaluated separately in Chapter 7.
+[363] Note 53. Section 6.3.2, implementation size table
+[364] Priority: Medium
+[365] Current text / marker: "86 Python files, about 106k lines" / "141 files, about 147k lines"
+[366] Reviewer note: Số dòng code rất lớn, nếu không giải thích phương pháp đếm sẽ dễ bị phản biện nghi ngờ có tính cả generated files/logs/results. Nên nói rõ phạm vi đếm hoặc bỏ line count.
+[367] Suggested rewrite / action:
+[368] If these counts are kept, add a footnote or sentence: "The counts are approximate and were computed from source and evaluation scripts in the thesis workspace. Dependency folders, virtual environments, generated images, cached artifacts, and benchmark result folders are excluded." If this cannot be guaranteed, replace line counts with a safer description such as "backend modules", "frontend components", and "evaluation runners" without exact line numbers.
+[369] Note 54. Figures 6.6-6.8
+[370] Priority: Medium
+[371] Current text / marker: Workspace screenshots
+[372] Reviewer note: Các screenshot hơi nhỏ, đặc biệt các panel UI và chữ trong giao diện khó đọc. Vì đây là bằng chứng implementation, nên hình cần đủ rõ để thấy chức năng chính.
+[373] Suggested rewrite / action:
+[374] Suggested figure action: enlarge Figure 6.6 to full page width and crop unused margins. For Figures 6.7 and 6.8, use zoomed screenshots of the relevant panels instead of full-screen captures. Suggested caption for Figure 6.6: "Main implemented workspace. The left side contains the inventory and room-editing controls, the center contains the editable 2D floor plan, and the right side contains the design brief and generation controls."
+[375] Note 55. Section 6.4 Deployment
+[376] Priority: Medium
+[377] Current text / marker: "The project includes configuration files for local and Docker-based execution."
+[378] Reviewer note: Deployment section hơi ngắn. Nên nói rõ các component chạy ở đâu, secrets được quản lý thế nào, và vì sao Docker Compose đủ cho prototype.
+[379] Suggested rewrite / action:
+[380] The project includes configuration files for both local development and Docker-based execution. Docker Compose starts the backend service and PostgreSQL database with consistent environment variables. During development, the frontend can run separately with Vite and communicate with the backend through REST and server-sent event endpoints. Provider keys, database URLs, authentication secrets, and model settings are kept outside the source code through environment variables. This deployment is sufficient for thesis evaluation and local demonstration, while production deployment would require stronger monitoring, rate limiting, backup, and secret-management policies.
+[381] Chapter 7 - Experimental Evaluation
+[382] Note 56. Section 7.1.1, RQ3
+[383] Priority: Medium
+[384] Current text / marker: "Does the system remain stable when the benchmark increases from simple rectangular rooms to non-rectangular rooms with openings?"
+[385] Reviewer note: RQ3 đang trộn hai ý: stability across runs và robustness to harder geometry. Nên viết rõ một câu hỏi là stability/robustness.
+[386] Suggested rewrite / action:
+[387] RQ3: Does the system remain robust across repeated runs and increasingly difficult room geometries, including non-rectangular rooms with fixed openings?
+[388] Note 57. Section 7.1.2, compared systems paragraph
+[389] Priority: Medium
+[390] Current text / marker: "The external baselines are normalized into the same output schema..."
+[391] Reviewer note: Đây là điểm rất quan trọng vì so sánh với hệ thống ngoài. Cần thêm một câu nói việc chuyển đổi có thể gây bias/limitation và được kiểm soát thế nào.
+[392] Suggested rewrite / action:
+[393] The external baselines are normalized into the same 2D output schema before scoring so that geometry, request following, arrangement quality, and valid-object count can be measured consistently. This conversion is necessary because the compared systems do not expose exactly the same internal representation as TKNT. To reduce conversion bias, the normalization keeps the visible object categories, approximate footprints, positions, and orientations whenever they can be recovered from the baseline output.
+[394] Note 58. Section 7.1.3, benchmark scenario types
+[395] Priority: Medium
+[396] Current text / marker: "controlled synthetic cases"
+[397] Reviewer note: Nên giải thích vì sao synthetic cases vẫn hợp lý và chúng đại diện cho room constraints nào. Đoạn đã có nhưng có thể cụ thể hơn.
+[398] Suggested rewrite / action:
+[399] The auto-fill benchmark uses controlled synthetic cases rather than copied apartment floor plans. This choice makes it possible to vary one constraint at a time, such as room shape, opening placement, or object requirements, while keeping the scoring comparable across systems. The cases are realism-oriented: they use common bedroom and living-room dimensions, typical furniture groups, and fixed doors or windows that create practical placement constraints.
+[400] Note 59. Section 7.1.4, metric weights paragraph
+[401] Priority: High
+[402] Current text / marker: "Overall score is computed as 30% geometry, 25% request following..."
+[403] Reviewer note: Trọng số metric có vẻ tự đặt. Cần giải thích vì sao chọn trọng số này để tránh bị hỏi "vì sao geometry 30% mà không phải 50%?".
+[404] Suggested rewrite / action:
+[405] The four primary component metrics are reported on a 0-100 scale. The overall score is computed as 30% geometry, 25% request following, 25% arrangement quality, and 20% valid object completeness. Geometry receives the largest weight because a layout that crosses room boundaries, overlaps blocking furniture, or blocks openings is not usable even if it contains the requested objects. Request following and arrangement quality receive equal weight because an early design must both answer the brief and remain functional. Valid object completeness receives a lower weight because it is a completeness check rather than a full usability judgment.
+[406] Note 60. Section 7.1.5 / scenario-level analysis
+[407] Priority: Medium
+[408] Current text / marker: Long JSON snippets for Scenario A/B/C
+[409] Reviewer note: Các JSON output khá dài và chiếm nhiều trang. Chúng hữu ích nhưng làm flow đọc bị đứt. Có thể chuyển một phần sang appendix hoặc rút còn metric + object list.
+[410] Suggested rewrite / action:
+[411] Suggested rewrite before the examples: "To make the metric interpretation concrete, this subsection shows three representative cases. For each case, only the fields needed for understanding the result are shown: room type, shape, openings, prompt focus, object list, component scores, and violation count. Full normalized JSON outputs are stored in the evaluation artifacts."
+[412] Note 61. Section 7.1.6, external baseline comparison
+[413] Priority: Medium
+[414] Current text / marker: "The external comparison contains 100 case-run observations per system..."
+[415] Reviewer note: Rất tốt nhưng cần nói rõ "case-run observation" là gì vì thuật ngữ này có thể lạ.
+[416] Suggested rewrite / action:
+[417] The external comparison contains 100 case-run observations per system. A case-run observation means one execution of one benchmark case by one system. Each benchmark case is executed twice to reflect the non-deterministic behavior of AI-assisted generation. Therefore, the Overall column in the subgroup tables is reported as mean ± standard deviation over case-run observations, while the component metrics are reported as means to keep the tables readable.
+[418] Note 62. Tables 7.4-7.6
+[419] Priority: Medium
+[420] Current text / marker: External baseline results tables
+[421] Reviewer note: Các bảng kết quả nhiều số, khó đọc nếu không có takeaway ngay dưới. Bạn đã có phân tích, nhưng nên đảm bảo mỗi bảng có một câu kết luận ngắn trước đoạn dài.
+[422] Suggested rewrite / action:
+[423] Suggested pattern after each result table: "Main reading: in easy rooms without openings, the baselines can be competitive; when openings or non-rectangular boundaries are introduced, TKNT maintains much higher geometry and arrangement scores." This one-sentence reading helps the reader understand the table before entering detailed interpretation.
+[424] Note 63. Section 7.1.7/7.1.8 numbering
+[425] Priority: High
+[426] Current text / marker: Contents lists Scenario-Level Analysis, Comparison, Ablation, Discussion; body headings around pages 73-84 should be checked
+[427] Reviewer note: Cần kiểm tra lại số thứ tự heading trong Chapter 7 sau khi compile. Trong text extract có dấu hiệu section numbering không khớp hoàn toàn với mục lục. Đây là lỗi hình thức dễ bị bắt.
+[428] Suggested rewrite / action:
+[429] Suggested action: rebuild the table of contents and verify that the body headings match exactly: 7.1.5 Evaluation Metrics, 7.1.6 Scenario-Level Analysis, 7.1.7 Comparison with External Baselines, 7.1.8 Ablation Study, 7.1.9 Discussion. If one heading is missing or manually formatted, convert it to the correct LaTeX section/subsection command.
+[430] Note 64. Ablation discussion
+[431] Priority: Medium
+[432] Current text / marker: "some ablated variants look slightly better than the full system on a limited subset"
+[433] Reviewer note: Đây là điểm phản biện sẽ hỏi. Nên giải thích mạnh hơn vì sao full vẫn được chọn khi một số ablation có primary score cao hơn.
+[434] Suggested rewrite / action:
+[435] Some ablated variants achieve slightly higher scores on the four primary metrics in a limited subset. This does not mean that the removed components are unnecessary. The primary metrics mainly reward immediate geometric validity, request checks, arrangement quality, and valid object count. They do not fully capture style-material consistency, gallery diversity, repeated-run reliability, or worst-case behavior. The stability holdout therefore provides an additional view of robustness, and it explains why the full pipeline remains the preferred configuration.
+[436] Note 65. Section 7.2.2, image-flow variant description
+[437] Priority: Medium
+[438] Current text / marker: "official edge/silhouette-guided variant"
+[439] Reviewer note: Từ "official" không phù hợp với văn phong luận văn; nên dùng "main proposed" hoặc "selected". Ngoài ra internal id dài nên chuyển vào ngoặc.
+[440] Suggested rewrite / action:
+[441] The main proposed generation variant is the edge/silhouette-guided workflow (SE-ESG). It uses the annotated edge/silhouette guide in a single image-edit pass. In the implementation artifacts, this variant corresponds to the internal id single_edit_edge_silhouette_guided. Figure 7.9 shows the six outputs for the same source case, and Section 7.2.5 reports the aggregate ranking.
+[442] Note 66. Section 7.2.4, image metrics paragraph
+[443] Priority: Medium
+[444] Current text / marker: "The macro score is the unweighted mean of these four metrics."
+[445] Reviewer note: Cần nói vì sao unweighted mean. Nếu không, phản biện có thể hỏi tại sao edge/depth/DINO bằng nhau.
+[446] Suggested rewrite / action:
+[447] The macro score is the unweighted mean of the four layout-preservation metrics. Equal weighting is used because the metrics capture complementary aspects of fidelity: edge structure focuses on visible contours, depth structure focuses on coarse spatial organization, DINO patch similarity captures local visual correspondence, and DINO object similarity focuses on layout-critical visible objects. The macro score is therefore interpreted as a balanced preservation indicator rather than a complete measure of visual quality.
+[448] Note 67. Section 7.2.5, SE-ESG result paragraph
+[449] Priority: Medium
+[450] Current text / marker: "SE-ESG is the strongest official variant by combined macro mean."
+[451] Reviewer note: Cần viết thận trọng vì SE-ESG không thắng mọi component metric. Bạn đã nói ở đoạn sau, nhưng nên đưa ngay trong kết luận.
+[452] Suggested rewrite / action:
+[453] SE-ESG obtains the highest combined macro mean among the tested create-flow variants. It scores 0.587, ahead of simple prompt at 0.577 and LLM visual preflight at 0.554. The advantage mainly comes from layout edge structure and DINO patch similarity, which are closely tied to visible layout preservation. However, SE-ESG does not strictly dominate every individual component metric; simple prompt remains slightly higher on depth and DINO object similarity. The correct claim is therefore that SE-ESG provides the best overall macro trade-off, not that it is best on every metric.
+[454] Note 68. Section 7.2.5, runtime/token paragraph
+[455] Priority: Medium
+[456] Current text / marker: "Runtime and token usage are measured on a balanced matched subset..."
+[457] Reviewer note: Đoạn tốt, nhưng nên nói đây là practical comparison, không phải toàn bộ benchmark. Nếu không, người đọc có thể nhầm với 168 outputs.
+[458] Suggested rewrite / action:
+[459] Runtime and token usage are measured on a balanced matched subset of four representative cases: one simple bedroom, one simple living room, one non-rectangular bedroom, and one non-rectangular living room. Each case is run twice, giving eight observations per variant. This subset is used for practical cost comparison because all six variants contain complete provider runtime and token metadata for the same cases. The quality comparison still uses the full create benchmark reported above.
+[460] Note 69. Section 7.2.6, edit results paragraph
+[461] Priority: Medium
+[462] Current text / marker: "Object-scope preflight improves semantic edit success; prompt-only stays closer to source structure."
+[463] Reviewer note: Bảng 7.12 rất cô đọng nhưng nên có câu giải thích trade-off ngay trước hoặc sau bảng.
+[464] Suggested rewrite / action:
+[465] The edit benchmark shows a trade-off between applying the requested change and preserving the original image. Object-scope preflight improves manual edit success because it gives the model an explicit target and preservation scope. Prompt-image-only editing can sometimes obtain higher edge or depth similarity because it changes less, but this can also indicate under-editing when the requested operation is not fully performed.
+[466] Chapter 8 - Conclusion and Future Work
+[467] Note 70. Section 8.1, conclusion paragraph
+[468] Priority: Low
+[469] Current text / marker: "This thesis developed an AI-assisted interior layout design system..."
+[470] Reviewer note: Kết luận ổn nhưng nên nêu contribution theo đúng hai problem và evaluation result, không chỉ tính năng hệ thống.
+[471] Suggested rewrite / action:
+[472] This thesis developed an AI-assisted interior layout design and visualization system for living rooms and bedrooms. The system addresses two connected problems: generating an editable furniture layout from a natural-language brief and room geometry, and producing layout-consistent visualization images from the selected layout. The implemented prototype allows users to define room geometry with doors and windows, generate multiple layout variants, inspect and refine the result in 2D and 3D, and create or edit realistic renders from the selected scene.
+[473] Note 71. Section 8.2, first future work paragraph
+[474] Priority: High
+[475] Current text / marker: "The first future direction is to complete the quantitative and user-based evaluation. The remaining evaluation extensions in Chapter 7 should be filled..."
+[476] Reviewer note: Đoạn này mâu thuẫn với Chapter 7 vì Chapter 7 đã có kết quả đầy đủ. Không nên nói "complete" hay "should be filled" trong bản nộp cuối. Nên đổi thành mở rộng evaluation.
+[477] Suggested rewrite / action:
+[478] The first future direction is to extend the evaluation beyond the current benchmark. The thesis evaluation measures layout validity, request following, arrangement quality, image fidelity, preset fidelity, and edit success on controlled cases. Future work should add larger user studies with non-professional users and interior-design practitioners to measure usability, perceived design quality, editing effort, and trust in the generated recommendations.
+[479] Note 72. Section 8.2, room type future work
+[480] Priority: Low
+[481] Current text / marker: "Kitchens, bathrooms, work rooms..."
+[482] Reviewer note: Ý tốt nhưng cần gắn với scope hiện tại: living room và bedroom. Nên nói mở rộng cần constraint mới.
+[483] Suggested rewrite / action:
+[484] The second direction is to extend the supported room types beyond living rooms and bedrooms. Kitchens, bathrooms, work rooms, and combined living-dining spaces require additional constraints such as appliance workflow, wet areas, storage zones, safety clearances, and multi-functional circulation. Extending the system to these spaces would make it more useful, but it would also require more careful domain modeling and evaluation.
+[485] References
+[486] Note 73. References, pages 99-101
+[487] Priority: High
+[488] Current text / marker: "Ministry of Construction of Vietnam. Information... [1] Ministry of Construction..."
+[489] Reviewer note: Danh mục tài liệu tham khảo bị lặp thông tin rất nhiều: mỗi mục có cả citation generated và citation thô trong cùng entry. Đây là lỗi nghiêm trọng về hình thức. Cần sửa BibTeX hoặc .bib để mỗi reference chỉ có một entry sạch.
+[490] Suggested rewrite / action:
+[491] Suggested reference format for [1]: "Ministry of Construction of Vietnam. Information on housing and real estate market in Q4 2024 and the whole year 2024. Published Jan. 24, 2025. URL: https://moc.gov.vn/... (visited on 06/07/2026)."
+
+Suggested reference format for papers: "W. Feng et al. LayoutGPT: Compositional Visual Planning and Generation with Large Language Models. NeurIPS, 2023." Remove duplicated bracketed fragments such as "[5] W. Feng et al." inside the same reference entry.
+[492] Note 74. References, pages 99-101
+[493] Priority: Medium
+[494] Current text / marker: Mixed styles: URLs, arXiv entries, conference entries, duplicated years
+[495] Reviewer note: Citation style chưa nhất quán: có mục lặp năm hai lần, có mục có URL raw dài, có mục thiếu venue hoặc arXiv id rõ ràng. Nên chuẩn hóa trước khi nộp.
+[496] Suggested rewrite / action:
+[497] Suggested action: choose one citation style and normalize all entries. For arXiv papers, include authors, title, arXiv id, and year. For conference papers, include venue and year. For web pages, include organization, title, publication date if available, URL, and access date. Avoid embedding a full manually written citation inside the title field of BibTeX, because that is what causes the duplicated text in the compiled references.
+[498] Final correction checklist before submission
+[499] Rebuild the table of contents, list of figures, and list of tables after all edits.
+[500] Fix the Table 6.3 caption issue and verify all table/figure numbering.
+[501] Normalize "Generate 3D image" to "Generate 3D preview" everywhere.
+[502] Check Chapter 7 subsection numbering against the table of contents.
+[503] Remove internal writing notes such as "can be moved to appendix if needed".
+[504] Clean the reference list: remove duplicated citation fragments and standardize format.
+[505] Enlarge key use-case, workflow, UI, and experiment figures so text remains readable when printed.
+[506] Replace "official variant" with "main proposed variant" or "selected workflow" throughout Chapter 7.

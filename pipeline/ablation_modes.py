@@ -25,22 +25,6 @@ AblationMode = Literal[
 
 ABLATION_ENV = "TKNT_ABLATION_MODE"
 
-_VALID_MODES: set[str] = {
-    "full",
-    "minimal_room_context",
-    "no_style_policy",
-    "no_semantic_layout_planner",
-    "no_request_contract",
-    "no_tier_capacity",
-    "no_capacity_control",
-    "single_concept",
-    "no_concept_repair",
-    "no_material_macro_repair",
-    "no_accessory_refill",
-    "no_stylist_llm",
-    "no_gallery_selector",
-}
-
 _SYSTEM_ID_BY_MODE: dict[str, str] = {
     "full": "TKNT-Full",
     "minimal_room_context": "TKNT-AB-MinimalRoomContext",
@@ -56,6 +40,8 @@ _SYSTEM_ID_BY_MODE: dict[str, str] = {
     "no_stylist_llm": "TKNT-AB-NoStylistLLM",
     "no_gallery_selector": "TKNT-AB-NoGallerySelector",
 }
+
+_VALID_MODES: set[str] = set(_SYSTEM_ID_BY_MODE)
 
 _TIER_CAPACITY_DISABLED_MODES: set[str] = {
     "no_tier_capacity",

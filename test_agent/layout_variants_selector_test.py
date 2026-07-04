@@ -108,6 +108,47 @@ def _bedroom_layout_with_bookshelf(x_pos: int) -> dict[str, object]:
     return layout
 
 
+def _bedroom_core_layout(*, wardrobe_x: int, desk_x: int) -> dict[str, object]:
+    layout = _layout(0)
+    layout["objects"] = [
+        {
+            "cluster_id": "sleep_core",
+            "object_id": "bed",
+            "object_type": "bed",
+            "bbox": {"min_x": 3300, "min_y": 700, "max_x": 4800, "max_y": 2600},
+        },
+        {
+            "cluster_id": "storage_core",
+            "object_id": "wardrobe",
+            "object_type": "wardrobe",
+            "bbox": {
+                "min_x": wardrobe_x,
+                "min_y": 3100,
+                "max_x": wardrobe_x + 1300,
+                "max_y": 3600,
+            },
+        },
+        {
+            "cluster_id": "media_optional",
+            "object_id": "tv_console",
+            "object_type": "tv_console",
+            "bbox": {"min_x": 3200, "min_y": 100, "max_x": 4600, "max_y": 500},
+        },
+        {
+            "cluster_id": "work_study",
+            "object_id": "desk",
+            "object_type": "desk",
+            "bbox": {
+                "min_x": desk_x,
+                "min_y": 2600,
+                "max_x": desk_x + 900,
+                "max_y": 3100,
+            },
+        },
+    ]
+    return layout
+
+
 def _tier_output_for_requested_living_room() -> dict[str, object]:
     return {
         "decisions": [
@@ -150,6 +191,33 @@ class LayoutVariantsSelectorTest(unittest.TestCase):
         self.assertEqual(
             [row["gallery_selection_mode"] for row in selected],
             ["distinct", "distinct"],
+        )
+
+    def test_selector_prefers_core_anchor_diversity_over_desk_only_move(self) -> None:
+        selected = layout_variants.select_distinct_final_gallery_candidates(
+            candidates=[
+                _candidate(
+                    "base",
+                    _bedroom_core_layout(wardrobe_x=3600, desk_x=600),
+                    score=100,
+                ),
+                _candidate(
+                    "desk_only_move",
+                    _bedroom_core_layout(wardrobe_x=3600, desk_x=1800),
+                    score=99,
+                ),
+                _candidate(
+                    "storage_move",
+                    _bedroom_core_layout(wardrobe_x=100, desk_x=600),
+                    score=10,
+                ),
+            ],
+            max_variants=2,
+        )
+
+        self.assertEqual(
+            [row["source"] for row in selected],
+            ["base", "storage_move"],
         )
 
     def test_selector_caps_backfill_to_meaningful_visual_families(self) -> None:

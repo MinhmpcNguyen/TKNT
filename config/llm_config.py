@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from typing import Literal
 
 from config.openai_config import OpenAIConfig
-
-TextLLMProvider = Literal["openai"]
 
 _BENCHMARK_TEXT_MODEL_ENV = "TKNT_BENCHMARK_TEXT_MODEL"
 _DISABLE_MODEL_FALLBACK_ENV = "TKNT_DISABLE_MODEL_FALLBACK"
@@ -27,31 +24,19 @@ def _strict_single_text_model_name() -> str:
     return ""
 
 
-def _active_provider() -> TextLLMProvider:
-    return "openai"
-
-
-def _agent_models(provider: TextLLMProvider) -> dict[str, str]:
+def _agent_models() -> dict[str, str]:
     forced_model_name = _benchmark_text_model_name()
-    configured = _configured_agent_models(provider)
+    configured = dict(OpenAIConfig.AGENT_MODELS)
     if forced_model_name:
         return {name: forced_model_name for name in configured if name.strip()}
     return configured
 
 
-def _configured_agent_models(provider: TextLLMProvider) -> dict[str, str]:
-    if provider == "openai":
-        return dict(OpenAIConfig.AGENT_MODELS)
-    return {}
-
-
-def _primary_model_name(provider: TextLLMProvider) -> str:
+def _primary_model_name() -> str:
     forced_model_name = _benchmark_text_model_name()
     if forced_model_name:
         return forced_model_name
-    if provider == "openai":
-        return OpenAIConfig.MODELS.primary_model().name
-    return ""
+    return OpenAIConfig.MODELS.primary_model().name
 
 
 def _uniq_model_names(model_names: Sequence[str]) -> list[str]:
@@ -67,14 +52,13 @@ def _uniq_model_names(model_names: Sequence[str]) -> list[str]:
 
 
 class TextLLMConfig:
-    PROVIDER: TextLLMProvider = _active_provider()
     BENCHMARK_TEXT_MODEL: str = _benchmark_text_model_name()
     STRICT_SINGLE_TEXT_MODEL: str = _strict_single_text_model_name()
-    AGENT_MODELS: dict[str, str] = _agent_models(PROVIDER)
+    AGENT_MODELS: dict[str, str] = _agent_models()
 
     @classmethod
     def primary_model_name(cls) -> str:
-        return _primary_model_name(cls.PROVIDER)
+        return _primary_model_name()
 
     @classmethod
     def agent_model(cls, key: str) -> str | None:
@@ -84,7 +68,6 @@ class TextLLMConfig:
     def agent_model_chain(
         cls,
         model_config_keys: Sequence[str],
-        default_model_chain: Sequence[str] = (),
     ) -> list[str]:
         if cls.STRICT_SINGLE_TEXT_MODEL:
             return [cls.STRICT_SINGLE_TEXT_MODEL]

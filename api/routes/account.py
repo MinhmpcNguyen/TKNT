@@ -4,7 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_user
@@ -228,7 +228,7 @@ def get_render(
         raise HTTPException(status_code=404, detail="Render not found.")
     try:
         image_data_url = service.build_generated_render_data_url(render)
-    except Exception as exc:
+    except FileNotFoundError as exc:
         log_image_flow_event(
             "snapshot_image.saved_render.load_error",
             {
@@ -238,7 +238,7 @@ def get_render(
                 "error_message": str(exc),
             },
         )
-        raise
+        raise HTTPException(status_code=404, detail="Render file not found.") from exc
     serialized = service.serialize_generated_render(
         render,
         file_url=f"/account/renders/{render.id}/file",
@@ -250,7 +250,6 @@ def get_render(
             "render_id": str(render.id),
             "model_name": render.model_name,
             "mime_type": render.mime_type,
-            "storage_path": render.storage_path,
             "meta": dict(render.meta or {}),
             "image": summarize_image_data_url(image_data_url),
         },
@@ -292,7 +291,7 @@ def get_render_file(
     render = service.get_generated_render(user=user, render_id=render_id)
     if render is None:
         raise HTTPException(status_code=404, detail="Render not found.")
-    if render.image_bytes is not None:
+    try:
         return Response(
             content=service.read_generated_render_bytes(render),
             media_type=render.mime_type,
@@ -300,13 +299,8 @@ def get_render_file(
                 "Content-Disposition": f'inline; filename="{render.id}"',
             },
         )
-    if not render.storage_path:
-        raise HTTPException(status_code=404, detail="Render file not found.")
-    return FileResponse(
-        render.storage_path,
-        media_type=render.mime_type,
-        filename=f"{render.id}",
-    )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Render file not found.") from exc
 
 
 def _coerce_json_dict(value: dict[str, Any]) -> dict[str, JsonValue]:

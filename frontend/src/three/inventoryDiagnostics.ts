@@ -180,33 +180,6 @@ export function isShelfLikePreviewType(value: string): boolean {
   );
 }
 
-export function isUserGeneratedPreviewItem(
-  item: InventoryItem | null | undefined
-): boolean {
-  if (!item) {
-    return false;
-  }
-
-  const attributes = readRecord(item.attributes);
-  if (!attributes) {
-    return false;
-  }
-
-  const ownershipScope = readString(attributes.ownership_scope)?.toLowerCase() ?? null;
-  const sourceMode = readString(attributes.source_mode)?.toLowerCase() ?? null;
-  const createdByUserId = readString(attributes.created_by_user_id);
-
-  if (ownershipScope !== 'owned') {
-    return false;
-  }
-
-  return (
-    sourceMode === 'prompt' ||
-    sourceMode === 'image' ||
-    createdByUserId !== null
-  );
-}
-
 export function resolveWallHungPreviewDepthMm(params: {
   objectType: string;
   planWidthMm: number;
@@ -419,7 +392,7 @@ export function resolveInventoryItemForPreview(params: {
   });
 
   const best = candidates[0];
-  const by = best.source.replaceAll('_', ' ');
+  const by = best.source.replace(/_/g, ' ');
   const strongMatchSources = new Set<InventoryPreviewMatchSource>([
     'exact_asset_id',
     'asset_id_prefix',

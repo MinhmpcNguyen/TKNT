@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -7,7 +8,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from cluster_composer.merge import merge_cluster_outputs
+build_solver_object_program = importlib.import_module(
+    "object_program.builder"
+).build_solver_object_program
 
 
 def _load_json(path: Path) -> dict:
@@ -16,7 +19,9 @@ def _load_json(path: Path) -> dict:
 
 def main() -> int:
     result_dir = Path(__file__).resolve().parent / "result"
-    cluster_path = result_dir / "cluster_forge_output.json"
+    cluster_path = result_dir / "seed_relation_planner_output.json"
+    if not cluster_path.exists():
+        cluster_path = result_dir / "cluster_forge_output.json"
     tier_path = result_dir / "tier_count_director_output.json"
 
     if not cluster_path.exists():
@@ -26,13 +31,15 @@ def main() -> int:
         print(f"Missing: {tier_path}")
         return 1
 
-    cluster_forge = _load_json(cluster_path)
+    seed_relation_plan = _load_json(cluster_path)
     tier_count = _load_json(tier_path)
 
-    merged = merge_cluster_outputs(cluster_forge, tier_count)
+    merged = build_solver_object_program(seed_relation_plan, tier_count)
 
     output_path = result_dir / "cluster_merged_output.json"
-    output_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"Saved merged output to: {output_path}")
 
     return 0

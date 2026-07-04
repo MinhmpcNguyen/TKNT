@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent))
 
+from clients.base_client import LLMClientProtocol, LLMModelKey
+from clients.llm_client import get_llm_client
+from config import root_config
 from db import PostgresAssetRepository, PostgresDesignKnowledgeRepository
 from db.models import (
     Asset,
@@ -22,11 +25,8 @@ from db.models import (
     DesignKnowledgeFilter,
     TenantId,
 )
-from db.schema import get_schema_statements
 from db.postgres import PostgresConfig, create_connection
-from config.semantic_search_config import SemanticSearchConfig
-from clients.base_client import LLMClientProtocol, LLMModelKey
-from clients.llm_client import get_llm_client
+from db.schema import get_schema_statements
 from stylist.room_essentials_loader import load_room_essentials as load_room_essentials_kb
 
 
@@ -182,7 +182,7 @@ def _embed_batch(
 
 
 def _backfill_embeddings(batch_size: int = 32) -> tuple[int, int]:
-    if not SemanticSearchConfig.ENABLED:
+    if not root_config.services.semantic_search.enabled:
         return 0, 0
 
     client = get_llm_client()

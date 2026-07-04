@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Line, Rect, Stage, Group, Circle, Text } from 'react-konva';
 import { useEditorStore } from '../store';
 import { clamp, polygonBounds, toCanvas, fromCanvas } from '../utils/geometry';
-import { Door, InventoryItem, Placement, Point, Window } from '../types';
+import { Door, FloorplanGeometry, InventoryItem, Placement, Point, Window } from '../types';
 import {
   frontWorldToLocalSide,
   planRotationToCanvasDeg,
@@ -22,19 +22,47 @@ const ROTATE_CONTROL_FILL = '#fff7eb';
 const ROTATE_CONTROL_STROKE = '#a46a2a';
 const ROTATE_CONTROL_HIGHLIGHT = '#f4a13c';
 const OBJECT_COLOR_POPOVER_WIDTH = 252;
+const COLOR_POPOVER_HEIGHT = 50;
 const CANVAS_MAX_WIDTH = 900;
 const CANVAS_MAX_HEIGHT = 650;
 const CANVAS_ASPECT_RATIO = CANVAS_MAX_WIDTH / CANVAS_MAX_HEIGHT;
 const CANVAS_PADDING_MIN = 24;
 const CANVAS_PADDING_MAX = 80;
+const MIN_SURFACE_CHILD_HIT_SIZE = 28;
+const DEFAULT_OBJECT_COLOR = '#cfcac2';
+const DEFAULT_FLOOR_COLOR = '#f6f4ef';
+const DEFAULT_WALL_COLOR = '#555555';
 const OBJECT_COLOR_SWATCHES = [
-  '#cfcac2',
+  DEFAULT_OBJECT_COLOR,
   '#6b7280',
   '#9f7a68',
   '#d9a441',
   '#4f7f6f',
   '#4f6f9f',
 ];
+const FLOOR_COLOR_SWATCHES = [
+  DEFAULT_FLOOR_COLOR,
+  '#d8c5a4',
+  '#c8d4bd',
+  '#c5d2dc',
+  '#d7c0b2',
+  '#b9b1a7',
+];
+const WALL_COLOR_SWATCHES = [
+  DEFAULT_WALL_COLOR,
+  '#8b6f53',
+  '#b49a7b',
+  '#d8c4a5',
+  '#7d927d',
+  '#7c8da6',
+];
+
+type CanvasRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
 
 type OpeningOverlay = {
   normal: Point;
@@ -188,8 +216,188 @@ function normalizedAngleDelta(value: number): number {
   return delta;
 }
 
-function normalizeColorInput(value: string | null | undefined): string {
-  return /^#[0-9a-f]{6}$/i.test(value ?? '') ? value ?? '#cfcac2' : '#cfcac2';
+function normalizeColorInput(
+  value: string | null | undefined,
+  fallback = DEFAULT_OBJECT_COLOR,
+): string {
+  return /^#[0-9a-f]{6}$/i.test(value ?? '') ? value ?? fallback : fallback;
+}
+
+function rectRight(rect: CanvasRect): number {
+  return rect.left + rect.width;
+}
+
+function rectBottom(rect: CanvasRect): number {
+  return rect.top + rect.height;
+}
+
+function insetRect(rect: CanvasRect, inset: number): CanvasRect {
+  return {
+    left: rect.left - inset,
+    top: rect.top - inset,
+    width: rect.width + inset * 2,
+    height: rect.height + inset * 2,
+  };
+}
+
+function intersectionArea(a: CanvasRect, b: CanvasRect): number {
+  const overlapWidth = Math.max(0, Math.min(rectRight(a), rectRight(b)) - Math.max(a.left, b.left));
+  const overlapHeight = Math.max(0, Math.min(rectBottom(a), rectBottom(b)) - Math.max(a.top, b.top));
+  return overlapWidth * overlapHeight;
+}
+
+function choosePopoverPosition(
+  anchor: CanvasRect,
+  avoidRects: CanvasRect[],
+  canvasWidth: number,
+  canvasHeight: number,
+  popoverWidth: number,
+  popoverHeight: number,
+): { left: number; top: number } {
+  const margin = 8;
+  const paddedAvoidRects = avoidRects.map((rect) => insetRect(rect, 6));
+  const candidates = [
+    {
+      left: anchor.left + anchor.width / 2 - popoverWidth / 2,
+      top: rectBottom(anchor) + margin,
+    },
+    {
+      left: anchor.left + anchor.width / 2 - popoverWidth / 2,
+      top: anchor.top - popoverHeight - margin,
+    },
+    {
+      left: rectRight(anchor) + margin,
+      top: anchor.top + anchor.height / 2 - popoverHeight / 2,
+    },
+    {
+      left: anchor.left - popoverWidth - margin,
+      top: anchor.top + anchor.height / 2 - popoverHeight / 2,
+    },
+  ].map((candidate) => ({
+    left: clamp(candidate.left, margin, Math.max(margin, canvasWidth - popoverWidth - margin)),
+    top: clamp(candidate.top, margin, Math.max(margin, canvasHeight - popoverHeight - margin)),
+  }));
+
+  const ranked = candidates
+    .map((candidate, index) => {
+      const rect = {
+        left: candidate.left,
+        top: candidate.top,
+        width: popoverWidth,
+        height: popoverHeight,
+      };
+      const overlap = paddedAvoidRects.reduce(
+        (sum, avoidRect) => sum + intersectionArea(rect, avoidRect),
+        0,
+      );
+      return { candidate, index, overlap };
+    })
+    .sort((a, b) => a.overlap - b.overlap || a.index - b.index);
+
+  return ranked[0]?.candidate ?? { left: margin, top: margin };
+}
+
+function unionRects(rects: CanvasRect[]): CanvasRect | null {
+  if (rects.length === 0) return null;
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rectRight(rect)));
+  const bottom = Math.max(...rects.map((rect) => rectBottom(rect)));
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function selectedPlacementLabelWidth(placement: Placement): number {
+  return Math.max(70, placement.category.length * 8);
+}
+
+function selectedActionRect(left: number, top: number, labelWidth: number): CanvasRect {
+  return unionRects([
+    { left, top, width: labelWidth, height: 20 },
+    { left, top: top + 26, width: 60, height: 18 },
+  ]) ?? { left, top, width: labelWidth, height: 44 };
+}
+
+function getPlacementActionRect(
+  placement: Placement,
+  floorplan: FloorplanGeometry | null,
+  placementCanvasPoint: Point | null,
+  toCanvasPoint: (point: Point) => Point,
+  scale: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): CanvasRect | null {
+  if (!placementCanvasPoint) return null;
+
+  const labelWidth = selectedPlacementLabelWidth(placement);
+  const width = placement.footprint_mm.w * scale;
+  const depth = placement.footprint_mm.d * scale;
+
+  if (isCurtainLike(placement.category) && floorplan) {
+    const matchedWindow = findNearestWindowForPlacement(
+      placement.position_mm,
+      floorplan.openings.windows,
+    );
+    if (matchedWindow) {
+      const start = toCanvasPoint(matchedWindow.start_mm);
+      const end = toCanvasPoint(matchedWindow.end_mm);
+      const mid = {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+      };
+      const curtainStrokeWidth = clamp(placement.footprint_mm.d * scale * 0.14, 8, 16);
+      return selectedActionRect(mid.x + 12, mid.y - curtainStrokeWidth - 10, labelWidth);
+    }
+  }
+
+  if (isWallMountedLike(placement) && floorplan) {
+    const matchedWall = snapToWall(
+      placement.position_mm,
+      Math.max(placement.footprint_mm.w, placement.footprint_mm.d, 160),
+      floorplan.walls,
+    );
+    if (matchedWall) {
+      const start = toCanvasPoint(matchedWall.start);
+      const end = toCanvasPoint(matchedWall.end);
+      const mid = {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+      };
+      const wallItemStrokeWidth = clamp(
+        placement.footprint_mm.d * scale,
+        6,
+        isMirrorLike(placement.category) ? 12 : 10,
+      );
+      return selectedActionRect(mid.x + 12, mid.y - wallItemStrokeWidth - 10, labelWidth);
+    }
+  }
+
+  if (isCeilingMountedLike(placement)) {
+    const radius = Math.max(8, Math.min(Math.max(width, depth) * 0.28, 24));
+    return {
+      left: placementCanvasPoint.x - radius,
+      top: placementCanvasPoint.y - radius,
+      width: radius * 2,
+      height: radius * 2,
+    };
+  }
+
+  const selectedOverlaySize = Math.max(width, depth);
+  const left = clamp(
+    placementCanvasPoint.x + selectedOverlaySize / 2 + 14,
+    4,
+    canvasWidth - labelWidth - 4,
+  );
+  const top = clamp(
+    placementCanvasPoint.y - selectedOverlaySize / 2,
+    4,
+    canvasHeight - 48,
+  );
+  return selectedActionRect(left, top, labelWidth);
 }
 
 function polygonCenter(points: Point[]): Point {
@@ -229,15 +437,14 @@ export const Canvas2D: React.FC = () => {
     selectWall,
     selectOpening,
     updatePlacement,
+    updateWall,
     removePlacement,
     removeOpening,
-    updateWall,
     violations,
     setDesign,
     setFloorplan,
     roomEditMode,
     drawWallMode,
-    setFloorplanCapture,
   } = useEditorStore();
   const [stageSize, setStageSize] = useState({
     width: CANVAS_MAX_WIDTH,
@@ -245,6 +452,7 @@ export const Canvas2D: React.FC = () => {
   });
   const [zoomMultiplier, setZoomMultiplier] = useState(1);
   const [drawingLine, setDrawingLine] = useState<{ startIndex: number; end: Point } | null>(null);
+  const [selectedSurface, setSelectedSurface] = useState<'floor' | null>(null);
 
   const bounds = useMemo(() => {
     if (!floorplan) {
@@ -310,12 +518,87 @@ export const Canvas2D: React.FC = () => {
   const selectedPlacementCanvasPoint = selectedPlacement
     ? toCanvasPoint(selectedPlacement.position_mm)
     : null;
+  const selectedWall =
+    floorplan?.walls.find((wall) => wall.wall_id === selectedWallId) ?? null;
   const selectedPlacementColor = normalizeColorInput(selectedPlacement?.color_hex);
-  const selectedColorControlPosition = selectedPlacementCanvasPoint
-    ? {
-        left: clamp(selectedPlacementCanvasPoint.x + 18, 12, width - OBJECT_COLOR_POPOVER_WIDTH),
-        top: clamp(selectedPlacementCanvasPoint.y - 52, 12, height - 48),
-      }
+  const selectedWallColor = normalizeColorInput(selectedWall?.color_hex, DEFAULT_WALL_COLOR);
+  const selectedFloorColor = normalizeColorInput(
+    floorplan?.room.floor_color_hex,
+    DEFAULT_FLOOR_COLOR,
+  );
+  const selectedColorControlPosition = selectedPlacement
+    ? (() => {
+        const actionRect = getPlacementActionRect(
+          selectedPlacement,
+          floorplan,
+          selectedPlacementCanvasPoint,
+          toCanvasPoint,
+          scale,
+          width,
+          height,
+        );
+        const fallbackAnchor = selectedPlacementCanvasPoint
+          ? {
+              left: selectedPlacementCanvasPoint.x - 16,
+              top: selectedPlacementCanvasPoint.y - 16,
+              width: 32,
+              height: 32,
+            }
+          : null;
+        const anchor = actionRect ?? fallbackAnchor;
+        if (!anchor) return null;
+        return choosePopoverPosition(
+          anchor,
+          actionRect ? [actionRect] : anchor ? [anchor] : [],
+          width,
+          height,
+          OBJECT_COLOR_POPOVER_WIDTH,
+          COLOR_POPOVER_HEIGHT,
+        );
+      })()
+    : null;
+  const selectedWallColorControlPosition = selectedWall
+    ? (() => {
+        const p1 = toCanvasPoint(selectedWall.p1_mm);
+        const p2 = toCanvasPoint(selectedWall.p2_mm);
+        const mid = {
+          x: (p1.x + p2.x) / 2,
+          y: (p1.y + p2.y) / 2,
+        };
+        const anchor = {
+          left: mid.x - 42,
+          top: mid.y - 18,
+          width: 84,
+          height: 36,
+        };
+        return choosePopoverPosition(
+          anchor,
+          [anchor],
+          width,
+          height,
+          OBJECT_COLOR_POPOVER_WIDTH,
+          COLOR_POPOVER_HEIGHT,
+        );
+      })()
+    : null;
+  const floorColorControlPosition = selectedSurface === 'floor' && floorplan
+    ? (() => {
+        const roomCenter = toCanvasPoint(polygonCenter(floorplan.room.polygon_mm));
+        const anchor = {
+          left: roomCenter.x - 48,
+          top: roomCenter.y - 18,
+          width: 96,
+          height: 36,
+        };
+        return choosePopoverPosition(
+          anchor,
+          [],
+          width,
+          height,
+          OBJECT_COLOR_POPOVER_WIDTH,
+          COLOR_POPOVER_HEIGHT,
+        );
+      })()
     : null;
   const selectedCornerPoint =
     roomEditMode && floorplan && selectedCornerIndex !== null
@@ -331,19 +614,6 @@ export const Canvas2D: React.FC = () => {
           top: clamp(selectedCornerCanvasPoint.y + 12, 8, height - 34),
         }
       : null;
-
-  useEffect(() => {
-    setFloorplanCapture(() => {
-      const stage = stageRef.current;
-      if (!stage) return null;
-      try {
-        return stage.toDataURL({ pixelRatio: 1.5 });
-      } catch {
-        return null;
-      }
-    });
-    return () => setFloorplanCapture(null);
-  }, [setFloorplanCapture]);
 
   const deleteRoomCorner = useCallback(
     (index: number) => {
@@ -366,6 +636,41 @@ export const Canvas2D: React.FC = () => {
       selectWall(null);
     },
     [floorplan, selectCorner, selectWall, setFloorplan],
+  );
+
+  const selectCanvasPlacement = useCallback(
+    (placementId: string) => {
+      setSelectedSurface(null);
+      selectPlacement(placementId);
+    },
+    [selectPlacement],
+  );
+
+  const selectCanvasOpening = useCallback(
+    (type: 'door' | 'window', id: string) => {
+      setSelectedSurface(null);
+      selectOpening(type, id);
+    },
+    [selectOpening],
+  );
+
+  const selectCanvasWall = useCallback(
+    (wallId: string | null) => {
+      setSelectedSurface(null);
+      selectWall(wallId);
+    },
+    [selectWall],
+  );
+
+  const updateFloorColor = useCallback(
+    (color: string) => {
+      if (!floorplan) return;
+      setFloorplan({
+        ...floorplan,
+        room: { ...floorplan.room, floor_color_hex: color },
+      });
+    },
+    [floorplan, setFloorplan],
   );
 
   useEffect(() => {
@@ -436,7 +741,7 @@ export const Canvas2D: React.FC = () => {
           ...floorplan,
           openings: { ...floorplan.openings, doors: [...floorplan.openings.doors, nextDoor] },
         });
-        selectOpening('door', nextDoor.door_id);
+        selectCanvasOpening('door', nextDoor.door_id);
       } else {
         const nextWindow: Window = {
           window_id: `window_${Date.now()}`,
@@ -450,7 +755,7 @@ export const Canvas2D: React.FC = () => {
           ...floorplan,
           openings: { ...floorplan.openings, windows: [...floorplan.openings.windows, nextWindow] },
         });
-        selectOpening('window', nextWindow.window_id);
+        selectCanvasOpening('window', nextWindow.window_id);
       }
       return;
     }
@@ -482,14 +787,14 @@ export const Canvas2D: React.FC = () => {
         : null;
     if (!nextDesign) return;
     setDesign(nextDesign);
-    selectPlacement(placement.placement_id);
+    selectCanvasPlacement(placement.placement_id);
   };
 
   const handleStageMouseMove = () => {
     if (!drawingLine || !floorplan) return;
     const pointer = stageRef.current?.getPointerPosition();
     if (!pointer) return;
-      const nextEnd = fromCanvasPoint({ x: pointer.x, y: pointer.y });
+    const nextEnd = fromCanvasPoint({ x: pointer.x, y: pointer.y });
     setDrawingLine({ ...drawingLine, end: nextEnd });
   };
 
@@ -582,7 +887,7 @@ export const Canvas2D: React.FC = () => {
           ...floorplan,
           walls: [...floorplan.walls, newWall],
         });
-        selectWall(newWall.wall_id);
+        selectCanvasWall(newWall.wall_id);
       }
     }
     setDrawingLine(null);
@@ -593,7 +898,7 @@ export const Canvas2D: React.FC = () => {
     if (evt.target !== evt.target.getStage()) return;
     const pointer = stageRef.current?.getPointerPosition();
     if (!pointer) return;
-      const point = fromCanvasPoint({ x: pointer.x, y: pointer.y });
+    const point = fromCanvasPoint({ x: pointer.x, y: pointer.y });
     const points = floorplan.room.polygon_mm;
     const nextPoints = [...points, point];
     setFloorplan({
@@ -627,23 +932,34 @@ export const Canvas2D: React.FC = () => {
       const p1 = toCanvasPoint(wall.p1_mm);
       const p2 = toCanvasPoint(wall.p2_mm);
       const isSelected = selectedWallId === wall.wall_id;
-      const strokeColor = isSelected ? "#d9534f" : (wall.color_hex || "#555");
+      const strokeColor = wall.color_hex || DEFAULT_WALL_COLOR;
+      const strokeWidth = Math.max(2, wall.thickness_mm * scale);
       return (
         <Group key={wall.wall_id}>
+          {isSelected ? (
+            <Line
+              points={[p1.x, p1.y, p2.x, p2.y]}
+              stroke="#d9534f"
+              strokeWidth={strokeWidth + 5}
+              opacity={0.72}
+              lineCap="round"
+              listening={false}
+            />
+          ) : null}
           <Line
             points={[p1.x, p1.y, p2.x, p2.y]}
             stroke={strokeColor}
-            strokeWidth={Math.max(2, wall.thickness_mm * scale)}
+            strokeWidth={strokeWidth}
             lineCap="round"
             onClick={() => {
-              selectWall(wall.wall_id);
+              selectCanvasWall(wall.wall_id);
             }}
             onDblClick={() => {
               if (!roomEditMode || !floorplan) return;
               if (wall.locked) return;
               const nextWalls = floorplan.walls.filter((w) => w.wall_id !== wall.wall_id);
               setFloorplan({ ...floorplan, walls: nextWalls });
-              selectWall(null);
+              selectCanvasWall(null);
             }}
             draggable={false}
           />
@@ -707,18 +1023,24 @@ export const Canvas2D: React.FC = () => {
       const c = toCanvasPoint(p);
       return [c.x, c.y];
     });
-    const floorFill = floorplan.room.floor_color_hex ?? 'rgba(246, 244, 239, 0.6)';
+    const floorFill = floorplan.room.floor_color_hex ?? DEFAULT_FLOOR_COLOR;
+    const selectFloor = (evt: any) => {
+      evt.cancelBubble = true;
+      setSelectedSurface('floor');
+      selectPlacement(null);
+      selectOpening(null);
+      selectCorner(null);
+      selectWall(null);
+    };
     return (
       <Line
         points={points}
         closed={!roomEditMode && points.length >= 6}
         fill={floorFill}
-        stroke="#bdb4a7"
-        strokeWidth={2}
-        onClick={() => {
-          selectCorner(null);
-          selectWall(null);
-        }}
+        stroke={selectedSurface === 'floor' ? '#2f6f5e' : '#bdb4a7'}
+        strokeWidth={selectedSurface === 'floor' ? 3 : 2}
+        onClick={selectFloor}
+        onTap={selectFloor}
       />
     );
   };
@@ -767,6 +1089,7 @@ export const Canvas2D: React.FC = () => {
       const isSelected = selectedCornerIndex === idx;
       const selectRoomCorner = (evt: any) => {
         evt.cancelBubble = true;
+        setSelectedSurface(null);
         selectCorner(idx);
         if (!drawWallMode || !floorplan) return;
         if (selectedCornerIndex !== idx) {
@@ -930,7 +1253,7 @@ export const Canvas2D: React.FC = () => {
               openings: { ...floorplan.openings, doors: updated },
             });
           }}
-          onClick={() => selectOpening('door', door.door_id)}
+          onClick={() => selectCanvasOpening('door', door.door_id)}
         >
           <Line
             points={[p1.x, p1.y, p2.x, p2.y]}
@@ -1039,7 +1362,7 @@ export const Canvas2D: React.FC = () => {
               openings: { ...floorplan.openings, windows: updated },
             });
           }}
-          onClick={() => selectOpening('window', window.window_id)}
+          onClick={() => selectCanvasOpening('window', window.window_id)}
         >
           <Line
             points={[p1.x, p1.y, p2.x, p2.y]}
@@ -1146,13 +1469,13 @@ export const Canvas2D: React.FC = () => {
       const w = placement.footprint_mm.w * scale;
       const d = placement.footprint_mm.d * scale;
       const isSelected = placement.placement_id === selectedPlacementId;
+      const isSurfaceChild = placementLayer(placement) === 2;
       const canvasRotationDeg = planRotationToCanvasDeg(placement.rotation_deg);
       const stroke = isPlacementErrored(placement.placement_id) ? '#d9534f' : '#333';
       const labelText = isCurtain ? 'curtain' : placement.category;
       const labelColor = isCurtain ? '#b65a3a' : '#1f1f1f';
-      const selectedLabelWidth = Math.max(70, placement.category.length * 8);
+      const selectedLabelWidth = selectedPlacementLabelWidth(placement);
       const showInlineLabel = true;
-      const showHoverTag = false;
       const tagText = labelText;
       const frontSide =
         placement.front_side_local ??
@@ -1168,6 +1491,9 @@ export const Canvas2D: React.FC = () => {
       const tagPaddingY = Math.max(2, tagFontSize * 0.25);
       const estTextW = tagText.length * tagFontSize * 0.58;
       const tagWidth = Math.min(maxLabelWidth, Math.max(24, estTextW + tagPaddingX * 2));
+      const hitWidth = isSurfaceChild ? Math.max(w, MIN_SURFACE_CHILD_HIT_SIZE) : w;
+      const hitDepth = isSurfaceChild ? Math.max(d, MIN_SURFACE_CHILD_HIT_SIZE) : d;
+      const hasExpandedHitArea = !isLocked && (hitWidth > w || hitDepth > d);
 
       if (isCurtain && matchedWindow) {
         const start = toCanvasPoint(matchedWindow.start_mm);
@@ -1198,8 +1524,8 @@ export const Canvas2D: React.FC = () => {
                 },
               });
             }}
-            onClick={() => selectPlacement(placement.placement_id)}
-            onTap={() => selectPlacement(placement.placement_id)}
+            onClick={() => selectCanvasPlacement(placement.placement_id)}
+            onTap={() => selectCanvasPlacement(placement.placement_id)}
           >
             <Line
               points={[start.x, start.y, end.x, end.y]}
@@ -1327,8 +1653,8 @@ export const Canvas2D: React.FC = () => {
                 },
               });
             }}
-            onClick={() => selectPlacement(placement.placement_id)}
-            onTap={() => selectPlacement(placement.placement_id)}
+            onClick={() => selectCanvasPlacement(placement.placement_id)}
+            onTap={() => selectCanvasPlacement(placement.placement_id)}
           >
             <Line
               points={[start.x, start.y, end.x, end.y]}
@@ -1448,8 +1774,8 @@ export const Canvas2D: React.FC = () => {
               const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
               updatePlacement({ ...placement, position_mm: newPos });
             }}
-            onClick={() => selectPlacement(placement.placement_id)}
-            onTap={() => selectPlacement(placement.placement_id)}
+            onClick={() => selectCanvasPlacement(placement.placement_id)}
+            onTap={() => selectCanvasPlacement(placement.placement_id)}
           >
             <Circle
               radius={radius}
@@ -1524,9 +1850,19 @@ export const Canvas2D: React.FC = () => {
               const newPos = fromCanvasPoint({ x: evt.target.x(), y: evt.target.y() });
               updatePlacement({ ...placement, position_mm: newPos });
             }}
-            onClick={() => selectPlacement(placement.placement_id)}
-            onTap={() => selectPlacement(placement.placement_id)}
+            onClick={() => selectCanvasPlacement(placement.placement_id)}
+            onTap={() => selectCanvasPlacement(placement.placement_id)}
           >
+            {hasExpandedHitArea && (
+              <Rect
+                x={-hitWidth / 2}
+                y={-hitDepth / 2}
+                width={hitWidth}
+                height={hitDepth}
+                fill="rgba(0,0,0,0.001)"
+                strokeWidth={0}
+              />
+            )}
             <Rect
               x={-w / 2}
               y={-d / 2}
@@ -1566,21 +1902,6 @@ export const Canvas2D: React.FC = () => {
                   width={Math.max(0, tagWidth - tagPaddingX * 2)}
                   ellipsis
                 />
-              </Group>
-            )}
-            {showHoverTag && (
-              <Group x={w / 2 + 10} y={-d / 2} listening={false}>
-                <Rect
-                  width={Math.max(70, tagText.length * 7 + 22)}
-                  height={20}
-                  fill="rgba(255,255,255,0.9)"
-                  stroke="rgba(0,0,0,0.25)"
-                  cornerRadius={4}
-                  shadowColor="#333"
-                  shadowBlur={2}
-                  shadowOpacity={0.12}
-                />
-                <Text text={tagText} fontSize={12} fill="#111" x={6} y={4} />
               </Group>
             )}
             {isSelected && !isLocked && (
@@ -1717,6 +2038,48 @@ export const Canvas2D: React.FC = () => {
     });
   };
 
+  const renderColorPopover = (
+    label: string,
+    colorValue: string,
+    swatches: string[],
+    position: { left: number; top: number } | null,
+    ariaLabel: string,
+    onColorChange: (color: string) => void,
+  ) => {
+    if (!position) return null;
+    return (
+      <div
+        className="canvas-object-color-popover"
+        style={{
+          left: position.left,
+          top: position.top,
+        }}
+        onClick={(evt) => evt.stopPropagation()}
+        onMouseDown={(evt) => evt.stopPropagation()}
+      >
+        <span>{label}</span>
+        <div className="canvas-object-color-swatches" aria-label={`${ariaLabel} presets`}>
+          {swatches.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={color.toLowerCase() === colorValue.toLowerCase() ? 'selected' : ''}
+              style={{ backgroundColor: color }}
+              aria-label={`Set ${ariaLabel.toLowerCase()} ${color}`}
+              onClick={() => onColorChange(color)}
+            />
+          ))}
+        </div>
+        <input
+          type="color"
+          aria-label={ariaLabel}
+          value={colorValue}
+          onChange={(evt) => onColorChange(evt.target.value)}
+        />
+      </div>
+    );
+  };
+
   return (
     <div
       ref={dropZoneRef}
@@ -1726,41 +2089,36 @@ export const Canvas2D: React.FC = () => {
       onMouseDown={handleCanvasMouseDown}
       onTouchStart={handleCanvasTouchStart}
     >
-      {selectedPlacement && selectedColorControlPosition ? (
-        <div
-          className="canvas-object-color-popover"
-          style={{
-            left: selectedColorControlPosition.left,
-            top: selectedColorControlPosition.top,
-          }}
-          onClick={(evt) => evt.stopPropagation()}
-          onMouseDown={(evt) => evt.stopPropagation()}
-        >
-          <span>Color</span>
-          <div className="canvas-object-color-swatches" aria-label="Object color presets">
-            {OBJECT_COLOR_SWATCHES.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className={
-                  color.toLowerCase() === selectedPlacementColor.toLowerCase() ? 'selected' : ''
-                }
-                style={{ backgroundColor: color }}
-                aria-label={`Set object color ${color}`}
-                onClick={() => updatePlacement({ ...selectedPlacement, color_hex: color })}
-              />
-            ))}
-          </div>
-          <input
-            type="color"
-            aria-label="Object color"
-            value={selectedPlacementColor}
-            onChange={(evt) =>
-              updatePlacement({ ...selectedPlacement, color_hex: evt.target.value })
-            }
-          />
-        </div>
-      ) : null}
+      {selectedPlacement
+        ? renderColorPopover(
+            'Color',
+            selectedPlacementColor,
+            OBJECT_COLOR_SWATCHES,
+            selectedColorControlPosition,
+            'Object color',
+            (color) => updatePlacement({ ...selectedPlacement, color_hex: color }),
+          )
+        : null}
+      {floorplan
+        ? renderColorPopover(
+            'Floor',
+            selectedFloorColor,
+            FLOOR_COLOR_SWATCHES,
+            floorColorControlPosition,
+            'Floor color',
+            updateFloorColor,
+          )
+        : null}
+      {selectedWall
+        ? renderColorPopover(
+            'Wall',
+            selectedWallColor,
+            WALL_COLOR_SWATCHES,
+            selectedWallColorControlPosition,
+            'Wall color',
+            (color) => updateWall(selectedWall.wall_id, { color_hex: color }),
+          )
+        : null}
       {selectedCornerDeletePosition && selectedCornerIndex !== null ? (
         <button
           type="button"
@@ -1824,11 +2182,11 @@ function resolveDroppedAsset(
   dataTransfer: DataTransfer,
   inventory: InventoryItem[],
 ): PlacementAsset | null {
-  const rawCustom = dataTransfer.getData('application/x-asset');
+  const rawAssetPayload = dataTransfer.getData('application/x-asset');
   const rawPlain = dataTransfer.getData('text/plain');
   const rawAssetId = dataTransfer.getData('text/x-asset-id');
 
-  for (const candidate of [rawCustom, rawPlain]) {
+  for (const candidate of [rawAssetPayload, rawPlain]) {
     if (!candidate) continue;
     try {
       const parsed = JSON.parse(candidate);
@@ -1872,20 +2230,13 @@ function isPlacementAsset(value: unknown): value is PlacementAsset {
   );
 }
 
-function isRugLike(category: string): boolean {
+function isFloorCovering(category: string): boolean {
   const cat = category.toLowerCase();
   return (
     cat.includes('rug') ||
     cat.includes('carpet') ||
     cat.includes('mat') ||
-    cat.includes('runner')
-  );
-}
-
-function isFloorCovering(category: string): boolean {
-  const cat = category.toLowerCase();
-  return (
-    isRugLike(cat) ||
+    cat.includes('runner') ||
     cat.includes('mattress') ||
     cat.includes('floor_rug') ||
     cat.includes('area_rug')

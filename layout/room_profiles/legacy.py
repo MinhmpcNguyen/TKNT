@@ -308,14 +308,14 @@ def living_room_shadow_size_profile(object_type: object) -> dict[str, Any] | Non
 
 def bedroom_legacy_semantic_room_rule(room_type: str) -> dict[str, Any] | None:
     _ = room_type
-    from stylist.semantic_program_rules import get_compiled_semantic_room_rule
+    from stylist.rules import get_compiled_semantic_room_rule
 
     return get_compiled_semantic_room_rule("bedroom")
 
 
 def living_room_legacy_semantic_room_rule(room_type: str) -> dict[str, Any] | None:
     _ = room_type
-    from stylist.semantic_program_rules import get_compiled_semantic_room_rule
+    from stylist.rules import get_compiled_semantic_room_rule
 
     return get_compiled_semantic_room_rule("living_room")
 

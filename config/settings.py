@@ -1,27 +1,23 @@
 import os
 from dataclasses import dataclass
 
+_DEFAULT_POSTGRES_DB = "tknt"
+_DEFAULT_POSTGRES_USER = "tknt"
+_DEFAULT_POSTGRES_PASSWORD = "tknt_password"
+_DEFAULT_POSTGRES_HOST = "db"
+_DEFAULT_POSTGRES_PORT = 5432
+_DEFAULT_VECTOR_DIMS = 1536
+
 
 @dataclass(frozen=True)
 class Settings:
-    # PostgreSQL
-    PG_DB: str = os.getenv("POSTGRES_DB", "Hackathon")
-    PG_USER: str = os.getenv("POSTGRES_USER", "hackathon")
-    PG_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "password")
-    PG_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
-    PG_PORT: int = int(os.getenv("POSTGRES_PORT", "5433"))
+    PG_DB: str = os.getenv("POSTGRES_DB", _DEFAULT_POSTGRES_DB)
+    PG_USER: str = os.getenv("POSTGRES_USER", _DEFAULT_POSTGRES_USER)
+    PG_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", _DEFAULT_POSTGRES_PASSWORD)
+    PG_HOST: str = os.getenv("POSTGRES_HOST", _DEFAULT_POSTGRES_HOST)
+    PG_PORT: int = int(os.getenv("POSTGRES_PORT", str(_DEFAULT_POSTGRES_PORT)))
 
-    # Elasticsearch
-    ES_URL: str = os.getenv("ELASTIC_URL", "http://localhost:9200")
-    ES_INDEX: str = os.getenv("ELASTIC_INDEX", "hackathon-hybrid")
-
-    # OpenAI
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    EMBED_MODEL: str = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-    VECTOR_DIMS: int = int(os.getenv("VECTOR_DIMS", "1536"))
-
-    # Pipeline
-    BATCH_SIZE: int = int(os.getenv("BATCH_SIZE", "64"))
+    VECTOR_DIMS: int = int(os.getenv("VECTOR_DIMS", str(_DEFAULT_VECTOR_DIMS)))
 
 
 settings = Settings()

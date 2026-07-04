@@ -1,0 +1,141 @@
+% Restructured book: automatic layout design.
+\chapter{Automatic Interior Layout Design}
+
+This chapter presents the \textbf{Automatic Interior Layout Design} component of RoomFlow. This component addresses the first sub-problem of the system: transforming a user-provided design specification into structured, geometrically valid, and editable furniture layouts. Instead of asking a language model to directly output final object coordinates, RoomFlow separates semantic design reasoning from geometric placement. The language model is used to interpret the user's intent, select suitable furniture, and produce structured design constraints, while the geometric modules validate the room model, solve object placement, rank layout variants, and return an editable layout to the user. This chapter explains this process from the overall pipeline to the main intermediate representations and modules used to generate the final layout candidates.
+
+\section{Overall Processing Flow}\label{sec:problem1-processing-flow}
+
+At the processing-flow level, RoomFlow represents the user-provided design specification as three input streams: room geometry, the natural-language design brief, and the furniture inventory. The room geometry defines the boundary polygon, room height, doors, and windows, typically created using the interactive editor. The design brief describes the intended room type, style preferences, required objects, and optional user preferences. The furniture inventory provides the available object categories, dimensions, style metadata, material metadata, and optional 3D assets. These inputs are gradually converted into layout candidates through semantic planning, room modeling, object-program construction, geometric solving, and finalization.
+
+The output of this pipeline is a structured layout representation rather than a rendered image. Each generated layout stores furniture objects with their categories, dimensions, positions, orientations, and display metadata. This representation allows the system to check geometric validity, present the result in the 2D editor, construct a 3D preview, and pass the selected layout to the later photorealistic rendering workflow. More importantly, the layout remains editable, so the automatic result works as a controllable starting point instead of a fixed final artifact.
+
+The pipeline is designed around a separation between semantic planning and geometric placement. The semantic modules interpret the design brief and infer what the room should contain, which objects are required or optional, how objects should relate to one another, and which style constraints should be preserved. The geometric modules then convert this semantic plan into concrete object placements under room constraints. This separation is important because natural language models are useful for understanding design intent, but they are not reliable enough to directly produce final coordinates in constrained room geometry.
+
+For example, the user can enter a design brief describing a small guest bedroom with a bed, wardrobe, desk, and a small vanity near the window, and define the room as a 4.0 m by 3.2 m rectangle with a door on the south wall and a window on the north wall. From this specification, the semantic planning module identifies the bed and wardrobe as required objects, the desk as strongly preferred, and the vanity as optional if enough space remains. The room modeling module converts the door and window into geometric constraints such as clearance zones and window-related placement preferences. The object program then organizes the furniture into anchor objects and supporting objects, and the solver searches for placements that keep the door usable, avoid object overlap, respect the room boundary, and preserve basic circulation.
+
+\hyperref[fig:4-1]{Figure~4.1} summarizes the overall processing flow of the \textbf{Automatic Interior Layout Design} pipeline. The figure organizes the pipeline into five module groups. First, room interpretation normalizes the design case and fixed room geometry. Second, semantic planning extracts furniture requirements, priorities, relations, functional clusters, and style information. Third, the layout-program group converts these planning results into anchor-first placement concepts and solver-ready relation plans. Fourth, geometric solving places objects, repairs near-valid candidates, validates spatial constraints, and scores feasible layouts. Finally, the finalization stage restores eligible accessories, binds inventory and style metadata, removes redundant candidates, and selects a small gallery of distinct editable layout variants for the user.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.78\textheight,keepaspectratio]{figures/chapter4/problem1_flow_detailed.pdf}
+\caption{Detailed module groups and intermediate artifacts in automatic layout generation.}
+\label{fig:4-1}
+\end{figure}
+
+\section{Input Representation}\label{sec:problem1-input-representation}
+
+Each pipeline run is represented as a structured design case. This case separates the user's design brief from physical room data and furniture records. The design brief stores semantic information such as room type, intended activities, required furniture, and style preferences. The room data stores geometric information such as the boundary polygon, room height, doors, windows, and wall-opening metadata. The furniture inventory stores the available object categories, physical dimensions, style or material tags, and optional asset identifiers.
+
+This separation is important because different modules use different parts of the input. The language-model modules mainly use the design brief and inventory scope to interpret intent, infer furniture requirements, and build semantic relations. The geometric modules use the room boundary, fixed openings, dimensions, and object footprints to construct constraints and validate placements. As a result, the language model is not asked to invent room geometry, and the solver does not rely on ambiguous natural-language descriptions when checking spatial validity.
+
+All components share the same case identifier, object identifiers, opening identifiers, and millimeter-based coordinate system. This shared representation allows the system to trace every later artifact back to the original design case. Semantic requirements, solver decisions, editable 2D objects, reconstructed 3D preview objects, and evaluation outputs can therefore be linked consistently across the pipeline. The complete implementation schema contains additional metadata and diagnostic fields, but the essential representation consists of the design brief, room geometry, furniture inventory, and shared identifiers.
+
+\section{Semantic Planning Module}\label{sec:problem1-semantic-planning-module}
+
+The semantic planning module converts the user's design brief into solver-ready semantic requirements. The output of this module is not a set of final coordinates. Instead, it is an intermediate design plan that specifies what objects should participate in the layout problem, how important they are, how they should relate to one another, and which style preferences should influence later object selection and visualization.
+
+This step is necessary because a natural-language design brief is not directly usable by a geometric solver. Even when the user explicitly lists the desired furniture, the system still needs to convert the brief into operational layout information. For example, a request that a vanity should be near the window, a bed should remain easy to access, or the room should feel uncluttered must be translated into object priorities, spatial relations, placement preferences, and density constraints. These semantic decisions narrow the search space before geometric placement begins.
+
+Figure~\ref{fig:4-2} summarizes the semantic planning flow. The process starts from the user brief and the available furniture inventory, then extracts the intended room type, required furniture, optional objects, quantity ranges, priority levels, functional relations, and style policy. The object requirement contract determines which objects are required, preferred-if-fit, optional, or excluded. The count and priority plan decides how many object instances should be considered and which objects should be protected during pruning. The relation plan describes functional relations such as facing, adjacency, proximity, support, and window-related preferences. The style policy records visual preferences such as density, material tendency, color palette, and decorative level without directly changing the room geometry.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/chapter4/semantic_planning_flow.pdf}
+\caption{Semantic planning flow from user intent and inventory scope to objects, quantities, priorities, relations, and style policy.}
+\label{fig:4-2}
+\end{figure}
+
+The outputs of semantic planning are normalized before being passed to the geometric modules. Object names are mapped to supported inventory categories, quantity ranges are checked against room type and available space, and unsupported or conflicting relations are simplified into solver-compatible preferences. This validation step is important because the language model may produce useful design reasoning, but its output must still be converted into a bounded and consistent representation for later placement.
+
+The essential role of this module is to separate design understanding from spatial solving. The language model is used for interpreting intent, inferring layout preferences, and producing semantic constraints. The following modules handle room boundaries, openings, collisions, clearances, and circulation. This separation reduces the risk of asking the language model to generate precise coordinates directly and keeps the final layout structured, validatable, and editable.
+
+\section{Room Modeling Module}\label{sec:problem1-room-modeling-module}
+
+The room modeling module converts raw room geometry into a normalized, solver-ready room representation. The input consists of the boundary polygon, room height, and any fixed openings such as doors and windows. These data are not used directly by the solver in their raw form, because furniture placement requires more than knowing the outer boundary of the room. The system must also know which wall segments are usable, where openings must remain clear, which regions are suitable for circulation, and which areas may support window-related placement preferences.
+
+The module first normalizes the coordinate system and validates the room boundary. It checks whether the polygon forms a usable indoor region, identifies wall segments, and rejects invalid geometry that cannot support layout generation. It then attaches each door or window to a corresponding wall segment and converts the opening into geometric constraints. A door produces a clearance region that should not be blocked by furniture, while a window can define a daylight-related preference zone for objects such as desks, vanities, or reading furniture.
+
+Figure~\ref{fig:4-3} illustrates this transformation from raw room data to a compact room model. The process starts with the boundary polygon, doors, windows, and room metadata. It then normalizes geometry, attaches openings to wall segments, derives clearance and circulation constraints, and creates a shared room model containing the polygon, wall features, opening zones, and solver-facing spatial constraints. The figure emphasizes that room modeling is a deterministic geometry-processing step, not a language-generation step.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/chapter4/room_modeling_flow.pdf}
+\caption{Room modeling flow from raw boundary and opening data to the shared geometric constraints used by later modules.}
+\label{fig:4-3}
+\end{figure}
+
+The resulting room model gives later modules more information than a raw polygon. For example, an L-shaped room with one door and one window is represented not only by its boundary vertices, but also by door clearance, usable wall segments, circulation targets, and window-related placement preferences. These derived constraints allow the object program and geometric solver to place furniture while keeping objects inside the room, avoiding blocked openings, preserving walking space, and using the room shape more effectively.
+
+\section{Object Program and Geometric Solver}\label{sec:problem1-object-program-and-solver}
+
+The object program module converts the semantic plan and room model into a structured placement problem. It selects the furniture objects that should participate in the solver, assigns each object a role, and converts semantic relations into geometric constraints or preferences. In this representation, anchor objects define the main structure of a functional group, such as a bed in a bedroom or a sofa in a living room. Support objects depend on an anchor, such as a nightstand beside a bed or a chair paired with a desk. Accessories and low-priority objects are deferred until the main blocking furniture has been placed validly.
+
+Figure~\ref{fig:4-4} summarizes how the object program is connected to geometric solving, validation, repair, and scoring. The input consists of the semantic plan, the room model, and the furniture inventory. The object-program stage selects objects, compiles relations, and builds a solver-ready placement program. The geometric solver then generates anchor-based concepts, places furniture, validates hard constraints, repairs near-valid candidates when possible, and scores feasible layouts. The output is a set of candidate layouts with object coordinates, scores, and diagnostic information.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/chapter4/object_program_solver_flow.pdf}
+\caption{Object-program construction and geometric solving from structured requirements to validated furniture coordinates.}
+\label{fig:4-4}
+\end{figure}
+
+The geometric solver uses an anchor-first heuristic search rather than a learned coordinate generator or an exact global optimizer. This design is chosen because the target output must be inspectable, editable, and robust to user-defined room geometry. The solver first enumerates candidate positions and orientations for primary anchor objects. It then attaches dependent objects using relation templates, rejects candidates that violate hard constraints, repairs near-valid placements by shifting objects within allowed regions, and ranks the feasible layouts using soft design objectives.
+
+Algorithm 1 summarizes this anchor-first search procedure. The procedure starts by generating wall, corner, center, and relation-based anchor targets. It then enumerates orientations for primary objects, places required anchors, attaches support objects, repairs near-valid candidates, adds optional accessories only after the main layout is valid, and ranks the remaining candidates. The ranked layouts and their diagnostics are passed to the gallery selection module.
+
+\noindent\textbf{Algorithm 1: Anchor-first geometric search for editable layout generation.}
+
+{\footnotesize
+\begin{verbatim}
+Input: room model, object program, inventory dimensions
+Output: ranked candidate layouts
+
+1. Generate wall, corner, center, and relation-based anchor targets.
+2. Enumerate orientations for primary anchor objects.
+3. Place required anchors; reject hard-constraint violations.
+4. Attach support objects from relation templates.
+5. Repair near-valid candidates by shifting objects within allowed zones.
+6. Add optional accessories only after blocking furniture is valid.
+7. Score feasible candidates with soft objectives.
+8. Keep ranked candidates and diagnostics for gallery selection.
+\end{verbatim}
+}
+
+The solver rejects physically unusable layouts through hard constraints. Let \(R_i(\theta_i)\) be the footprint of object \(i\) under orientation \(\theta_i\), \(P_{\mathrm{room}}\) be the room polygon, and \(g_k\) be a fixed opening or required access target. A candidate layout is considered hard-valid only if the main object footprints remain inside the room, do not block one another, keep openings usable, and preserve a basic path from the door to the room interior:
+
+\begin{align*}
+R_i(\theta_i) &\subseteq P_{\mathrm{room}}, \\
+\operatorname{area}(R_i(\theta_i) \cap R_j(\theta_j)) &= 0, \quad i \neq j, \\
+\operatorname{dist}(R_i(\theta_i), g_k) &\geq \delta_k, \\
+\operatorname{path}(g_k, \operatorname{center}(P_{\mathrm{room}})) &\text{ is unblocked.}
+\end{align*}
+
+After invalid candidates are rejected, the solver ranks the remaining feasible layouts using a soft objective:
+
+\[
+L^{\star} = \arg\min_{L \in \mathcal{F}} E(L), \quad
+E(L) = \sum_m \lambda_m \phi_m(L) + \sum_n \mu_n \psi_n(L)
+\]
+
+Here, \(\mathcal{F}\) is the set of hard-valid layouts. The \(\phi_m\) terms represent residual geometric cost, such as repair distance, weak clearance, or inefficient circulation. The \(\psi_n\) terms represent design preferences, such as wall anchoring, functional adjacency, visibility, balance, and relation satisfaction. These terms are used for ranking feasible layouts, not for accepting physically invalid ones.
+
+The ranked candidates are stored together with diagnostic summaries. These diagnostics explain why a candidate is valid, which soft preferences it satisfies, and which requirements remain weak or unsatisfied. This information is useful for gallery selection, frontend display, debugging, and later evaluation. More importantly, because the solver outputs structured object placements rather than an image, the selected layout can still be edited by the user and reused by the 3D preview and rendering pipeline.
+
+\section{Gallery Selection and Editable Output}\label{sec:problem1-gallery-selection}
+
+The gallery selection module converts the feasible solver candidates into a small set of user-facing layout variants. The purpose of this step is not only to choose the highest-scoring layout, but also to avoid showing many near-identical alternatives to the user. The module first keeps only candidates that satisfy the hard-validity checks, including containment, collision, opening clearance, and basic circulation. It then ranks the feasible candidates by their soft objective scores and removes duplicates using a layout signature.
+
+A layout signature records high-level structural choices instead of exact coordinate values. These choices include the wall used by the main anchor object, the orientation of major furniture, the placement of large storage objects, and the main circulation pattern. For example, two bedroom layouts that both place the bed on the same wall, keep the wardrobe on the same side, and use the same entry path are treated as the same structural variant even if their coordinates differ slightly. This filtering keeps the gallery compact and makes the alternatives easier to compare.
+
+Figure~\ref{fig:4-5} summarizes the finalization and selection flow. The process starts from feasible candidates and deferred accessories. It then restores eligible accessories, binds furniture assets and style metadata, removes duplicate structural variants, ranks the remaining candidates, and returns an editable layout gallery. This figure emphasizes that the final output is not a rendered image, but a structured design state that can still be inspected and modified.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/chapter4/gallery_selection_flow.pdf}
+\caption{Finalization flow that restores eligible objects, binds display metadata, removes duplicates, and selects the editable gallery.}
+\label{fig:4-5}
+\end{figure}
+
+Each selected layout stores object identities, categories, dimensions, center positions, orientations, heights, front directions, and display metadata. The 2D editor uses this state for direct manipulation, while the 3D preview reconstructs the room and furniture from the same data. The later photorealistic rendering workflow also uses the selected layout to prepare a layout-guided snapshot. This shared state allows RoomFlow to connect automatic layout generation, manual editing, 3D preview, and rendering without losing the original spatial structure.
+
+If no valid layout can be selected, the system returns diagnostic information instead of silently failing. Typical diagnostics include furniture that is too large for the room, blocked door or window clearance, insufficient circulation, or unsupported relations between requested objects. These diagnostics help the user understand why automatic layout generation failed and decide whether to relax optional requirements, change the room input, or continue with manual editing.

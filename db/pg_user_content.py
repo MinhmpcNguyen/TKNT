@@ -17,9 +17,11 @@ from db.models import (
     UserAccount,
     UserAuthRecord,
     UserId,
+    UserRole,
 )
 from db.pg_utils import (
     RowMapping,
+    to_bool,
     to_json_dict,
     to_optional_bytes,
     to_optional_int,
@@ -27,6 +29,9 @@ from db.pg_utils import (
     to_str,
 )
 from db.postgres import create_connection
+
+
+_SUPPORTED_GENERATED_RENDER_SOURCE = "snapshot_render"
 
 
 class PostgresUserContentRepository:
@@ -41,7 +46,9 @@ class PostgresUserContentRepository:
                 display_name,
                 tenant_id,
                 password_salt,
-                password_hash
+                password_hash,
+                role,
+                is_active
             )
             VALUES (
                 %(id)s,
@@ -49,7 +56,9 @@ class PostgresUserContentRepository:
                 %(display_name)s,
                 %(tenant_id)s,
                 %(password_salt)s,
-                %(password_hash)s
+                %(password_hash)s,
+                %(role)s,
+                %(is_active)s
             )
         """
         with self._connection_factory() as conn:
@@ -63,6 +72,8 @@ class PostgresUserContentRepository:
                         "tenant_id": record.user.tenant_id,
                         "password_salt": record.password_salt,
                         "password_hash": record.password_hash,
+                        "role": record.user.role,
+                        "is_active": record.user.is_active,
                     },
                 )
 
@@ -81,6 +92,52 @@ class PostgresUserContentRepository:
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, {"user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_user(row)
+
+    def list_users(self) -> Sequence[UserAccount]:
+        query = """
+            SELECT *
+            FROM user_accounts
+            ORDER BY created_at DESC, email ASC
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {})
+                rows = cur.fetchall()
+        return [_row_to_user(row) for row in rows]
+
+    def update_user_account(
+        self,
+        *,
+        user_id: UserId,
+        display_name: str | None,
+        role: UserRole,
+        is_active: bool,
+    ) -> UserAccount | None:
+        query = """
+            UPDATE user_accounts
+            SET
+                display_name = %(display_name)s,
+                role = %(role)s,
+                is_active = %(is_active)s,
+                updated_at = NOW()
+            WHERE id = %(user_id)s
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "user_id": user_id,
+                        "display_name": display_name,
+                        "role": role,
+                        "is_active": is_active,
+                    },
+                )
                 row = cur.fetchone()
         if row is None:
             return None
@@ -137,6 +194,16 @@ class PostgresUserContentRepository:
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, {"session_id": session_id})
+
+    def revoke_user_sessions(self, user_id: UserId) -> None:
+        query = """
+            UPDATE auth_sessions
+            SET revoked_at = NOW()
+            WHERE user_id = %(user_id)s AND revoked_at IS NULL
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"user_id": user_id})
 
     def touch_session(self, session_id: SessionId) -> None:
         query = (
@@ -315,7 +382,9 @@ class PostgresUserContentRepository:
                 row = cur.fetchone()
         if row is None:
             return layout
-        stored = self.get_saved_layout(SavedLayoutId(to_str(row.get("id"))), layout.user_id)
+        stored = self.get_saved_layout(
+            SavedLayoutId(to_str(row.get("id"))), layout.user_id
+        )
         return stored or _row_to_saved_layout(row)
 
     def update_saved_layout(self, layout: SavedLayout) -> SavedLayout | None:
@@ -358,11 +427,7 @@ class PostgresUserContentRepository:
     def list_saved_layouts(
         self, user_id: UserId, case_id: SavedLayoutCaseId | None = None
     ) -> Sequence[SavedLayout]:
-        case_filter = (
-            "AND l.case_id = %(case_id)s"
-            if case_id is not None
-            else ""
-        )
+        case_filter = "AND l.case_id = %(case_id)s" if case_id is not None else ""
         query = """
             SELECT l.*, c.name AS case_name
             FROM saved_layouts AS l
@@ -414,7 +479,6 @@ class PostgresUserContentRepository:
                 model_name,
                 prompt,
                 negative_prompt,
-                storage_path,
                 root_layout_id,
                 case_id,
                 option_id,
@@ -430,7 +494,6 @@ class PostgresUserContentRepository:
                 %(model_name)s,
                 %(prompt)s,
                 %(negative_prompt)s,
-                %(storage_path)s,
                 %(root_layout_id)s,
                 %(case_id)s,
                 %(option_id)s,
@@ -451,7 +514,6 @@ class PostgresUserContentRepository:
                         "model_name": render.model_name,
                         "prompt": render.prompt,
                         "negative_prompt": render.negative_prompt,
-                        "storage_path": render.storage_path,
                         "root_layout_id": render.root_layout_id,
                         "case_id": render.case_id,
                         "option_id": render.option_id,
@@ -467,11 +529,18 @@ class PostgresUserContentRepository:
             SELECT *
             FROM generated_renders
             WHERE user_id = %(user_id)s
+              AND source = %(source)s
             ORDER BY created_at DESC
         """
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, {"user_id": user_id})
+                cur.execute(
+                    query,
+                    {
+                        "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
+                    },
+                )
                 rows = cur.fetchall()
         return [_row_to_generated_render(row) for row in rows]
 
@@ -481,11 +550,20 @@ class PostgresUserContentRepository:
         query = """
             SELECT *
             FROM generated_renders
-            WHERE id = %(render_id)s AND user_id = %(user_id)s
+            WHERE id = %(render_id)s
+              AND user_id = %(user_id)s
+              AND source = %(source)s
         """
         with self._connection_factory() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, {"render_id": render_id, "user_id": user_id})
+                cur.execute(
+                    query,
+                    {
+                        "render_id": render_id,
+                        "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
+                    },
+                )
                 row = cur.fetchone()
         if row is None:
             return None
@@ -500,7 +578,9 @@ class PostgresUserContentRepository:
         query = """
             UPDATE generated_renders
             SET meta = %(meta)s
-            WHERE id = %(render_id)s AND user_id = %(user_id)s
+            WHERE id = %(render_id)s
+              AND user_id = %(user_id)s
+              AND source = %(source)s
             RETURNING *
         """
         with self._connection_factory() as conn:
@@ -510,6 +590,7 @@ class PostgresUserContentRepository:
                     {
                         "render_id": render_id,
                         "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
                         "meta": Jsonb(meta),
                     },
                 )
@@ -525,9 +606,18 @@ def _row_to_user(row: RowMapping) -> UserAccount:
         email=to_str(row.get("email")),
         display_name=to_optional_str(row.get("display_name")),
         tenant_id=TenantId(to_str(row.get("tenant_id"))),
+        role=_row_to_user_role(row),
+        is_active=to_bool(row.get("is_active"), default=True),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
+
+
+def _row_to_user_role(row: RowMapping) -> UserRole:
+    role = to_optional_str(row.get("role")) or "user"
+    if role == "admin":
+        return "admin"
+    return "user"
 
 
 def _row_to_user_auth(row: RowMapping) -> UserAuthRecord:
@@ -589,11 +679,7 @@ def _row_to_saved_layout(row: RowMapping) -> SavedLayout:
 
 def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
     source = to_str(row.get("source"))
-    if source not in {
-        "snapshot_render",
-        "object_prompt_reference",
-        "object_image_upload",
-    }:
+    if source != _SUPPORTED_GENERATED_RENDER_SOURCE:
         raise ValueError(f"Unsupported render source: {source}")
     raw_root_layout_id = to_optional_str(row.get("root_layout_id"))
     raw_case_id = to_optional_str(row.get("case_id"))
@@ -604,7 +690,6 @@ def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
         model_name=to_str(row.get("model_name")),
         prompt=to_str(row.get("prompt")),
         negative_prompt=to_optional_str(row.get("negative_prompt")),
-        storage_path=to_optional_str(row.get("storage_path")),
         root_layout_id=SavedLayoutId(raw_root_layout_id)
         if raw_root_layout_id is not None
         else None,

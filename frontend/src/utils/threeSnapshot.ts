@@ -1,22 +1,22 @@
-export type SnapshotVector3 = {
+type SnapshotVector3 = {
   x: number;
   y: number;
   z: number;
 };
 
-export type SnapshotBoundsMm = {
+type SnapshotBoundsMm = {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
 };
 
-export type SnapshotPointMm = {
+type SnapshotPointMm = {
   x: number;
   y: number;
 };
 
-export type SnapshotScreenBboxPx = {
+type SnapshotScreenBboxPx = {
   minX: number;
   minY: number;
   maxX: number;
@@ -152,6 +152,7 @@ export type ThreeSnapshotArtifact = {
     visibleObjectCount: number;
     raycastVisibleObjectCount: number;
     projectedFallbackObjectCount: number;
+    projectedFallbackObjectIds: string[];
     openingBboxMissingCount: number;
     openingIdsMissingBbox: string[];
     reasons: string[];
@@ -164,6 +165,13 @@ export type ThreeSnapshotArtifact = {
 const MM_PER_M = 1000;
 const OCCLUSION_TOLERANCE_M = 0.03;
 const SNAPSHOT_RAYCAST_LINE_THRESHOLD_M = 0.005;
+const IMPORTANT_PROJECTED_OBJECT_TYPES = new Set([
+  'rug',
+  'carpet',
+  'ceiling_light',
+  'pendant_light',
+  'chandelier',
+]);
 
 export function buildThreeSnapshotArtifact(
   state: ThreeSnapshotRenderState
@@ -178,8 +186,7 @@ export function buildThreeSnapshotArtifact(
     openingsGroup,
     proxyById,
     objectMetadataById,
-} =
-    state;
+  } = state;
   objectGroup.updateMatrixWorld?.(true);
   wallGroup?.updateMatrixWorld?.(true);
   openingsGroup?.updateMatrixWorld?.(true);
@@ -280,11 +287,23 @@ export function buildThreeSnapshotArtifact(
     }
   }
 
-  let projectedFallbackObjectCount = 0;
-  if (visibleObjects.length === 0 && visibleCandidates.length > 0) {
-    visibleObjects.push(...visibleCandidates);
-    projectedFallbackObjectCount = visibleCandidates.length;
+  const projectedFallbackObjects =
+    visibleObjects.length === 0 && visibleCandidates.length > 0
+      ? visibleCandidates
+      : visibleCandidates.filter((candidate) =>
+          shouldPreserveProjectedObject(candidate, canvasWidth, canvasHeight)
+        );
+  const visibleObjectIds = new Set(visibleObjects.map((object) => object.id));
+  const projectedFallbackObjectIds: string[] = [];
+  for (const candidate of projectedFallbackObjects) {
+    if (visibleObjectIds.has(candidate.id)) {
+      continue;
+    }
+    visibleObjects.push(candidate);
+    visibleObjectIds.add(candidate.id);
+    projectedFallbackObjectIds.push(candidate.id);
   }
+  const projectedFallbackObjectCount = projectedFallbackObjectIds.length;
 
   visibleObjects.sort((left, right) => left.distanceToCameraM - right.distanceToCameraM);
 
@@ -317,18 +336,24 @@ export function buildThreeSnapshotArtifact(
     }
   }
   const visibilityReasons: string[] = [];
-  if (projectedFallbackObjectCount > 0) {
+  if (
+    visibleObjects.length === projectedFallbackObjectCount &&
+    projectedFallbackObjectCount > 0
+  ) {
     visibilityReasons.push('raycast_occlusion_returned_no_visible_objects');
+  } else if (projectedFallbackObjectCount > 0) {
+    visibilityReasons.push('important_projected_objects_added');
   }
   if (openingIdsMissingBbox.length > 0) {
     visibilityReasons.push('opening_screen_bbox_missing');
   }
   const visibilityDiagnostics = {
-    status: visibilityReasons.length > 0 ? 'degraded' as const : 'ok' as const,
+    status: visibilityReasons.length > 0 ? ('degraded' as const) : ('ok' as const),
     allObjectCount: allObjects.length,
     visibleObjectCount: visibleObjects.length,
     raycastVisibleObjectCount,
     projectedFallbackObjectCount,
+    projectedFallbackObjectIds,
     openingBboxMissingCount: openingIdsMissingBbox.length,
     openingIdsMissingBbox,
     reasons: visibilityReasons,
@@ -395,7 +420,7 @@ export function buildThreeSnapshotArtifact(
     visibleObjectCount: visibleObjects.length,
     hiddenObjectCount: Math.max(0, allObjects.length - visibleObjects.length),
     visibilityMethod:
-      'frustum intersection plus center/corner occlusion sampling against current object meshes and walls above the opacity threshold, excluding render-only helpers',
+      'frustum intersection plus center/corner occlusion sampling against current object meshes and walls above the opacity threshold, with projected fallback for important floor and ceiling anchors, excluding render-only helpers',
     visibilityDiagnostics,
     wallOcclusionOpacityThreshold: state.wallOcclusionOpacityThreshold,
     allObjects,
@@ -614,6 +639,60 @@ function isSnapshotRaycastHelper(node: any): boolean {
     current = current.parent ?? null;
   }
   return false;
+}
+
+function shouldPreserveProjectedObject(
+  object: VisibleSnapshotObject,
+  canvasWidth: number,
+  canvasHeight: number
+): boolean {
+  if (object.visibleSampleCount > 0 || !object.screenBboxPx) {
+    return false;
+  }
+
+  const box = object.screenBboxPx;
+  if (box.width < 6 || box.height < 6) {
+    return false;
+  }
+
+  const objectType = normalizeObjectTypeKey(object.type);
+  const identityText = normalizeObjectTypeKey(
+    [
+      object.id,
+      object.renderIdentityLabel ?? '',
+      object.renderIdentityHint ?? '',
+    ].join('_')
+  );
+  const importantType =
+    IMPORTANT_PROJECTED_OBJECT_TYPES.has(objectType) ||
+    IMPORTANT_PROJECTED_OBJECT_TYPES.has(identityText) ||
+    identityText.includes('rug') ||
+    identityText.includes('carpet') ||
+    identityText.includes('ceiling_light') ||
+    identityText.includes('pendant_light') ||
+    identityText.includes('chandelier');
+  if (!importantType) {
+    return false;
+  }
+
+  const canvasArea = Math.max(1, canvasWidth * canvasHeight);
+  const boxAreaRatio = Math.max(0, box.width * box.height) / canvasArea;
+  const minimumAreaRatio =
+    objectType.includes('light') ||
+    identityText.includes('light') ||
+    identityText.includes('chandelier')
+      ? 0.00015
+      : 0.001;
+  return boxAreaRatio >= minimumAreaRatio;
+}
+
+function normalizeObjectTypeKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_\d+$/g, '');
 }
 
 function findObjectRoot(node: any): any | null {

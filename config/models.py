@@ -20,21 +20,15 @@ class OpenAIModelGroupConfig(BaseModel):
     primary: OpenAIModelConfig | None = None
     helper: OpenAIModelConfig | None = None
     embedding: OpenAIModelConfig | None = None
-    gpt_4o: OpenAIModelConfig | None = None
-    gpt_4o_mini: OpenAIModelConfig | None = None
-    text_embedding_3_small: OpenAIModelConfig | None = None
 
     def primary_model(self) -> OpenAIModelConfig:
-        return self._require_model(self.primary or self.gpt_4o, "primary")
+        return self._require_model(self.primary, "primary")
 
     def helper_model(self) -> OpenAIModelConfig:
-        return self._require_model(self.helper or self.gpt_4o_mini, "helper")
+        return self._require_model(self.helper, "helper")
 
     def embedding_model(self) -> OpenAIModelConfig:
-        return self._require_model(
-            self.embedding or self.text_embedding_3_small,
-            "embedding",
-        )
+        return self._require_model(self.embedding, "embedding")
 
     def resolved_models(self) -> dict[str, OpenAIModelConfig]:
         return {
@@ -58,8 +52,6 @@ class OpenAIConfig(BaseModel):
     azure: bool = False
     api_version: str = "2024-08-01-preview"
     api_key: str | None = None
-    public_key: str | None = None
-    private_key_file: str | None = None
     models: OpenAIModelGroupConfig
     agent_models: dict[str, OpenAIModelConfig] = Field(default_factory=dict)
 
@@ -69,12 +61,7 @@ class OpenAIConfig(BaseModel):
             return self
         if self.api_key:
             return self
-        if self.public_key and self.private_key_file:
-            return self
-        raise ValueError(
-            "Configure either services.openai.api_key or both "
-            "services.openai.public_key and services.openai.private_key_file."
-        )
+        raise ValueError("Configure services.openai.api_key.")
 
     @model_validator(mode="after")
     def validate_azure_endpoints(self) -> Self:

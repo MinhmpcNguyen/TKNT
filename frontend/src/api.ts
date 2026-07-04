@@ -1,18 +1,21 @@
 import {
+  AdminUser,
   AuthUser,
   GeneratedRenderRecord,
   InventoryItem,
   SavedLayoutRecord,
+  UserRole,
 } from './types';
 
-const DEFAULT_API_BASE = (import.meta as any).env?.PROD
+const DEFAULT_API_BASE = import.meta.env.PROD
   ? '/api'
   : 'http://localhost:8001';
 const API_BASE = normalizeApiBase(
-  (import.meta as any).env?.VITE_API_BASE ?? DEFAULT_API_BASE
+  import.meta.env.VITE_API_BASE ?? DEFAULT_API_BASE
 );
 const AUTH_TOKEN_STORAGE_KEY = 'tknt.authToken';
-const API_RELATIVE_URL_PATTERN = /^\/(inventory|account|pipeline|auth|assets_gen)(\/|$)/;
+const API_RELATIVE_URL_PATTERN =
+  /^\/(inventory|account|pipeline|auth|admin|billing|assets_gen)(\/|$)/;
 
 function normalizeApiBase(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -58,6 +61,46 @@ export type AuthSessionResponse = {
   access_token: string;
   token_type: 'bearer';
   user: AuthUser;
+};
+
+export type BillingSettingsResponse = {
+  per_credit_price_vnd: number;
+  monthly_price_vnd: number;
+  monthly_credit_quota: number;
+  updated_at?: string | null;
+};
+
+export type AdminUserCreatePayload = {
+  email: string;
+  password: string;
+  display_name?: string | null;
+  role?: UserRole;
+};
+
+export type AdminUserUpdatePayload = {
+  display_name?: string | null;
+  role?: UserRole;
+  is_active?: boolean;
+};
+
+export type AdminFurnitureCreatePayload = {
+  name: string;
+  category: string;
+  style_tags: string[];
+  material?: string | null;
+  brand?: string | null;
+  length_mm?: number | null;
+  width_mm?: number | null;
+  height_mm?: number | null;
+  price_amount?: number | null;
+  price_currency?: string;
+  attributes?: Record<string, unknown>;
+  model_reference?: string | null;
+  preview_reference?: string | null;
+};
+
+export type AdminFurnitureUploadPayload = AdminFurnitureCreatePayload & {
+  model_file: File;
 };
 
 export type SnapshotImageRenderResult = {
@@ -166,7 +209,7 @@ export type SnapshotImagePartialImageEvent = {
   attempt: string;
 };
 
-export type SnapshotImageStreamHandlers = {
+type SnapshotImageStreamHandlers = {
   onStatus?: (event: { message: string; attempt: string | null }) => void;
   onPartialImage?: (event: SnapshotImagePartialImageEvent) => void;
   onCompleted?: (event: SnapshotImageRenderApiResponse) => void;
@@ -179,7 +222,6 @@ type SnapshotImageRenderClientRequest = {
   depthMapImageDataUrl?: string | null;
   edgeMapImageDataUrl?: string | null;
   segmentationMapImageDataUrl?: string | null;
-  layoutReferenceImageDataUrl?: string | null;
   annotatedReferenceImageDataUrl?: string | null;
   sceneReferenceImageDataUrl?: string | null;
   sceneReferenceMode?: SnapshotImageSceneReferenceMode;
@@ -236,7 +278,7 @@ export type SnapshotImageEditOperation = {
   target_color?: string | null;
 };
 
-export type SnapshotImageLockedGeometryReference = {
+type SnapshotImageLockedGeometryReference = {
   object_id: string;
   object_name?: string | null;
   image_data_url: string;
@@ -244,7 +286,7 @@ export type SnapshotImageLockedGeometryReference = {
   screen_bbox_px?: Record<string, number> | null;
 };
 
-export type SnapshotImageLockedGeometryAtlasObject = {
+type SnapshotImageLockedGeometryAtlasObject = {
   object_id: string;
   object_name?: string | null;
   screen_bbox_px?: Record<string, number> | null;
@@ -261,7 +303,7 @@ export type SnapshotImageLockedGeometryAtlas = {
   objects: SnapshotImageLockedGeometryAtlasObject[];
 };
 
-export type SnapshotImageEditOperationSummary = {
+type SnapshotImageEditOperationSummary = {
   object_id: string;
   object_name?: string | null;
   operation_type?: 'prompt' | 'add' | 'replace' | 'recolor' | 'remove' | null;
@@ -352,7 +394,7 @@ async function requestJson<T>(
   return (await res.json()) as T;
 }
 
-export function appendAccessToken(url: string, token?: string | null): string {
+function appendAccessToken(url: string, token?: string | null): string {
   const rawUrl = url.trim();
   if (!rawUrl) {
     return url;
@@ -566,43 +608,201 @@ export async function logoutUser(token?: string | null): Promise<void> {
   );
 }
 
-export async function fetchInventory(
-  tenantId: string,
+export async function fetchBillingSettings(): Promise<BillingSettingsResponse> {
+  return requestJson<BillingSettingsResponse>(
+    '/billing/settings',
+    {},
+    { fallbackError: 'Failed to load billing settings' }
+  );
+}
+
+export async function updateAdminBillingSettings(
+  payload: BillingSettingsResponse,
+  token?: string | null
+): Promise<BillingSettingsResponse> {
+  return requestJson<BillingSettingsResponse>(
+    '/admin/billing/settings',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to update billing settings',
+    }
+  );
+}
+
+export async function listAdminUsers(token?: string | null): Promise<AdminUser[]> {
+  return requestJson<AdminUser[]>(
+    '/admin/users',
+    {},
+    { token, fallbackError: 'Failed to load users' }
+  );
+}
+
+export async function createAdminUser(
+  payload: AdminUserCreatePayload,
+  token?: string | null
+): Promise<AdminUser> {
+  return requestJson<AdminUser>(
+    '/admin/users',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to create user',
+    }
+  );
+}
+
+export async function updateAdminUser(
+  userId: string,
+  payload: AdminUserUpdatePayload,
+  token?: string | null
+): Promise<AdminUser> {
+  return requestJson<AdminUser>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to update user',
+    }
+  );
+}
+
+export async function listAdminInventoryItems(
   token?: string | null
 ): Promise<InventoryItem[]> {
   const data = await requestJson<{ items?: Array<Record<string, unknown>> }>(
-    `/inventory/items?tenant_id=${encodeURIComponent(tenantId)}`,
+    '/admin/inventory/items',
+    {},
+    { token, fallbackError: 'Failed to load admin inventory' }
+  );
+  return (data.items ?? []).map((item) => mapApiInventoryItem(item, token));
+}
+
+export async function createAdminInventoryItem(
+  payload: AdminFurnitureCreatePayload,
+  token?: string | null
+): Promise<InventoryItem> {
+  const item = await requestJson<Record<string, unknown>>(
+    '/admin/inventory/items',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    {
+      token,
+      includeJsonContentType: true,
+      fallbackError: 'Failed to create furniture item',
+    }
+  );
+  return mapApiInventoryItem(item, token);
+}
+
+export async function createAdminInventoryItemWithUpload(
+  payload: AdminFurnitureUploadPayload,
+  token?: string | null
+): Promise<InventoryItem> {
+  const body = new FormData();
+  body.set('name', payload.name);
+  body.set('category', payload.category);
+  body.set('style_tags', payload.style_tags.join(','));
+  appendOptionalFormValue(body, 'material', payload.material);
+  appendOptionalFormValue(body, 'brand', payload.brand);
+  appendOptionalFormValue(body, 'length_mm', payload.length_mm);
+  appendOptionalFormValue(body, 'width_mm', payload.width_mm);
+  appendOptionalFormValue(body, 'height_mm', payload.height_mm);
+  appendOptionalFormValue(body, 'price_amount', payload.price_amount);
+  body.set('price_currency', payload.price_currency ?? 'VND');
+  body.set('attributes_json', JSON.stringify(payload.attributes ?? {}));
+  appendOptionalFormValue(body, 'preview_reference', payload.preview_reference);
+  body.set('model_file', payload.model_file);
+
+  const item = await requestJson<Record<string, unknown>>(
+    '/admin/inventory/items/upload',
+    {
+      method: 'POST',
+      body,
+    },
+    {
+      token,
+      fallbackError: 'Failed to upload furniture item',
+    }
+  );
+  return mapApiInventoryItem(item, token);
+}
+
+export async function fetchInventory(token?: string | null): Promise<InventoryItem[]> {
+  const data = await requestJson<{ items?: Array<Record<string, unknown>> }>(
+    '/inventory/items',
     {},
     { token, fallbackError: 'Failed to load inventory' }
   );
   const items = (data?.items ?? []) as Array<Record<string, unknown>>;
-  return items.map((item) => {
-    const dims = (item.dimensions ?? {}) as Record<string, unknown>;
-    const attributes = appendTokenToAttributes(
-      (item.attributes ?? {}) as Record<string, unknown>,
-      token
-    );
-    return {
-      asset_id: String(item.id ?? ''),
-      name: String(item.name ?? ''),
-      category: String(item.type ?? ''),
-      footprint_mm: {
-        w: Number(dims.width_mm ?? 0),
-        d: Number(dims.length_mm ?? 0),
-      },
-      height_mm: Number(dims.height_mm ?? 0),
-      top_view: { type: 'rect' },
-      style_tags: Array.isArray(item.style_tags) ? (item.style_tags as string[]) : [],
-      material: typeof item.material === 'string' ? item.material : null,
-      material_tags: Array.isArray(attributes.material_tags)
-        ? (attributes.material_tags as string[])
-        : [],
-      price: null,
-      color_hex: typeof attributes.color_hex === 'string' ? attributes.color_hex : null,
-      room_type: typeof attributes.room_type === 'string' ? attributes.room_type : null,
-      attributes,
-    } satisfies InventoryItem;
-  });
+  return items.map((item) => mapApiInventoryItem(item, token));
+}
+
+function appendOptionalFormValue(
+  body: FormData,
+  key: string,
+  value: string | number | null | undefined
+): void {
+  if (value === null || value === undefined || value === '') {
+    return;
+  }
+  body.set(key, String(value));
+}
+
+function mapApiInventoryItem(
+  item: Record<string, unknown>,
+  token?: string | null
+): InventoryItem {
+  const dims = (item.dimensions ?? {}) as Record<string, unknown>;
+  const attributes = appendTokenToAttributes(
+    (item.attributes ?? {}) as Record<string, unknown>,
+    token
+  );
+  return {
+    asset_id: String(item.id ?? ''),
+    name: String(item.name ?? ''),
+    category: String(item.type ?? ''),
+    footprint_mm: {
+      w: Number(dims.width_mm ?? 0),
+      d: Number(dims.length_mm ?? 0),
+    },
+    height_mm: Number(dims.height_mm ?? 0),
+    top_view: { type: 'rect' },
+    style_tags: Array.isArray(item.style_tags) ? (item.style_tags as string[]) : [],
+    material: typeof item.material === 'string' ? item.material : null,
+    material_tags: Array.isArray(attributes.material_tags)
+      ? (attributes.material_tags as string[])
+      : [],
+    price: readInventoryPrice(item.price),
+    color_hex: typeof attributes.color_hex === 'string' ? attributes.color_hex : null,
+    room_type: typeof attributes.room_type === 'string' ? attributes.room_type : null,
+    attributes,
+  };
+}
+
+function readInventoryPrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const amount = Number((value as Record<string, unknown>).amount);
+    return Number.isFinite(amount) ? amount : null;
+  }
+  return null;
 }
 
 export async function runPipeline(
@@ -669,7 +869,7 @@ export async function renderSnapshotImage(
   request: SnapshotImageRenderClientRequest,
   token?: string | null
 ): Promise<SnapshotImageRenderApiResponse> {
-  return requestJson<SnapshotImageRenderApiResponse>(
+  const response = await requestJson<SnapshotImageRenderApiResponse>(
     '/pipeline/render-snapshot-image',
     {
       method: 'POST',
@@ -680,15 +880,8 @@ export async function renderSnapshotImage(
       includeJsonContentType: true,
       fallbackError: 'Failed to render snapshot image',
     }
-  ).then((response) => ({
-    ...response,
-    saved_render: response.saved_render
-      ? {
-          ...response.saved_render,
-          file_url: appendAccessToken(response.saved_render.file_url, token),
-        }
-      : response.saved_render,
-  }));
+  );
+  return appendSnapshotRenderAccessToken(response, token);
 }
 
 export async function renderSnapshotImageStream(
@@ -787,7 +980,6 @@ function buildSnapshotImageRenderBody(
     depth_map_image_data_url: request.depthMapImageDataUrl ?? null,
     edge_map_image_data_url: request.edgeMapImageDataUrl ?? null,
     segmentation_map_image_data_url: request.segmentationMapImageDataUrl ?? null,
-    layout_reference_image_data_url: request.layoutReferenceImageDataUrl ?? null,
     annotated_reference_image_data_url:
       request.annotatedReferenceImageDataUrl ?? null,
     scene_reference_image_data_url: request.sceneReferenceImageDataUrl ?? null,

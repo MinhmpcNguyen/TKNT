@@ -1,0 +1,359 @@
+{
+  "status": "OK",
+  "room_type": "bedroom",
+  "overall_score": 68.0,
+  "max_score": 160,
+  "normalized_score_0_100": 42.5,
+  "rules": [
+    {
+      "rule_id": "bed/central",
+      "name": "Bed is central anchor",
+      "weight": 10,
+      "earned": 10,
+      "status": "passed",
+      "details": "dist_to_center_mm=445.4 (threshold=2881.4)."
+    },
+    {
+      "rule_id": "bed/against_wall",
+      "name": "Bed near a wall",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "min_distance_to_wall_mm=1000.0 (threshold=200)."
+    },
+    {
+      "rule_id": "bed/headboard_against_wall",
+      "name": "Headboard near a wall",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "headboard_edge=bottom; min_distance_to_wall_mm=1210.0 (threshold=200)."
+    },
+    {
+      "rule_id": "nightstand/adjacent_to_headboard",
+      "name": "Nightstand(s) adjacent to headboard",
+      "weight": 10,
+      "earned": 10.0,
+      "status": "passed",
+      "details": "adjacent=1/1; headboard_edge=bottom."
+    },
+    {
+      "rule_id": "nightstand/preferred_side",
+      "name": "Single nightstand on preferred side",
+      "weight": 6,
+      "earned": 6,
+      "status": "passed",
+      "details": "nightstand=nightstand; preferred=either; actual=left."
+    },
+    {
+      "rule_id": "nightstand/paired_with_bedside_lamp",
+      "name": "Nightstand paired with bedside lamp",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "No bedside_lamp found."
+    },
+    {
+      "rule_id": "bedside_lamp/on_nightstand_or_above",
+      "name": "Bedside lamp on/above nightstand",
+      "weight": 9,
+      "earned": 0,
+      "status": "failed",
+      "details": "No bedside_lamp found."
+    },
+    {
+      "rule_id": "bedside_lamp/not_independent",
+      "name": "Bedside lamp near bed + nightstand",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "No bedside_lamp found."
+    },
+    {
+      "rule_id": "wardrobe/against_wall",
+      "name": "Wardrobe near a wall",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "wardrobe=wardrobe; min_distance_to_wall_mm=50.0."
+    },
+    {
+      "rule_id": "wardrobe/near_door",
+      "name": "Wardrobe closer to door than bed headboard",
+      "weight": 7,
+      "earned": 7,
+      "status": "passed",
+      "details": "dist_wardrobe_to_door_mm=2381.9; dist_headboard_to_door_mm=2396.8."
+    },
+    {
+      "rule_id": "wardrobe/not_next_to_headboard",
+      "name": "Wardrobe not next to headboard area",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "min_distance_wardrobe_to_headboard_mm=650.0 (min=800)."
+    },
+    {
+      "rule_id": "wardrobe/front_clearance",
+      "name": "Wardrobe has front clearance",
+      "weight": 10,
+      "earned": 0,
+      "status": "failed",
+      "details": "clearance_depth_mm=800; blockers_in_clearance=['bed']."
+    },
+    {
+      "rule_id": "side_table/near_window",
+      "name": "Side table near window (if present)",
+      "weight": 7,
+      "earned": 0,
+      "status": "failed",
+      "details": "side_table=desk; min_distance_to_window_mm=2688.0 (threshold=1500)."
+    },
+    {
+      "rule_id": "side_table/alternative_placement",
+      "name": "Side table alternative placement when no window",
+      "weight": 6,
+      "earned": 0,
+      "status": "failed",
+      "details": "Window exists; fallback placement rule therefore fails by rubric standardization."
+    },
+    {
+      "rule_id": "side_table/not_block_path",
+      "name": "Side table does not block key paths",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "intersections=[]."
+    },
+    {
+      "rule_id": "curtain/present_with_window",
+      "name": "Curtain present when window exists",
+      "weight": 10,
+      "earned": 0,
+      "status": "failed",
+      "details": "No curtain found."
+    },
+    {
+      "rule_id": "bed/avoid_window",
+      "name": "Bed headboard not under a window",
+      "weight": 8,
+      "earned": 8,
+      "status": "passed",
+      "details": "min_headboard_to_window_mm=2096.8 (min=500)."
+    },
+    {
+      "rule_id": "ceiling_light/near_center",
+      "name": "Ceiling light near room center",
+      "weight": 9,
+      "earned": 9,
+      "status": "passed",
+      "details": "closest_ceiling_light=ceiling_light_001; dist_to_center_mm=296.8; diag_mm=6403.1."
+    },
+    {
+      "rule_id": "ceiling_light/general_overhead",
+      "name": "Ceiling light is general overhead lighting",
+      "weight": 8,
+      "earned": 0,
+      "status": "failed",
+      "details": "No ceiling light satisfied both conditions: hung on ceiling and not tied to a single object. ceiling_light_001: hung_on_ceiling=True, tied_to_single_object=True"
+    }
+  ],
+  "object_instances": {
+    "bed": [
+      "bed"
+    ],
+    "nightstand": [
+      "nightstand"
+    ],
+    "wardrobe": [
+      "wardrobe"
+    ],
+    "ceiling_lamp": [
+      "ceiling_light_001"
+    ],
+    "side_table": [
+      "desk",
+      "side_table"
+    ]
+  },
+  "oob": {
+    "status": "passed",
+    "scene_invalid": false,
+    "oob_rate": 0.0,
+    "checked_instance_ids": [
+      "bed",
+      "bench",
+      "nightstand",
+      "chair",
+      "desk",
+      "office_chair",
+      "dresser",
+      "storage_cabinet",
+      "wardrobe",
+      "armchair",
+      "floor_lamp",
+      "side_table",
+      "tv_console",
+      "air_conditioner_001",
+      "ceiling_light_001"
+    ],
+    "out_of_bounds_instance_ids": [],
+    "out_of_bounds_objects": [],
+    "details": "out_of_bounds=0/15."
+  },
+  "bbl": {
+    "status": "passed",
+    "mean_intersection_area_mm2": 0.0,
+    "pair_count": 10,
+    "checked_instance_ids": [
+      "bed",
+      "nightstand",
+      "wardrobe",
+      "desk",
+      "side_table"
+    ],
+    "details": "sum_intersection_area_mm2=0.0."
+  },
+  "numerical": {
+    "status": "passed",
+    "gt_spec": {
+      "bed": {
+        "min": 1,
+        "max": 1
+      },
+      "nightstand": {
+        "min": 1,
+        "max": 2
+      },
+      "wardrobe": {
+        "min": 1,
+        "max": 1
+      },
+      "curtain": {
+        "min": 1,
+        "max": 1
+      },
+      "ceiling_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "bedside_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "side_table": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "pred_counts": {
+      "bed": 1,
+      "nightstand": 1,
+      "wardrobe": 1,
+      "curtain": 0,
+      "ceiling_lamp": 1,
+      "bedside_lamp": 0,
+      "side_table": 1
+    },
+    "tp": 5,
+    "fp": 0,
+    "fn": 2,
+    "precision": 1.0,
+    "recall": 0.714286,
+    "accuracy": 0.0,
+    "comparison_accuracy": 1.0,
+    "comparisons": [
+      {
+        "left": "nightstand",
+        "right": "bed",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal",
+          "greater"
+        ],
+        "correct": true
+      },
+      {
+        "left": "wardrobe",
+        "right": "bed",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": true
+      }
+    ],
+    "details": "pred_total=5; gt_total=7."
+  },
+  "numerical_reasoning": {
+    "status": "passed",
+    "gt_spec": {
+      "bed": {
+        "min": 1,
+        "max": 1
+      },
+      "nightstand": {
+        "min": 1,
+        "max": 2
+      },
+      "wardrobe": {
+        "min": 1,
+        "max": 1
+      },
+      "curtain": {
+        "min": 1,
+        "max": 1
+      },
+      "ceiling_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "bedside_lamp": {
+        "min": 1,
+        "max": 1
+      },
+      "side_table": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "pred_counts": {
+      "bed": 1,
+      "nightstand": 1,
+      "wardrobe": 1,
+      "curtain": 0,
+      "ceiling_lamp": 1,
+      "bedside_lamp": 0,
+      "side_table": 1
+    },
+    "tp": 5,
+    "fp": 0,
+    "fn": 2,
+    "precision": 1.0,
+    "recall": 0.714286,
+    "accuracy": 0.0,
+    "comparison_accuracy": 1.0,
+    "comparisons": [
+      {
+        "left": "nightstand",
+        "right": "bed",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal",
+          "greater"
+        ],
+        "correct": true
+      },
+      {
+        "left": "wardrobe",
+        "right": "bed",
+        "predicted_relation": "equal",
+        "allowed_relations": [
+          "equal"
+        ],
+        "correct": true
+      }
+    ],
+    "details": "pred_total=5; gt_total=7."
+  }
+}

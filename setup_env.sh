@@ -22,7 +22,6 @@ conda install -y -n "${ENV_NAME}" -c conda-forge \
   pydantic \
   python-dotenv \
   pyyaml \
-  cryptography \
   psycopg \
   typing-extensions
 

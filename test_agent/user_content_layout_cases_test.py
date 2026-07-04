@@ -14,8 +14,10 @@ services_package = types.ModuleType("services")
 services_package.__path__ = [str(REPO_ROOT / "services")]
 sys.modules.setdefault("services", services_package)
 
-import services.user_content_service as user_content_service_module
-from db.models import (
+import services.user_content_service as user_content_service_module  # noqa: E402
+from db.models import (  # noqa: E402
+    Asset,
+    AssetId,
     GeneratedRender,
     GeneratedRenderId,
     SavedLayout,
@@ -26,8 +28,9 @@ from db.models import (
     UserAccount,
     UserId,
 )
-from pipeline.account_layout_autosave import build_saved_layout_option_drafts
-from services.user_content_service import (
+from db.pg_user_content import PostgresUserContentRepository  # noqa: E402
+from pipeline.account_layout_autosave import build_saved_layout_option_drafts  # noqa: E402
+from services.user_content_service import (  # noqa: E402
     LayoutOptionPersistenceRequest,
     UserContentService,
 )
@@ -38,15 +41,15 @@ class FakeUserContentRepository:
         self.users: dict[UserId, UserAccount] = {}
         self.cases: dict[SavedLayoutCaseId, SavedLayoutCase] = {}
         self.layouts: dict[SavedLayoutId, SavedLayout] = {}
-        self.layout_keys: dict[tuple[UserId, SavedLayoutCaseId, str], SavedLayoutId] = {}
+        self.layout_keys: dict[
+            tuple[UserId, SavedLayoutCaseId, str], SavedLayoutId
+        ] = {}
         self.generated_renders: dict[GeneratedRenderId, GeneratedRender] = {}
 
     def get_user_by_id(self, user_id: UserId) -> UserAccount | None:
         return self.users.get(user_id)
 
-    def upsert_saved_layout_case(
-        self, layout_case: SavedLayoutCase
-    ) -> SavedLayoutCase:
+    def upsert_saved_layout_case(self, layout_case: SavedLayoutCase) -> SavedLayoutCase:
         self.cases[layout_case.id] = layout_case
         return layout_case
 
@@ -133,9 +136,45 @@ class FakeUserContentRepository:
         return updated
 
 
+class RecordingCursor:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def __enter__(self) -> RecordingCursor:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def execute(self, query: str, params: dict[str, object]) -> None:
+        self.calls.append((query, params))
+
+    def fetchall(self) -> list[dict[str, object]]:
+        return []
+
+    def fetchone(self) -> dict[str, object] | None:
+        return None
+
+
+class RecordingConnection:
+    def __init__(self, cursor: RecordingCursor) -> None:
+        self._cursor = cursor
+
+    def __enter__(self) -> RecordingConnection:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def cursor(self) -> RecordingCursor:
+        return self._cursor
+
+
 class UserContentLayoutCasesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._original_schema_init = user_content_service_module.ensure_user_content_schema
+        self._original_schema_init = (
+            user_content_service_module.ensure_user_content_schema
+        )
         user_content_service_module.ensure_user_content_schema = lambda: None
         self.repository = FakeUserContentRepository()
         self.user = UserAccount(
@@ -216,7 +255,9 @@ class UserContentLayoutCasesTest(unittest.TestCase):
         self.assertIsNone(blocked)
         self.assertIsNotNone(updated)
         self.assertEqual(updated.name if updated is not None else "", "Owner edit")
-        self.assertEqual(updated.case_id, saved.case_id if updated is not None else None)
+        self.assertEqual(
+            updated.case_id, saved.case_id if updated is not None else None
+        )
 
     def test_save_snapshot_render_links_case_option_context(self) -> None:
         saved = self.service.upsert_layout_case_options(
@@ -255,6 +296,28 @@ class UserContentLayoutCasesTest(unittest.TestCase):
         self.assertEqual(render.meta["case_id"], "case_render")
         self.assertEqual(render.meta["option_id"], "variant_1")
 
+    def test_postgres_render_queries_filter_supported_snapshot_source(self) -> None:
+        cursor = RecordingCursor()
+        repository = PostgresUserContentRepository(
+            connection_factory=lambda: RecordingConnection(cursor)
+        )
+
+        repository.list_generated_renders(UserId("user_a"))
+        repository.get_generated_render(
+            GeneratedRenderId("render_a"),
+            UserId("user_a"),
+        )
+        repository.update_generated_render_meta(
+            GeneratedRenderId("render_a"),
+            UserId("user_a"),
+            {"starred": True},
+        )
+
+        self.assertEqual(len(cursor.calls), 3)
+        for query, params in cursor.calls:
+            self.assertIn("source = %(source)s", query)
+            self.assertEqual(params.get("source"), "snapshot_render")
+
     def test_resolve_snapshot_render_context_from_root_layout_id(self) -> None:
         saved = self.service.upsert_layout_case_options(
             user=self.user,
@@ -292,14 +355,29 @@ class UserContentLayoutCasesTest(unittest.TestCase):
 
         self.assertIsNone(context)
 
+    def test_asset_access_only_allows_shared_inventory_tenant(self) -> None:
+        shared_asset = Asset(
+            id=AssetId("asset_shared"),
+            tenant_id=TenantId("demo_tenant"),
+            type="FURNITURE",
+            name="Shared chair",
+        )
+        user_asset = Asset(
+            id=AssetId("asset_user"),
+            tenant_id=self.user.tenant_id,
+            type="FURNITURE",
+            name="User chair",
+        )
+
+        self.assertTrue(self.service.can_access_asset(asset=shared_asset))
+        self.assertFalse(self.service.can_access_asset(asset=user_asset))
+
     def test_fixture_layout_variants_build_saved_option_drafts(self) -> None:
         case_dir = REPO_ROOT / "cases/user_f1a4e69d3672aab8_20260515T032329Z"
         drafts = build_saved_layout_option_drafts(
             case_id="fixture_case",
             case_name="Fixture Case",
             room_payload=_load_json(case_dir / "01_room_interpreter.json"),
-            stylist_payload=_load_json(case_dir / "08_stylist.json"),
-            absolute_layout_payload=_load_json(case_dir / "07_absolute_layout.json"),
             layout_variants_payload=_load_json(case_dir / "09_layout_variants.json"),
         )
 
