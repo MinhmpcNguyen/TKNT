@@ -1,0 +1,79 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.basedpyright/
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+
+# Conda (local)
+.conda_envs/
+.conda_pkgs/
+
+# Node / Vite
+node_modules/
+.vite/
+
+# Project outputs
+logs/
+outputs*/
+cases/*tenant_*/
+cases/user_*/
+.cache/
+.playwright-mcp/
+Thesis_Chapters_DOCX/
+Thesis_LaTeX/
+
+# Local JSON outputs
+*.json
+!docs/code_annotations.json
+!evaluation/layout_benchmark/systems_ablation.json
+
+# Secrets (do not commit)
+app-config.yaml
+.env
+.env.*
+!.env.example
+gemini.env
+hidden.env
+openai_key.txt
+private_key.enc
+*.pem
+*.key
+
+#GLB
+*.glb
+
+# Local model weights
+OpenShape-Embeddings/*.pt
+
+# Generated/cache artifacts
+.cache/
+.playwright-mcp/
+Thesis_Chapters_DOCX/
+Thesis_LaTeX/
+experiments/image_flow_eval/runs/
+experiments/*_outputs/
+experiments/triposr_output*/
+experiments/hunyuan3d_outputs/
+generated/user_content/
+generated/object_3d_jobs/
+evaluation/layout_benchmark/*_artifacts/
+models/metrics/*.pt
+*.pth
+*.safetensors

@@ -1,0 +1,611 @@
+{"kind":"deck","id":"pr/j6302y","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"DEFAULT"}
+{"kind":"slide","id":"sl/2x4nap4r","slide":1,"title":"An Interactive Generative AI System for","textShapes":3}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":1,"name":"rf4-cover-title","text":"An Interactive Generative AI System for\nConstraint-Aware Interior Layout and Photorealistic Synthesis","textPreview":"An Interactive Generative AI System for | Constraint-Aware Interior Layout and Photorealistic Synthesis","textChars":101,"textLines":2,"bbox":[52,250,760,105]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":1,"name":"rf4-cover-project","text":"ROOMFLOW","textPreview":"ROOMFLOW","textChars":8,"textLines":1,"bbox":[52,384,260,34]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":1,"name":"rf4-cover-meta","text":"Nguyen Thanh Minh | 20225450\nSupervisor: Dr. Trịnh Tuấn Đạt\nData Science and Artificial Intelligence\nHanoi, 07/2026","textPreview":"Nguyen Thanh Minh | 20225450 | Supervisor: Dr. Trịnh Tuấn Đạt | Data Science and Artificial Intelligence | Hanoi, 07/2026","textChars":115,"textLines":4,"bbox":[52,430,430,96]}
+{"kind":"shape","id":"sh/cj6tovah","slide":1,"name":"rf4-cover-tagline","bbox":[43,662,220,20]}
+{"kind":"image","id":"im/4byhgn29","slide":1,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/bm58z25k","slide":1,"name":"","bbox":[42,40.23,215,64.55]}
+{"kind":"notes","id":"nt/2x4nap4r","slide":1,"text":""}
+{"kind":"slide","id":"sl/pg3ex0nu","slide":2,"title":"From motivation to workflow, then to evaluation.","textShapes":20}
+{"kind":"shape","id":"sh/r65wjudg","slide":2,"name":"rf4-title-2","bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":2,"name":"rfp-outline-claim","text":"From motivation to workflow, then to evaluation.","textPreview":"From motivation to workflow, then to evaluation.","textChars":48,"textLines":1,"bbox":[86,140,760,32]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":2,"name":"rfp-outline-line","bbox":[195,200,3,380]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":2,"name":"rfp-outline-dot-0","bbox":[177,195,38,38]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":2,"name":"rfp-outline-num-0","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[177,202,38,22]}
+{"kind":"textbox","id":"sh/0z61032l","slide":2,"name":"rfp-outline-title-0","text":"Motivation","textPreview":"Motivation","textChars":10,"textLines":1,"bbox":[250,193,420,26]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":2,"name":"rfp-outline-subtitle-0","text":"Why editable room feedback matters","textPreview":"Why editable room feedback matters","textChars":34,"textLines":1,"bbox":[250,222,450,24]}
+{"kind":"shape","id":"sh/i5sneloj","slide":2,"name":"rfp-outline-dot-1","bbox":[177,267,38,38]}
+{"kind":"textbox","id":"sh/obm58z25","slide":2,"name":"rfp-outline-num-1","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[177,274,38,22]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":2,"name":"rfp-outline-title-1","text":"Problem & Key Idea","textPreview":"Problem & Key Idea","textChars":18,"textLines":1,"bbox":[250,265,420,26]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":2,"name":"rfp-outline-subtitle-1","text":"Input, RoomFlow, output","textPreview":"Input, RoomFlow, output","textChars":23,"textLines":1,"bbox":[250,294,450,24]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":2,"name":"rfp-outline-dot-2","bbox":[177,339,38,38]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":2,"name":"rfp-outline-num-2","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[177,346,38,22]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":2,"name":"rfp-outline-title-2","text":"RoomFlow Workflow","textPreview":"RoomFlow Workflow","textChars":17,"textLines":1,"bbox":[250,337,420,26]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":2,"name":"rfp-outline-subtitle-2","text":"Planning, rendering, revision","textPreview":"Planning, rendering, revision","textChars":29,"textLines":1,"bbox":[250,366,450,24]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":2,"name":"rfp-outline-dot-3","bbox":[177,411,38,38]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":2,"name":"rfp-outline-num-3","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[177,418,38,22]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":2,"name":"rfp-outline-title-3","text":"Automatic Interior Layout","textPreview":"Automatic Interior Layout","textChars":25,"textLines":1,"bbox":[250,409,420,26]}
+{"kind":"textbox","id":"sh/il0rqd4v","slide":2,"name":"rfp-outline-subtitle-3","text":"Semantic plan and solver","textPreview":"Semantic plan and solver","textChars":24,"textLines":1,"bbox":[250,438,450,24]}
+{"kind":"shape","id":"sh/b6xkf6dc","slide":2,"name":"rfp-outline-dot-4","bbox":[177,483,38,38]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":2,"name":"rfp-outline-num-4","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[177,490,38,22]}
+{"kind":"textbox","id":"sh/tcj6tova","slide":2,"name":"rfp-outline-title-4","text":"Rendering and Editing","textPreview":"Rendering and Editing","textChars":21,"textLines":1,"bbox":[250,481,420,26]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":2,"name":"rfp-outline-subtitle-4","text":"Layout evidence and local edits","textPreview":"Layout evidence and local edits","textChars":31,"textLines":1,"bbox":[250,510,450,24]}
+{"kind":"shape","id":"sh/byhgn29g","slide":2,"name":"rfp-outline-dot-5","bbox":[177,555,38,38]}
+{"kind":"textbox","id":"sh/0je9cvix","slide":2,"name":"rfp-outline-num-5","text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[177,562,38,22]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":2,"name":"rfp-outline-title-5","text":"Evaluation & Conclusion","textPreview":"Evaluation & Conclusion","textChars":23,"textLines":1,"bbox":[250,553,420,26]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":2,"name":"rfp-outline-subtitle-5","text":"Results, cases, contributions","textPreview":"Results, cases, contributions","textChars":29,"textLines":1,"bbox":[250,582,450,24]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":2,"name":"pro-auto-slide-number-2","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/x0nuxc3y","slide":2,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/pg3ex0nu","slide":2,"text":""}
+{"kind":"slide","id":"sl/s72x4nap","slide":3,"title":"SECTION","textShapes":4}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":3,"name":"rf4-section-kicker-3","text":"SECTION","textPreview":"SECTION","textChars":7,"textLines":1,"bbox":[370,232,190,20]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":3,"name":"rf4-section-title-3","text":"Motivation","textPreview":"Motivation","textChars":10,"textLines":1,"bbox":[365,258,520,112]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":3,"name":"rf4-section-subtitle-3","text":"Why editable, room-specific feedback matters.","textPreview":"Why editable, room-specific feedback matters.","textChars":45,"textLines":1,"bbox":[380,382,490,62]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":3,"name":"pro-auto-slide-number-3","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/7u54zido","slide":3,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/s72x4nap","slide":3,"text":""}
+{"kind":"slide","id":"sl/val87ed8","slide":4,"title":"Design Need and Output Requirement","textShapes":21}
+{"kind":"textbox","id":"sh/al87ed8b","slide":4,"name":"TextBox 83","text":"Design Need and Output Requirement","textPreview":"Design Need and Output Requirement","textChars":34,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/z61032ls","slide":4,"name":"TextBox 84","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":4,"name":"Oval 85","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[69.12,119.04,36.48,36.48]}
+{"kind":"shape","id":"sh/hcrmhk3q","slide":4,"name":"Rounded Rectangle 86","bbox":[120,115.2,312,80.64]}
+{"kind":"shape","id":"sh/6xkf6dcb","slide":4,"name":"Rectangle 87","bbox":[120,115.2,7.68,80.64]}
+{"kind":"textbox","id":"sh/zed8v6ps","slide":4,"name":"TextBox 88","text":"Fast","textPreview":"Fast","textChars":4,"textLines":1,"bbox":[139.2,132.48,278.4,28.8]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":4,"name":"TextBox 89","text":"Generate alternatives early.","textPreview":"Generate alternatives early.","textChars":28,"textLines":1,"bbox":[139.2,170.88,278.4,18.24]}
+{"kind":"textbox","id":"sh/wval87ed","slide":4,"name":"Oval 90","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[69.12,239.04,36.48,36.48]}
+{"kind":"shape","id":"sh/7adsji5s","slide":4,"name":"Rounded Rectangle 91","bbox":[120,235.2,312,80.64]}
+{"kind":"shape","id":"sh/epkzupwb","slide":4,"name":"Rectangle 92","bbox":[120,235.2,7.68,80.64]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":4,"name":"TextBox 93","text":"Geometry-aware","textPreview":"Geometry-aware","textChars":14,"textLines":1,"bbox":[139.2,252.48,278.4,28.8]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":4,"name":"TextBox 94","text":"Respect room shape and openings.","textPreview":"Respect room shape and openings.","textChars":32,"textLines":1,"bbox":[139.2,290.88,278.4,18.24]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":4,"name":"Oval 95","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[69.12,359.04,36.48,36.48]}
+{"kind":"shape","id":"sh/e1w7mp0b","slide":4,"name":"Rounded Rectangle 96","bbox":[120,355.2,312,80.64]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":4,"name":"Rectangle 97","bbox":[120,355.2,7.68,80.64]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":4,"name":"TextBox 98","text":"Editable","textPreview":"Editable","textChars":8,"textLines":1,"bbox":[139.2,372.48,278.4,28.8]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":4,"name":"TextBox 99","text":"Keep the result controllable.","textPreview":"Keep the result controllable.","textChars":29,"textLines":1,"bbox":[139.2,410.88,278.4,18.24]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":4,"name":"TextBox 100","text":"Early design assistant","textPreview":"Early design assistant","textChars":22,"textLines":1,"bbox":[532.8,110.4,302.4,33.6]}
+{"kind":"shape","id":"sh/je9cvixc","slide":4,"name":"Rounded Rectangle 101","bbox":[494.4,172.8,117.12,115.2]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":4,"name":"TextBox 102","text":"User brief","textPreview":"User brief","textChars":10,"textLines":1,"bbox":[502.08,192,101.76,26.88]}
+{"kind":"textbox","id":"sh/xs72x4na","slide":4,"name":"TextBox 103","text":"plain-language intent","textPreview":"plain-language intent","textChars":21,"textLines":1,"bbox":[503.04,225.6,99.84,30.72]}
+{"kind":"shape","id":"sh/87ed8bat","slide":4,"name":"Connector 104","bbox":[614.4,228.48,19.2,0]}
+{"kind":"shape","id":"sh/fmlkjm1c","slide":4,"name":"Rounded Rectangle 105","bbox":[638.4,172.8,117.12,115.2]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":4,"name":"TextBox 106","text":"Room model","textPreview":"Room model","textChars":10,"textLines":1,"bbox":[646.08,192,101.76,26.88]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":4,"name":"TextBox 107","text":"real geometry","textPreview":"real geometry","textChars":13,"textLines":1,"bbox":[647.04,225.6,99.84,30.72]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":4,"name":"Connector 108","bbox":[758.4,228.48,19.2,0]}
+{"kind":"shape","id":"sh/2t83itgf","slide":4,"name":"Rounded Rectangle 109","bbox":[782.4,172.8,117.12,115.2]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":4,"name":"TextBox 110","text":"Editable result","textPreview":"Editable result","textChars":15,"textLines":1,"bbox":[790.08,192,101.76,26.88]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":4,"name":"TextBox 111","text":"layout + render link","textPreview":"layout + render link","textChars":20,"textLines":1,"bbox":[791.04,225.6,99.84,30.72]}
+{"kind":"shape","id":"sh/9knih4by","slide":4,"name":"Rounded Rectangle 112","bbox":[499.2,336,355.2,148.8]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":4,"name":"TextBox 113","text":"Room-specific feedback","textPreview":"Room-specific feedback","textChars":22,"textLines":1,"bbox":[523.2,355.2,307.2,26.88]}
+{"kind":"shape","id":"sh/rqd4vmtw","slide":4,"name":"Rectangle 114","bbox":[585.6,388.8,172.8,67.2]}
+{"kind":"shape","id":"sh/kb6xkf6d","slide":4,"name":"Arc 115","bbox":[587.52,432,40.32,40.32]}
+{"kind":"shape","id":"sh/9w3m94fu","slide":4,"name":"Rectangle 116","bbox":[652.8,384,52.8,3.84]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":4,"name":"TextBox 117","text":"boundary • openings • circulation","textPreview":"boundary • openings • circulation","textChars":33,"textLines":1,"bbox":[523.2,455.04,307.2,21.12]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":4,"name":"Rounded Rectangle 118","text":"Early-stage design needs fast visuals that remain editable and room-specific.","textPreview":"Early-stage design needs fast visuals that remain editable and room-specific.","textChars":77,"textLines":1,"bbox":[91.2,554.88,777.6,48]}
+{"kind":"image","id":"im/e9cvixcz","slide":4,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/val87ed8","slide":4,"text":""}
+{"kind":"slide","id":"sl/mlkjm1cf","slide":5,"title":"Existing Gap in AI-Assisted Interior Design","textShapes":14}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":5,"name":"rf4-title-5","text":"Existing Gap in AI-Assisted Interior Design","textPreview":"Existing Gap in AI-Assisted Interior Design","textChars":43,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":5,"name":"pro-gap-roomflow-bg","bbox":[616,172,273,300]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":5,"name":"pro-gap-header-0","text":"Text/Image Generation","textPreview":"Text/Image Generation","textChars":21,"textLines":1,"bbox":[88,192,237,36]}
+{"kind":"shape","id":"sh/p8nqxs72","slide":5,"name":"pro-gap-divider-1","bbox":[343,172,2,300]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":5,"name":"pro-gap-header-1","text":"Layout Generation","textPreview":"Layout Generation","textChars":17,"textLines":1,"bbox":[361,192,237,36]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":5,"name":"pro-gap-divider-2","bbox":[616,172,2,300]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":5,"name":"pro-gap-header-2","text":"RoomFlow","textPreview":"RoomFlow","textChars":8,"textLines":1,"bbox":[634,192,237,36]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":5,"name":"pro-gap-row-label-0","text":"Strength","textPreview":"Strength","textChars":8,"textLines":1,"bbox":[26,267,80,24]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":5,"name":"pro-gap-cell-0-0","text":"Fast visual ideas","textPreview":"Fast visual ideas","textChars":17,"textLines":1,"bbox":[92,264,229,48]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":5,"name":"pro-gap-cell-0-1","text":"Structured candidates","textPreview":"Structured candidates","textChars":21,"textLines":1,"bbox":[365,264,229,48]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":5,"name":"pro-gap-cell-0-2","text":"Editable layout state","textPreview":"Editable layout state","textChars":21,"textLines":1,"bbox":[638,264,229,48]}
+{"kind":"textbox","id":"sh/ulwval87","slide":5,"name":"pro-gap-row-label-1","text":"Gap","textPreview":"Gap","textChars":3,"textLines":1,"bbox":[26,359,80,24]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":5,"name":"pro-gap-cell-1-0","text":"Static and hard to revise","textPreview":"Static and hard to revise","textChars":25,"textLines":1,"bbox":[92,356,229,48]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":5,"name":"pro-gap-cell-1-1","text":"Needs real-room validation","textPreview":"Needs real-room validation","textChars":26,"textLines":1,"bbox":[365,356,229,48]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":5,"name":"pro-gap-cell-1-2","text":"Traceable output across layout, render, and edit","textPreview":"Traceable output across layout, render, and edit","textChars":48,"textLines":1,"bbox":[638,356,229,48]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":5,"name":"pro-takeaway-rule-590","bbox":[98,590,764,2]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":5,"name":"pro-takeaway-text-590","text":"RoomFlow focuses on editable, traceable design artifacts rather than isolated images.","textPreview":"RoomFlow focuses on editable, traceable design artifacts rather than isolated images.","textChars":85,"textLines":1,"bbox":[120,602,720,24]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":5,"name":"pro-auto-slide-number-5","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/vixczed8","slide":5,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/mlkjm1cf","slide":5,"text":""}
+{"kind":"slide","id":"sl/58z25kb6","slide":6,"title":"Problem Formulation and Scope","textShapes":19}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":6,"name":"rf4-title-6","text":"Problem Formulation and Scope","textPreview":"Problem Formulation and Scope","textChars":29,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"shape","id":"sh/szqtcj6t","slide":6,"name":"pro-scope-flow-0","bbox":[52,132,250,118]}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":6,"name":"pro-scope-flow-title-0","text":"Room + Brief","textPreview":"Room + Brief","textChars":12,"textLines":1,"bbox":[74,160,206,28]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":6,"name":"pro-scope-flow-body-0","text":"boundary, openings,\nrequested furniture","textPreview":"boundary, openings, | requested furniture","textChars":39,"textLines":2,"bbox":[77,196,200,40]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":6,"name":"pro-scope-arrow-0","text":">","textPreview":">","textChars":1,"textLines":1,"bbox":[315,172,38,34]}
+{"kind":"shape","id":"sh/tovahoza","slide":6,"name":"pro-scope-flow-1","bbox":[362,132,250,118]}
+{"kind":"textbox","id":"sh/032lszqt","slide":6,"name":"pro-scope-flow-title-1","text":"RoomFlow","textPreview":"RoomFlow","textChars":8,"textLines":1,"bbox":[384,160,206,28]}
+{"kind":"textbox","id":"sh/bulwval8","slide":6,"name":"pro-scope-flow-body-1","text":"plan, solve,\nrender, edit","textPreview":"plan, solve, | render, edit","textChars":25,"textLines":2,"bbox":[387,196,200,40]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":6,"name":"pro-scope-arrow-1","text":">","textPreview":">","textChars":1,"textLines":1,"bbox":[625,172,38,34]}
+{"kind":"shape","id":"sh/p0bi9s36","slide":6,"name":"pro-scope-flow-2","bbox":[672,132,250,118]}
+{"kind":"textbox","id":"sh/0fepkzup","slide":6,"name":"pro-scope-flow-title-2","text":"Editable Artifacts","textPreview":"Editable Artifacts","textChars":18,"textLines":1,"bbox":[694,160,206,28]}
+{"kind":"textbox","id":"sh/byhgn29g","slide":6,"name":"pro-scope-flow-body-2","text":"layout, 3D view,\nlayout-linked render","textPreview":"layout, 3D view, | layout-linked render","textChars":37,"textLines":2,"bbox":[697,196,200,40]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":6,"name":"pro-scope-label-0","text":"Rooms","textPreview":"Rooms","textChars":5,"textLines":1,"bbox":[115,335,90,22]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":6,"name":"pro-scope-body-0","text":"Living rooms and bedrooms","textPreview":"Living rooms and bedrooms","textChars":25,"textLines":1,"bbox":[213,335,255,36]}
+{"kind":"shape","id":"sh/32lszqtc","slide":6,"name":"pro-scope-rule-0","bbox":[115,377,325,1.5]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":6,"name":"pro-scope-label-1","text":"Input","textPreview":"Input","textChars":5,"textLines":1,"bbox":[506,335,90,22]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":6,"name":"pro-scope-body-1","text":"Brief, room boundary, doors/windows, furniture inventory","textPreview":"Brief, room boundary, doors/windows, furniture inventory","textChars":56,"textLines":1,"bbox":[604,335,255,36]}
+{"kind":"shape","id":"sh/at47y1kr","slide":6,"name":"pro-scope-rule-1","bbox":[506,377,325,1.5]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":6,"name":"pro-scope-label-2","text":"Claim","textPreview":"Claim","textChars":5,"textLines":1,"bbox":[115,414,90,22]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":6,"name":"pro-scope-body-2","text":"No new scene or image model training","textPreview":"No new scene or image model training","textChars":36,"textLines":1,"bbox":[213,414,255,36]}
+{"kind":"shape","id":"sh/lkjm1cfa","slide":6,"name":"pro-scope-rule-2","bbox":[115,456,325,1.5]}
+{"kind":"textbox","id":"sh/ex0nuxc3","slide":6,"name":"pro-scope-label-3","text":"Focus","textPreview":"Focus","textChars":5,"textLines":1,"bbox":[506,414,90,22]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":6,"name":"pro-scope-body-3","text":"Early exploration, not construction drawings","textPreview":"Early exploration, not construction drawings","textChars":44,"textLines":1,"bbox":[604,414,255,36]}
+{"kind":"shape","id":"sh/tovahoza","slide":6,"name":"pro-scope-rule-3","bbox":[506,456,325,1.5]}
+{"kind":"shape","id":"sh/032lszqt","slide":6,"name":"pro-takeaway-rule-590","bbox":[98,590,764,2]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":6,"name":"pro-takeaway-text-590","text":"RoomFlow controls generated images through an editable layout state.","textPreview":"RoomFlow controls generated images through an editable layout state.","textChars":68,"textLines":1,"bbox":[120,602,720,24]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":6,"name":"pro-auto-slide-number-6","text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/2p8nqxs7","slide":6,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/58z25kb6","slide":6,"text":""}
+{"kind":"slide","id":"sl/0z61032l","slide":7,"title":"Editable Layout as the Control State","textShapes":13}
+{"kind":"textbox","id":"sh/7adsji5s","slide":7,"name":"TextBox 83","text":"Editable Layout as the Control State","textPreview":"Editable Layout as the Control State","textChars":36,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":7,"name":"TextBox 84","text":"7","textPreview":"7","textChars":1,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":7,"name":"Rounded Rectangle 85","bbox":[316.8,216,326.4,124.8]}
+{"kind":"textbox","id":"sh/wval87ed","slide":7,"name":"TextBox 86","text":"Editable Layout\nState","textPreview":"Editable Layout | State","textChars":21,"textLines":2,"bbox":[345.6,233.28,268.8,52.8]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":7,"name":"TextBox 87","text":"objects • dimensions • positions • openings • camera","textPreview":"objects • dimensions • positions • openings • camera","textChars":52,"textLines":1,"bbox":[353.28,300.48,254.4,23.04]}
+{"kind":"shape","id":"sh/eloj2t83","slide":7,"name":"Rounded Rectangle 88","bbox":[76.8,120,196.8,84.48]}
+{"kind":"shape","id":"sh/sfil0rqd","slide":7,"name":"Rectangle 89","bbox":[76.8,120,7.68,84.48]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":7,"name":"TextBox 90","text":"Language planning","textPreview":"Language planning","textChars":17,"textLines":1,"bbox":[96,137.28,163.2,28.8]}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":7,"name":"TextBox 91","text":"structured intent","textPreview":"structured intent","textChars":17,"textLines":1,"bbox":[96,175.68,163.2,22.08]}
+{"kind":"shape","id":"sh/zupwb2hw","slide":7,"name":"Rounded Rectangle 92","bbox":[76.8,412.8,196.8,84.48]}
+{"kind":"shape","id":"sh/orytsvu9","slide":7,"name":"Rectangle 93","bbox":[76.8,412.8,7.68,84.48]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":7,"name":"TextBox 94","text":"Geometric solver","textPreview":"Geometric solver","textChars":16,"textLines":1,"bbox":[96,430.08,163.2,28.8]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":7,"name":"TextBox 95","text":"valid candidates","textPreview":"valid candidates","textChars":16,"textLines":1,"bbox":[96,468.48,163.2,22.08]}
+{"kind":"shape","id":"sh/z61032ls","slide":7,"name":"Rounded Rectangle 96","bbox":[667.2,120,196.8,84.48]}
+{"kind":"shape","id":"sh/oza1gvy9","slide":7,"name":"Rectangle 97","bbox":[667.2,120,7.68,84.48]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":7,"name":"TextBox 98","text":"3D preview","textPreview":"3D preview","textChars":10,"textLines":1,"bbox":[686.4,137.28,163.2,28.8]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":7,"name":"TextBox 99","text":"inspect and adjust","textPreview":"inspect and adjust","textChars":18,"textLines":1,"bbox":[686.4,175.68,163.2,22.08]}
+{"kind":"shape","id":"sh/byhgn29g","slide":7,"name":"Rounded Rectangle 100","bbox":[667.2,412.8,196.8,84.48]}
+{"kind":"shape","id":"sh/0je9cvix","slide":7,"name":"Rectangle 101","bbox":[667.2,412.8,7.68,84.48]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":7,"name":"TextBox 102","text":"Rendering & editing","textPreview":"Rendering & editing","textChars":19,"textLines":1,"bbox":[686.4,430.08,163.2,28.8]}
+{"kind":"textbox","id":"sh/il0rqd4v","slide":7,"name":"TextBox 103","text":"visual layer","textPreview":"visual layer","textChars":12,"textLines":1,"bbox":[686.4,468.48,163.2,22.08]}
+{"kind":"shape","id":"sh/b6xkf6dc","slide":7,"name":"Connector 104","bbox":[283.2,163.2,38.4,72]}
+{"kind":"shape","id":"sh/0rqd4vmt","slide":7,"name":"Connector 105","bbox":[283.2,326.4,38.4,129.6]}
+{"kind":"shape","id":"sh/tcj6tova","slide":7,"name":"Connector 106","bbox":[643.2,163.2,24,72]}
+{"kind":"shape","id":"sh/ixczed8v","slide":7,"name":"Connector 107","bbox":[643.2,326.4,24,129.6]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":7,"name":"Rounded Rectangle 108","text":"Image generation becomes a visual layer over the editable design state.","textPreview":"Image generation becomes a visual layer over the editable design state.","textChars":71,"textLines":1,"bbox":[91.2,560.64,777.6,48]}
+{"kind":"image","id":"im/0z61032l","slide":7,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/0z61032l","slide":7,"text":""}
+{"kind":"slide","id":"sl/fu18jqh0","slide":8,"title":"Iterative Room Design Workflow","textShapes":14}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":8,"name":"TextBox 67","text":"Iterative Room Design Workflow","textPreview":"Iterative Room Design Workflow","textChars":30,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":8,"name":"TextBox 68","text":"8","textPreview":"8","textChars":1,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"textbox","id":"sh/v6psfil0","slide":8,"name":"Oval 69","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[74.88,110.4,34.56,34.56]}
+{"kind":"textbox","id":"sh/2lszqtcj","slide":8,"name":"TextBox 70","text":"Define room geometry","textPreview":"Define room geometry","textChars":20,"textLines":1,"bbox":[122.88,114.24,345.6,24.96]}
+{"kind":"shape","id":"sh/d8bat47y","slide":8,"name":"Connector 71","bbox":[92.16,146.88,0,34.56]}
+{"kind":"textbox","id":"sh/knih4byh","slide":8,"name":"Oval 72","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[74.88,182.4,34.56,34.56]}
+{"kind":"textbox","id":"sh/vu9knih4","slide":8,"name":"TextBox 73","text":"Write design brief","textPreview":"Write design brief","textChars":18,"textLines":1,"bbox":[122.88,186.24,345.6,24.96]}
+{"kind":"shape","id":"sh/29gr2p8n","slide":8,"name":"Connector 74","bbox":[92.16,218.88,0,34.56]}
+{"kind":"textbox","id":"sh/d0z61032","slide":8,"name":"Oval 75","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[74.88,254.4,34.56,34.56]}
+{"kind":"textbox","id":"sh/kf6dcbul","slide":8,"name":"TextBox 76","text":"Generate layout variants","textPreview":"Generate layout variants","textChars":24,"textLines":1,"bbox":[122.88,258.24,345.6,24.96]}
+{"kind":"shape","id":"sh/vixczed8","slide":8,"name":"Connector 77","bbox":[92.16,290.88,0,34.56]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":8,"name":"Oval 78","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[74.88,326.4,34.56,34.56]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":8,"name":"TextBox 79","text":"Preview and compare","textPreview":"Preview and compare","textChars":19,"textLines":1,"bbox":[122.88,330.24,345.6,24.96]}
+{"kind":"shape","id":"sh/rqd4vmtw","slide":8,"name":"Connector 80","bbox":[92.16,362.88,0,34.56]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":8,"name":"Oval 81","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[74.88,398.4,34.56,34.56]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":8,"name":"TextBox 82","text":"Render or edit selected layout","textPreview":"Render or edit selected layout","textChars":30,"textLines":1,"bbox":[122.88,402.24,345.6,24.96]}
+{"kind":"shape","id":"sh/2t83itgf","slide":8,"name":"Rounded Rectangle 83","bbox":[523.2,100.8,350.4,427.2]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":8,"name":"TextBox 85","text":"Design process view","textPreview":"Design process view","textChars":19,"textLines":1,"bbox":[571.2,513.6,254.4,23.04]}
+{"kind":"textbox","id":"sh/9knih4by","slide":8,"name":"Rounded Rectangle 86","text":"The user always returns to the editable layout.","textPreview":"The user always returns to the editable layout.","textChars":47,"textLines":1,"bbox":[91.2,566.4,777.6,44.16]}
+{"kind":"image","id":"im/1gvy90je","slide":8,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/8z25kb6x","slide":8,"name":"Picture 84","bbox":[547.2,115.2,302.4,398.4]}
+{"kind":"notes","id":"nt/fu18jqh0","slide":8,"text":""}
+{"kind":"slide","id":"sl/qh0fepkz","slide":9,"title":"SECTION","textShapes":4}
+{"kind":"textbox","id":"sh/ovahoza1","slide":9,"name":"rf4-section-kicker-9","text":"SECTION","textPreview":"SECTION","textChars":7,"textLines":1,"bbox":[370,232,190,20]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":9,"name":"rf4-section-title-9","text":"Automatic Interior\nLayout Design","textPreview":"Automatic Interior | Layout Design","textChars":32,"textLines":2,"bbox":[365,258,520,112]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":9,"name":"rf4-section-subtitle-9","text":"Generate valid, editable furniture layouts from a room brief.","textPreview":"Generate valid, editable furniture layouts from a room brief.","textChars":61,"textLines":1,"bbox":[380,382,490,62]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":9,"name":"pro-auto-slide-number-9","text":"9","textPreview":"9","textChars":1,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/36hcrmhk","slide":9,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/qh0fepkz","slide":9,"text":""}
+{"kind":"slide","id":"sl/29gr2p8n","slide":10,"title":"Layout Generation Pipeline","textShapes":14}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":10,"name":"rf4-title-10","text":"Layout Generation Pipeline","textPreview":"Layout Generation Pipeline","textChars":26,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/3m94fu18","slide":10,"name":"pro-auto-slide-number-10","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[895.2,684,43.2,19.2]}
+{"kind":"shape","id":"sh/lszqtcj6","slide":10,"name":"Rounded Rectangle 81","bbox":[36.48,88.32,458.88,587.52]}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":10,"name":"Rounded Rectangle 83","text":"Top-down flow used in Chapter 4","textPreview":"Top-down flow used in Chapter 4","textChars":31,"textLines":1,"bbox":[513.6,97.92,379.2,51.84]}
+{"kind":"textbox","id":"sh/adsji5sn","slide":10,"name":"Oval 84","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[516.48,172.8,32.64,32.64]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":10,"name":"TextBox 85","text":"Input package\nbrief + geometry + inventory","textPreview":"Input package | brief + geometry + inventory","textChars":42,"textLines":2,"bbox":[559.68,168.96,321.6,59.52]}
+{"kind":"textbox","id":"sh/sji5snel","slide":10,"name":"Oval 86","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[516.48,251.52,32.64,32.64]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":10,"name":"TextBox 87","text":"Interpret & plan\nroom model + object roles","textPreview":"Interpret & plan | room model + object roles","textChars":42,"textLines":2,"bbox":[559.68,247.68,321.6,59.52]}
+{"kind":"textbox","id":"sh/ap4r65wj","slide":10,"name":"Oval 88","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[516.48,330.24,32.64,32.64]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":10,"name":"TextBox 89","text":"Build layout program\nclusters, seeds, solver relations","textPreview":"Build layout program | clusters, seeds, solver relations","textChars":54,"textLines":2,"bbox":[559.68,326.4,321.6,59.52]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":10,"name":"Oval 90","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[516.48,408.96,32.64,32.64]}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":10,"name":"TextBox 91","text":"Solve and validate\nrepair, score, feasible candidates","textPreview":"Solve and validate | repair, score, feasible candidates","textChars":53,"textLines":2,"bbox":[559.68,405.12,321.6,59.52]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":10,"name":"Oval 92","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[516.48,487.68,32.64,32.64]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":10,"name":"TextBox 93","text":"Finalize gallery\nrefill, bind metadata, remove duplicates","textPreview":"Finalize gallery | refill, bind metadata, remove duplicates","textChars":57,"textLines":2,"bbox":[559.68,483.84,321.6,59.52]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":10,"name":"Rounded Rectangle 94","text":"Only feasible candidates enter the editable layout gallery.","textPreview":"Only feasible candidates enter the editable layout gallery.","textChars":59,"textLines":1,"bbox":[513.6,600,379.2,52.8]}
+{"kind":"image","id":"im/x0nuxc3y","slide":10,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/4fu18jqh","slide":10,"name":"Picture 82","bbox":[48,100.8,436.8,567.36]}
+{"kind":"notes","id":"nt/29gr2p8n","slide":10,"text":""}
+{"kind":"slide","id":"sl/re1w7mp0","slide":11,"title":"Room Geometry and Semantic Program","textShapes":8}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":11,"name":"TextBox 65","text":"Room Geometry and Semantic Program","textPreview":"Room Geometry and Semantic Program","textChars":34,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":11,"name":"TextBox 66","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":11,"name":"TextBox 67","text":"Two inputs become one solver contract.","textPreview":"Two inputs become one solver contract.","textChars":38,"textLines":1,"bbox":[69.12,82.56,816,26.88]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":11,"name":"TextBox 70","text":"Room geometry","textPreview":"Room geometry","textChars":13,"textLines":1,"bbox":[129.6,292.8,230.4,24.96]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":11,"name":"TextBox 71","text":"Semantic object program","textPreview":"Semantic object program","textChars":23,"textLines":1,"bbox":[571.2,292.8,278.4,24.96]}
+{"kind":"shape","id":"sh/4nap4r65","slide":11,"name":"Connector 72","bbox":[249.6,331.2,168,81.6]}
+{"kind":"shape","id":"sh/bq1oryts","slide":11,"name":"Connector 73","bbox":[552,331.2,139.2,81.6]}
+{"kind":"shape","id":"sh/m58z25kb","slide":11,"name":"Rounded Rectangle 74","bbox":[307.2,403.2,345.6,78.72]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":11,"name":"TextBox 75","text":"Geometry-aware solver contract","textPreview":"Geometry-aware solver contract","textChars":30,"textLines":1,"bbox":[331.2,422.4,297.6,24.96]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":11,"name":"TextBox 76","text":"Hard constraints + object roles + placement preferences","textPreview":"Hard constraints + object roles + placement preferences","textChars":55,"textLines":1,"bbox":[254.4,494.4,451.2,24]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":11,"name":"Rounded Rectangle 77","text":"The semantic plan becomes the contract for geometry.","textPreview":"The semantic plan becomes the contract for geometry.","textChars":52,"textLines":1,"bbox":[91.2,562.56,777.6,44.16]}
+{"kind":"image","id":"im/pg3ex0nu","slide":11,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/hcrmhk3q","slide":11,"name":"Picture 68","bbox":[62.4,148.8,374.4,137.28]}
+{"kind":"image","id":"im/orytsvu9","slide":11,"name":"Picture 69","bbox":[523.2,148.8,374.4,137.28]}
+{"kind":"notes","id":"nt/re1w7mp0","slide":11,"text":""}
+{"kind":"slide","id":"sl/4fu18jqh","slide":12,"title":"Constraint Solving and Editable Output","textShapes":10}
+{"kind":"textbox","id":"sh/58z25kb6","slide":12,"name":"TextBox 69","text":"Constraint Solving and Editable Output","textPreview":"Constraint Solving and Editable Output","textChars":38,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":12,"name":"TextBox 70","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":12,"name":"TextBox 73","text":"Candidate validation","textPreview":"Candidate validation","textChars":20,"textLines":1,"bbox":[76.8,316.8,316.8,26.88]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":12,"name":"TextBox 74","text":"Editable selected layout","textPreview":"Editable selected layout","textChars":24,"textLines":1,"bbox":[561.6,316.8,307.2,26.88]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":12,"name":"Rounded Rectangle 75","bbox":[427.2,177.6,76.8,59.52]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":12,"name":"TextBox 76","text":"checks","textPreview":"checks","textChars":6,"textLines":1,"bbox":[435.84,196.8,59.52,17.28]}
+{"kind":"shape","id":"sh/5sneloj2","slide":12,"name":"Connector 77","bbox":[417.6,208.32,115.2,0]}
+{"kind":"shape","id":"sh/cbulwval","slide":12,"name":"Rounded Rectangle 78","bbox":[78.72,398.4,331.2,86.4]}
+{"kind":"shape","id":"sh/kf6dcbul","slide":12,"name":"Rectangle 79","bbox":[78.72,398.4,7.68,86.4]}
+{"kind":"textbox","id":"sh/d0z61032","slide":12,"name":"TextBox 80","text":"Reject invalid candidates","textPreview":"Reject invalid candidates","textChars":25,"textLines":1,"bbox":[97.92,415.68,297.6,28.8]}
+{"kind":"textbox","id":"sh/29gr2p8n","slide":12,"name":"TextBox 81","text":"containment • collision • opening clearance • circulation","textPreview":"containment • collision • opening clearance • circulation","textChars":57,"textLines":1,"bbox":[97.92,454.08,297.6,24]}
+{"kind":"shape","id":"sh/vu9knih4","slide":12,"name":"Rounded Rectangle 82","bbox":[547.2,398.4,312,86.4]}
+{"kind":"shape","id":"sh/knih4byh","slide":12,"name":"Rectangle 83","bbox":[547.2,398.4,7.68,86.4]}
+{"kind":"textbox","id":"sh/d8bat47y","slide":12,"name":"TextBox 84","text":"Continue editing","textPreview":"Continue editing","textChars":16,"textLines":1,"bbox":[566.4,415.68,278.4,28.8]}
+{"kind":"textbox","id":"sh/2lszqtcj","slide":12,"name":"TextBox 85","text":"selected layout keeps identity, dimensions, pose, and metadata","textPreview":"selected layout keeps identity, dimensions, pose, and metadata","textChars":62,"textLines":1,"bbox":[566.4,454.08,278.4,24]}
+{"kind":"textbox","id":"sh/v6psfil0","slide":12,"name":"Rounded Rectangle 86","text":"AI proposes valid variants; the user controls the working layout.","textPreview":"AI proposes valid variants; the user controls the working layout.","textChars":65,"textLines":1,"bbox":[91.2,566.4,777.6,44.16]}
+{"kind":"image","id":"im/b6xkf6dc","slide":12,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/il0rqd4v","slide":12,"name":"Picture 71","bbox":[57.6,144,360,151.68]}
+{"kind":"image","id":"im/sneloj2t","slide":12,"name":"Picture 72","bbox":[542.4,151.68,355.2,123.84]}
+{"kind":"notes","id":"nt/4fu18jqh","slide":12,"text":""}
+{"kind":"slide","id":"sl/lwval87e","slide":13,"title":"SECTION","textShapes":4}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":13,"name":"rf4-section-kicker-15","text":"SECTION","textPreview":"SECTION","textChars":7,"textLines":1,"bbox":[370,232,190,20]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":13,"name":"rf4-section-title-15","text":"Layout-Guided\nPhotorealistic Rendering","textPreview":"Layout-Guided | Photorealistic Rendering","textChars":38,"textLines":2,"bbox":[365,258,520,112]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":13,"name":"rf4-section-subtitle-15","text":"Use the selected 3D layout and camera as evidence for realistic generation.","textPreview":"Use the selected 3D layout and camera as evidence for realistic generation.","textChars":75,"textLines":1,"bbox":[380,382,490,62]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":13,"name":"pro-auto-slide-number-13","text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/itgfmlkj","slide":13,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/lwval87e","slide":13,"text":""}
+{"kind":"slide","id":"sl/25kb6xkf","slide":14,"title":"Image Generation and Editing Flow","textShapes":2}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":14,"name":"rf4-title-16","text":"Image Generation and Editing Flow","textPreview":"Image Generation and Editing Flow","textChars":33,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":14,"name":"pro-auto-slide-number-14","text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/x0nuxc3y","slide":14,"name":"Image 2","bbox":[61.74,96,836.53,545]}
+{"kind":"image","id":"im/m94fu18j","slide":14,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/25kb6xkf","slide":14,"text":""}
+{"kind":"slide","id":"sl/7y1kre1w","slide":15,"title":"Image Generation Workflow","textShapes":2}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":15,"name":"rf4-title-16","text":"Image Generation Workflow","textPreview":"Image Generation Workflow","textChars":25,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":15,"name":"pro-auto-slide-number-14","text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/vahoza1g","slide":15,"name":"Image 3","bbox":[78.97,96,802.06,545]}
+{"kind":"image","id":"im/ovahoza1","slide":15,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/7y1kre1w","slide":15,"text":""}
+{"kind":"slide","id":"sl/8z25kb6x","slide":16,"title":"Localized Image Editing Workflow","textShapes":2}
+{"kind":"textbox","id":"sh/nqxs72x4","slide":16,"name":"TextBox 79","text":"Localized Image Editing Workflow","textPreview":"Localized Image Editing Workflow","textChars":32,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/u54zidon","slide":16,"name":"TextBox 80","text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"image","id":"im/u18jqh0f","slide":16,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/jm1cfa9w","slide":16,"name":"Picture 81","bbox":[77.1,96,805.8,545]}
+{"kind":"notes","id":"nt/8z25kb6x","slide":16,"text":""}
+{"kind":"slide","id":"sl/54zidony","slide":17,"title":"2D room editor","textShapes":8}
+{"kind":"shape","id":"sh/fepkzupw","slide":17,"name":"Shape 4","bbox":[50.4,134.4,442.8,436.8]}
+{"kind":"shape","id":"sh/oj2t83it","slide":17,"name":"Shape 5","bbox":[504,134.4,403.2,436.8]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":17,"name":"Shape 6","bbox":[68.4,585.6,144,36.48]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":17,"name":"Text 7","text":"2D room editor","textPreview":"2D room editor","textChars":14,"textLines":1,"bbox":[74.16,589.44,132.48,26.88]}
+{"kind":"shape","id":"sh/vy90je9c","slide":17,"name":"Shape 8","bbox":[230.4,585.6,144,36.48]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":17,"name":"Text 9","text":"Layout variants","textPreview":"Layout variants","textChars":15,"textLines":1,"bbox":[236.16,589.44,132.48,26.88]}
+{"kind":"shape","id":"sh/dsji5sne","slide":17,"name":"Shape 10","bbox":[392.4,585.6,144,36.48]}
+{"kind":"textbox","id":"sh/61032lsz","slide":17,"name":"Text 11","text":"3D preview","textPreview":"3D preview","textChars":10,"textLines":1,"bbox":[398.16,589.44,132.48,26.88]}
+{"kind":"shape","id":"sh/vmtwra5g","slide":17,"name":"Shape 12","bbox":[554.4,585.6,144,36.48]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":17,"name":"Text 13","text":"Render controls","textPreview":"Render controls","textChars":15,"textLines":1,"bbox":[560.16,589.44,132.48,26.88]}
+{"kind":"shape","id":"sh/dg7adsji","slide":17,"name":"Shape 14","bbox":[716.4,585.6,144,36.48]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":17,"name":"Text 15","text":"Localized editing","textPreview":"Localized editing","textChars":17,"textLines":1,"bbox":[722.16,589.44,132.48,26.88]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":17,"name":"Text 16","text":"One prototype links layout generation, 3D preview, rendering, and localized editing.","textPreview":"One prototype links layout generation, 3D preview, rendering, and localized editing.","textChars":84,"textLines":1,"bbox":[72,548,820.8,32]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":17,"name":"rf4-title-18","text":"End-to-End RoomFlow Prototype","textPreview":"End-to-End RoomFlow Prototype","textChars":29,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":17,"name":"pro-auto-slide-number-16","text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/a5gbq1or","slide":17,"name":"Image 1","bbox":[50.4,174.56,442.8,308.48]}
+{"kind":"image","id":"im/3m94fu18","slide":17,"name":"Image 2","bbox":[504,173.69,403.2,286.22]}
+{"kind":"image","id":"im/s72x4nap","slide":17,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/54zidony","slide":17,"text":""}
+{"kind":"slide","id":"sl/m58z25kb","slide":18,"title":"SECTION","textShapes":4}
+{"kind":"textbox","id":"sh/t83itgfm","slide":18,"name":"rf4-section-kicker-19","text":"SECTION","textPreview":"SECTION","textChars":7,"textLines":1,"bbox":[370,232,190,20]}
+{"kind":"textbox","id":"sh/4nap4r65","slide":18,"name":"rf4-section-title-19","text":"Evaluation","textPreview":"Evaluation","textChars":10,"textLines":1,"bbox":[365,258,520,112]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":18,"name":"rf4-section-subtitle-19","text":"Validity for layouts; fidelity and control for renders and edits.","textPreview":"Validity for layouts; fidelity and control for renders and edits.","textChars":65,"textLines":1,"bbox":[380,382,490,62]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":18,"name":"pro-auto-slide-number-17","text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/itgfmlkj","slide":18,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/m58z25kb","slide":18,"text":""}
+{"kind":"slide","id":"sl/bat47y1k","slide":19,"title":"Evaluation Protocol","textShapes":15}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":19,"name":"TextBox 116","text":"Evaluation Protocol","textPreview":"Evaluation Protocol","textChars":19,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":19,"name":"TextBox 117","text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"shape","id":"sh/r2p8nqxs","slide":19,"name":"Rounded Rectangle 118","bbox":[81.6,134.4,355.2,201.6]}
+{"kind":"shape","id":"sh/j2t83itg","slide":19,"name":"Rectangle 119","bbox":[81.6,134.4,7.68,201.6]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":19,"name":"TextBox 120","text":"Layout benchmark","textPreview":"Layout benchmark","textChars":16,"textLines":1,"bbox":[100.8,151.68,321.6,28.8]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":19,"name":"TextBox 121","text":"3 scenario groups\nRoomFlow vs I-Design vs FlairGPT","textPreview":"3 scenario groups | RoomFlow vs I-Design vs FlairGPT","textChars":50,"textLines":2,"bbox":[100.8,190.08,321.6,139.2]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":19,"name":"TextBox 122","text":"50","textPreview":"50","textChars":2,"textLines":1,"bbox":[129.6,176.64,115.2,62.4]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":19,"name":"TextBox 123","text":"benchmark\ncases","textPreview":"benchmark | cases","textChars":15,"textLines":2,"bbox":[237.12,184.32,134.4,53.76]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":19,"name":"Rounded Rectangle 124","bbox":[489.6,134.4,355.2,201.6]}
+{"kind":"shape","id":"sh/1w7mp0bi","slide":19,"name":"Rectangle 125","bbox":[489.6,134.4,7.68,201.6]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":19,"name":"TextBox 126","text":"Rendering & editing","textPreview":"Rendering & editing","textChars":19,"textLines":1,"bbox":[508.8,151.68,321.6,28.8]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":19,"name":"TextBox 127","text":"layout preservation\npreset fidelity\nedit success and scope","textPreview":"layout preservation | preset fidelity | edit success and scope","textChars":58,"textLines":3,"bbox":[508.8,190.08,321.6,139.2]}
+{"kind":"shape","id":"sh/uxc3ylc7","slide":19,"name":"Rounded Rectangle 128","bbox":[100.8,395.52,235.2,86.4]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":19,"name":"TextBox 129","text":"Validity","textPreview":"Validity","textChars":8,"textLines":1,"bbox":[112.32,410.88,211.2,23.04]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":19,"name":"TextBox 130","text":"layout feasibility","textPreview":"layout feasibility","textChars":18,"textLines":1,"bbox":[112.32,439.68,211.2,17.28]}
+{"kind":"shape","id":"sh/mp0bi9s3","slide":19,"name":"Rounded Rectangle 131","bbox":[374.4,395.52,235.2,86.4]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":19,"name":"TextBox 132","text":"Fidelity","textPreview":"Fidelity","textChars":8,"textLines":1,"bbox":[385.92,410.88,211.2,23.04]}
+{"kind":"textbox","id":"sh/47y1kre1","slide":19,"name":"TextBox 133","text":"render follows layout","textPreview":"render follows layout","textChars":21,"textLines":1,"bbox":[385.92,439.68,211.2,17.28]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":19,"name":"Rounded Rectangle 134","bbox":[648,395.52,235.2,86.4]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":19,"name":"TextBox 135","text":"Control","textPreview":"Control","textChars":7,"textLines":1,"bbox":[659.52,410.88,211.2,23.04]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":19,"name":"TextBox 136","text":"localized edits","textPreview":"localized edits","textChars":15,"textLines":1,"bbox":[659.52,439.68,211.2,17.28]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":19,"name":"Rounded Rectangle 137","text":"Metrics evaluate validity, fidelity, and control rather than exact match to one reference.","textPreview":"Metrics evaluate validity, fidelity, and control rather than exact match to one reference.","textChars":90,"textLines":1,"bbox":[91.2,566.4,777.6,44.16]}
+{"kind":"image","id":"im/0je9cvix","slide":19,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/bat47y1k","slide":19,"text":""}
+{"kind":"slide","id":"sl/j2t83itg","slide":20,"title":"Performance on Complex Room Geometry","textShapes":12}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":20,"name":"clean-title","text":"Performance on Complex Room Geometry","textPreview":"Performance on Complex Room Geometry","textChars":36,"textLines":1,"bbox":[25,8,888,34]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":20,"name":"metric-subtitle","text":"With fixed openings, each primary metric is shown across all three benchmark scenarios.","textPreview":"With fixed openings, each primary metric is shown across all three benchmark scenarios.","textChars":87,"textLines":1,"bbox":[62,120,730,30]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":20,"name":"higher-better-label","text":"Higher is better","textPreview":"Higher is better","textChars":16,"textLines":1,"bbox":[738,121,162,24]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":20,"name":"mini-chart-title","text":"Spatial feasibility","textPreview":"Spatial feasibility","textChars":19,"textLines":1,"bbox":[70,156,360,20]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":20,"name":"mini-chart-title","text":"Brief compliance","textPreview":"Brief compliance","textChars":16,"textLines":1,"bbox":[505,156,360,20]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":20,"name":"mini-chart-title","text":"Functional quality","textPreview":"Functional quality","textChars":18,"textLines":1,"bbox":[70,360,360,20]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":20,"name":"mini-chart-title","text":"Usable objects","textPreview":"Usable objects","textChars":14,"textLines":1,"bbox":[505,360,360,20]}
+{"kind":"shape","id":"sh/g7adsji5","slide":20,"name":"legend-swatch","bbox":[324,555,10,10]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":20,"name":"legend-label","text":"RoomFlow","textPreview":"RoomFlow","textChars":8,"textLines":1,"bbox":[338,552,86,16]}
+{"kind":"shape","id":"sh/y1kre1w7","slide":20,"name":"legend-swatch","bbox":[428,555,10,10]}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":20,"name":"legend-label","text":"I-Design","textPreview":"I-Design","textChars":8,"textLines":1,"bbox":[442,552,86,16]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":20,"name":"legend-swatch","bbox":[532,555,10,10]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":20,"name":"legend-label","text":"FlairGPT","textPreview":"FlairGPT","textChars":8,"textLines":1,"bbox":[546,552,86,16]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":20,"name":"metric-takeaway","text":"Across all three scenario groups with openings, RoomFlow keeps the strongest spatial and functional scores.","textPreview":"Across all three scenario groups with openings, RoomFlow keeps the strongest spatial and functional scores.","textChars":107,"textLines":1,"bbox":[68,610,824,48]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":20,"name":"clean-footer-number","text":"20","textPreview":"20","textChars":2,"textLines":1,"bbox":[894,679,36,20]}
+{"kind":"chart","id":"ch/gfmlkjm1","slide":20,"name":"","chartType":"bar","bbox":[70,178,385,155]}
+{"kind":"chart","id":"ch/y1kre1w7","slide":20,"name":"","chartType":"bar","bbox":[505,178,385,155]}
+{"kind":"chart","id":"ch/g7adsji5","slide":20,"name":"","chartType":"bar","bbox":[70,382,385,155]}
+{"kind":"chart","id":"ch/yxobm58z","slide":20,"name":"","chartType":"bar","bbox":[505,382,385,155]}
+{"kind":"image","id":"im/5o7qpg3e","slide":20,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/g3ex0nux","slide":20,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/rmhk3q5o","slide":20,"name":"","alt":"Clean HUST slide background","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/j2t83itg","slide":20,"text":""}
+{"kind":"slide","id":"sl/mhk3q5o7","slide":21,"title":"L-shaped living room with circulation constraints","textShapes":3}
+{"kind":"textbox","id":"sh/bq1oryts","slide":21,"name":"Text 8","text":"L-shaped living room with circulation constraints","textPreview":"L-shaped living room with circulation constraints","textChars":49,"textLines":1,"bbox":[157.5,590,645,32]}
+{"kind":"textbox","id":"sh/4r65wjud","slide":21,"name":"rf4-title-22","text":"Representative L-Shaped Layout Case","textPreview":"Representative L-Shaped Layout Case","textChars":35,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":21,"name":"pro-auto-slide-number-20","text":"21","textPreview":"21","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/2hwfyxob","slide":21,"name":"","bbox":[69,136,822,430]}
+{"kind":"image","id":"im/8nqxs72x","slide":21,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/mhk3q5o7","slide":21,"text":""}
+{"kind":"slide","id":"sl/5wjudg7a","slide":22,"title":"Ablation Findings","textShapes":9}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":22,"name":"clean-title","text":"Ablation Findings","textPreview":"Ablation Findings","textChars":17,"textLines":1,"bbox":[25,8,888,34]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":22,"name":"metric-subtitle","text":"Supplementary robustness metrics for post-processing ablations such as gallery, style, and material.","textPreview":"Supplementary robustness metrics for post-processing ablations such as gallery, style, and material.","textChars":100,"textLines":1,"bbox":[62,120,730,30]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":22,"name":"higher-better-label","text":"Higher is better","textPreview":"Higher is better","textChars":16,"textLines":1,"bbox":[738,121,162,24]}
+{"kind":"textbox","id":"sh/ytsvu9kn","slide":22,"name":"mini-chart-title","text":"Robustness summary","textPreview":"Robustness summary","textChars":18,"textLines":1,"bbox":[70,156,360,20]}
+{"kind":"textbox","id":"sh/cbulwval","slide":22,"name":"mini-chart-title","text":"Worst-case robustness","textPreview":"Worst-case robustness","textChars":21,"textLines":1,"bbox":[505,156,360,20]}
+{"kind":"textbox","id":"sh/u54zidon","slide":22,"name":"mini-chart-title","text":"Style-material","textPreview":"Style-material","textChars":14,"textLines":1,"bbox":[70,360,360,20]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":22,"name":"mini-chart-title","text":"Gallery diversity","textPreview":"Gallery diversity","textChars":17,"textLines":1,"bbox":[505,360,360,20]}
+{"kind":"textbox","id":"sh/54zidony","slide":22,"name":"metric-takeaway","text":"Gallery, style, and material ablations look acceptable on primary scores, but lose diversity and lower-tail robustness.","textPreview":"Gallery, style, and material ablations look acceptable on primary scores, but lose diversity and lower-tail robustness.","textChars":119,"textLines":1,"bbox":[68,610,824,48]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":22,"name":"clean-footer-number","text":"22","textPreview":"22","textChars":2,"textLines":1,"bbox":[894,679,36,20]}
+{"kind":"chart","id":"ch/lkjm1cfa","slide":22,"name":"","chartType":"bar","bbox":[70,178,385,155]}
+{"kind":"chart","id":"ch/3ex0nuxc","slide":22,"name":"","chartType":"bar","bbox":[505,178,385,155]}
+{"kind":"chart","id":"ch/loj2t83i","slide":22,"name":"","chartType":"bar","bbox":[70,382,385,155]}
+{"kind":"chart","id":"ch/s72x4nap","slide":22,"name":"","chartType":"bar","bbox":[505,382,385,155]}
+{"kind":"image","id":"im/s36hcrmh","slide":22,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/3m94fu18","slide":22,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/a5gbq1or","slide":22,"name":"","alt":"Clean HUST slide background","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/5wjudg7a","slide":22,"text":""}
+{"kind":"slide","id":"sl/crmhk3q5","slide":23,"title":"Rendering Metric Breakdown","textShapes":5}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":23,"name":"clean-title","text":"Rendering Metric Breakdown","textPreview":"Rendering Metric Breakdown","textChars":26,"textLines":1,"bbox":[25,8,888,34]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":23,"name":"metric-subtitle","text":"Create-flow preservation metrics across all rendering variants.","textPreview":"Create-flow preservation metrics across all rendering variants.","textChars":63,"textLines":1,"bbox":[62,120,730,30]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":23,"name":"higher-better-label","text":"Higher is better","textPreview":"Higher is better","textChars":16,"textLines":1,"bbox":[738,121,162,24]}
+{"kind":"textbox","id":"sh/0z61032l","slide":23,"name":"metric-takeaway","text":"SE-ESG gives the best overall preservation trade-off; SP remains slightly stronger on depth and object similarity.","textPreview":"SE-ESG gives the best overall preservation trade-off; SP remains slightly stronger on depth and object similarity.","textChars":114,"textLines":1,"bbox":[68,610,824,48]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":23,"name":"clean-footer-number","text":"23","textPreview":"23","textChars":2,"textLines":1,"bbox":[894,679,36,20]}
+{"kind":"chart","id":"ch/wfyxobm5","slide":23,"name":"Chart","chartType":"bar","bbox":[56,166,848,372]}
+{"kind":"image","id":"im/val87ed8","slide":23,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/6psfil0r","slide":23,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/crmhk3q5","slide":23,"text":""}
+{"kind":"slide","id":"sl/bq1oryts","slide":24,"title":"Localized Editing Metric Breakdown","textShapes":5}
+{"kind":"textbox","id":"sh/32lszqtc","slide":24,"name":"clean-title","text":"Localized Editing Metric Breakdown","textPreview":"Localized Editing Metric Breakdown","textChars":34,"textLines":1,"bbox":[25,8,888,34]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":24,"name":"metric-subtitle","text":"Manual edit scores by operation for object-scope validation versus prompt-only editing.","textPreview":"Manual edit scores by operation for object-scope validation versus prompt-only editing.","textChars":87,"textLines":1,"bbox":[62,120,730,30]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":24,"name":"higher-better-label","text":"Higher is better","textPreview":"Higher is better","textChars":16,"textLines":1,"bbox":[738,121,162,24]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":24,"name":"metric-takeaway","text":"Object-scope validation improves targeted edit success most clearly on recolor, while add/remove stay close.","textPreview":"Object-scope validation improves targeted edit success most clearly on recolor, while add/remove stay close.","textChars":108,"textLines":1,"bbox":[68,610,824,48]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":24,"name":"clean-footer-number","text":"24","textPreview":"24","textChars":2,"textLines":1,"bbox":[894,679,36,20]}
+{"kind":"chart","id":"ch/j6tovaho","slide":24,"name":"Chart","chartType":"bar","bbox":[56,164,848,364]}
+{"kind":"image","id":"im/ovahoza1","slide":24,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/dg7adsji","slide":24,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/bq1oryts","slide":24,"text":""}
+{"kind":"slide","id":"sl/61032lsz","slide":25,"title":"Layout-Guided Rendering Workflow","textShapes":9}
+{"kind":"textbox","id":"sh/xobm58z2","slide":25,"name":"rf4-title-16","text":"Layout-Guided Rendering Workflow","textPreview":"Layout-Guided Rendering Workflow","textChars":32,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":25,"name":"rfp-render-label-0","text":"3D snapshot","textPreview":"3D snapshot","textChars":11,"textLines":1,"bbox":[54,145,255,28]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":25,"name":"rfp-render-label-1","text":"Structural guide","textPreview":"Structural guide","textChars":16,"textLines":1,"bbox":[352,145,255,28]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":25,"name":"rfp-render-label-2","text":"Generated render","textPreview":"Generated render","textChars":16,"textLines":1,"bbox":[650,145,255,28]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":25,"name":"rfp-render-arrow-1","text":">","textPreview":">","textChars":1,"textLines":1,"bbox":[315,286,32,34]}
+{"kind":"textbox","id":"sh/1032lszq","slide":25,"name":"rfp-render-arrow-2","text":">","textPreview":">","textChars":1,"textLines":1,"bbox":[612,286,32,34]}
+{"kind":"shape","id":"sh/u9knih4b","slide":25,"name":"rfp-render-package","bbox":[142,478,676,48]}
+{"kind":"textbox","id":"sh/judg7ads","slide":25,"name":"rfp-render-package-text","text":"Conditioning package: 3D snapshot + structural guide + visual preset","textPreview":"Conditioning package: 3D snapshot + structural guide + visual preset","textChars":68,"textLines":1,"bbox":[170,491,620,22]}
+{"kind":"shape","id":"sh/cj6tovah","slide":25,"name":"rfp-takeaway-box","bbox":[86,590,788,42]}
+{"kind":"textbox","id":"sh/54zidony","slide":25,"name":"rfp-takeaway-text","text":"A valid render improves appearance without drifting from the layout.","textPreview":"A valid render improves appearance without drifting from the layout.","textChars":68,"textLines":1,"bbox":[108,600,744,22]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":25,"name":"pro-auto-slide-number-14","text":"24","textPreview":"24","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/1kre1w7m","slide":25,"name":"Image 2","bbox":[54,185,255,245]}
+{"kind":"image","id":"im/uxc3ylc7","slide":25,"name":"Image 3","bbox":[352,185,255,245]}
+{"kind":"image","id":"im/ji5snelo","slide":25,"name":"Image 4","bbox":[650,185,255,245]}
+{"kind":"image","id":"im/8bat47y1","slide":25,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/61032lsz","slide":25,"text":""}
+{"kind":"slide","id":"sl/psfil0rq","slide":26,"title":"Localized Image Editing with Context Preservation","textShapes":8}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":26,"name":"TextBox 79","text":"Localized Image Editing with Context Preservation","textPreview":"Localized Image Editing with Context Preservation","textChars":49,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/zupwb2hw","slide":26,"name":"TextBox 80","text":"25","textPreview":"25","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":26,"name":"Rounded Rectangle 82","text":"ADD","textPreview":"ADD","textChars":3,"textLines":1,"bbox":[110.4,481.92,139.2,34.56]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":26,"name":"Rounded Rectangle 83","text":"REMOVE","textPreview":"REMOVE","textChars":6,"textLines":1,"bbox":[307.2,481.92,139.2,34.56]}
+{"kind":"textbox","id":"sh/z61032ls","slide":26,"name":"Rounded Rectangle 84","text":"REPLACE","textPreview":"REPLACE","textChars":7,"textLines":1,"bbox":[504,481.92,139.2,34.56]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":26,"name":"Rounded Rectangle 85","text":"RECOLOR","textPreview":"RECOLOR","textChars":7,"textLines":1,"bbox":[700.8,481.92,139.2,34.56]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":26,"name":"TextBox 86","text":"Source render → target scope → edited result","textPreview":"Source render → target scope → edited result","textChars":44,"textLines":1,"bbox":[216,524.16,528,24.96]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":26,"name":"Rounded Rectangle 87","text":"The image model edits the visual layer; the editable layout remains authoritative.","textPreview":"The image model edits the visual layer; the editable layout remains authoritative.","textChars":82,"textLines":1,"bbox":[91.2,566.4,777.6,44.16]}
+{"kind":"image","id":"im/8bat47y1","slide":26,"name":"","bbox":[0,0,960,720]}
+{"kind":"image","id":"im/m58z25kb","slide":26,"name":"Picture 81","bbox":[55.68,120,849.6,351.36]}
+{"kind":"notes","id":"nt/psfil0rq","slide":26,"text":""}
+{"kind":"slide","id":"sl/gfmlkjm1","slide":27,"title":"Contributions and Limitations","textShapes":13}
+{"kind":"textbox","id":"sh/ulwval87","slide":27,"name":"TextBox 58","text":"Contributions and Limitations","textPreview":"Contributions and Limitations","textChars":29,"textLines":1,"bbox":[24.96,7.68,888,30.72]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":27,"name":"TextBox 59","text":"26","textPreview":"26","textChars":2,"textLines":1,"bbox":[895.68,679.68,33.6,19.2]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":27,"name":"Rounded Rectangle 60","bbox":[62.4,115.2,259.2,110.4]}
+{"kind":"shape","id":"sh/wjudg7ad","slide":27,"name":"Rectangle 61","bbox":[62.4,115.2,7.68,110.4]}
+{"kind":"textbox","id":"sh/p4r65wju","slide":27,"name":"TextBox 62","text":"Constraint-aware layouts","textPreview":"Constraint-aware layouts","textChars":24,"textLines":1,"bbox":[81.6,132.48,225.6,28.8]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":27,"name":"TextBox 63","text":"Generate valid, editable room arrangements.","textPreview":"Generate valid, editable room arrangements.","textChars":43,"textLines":1,"bbox":[81.6,170.88,225.6,48]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":27,"name":"Rounded Rectangle 64","bbox":[355.2,115.2,259.2,110.4]}
+{"kind":"shape","id":"sh/0bi9s36h","slide":27,"name":"Rectangle 65","bbox":[355.2,115.2,7.68,110.4]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":27,"name":"TextBox 66","text":"Layout-guided rendering","textPreview":"Layout-guided rendering","textChars":23,"textLines":1,"bbox":[374.4,132.48,225.6,28.8]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":27,"name":"TextBox 67","text":"Use structural evidence for realistic output.","textPreview":"Use structural evidence for realistic output.","textChars":45,"textLines":1,"bbox":[374.4,170.88,225.6,48]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":27,"name":"Rounded Rectangle 68","bbox":[648,115.2,259.2,110.4]}
+{"kind":"shape","id":"sh/xkf6dcbu","slide":27,"name":"Rectangle 69","bbox":[648,115.2,7.68,110.4]}
+{"kind":"textbox","id":"sh/4zidonyd","slide":27,"name":"TextBox 70","text":"End-to-end prototype","textPreview":"End-to-end prototype","textChars":20,"textLines":1,"bbox":[667.2,132.48,225.6,28.8]}
+{"kind":"textbox","id":"sh/fepkzupw","slide":27,"name":"TextBox 71","text":"Connect layout, preview, rendering, and editing.","textPreview":"Connect layout, preview, rendering, and editing.","textChars":48,"textLines":1,"bbox":[667.2,170.88,225.6,48]}
+{"kind":"shape","id":"sh/mtwra5gb","slide":27,"name":"Rounded Rectangle 72","bbox":[91.2,292.8,369.6,148.8]}
+{"kind":"shape","id":"sh/xc3ylc7u","slide":27,"name":"Rectangle 73","bbox":[91.2,292.8,7.68,148.8]}
+{"kind":"textbox","id":"sh/4r65wjud","slide":27,"name":"TextBox 74","text":"Key findings","textPreview":"Key findings","textChars":12,"textLines":1,"bbox":[110.4,310.08,336,28.8]}
+{"kind":"textbox","id":"sh/f6dcbulw","slide":27,"name":"TextBox 75","text":"• Layout scores improve on irregular rooms\n• Object-scope edits preserve context","textPreview":"• Layout scores improve on irregular rooms | • Object-scope edits preserve context","textChars":80,"textLines":2,"bbox":[110.4,348.48,336,86.4]}
+{"kind":"shape","id":"sh/mlkjm1cf","slide":27,"name":"Rounded Rectangle 76","bbox":[499.2,292.8,369.6,148.8]}
+{"kind":"shape","id":"sh/x0nuxc3y","slide":27,"name":"Rectangle 77","bbox":[499.2,292.8,7.68,148.8]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":27,"name":"TextBox 78","text":"Limitations and Future Work","textPreview":"Limitations and Future Work","textChars":27,"textLines":1,"bbox":[518.4,310.08,336,28.8]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":27,"name":"TextBox 79","text":"• Broader room types and interventions\n• Stronger multi-view consistency","textPreview":"• Broader room types and interventions | • Stronger multi-view consistency","textChars":72,"textLines":2,"bbox":[518.4,348.48,336,86.4]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":27,"name":"Rounded Rectangle 80","text":"RoomFlow supports early-stage interior exploration with editable and traceable design artifacts.","textPreview":"RoomFlow supports early-stage interior exploration with editable and traceable design artifacts.","textChars":96,"textLines":1,"bbox":[91.2,566.4,777.6,44.16]}
+{"kind":"image","id":"im/lc7u54zi","slide":27,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/gfmlkjm1","slide":27,"text":""}
+{"kind":"slide","id":"sl/vahoza1g","slide":28,"title":"THANK YOU!","textShapes":4}
+{"kind":"shape","id":"sh/2hwfyxob","slide":28,"name":"rf4-section-kicker-29","bbox":[370,232,190,20]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":28,"name":"rf4-section-title-29","text":"THANK YOU!","textPreview":"THANK YOU!","textChars":10,"textLines":1,"bbox":[370,258,510,68]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":28,"name":"rf4-section-subtitle-29","text":"Questions & Discussion","textPreview":"Questions & Discussion","textChars":22,"textLines":1,"bbox":[373,350,500,80]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":28,"name":"rfp-thanks-name","text":"Nguyen Thanh Minh | 20225450","textPreview":"Nguyen Thanh Minh | 20225450","textChars":28,"textLines":1,"bbox":[373,420,390,24]}
+{"kind":"textbox","id":"sh/9knih4by","slide":28,"name":"pro-auto-slide-number-25","text":"27","textPreview":"27","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/uxc3ylc7","slide":28,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/vahoza1g","slide":28,"text":""}
+{"kind":"slide","id":"sl/a1gvy90j","slide":29,"title":"Usability","textShapes":20}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":29,"name":"Shape 4","bbox":[50.4,139.2,154.8,120]}
+{"kind":"shape","id":"sh/qh0fepkz","slide":29,"name":"Shape 5","bbox":[50.4,139.2,5.76,120]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":29,"name":"Text 6","text":"Usability","textPreview":"Usability","textChars":9,"textLines":1,"bbox":[64.8,154.56,126,32.64]}
+{"kind":"textbox","id":"sh/byhgn29g","slide":29,"name":"Text 7","text":"No drafting expertise required","textPreview":"No drafting expertise required","textChars":30,"textLines":1,"bbox":[64.8,194.88,126,52.8]}
+{"kind":"shape","id":"sh/idonyd0z","slide":29,"name":"Shape 8","bbox":[230.4,139.2,154.8,120]}
+{"kind":"shape","id":"sh/t47y1kre","slide":29,"name":"Shape 9","bbox":[230.4,139.2,5.76,120]}
+{"kind":"textbox","id":"sh/0je9cvix","slide":29,"name":"Text 10","text":"Editability","textPreview":"Editability","textChars":11,"textLines":1,"bbox":[244.8,154.56,126,32.64]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":29,"name":"Text 11","text":"AI output remains directly editable","textPreview":"AI output remains directly editable","textChars":35,"textLines":1,"bbox":[244.8,194.88,126,52.8]}
+{"kind":"shape","id":"sh/il0rqd4v","slide":29,"name":"Shape 12","bbox":[410.4,139.2,154.8,120]}
+{"kind":"shape","id":"sh/tcj6tova","slide":29,"name":"Shape 13","bbox":[410.4,139.2,5.76,120]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":29,"name":"Text 14","text":"Spatial consistency","textPreview":"Spatial consistency","textChars":19,"textLines":1,"bbox":[424.8,154.56,126,32.64]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":29,"name":"Text 15","text":"Room geometry and openings are preserved","textPreview":"Room geometry and openings are preserved","textChars":40,"textLines":1,"bbox":[424.8,194.88,126,52.8]}
+{"kind":"shape","id":"sh/ixczed8v","slide":29,"name":"Shape 16","bbox":[590.4,139.2,154.8,120]}
+{"kind":"shape","id":"sh/al87ed8b","slide":29,"name":"Shape 17","bbox":[590.4,139.2,5.76,120]}
+{"kind":"textbox","id":"sh/z61032ls","slide":29,"name":"Text 18","text":"Visualization consistency","textPreview":"Visualization consistency","textChars":25,"textLines":1,"bbox":[604.8,154.56,126,32.64]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":29,"name":"Text 19","text":"Render follows layout and camera","textPreview":"Render follows layout and camera","textChars":32,"textLines":1,"bbox":[604.8,194.88,126,52.8]}
+{"kind":"shape","id":"sh/hcrmhk3q","slide":29,"name":"Shape 20","bbox":[770.4,139.2,154.8,120]}
+{"kind":"shape","id":"sh/a9w3m94f","slide":29,"name":"Shape 21","bbox":[770.4,139.2,5.76,120]}
+{"kind":"textbox","id":"sh/zupwb2hw","slide":29,"name":"Text 22","text":"Traceability","textPreview":"Traceability","textChars":12,"textLines":1,"bbox":[784.8,154.56,126,32.64]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":29,"name":"Text 23","text":"Artifacts remain linked to their sources","textPreview":"Artifacts remain linked to their sources","textChars":40,"textLines":1,"bbox":[784.8,194.88,126,52.8]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":29,"name":"Text 24","text":"Three thesis-critical use cases","textPreview":"Three thesis-critical use cases","textChars":31,"textLines":1,"bbox":[54,307.2,331.2,40.32]}
+{"kind":"shape","id":"sh/65wjudg7","slide":29,"name":"Shape 25","bbox":[54,364.8,262.8,158.4]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":29,"name":"Shape 26","bbox":[54,364.8,5.76,158.4]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":29,"name":"Text 28","text":"UC01 — Auto Design Room Layout","textPreview":"UC01 — Auto Design Room Layout","textChars":30,"textLines":1,"bbox":[110.16,380.16,192.24,32.64]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":29,"name":"Text 29","text":"Generate editable variants from the brief, room geometry, openings, and inventory.","textPreview":"Generate editable variants from the brief, room geometry, openings, and inventory.","textChars":82,"textLines":1,"bbox":[68.4,420.48,234,91.2]}
+{"kind":"shape","id":"sh/e1w7mp0b","slide":29,"name":"Shape 30","bbox":[347.76,364.8,262.8,158.4]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":29,"name":"Shape 31","bbox":[347.76,364.8,5.76,158.4]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":29,"name":"Text 33","text":"UC02 — Generate Perspective Image","textPreview":"UC02 — Generate Perspective Image","textChars":33,"textLines":1,"bbox":[403.92,380.16,192.24,32.64]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":29,"name":"Text 34","text":"Capture the selected 3D view and generate a layout-linked realistic render.","textPreview":"Capture the selected 3D view and generate a layout-linked realistic render.","textChars":75,"textLines":1,"bbox":[362.16,420.48,234,91.2]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":29,"name":"Shape 35","bbox":[641.52,364.8,262.8,158.4]}
+{"kind":"shape","id":"sh/wra5gbq1","slide":29,"name":"Shape 36","bbox":[641.52,364.8,5.76,158.4]}
+{"kind":"textbox","id":"sh/9knih4by","slide":29,"name":"Text 38","text":"UC03 — Edit Perspective Image","textPreview":"UC03 — Edit Perspective Image","textChars":29,"textLines":1,"bbox":[697.68,380.16,192.24,32.64]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":29,"name":"Text 39","text":"Apply add, remove, replace, or recolor operations to a selected target.","textPreview":"Apply add, remove, replace, or recolor operations to a selected target.","textChars":71,"textLines":1,"bbox":[655.92,420.48,234,91.2]}
+{"kind":"shape","id":"sh/re1w7mp0","slide":29,"name":"Shape 40","bbox":[72,580.8,820.8,52.8]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":29,"name":"Text 41","text":"Supporting functions enable the workflow, but the defense focuses on layout generation and layout-guided rendering/editing.","textPreview":"Supporting functions enable the workflow, but the defense focuses on layout generation and layout-guided rendering/editing.","textChars":123,"textLines":1,"bbox":[84.96,588.48,794.88,37.44]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":29,"name":"rf4-title-30","text":"Backup: Requirements and Use Cases","textPreview":"Backup: Requirements and Use Cases","textChars":34,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":29,"name":"pro-auto-slide-number-26","text":"28","textPreview":"28","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/8bat47y1","slide":29,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/a1gvy90j","slide":29,"text":""}
+{"kind":"slide","id":"sl/kre1w7mp","slide":30,"title":"Backup: System Architecture","textShapes":2}
+{"kind":"shape","id":"sh/3m94fu18","slide":30,"name":"Shape 4","bbox":[61.2,129.6,838.8,542.4]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":30,"name":"rf4-title-31","text":"Backup: System Architecture","textPreview":"Backup: System Architecture","textChars":27,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":30,"name":"pro-auto-slide-number-27","text":"29","textPreview":"29","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/n29gr2p8","slide":30,"name":"Image 1","bbox":[119.72,132,720.56,522]}
+{"kind":"image","id":"im/gbq1oryt","slide":30,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/kre1w7mp","slide":30,"text":""}
+{"kind":"slide","id":"sl/h0fepkzu","slide":31,"title":"Spatial feasibility","textShapes":19}
+{"kind":"shape","id":"sh/rytsvu9k","slide":31,"name":"Shape 4","bbox":[54,129.6,208.8,120]}
+{"kind":"shape","id":"sh/gr2p8nqx","slide":31,"name":"Shape 5","bbox":[54,129.6,5.76,120]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":31,"name":"Text 6","text":"Spatial feasibility","textPreview":"Spatial feasibility","textChars":19,"textLines":1,"bbox":[68.4,144.96,180,32.64]}
+{"kind":"textbox","id":"sh/tovahoza","slide":31,"name":"Text 7","text":"Inside room • no overlap • opening clearance • circulation","textPreview":"Inside room • no overlap • opening clearance • circulation","textChars":58,"textLines":1,"bbox":[68.4,185.28,180,52.8]}
+{"kind":"shape","id":"sh/032lszqt","slide":31,"name":"Shape 8","bbox":[277.2,129.6,208.8,120]}
+{"kind":"shape","id":"sh/bi9s36hc","slide":31,"name":"Shape 9","bbox":[277.2,129.6,5.76,120]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":31,"name":"Text 10","text":"Brief compliance","textPreview":"Brief compliance","textChars":16,"textLines":1,"bbox":[291.6,144.96,180,32.64]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":31,"name":"Text 11","text":"Required objects • user relations • intent alignment","textPreview":"Required objects • user relations • intent alignment","textChars":52,"textLines":1,"bbox":[291.6,185.28,180,52.8]}
+{"kind":"shape","id":"sh/0fepkzup","slide":31,"name":"Shape 12","bbox":[500.4,129.6,208.8,120]}
+{"kind":"shape","id":"sh/bulwval8","slide":31,"name":"Shape 13","bbox":[500.4,129.6,5.76,120]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":31,"name":"Text 14","text":"Functional quality","textPreview":"Functional quality","textChars":18,"textLines":1,"bbox":[514.8,144.96,180,32.64]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":31,"name":"Text 15","text":"Access • orientation • focal relationships • room flow","textPreview":"Access • orientation • focal relationships • room flow","textChars":54,"textLines":1,"bbox":[514.8,185.28,180,52.8]}
+{"kind":"shape","id":"sh/0je9cvix","slide":31,"name":"Shape 16","bbox":[723.6,129.6,180,120]}
+{"kind":"shape","id":"sh/g7adsji5","slide":31,"name":"Shape 17","bbox":[723.6,129.6,5.76,120]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":31,"name":"Text 18","text":"Usable completeness","textPreview":"Usable completeness","textChars":19,"textLines":1,"bbox":[738,144.96,151.2,32.64]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":31,"name":"Text 19","text":"Present objects that are also geometrically usable","textPreview":"Present objects that are also geometrically usable","textChars":50,"textLines":1,"bbox":[738,185.28,151.2,52.8]}
+{"kind":"shape","id":"sh/rmhk3q5o","slide":31,"name":"Shape 20","bbox":[54,292.8,208.8,120]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":31,"name":"Shape 21","bbox":[54,292.8,5.76,120]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":31,"name":"Text 22","text":"Edge similarity","textPreview":"Edge similarity","textChars":15,"textLines":1,"bbox":[68.4,308.16,180,32.64]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":31,"name":"Text 23","text":"Preservation of visible boundaries and room structure","textPreview":"Preservation of visible boundaries and room structure","textChars":53,"textLines":1,"bbox":[68.4,348.48,180,52.8]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":31,"name":"Shape 24","bbox":[277.2,292.8,208.8,120]}
+{"kind":"shape","id":"sh/gr2p8nqx","slide":31,"name":"Shape 25","bbox":[277.2,292.8,5.76,120]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":31,"name":"Text 26","text":"Depth similarity","textPreview":"Depth similarity","textChars":16,"textLines":1,"bbox":[291.6,308.16,180,32.64]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":31,"name":"Text 27","text":"Preservation of large-scale spatial ordering","textPreview":"Preservation of large-scale spatial ordering","textChars":44,"textLines":1,"bbox":[291.6,348.48,180,52.8]}
+{"kind":"shape","id":"sh/6tovahoz","slide":31,"name":"Shape 28","bbox":[500.4,292.8,208.8,120]}
+{"kind":"shape","id":"sh/dg7adsji","slide":31,"name":"Shape 29","bbox":[500.4,292.8,5.76,120]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":31,"name":"Text 30","text":"DINO patch/object","textPreview":"DINO patch/object","textChars":17,"textLines":1,"bbox":[514.8,308.16,180,32.64]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":31,"name":"Text 31","text":"Semantic and local appearance consistency","textPreview":"Semantic and local appearance consistency","textChars":41,"textLines":1,"bbox":[514.8,348.48,180,52.8]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":31,"name":"Shape 32","bbox":[723.6,292.8,180,120]}
+{"kind":"shape","id":"sh/d8v6psfi","slide":31,"name":"Shape 33","bbox":[723.6,292.8,5.76,120]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":31,"name":"Text 34","text":"Preset & edit fidelity","textPreview":"Preset & edit fidelity","textChars":22,"textLines":1,"bbox":[738,308.16,151.2,32.64]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":31,"name":"Text 35","text":"Visual preset following and requested edit success","textPreview":"Visual preset following and requested edit success","textChars":50,"textLines":1,"bbox":[738,348.48,151.2,52.8]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":31,"name":"Shape 36","bbox":[72,513.6,813.6,65.28]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":31,"name":"Text 37","text":"Use metrics as evidence bundles; human inspection remains required for image edits.","textPreview":"Use metrics as evidence bundles; human inspection remains required for image edits.","textChars":83,"textLines":1,"bbox":[84.96,521.28,787.68,49.92]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":31,"name":"rf4-title-32","text":"Backup: Evaluation Metrics","textPreview":"Backup: Evaluation Metrics","textChars":26,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/fil0rqd4","slide":31,"name":"pro-auto-slide-number-28","text":"30","textPreview":"30","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/byhgn29g","slide":31,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/h0fepkzu","slide":31,"text":""}
+{"kind":"slide","id":"sl/yhgn29gr","slide":32,"title":"Overall score","textShapes":19}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":32,"name":"Text 4","text":"Overall score","textPreview":"Overall score","textChars":13,"textLines":1,"bbox":[57.6,129.6,439.2,34.56]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":32,"name":"Text 5","text":"Full","textPreview":"Full","textChars":4,"textLines":1,"bbox":[64.8,189.12,111.6,24]}
+{"kind":"shape","id":"sh/epkzupwb","slide":32,"name":"Shape 6","bbox":[187.2,192,308.77,26.88]}
+{"kind":"textbox","id":"sh/8jqh0fep","slide":32,"name":"Text 7","text":"95.3","textPreview":"95.3","textChars":4,"textLines":1,"bbox":[516.96,190.08,43.2,24]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":32,"name":"Text 8","text":"No request","textPreview":"No request","textChars":10,"textLines":1,"bbox":[64.8,263.04,111.6,24]}
+{"kind":"shape","id":"sh/qd4vmtwr","slide":32,"name":"Shape 9","bbox":[187.2,265.92,310.07,26.88]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":32,"name":"Text 10","text":"95.7","textPreview":"95.7","textChars":4,"textLines":1,"bbox":[516.96,264,43.2,24]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":32,"name":"Text 11","text":"No tier","textPreview":"No tier","textChars":7,"textLines":1,"bbox":[64.8,336.96,111.6,24]}
+{"kind":"shape","id":"sh/xczed8v6","slide":32,"name":"Shape 12","bbox":[187.2,339.84,309.1,26.88]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":32,"name":"Text 13","text":"95.4","textPreview":"95.4","textChars":4,"textLines":1,"bbox":[516.96,337.92,43.2,24]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":32,"name":"Text 14","text":"No semantic","textPreview":"No semantic","textChars":11,"textLines":1,"bbox":[64.8,410.88,111.6,24]}
+{"kind":"shape","id":"sh/8z25kb6x","slide":32,"name":"Shape 15","bbox":[187.2,413.76,275.4,26.88]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":32,"name":"Text 16","text":"85.0","textPreview":"85.0","textChars":4,"textLines":1,"bbox":[516.96,411.84,43.2,24]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":32,"name":"Text 17","text":"Minimal context","textPreview":"Minimal context","textChars":15,"textLines":1,"bbox":[64.8,484.8,111.6,24]}
+{"kind":"shape","id":"sh/w3m94fu1","slide":32,"name":"Shape 18","bbox":[187.2,487.68,249.8,26.88]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":32,"name":"Text 19","text":"77.1","textPreview":"77.1","textChars":4,"textLines":1,"bbox":[516.96,485.76,43.2,24]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":32,"name":"Shape 20","bbox":[583.2,148.8,302.4,120]}
+{"kind":"shape","id":"sh/lwval87e","slide":32,"name":"Shape 21","bbox":[583.2,148.8,5.76,120]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":32,"name":"Text 22","text":"Strongest degradation","textPreview":"Strongest degradation","textChars":21,"textLines":1,"bbox":[597.6,164.16,273.6,32.64]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":32,"name":"Text 23","text":"Removing structured semantic context weakens object roles and relations.","textPreview":"Removing structured semantic context weakens object roles and relations.","textChars":72,"textLines":1,"bbox":[597.6,204.48,273.6,52.8]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":32,"name":"Shape 24","bbox":[583.2,302.4,302.4,120]}
+{"kind":"shape","id":"sh/l87ed8ba","slide":32,"name":"Shape 25","bbox":[583.2,302.4,5.76,120]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":32,"name":"Text 26","text":"Primary metrics are incomplete","textPreview":"Primary metrics are incomplete","textChars":30,"textLines":1,"bbox":[597.6,317.76,273.6,32.64]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":32,"name":"Text 27","text":"Some ablations score similarly because diversity and style are measured separately.","textPreview":"Some ablations score similarly because diversity and style are measured separately.","textChars":83,"textLines":1,"bbox":[597.6,358.08,273.6,52.8]}
+{"kind":"shape","id":"sh/z25kb6xk","slide":32,"name":"Shape 28","bbox":[583.2,456,302.4,120]}
+{"kind":"shape","id":"sh/onyd0z61","slide":32,"name":"Shape 29","bbox":[583.2,456,5.76,120]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":32,"name":"Text 30","text":"Interpretation","textPreview":"Interpretation","textChars":14,"textLines":1,"bbox":[597.6,471.36,273.6,32.64]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":32,"name":"Text 31","text":"Weak context still places objects, but alignment with the intent degrades.","textPreview":"Weak context still places objects, but alignment with the intent degrades.","textChars":74,"textLines":1,"bbox":[597.6,511.68,273.6,52.8]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":32,"name":"rf4-title-33","text":"Backup: Ablation Study","textPreview":"Backup: Ablation Study","textChars":22,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":32,"name":"pro-auto-slide-number-29","text":"31","textPreview":"31","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/8nqxs72x","slide":32,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/yhgn29gr","slide":32,"text":""}
+{"kind":"slide","id":"sl/3ex0nuxc","slide":33,"title":"Frontend","textShapes":13}
+{"kind":"shape","id":"sh/32lszqtc","slide":33,"name":"Shape 4","bbox":[50.4,129.6,460.8,456]}
+{"kind":"shape","id":"sh/ahoza1gv","slide":33,"name":"Shape 5","bbox":[536.4,139.2,169.2,100.8]}
+{"kind":"shape","id":"sh/cj6tovah","slide":33,"name":"Shape 6","bbox":[536.4,139.2,5.76,100.8]}
+{"kind":"textbox","id":"sh/54zidony","slide":33,"name":"Text 7","text":"Frontend","textPreview":"Frontend","textChars":8,"textLines":1,"bbox":[550.8,154.56,140.4,32.64]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":33,"name":"Text 8","text":"React • Canvas • Three.js","textPreview":"React • Canvas • Three.js","textChars":25,"textLines":1,"bbox":[550.8,194.88,140.4,33.6]}
+{"kind":"shape","id":"sh/nyd0z610","slide":33,"name":"Shape 9","bbox":[723.6,139.2,169.2,100.8]}
+{"kind":"shape","id":"sh/cvixczed","slide":33,"name":"Shape 10","bbox":[723.6,139.2,5.76,100.8]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":33,"name":"Text 11","text":"Backend","textPreview":"Backend","textChars":7,"textLines":1,"bbox":[738,154.56,140.4,32.64]}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":33,"name":"Text 12","text":"FastAPI • SSE • provider clients","textPreview":"FastAPI • SSE • provider clients","textChars":32,"textLines":1,"bbox":[738,194.88,140.4,33.6]}
+{"kind":"shape","id":"sh/nap4r65w","slide":33,"name":"Shape 13","bbox":[536.4,273.6,169.2,100.8]}
+{"kind":"shape","id":"sh/c7u54zid","slide":33,"name":"Shape 14","bbox":[536.4,273.6,5.76,100.8]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":33,"name":"Text 15","text":"Data","textPreview":"Data","textChars":4,"textLines":1,"bbox":[550.8,288.96,140.4,32.64]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":33,"name":"Text 16","text":"PostgreSQL • JSON artifacts • saved renders","textPreview":"PostgreSQL • JSON artifacts • saved renders","textChars":43,"textLines":1,"bbox":[550.8,329.28,140.4,33.6]}
+{"kind":"shape","id":"sh/czed8v6p","slide":33,"name":"Shape 17","bbox":[723.6,273.6,169.2,100.8]}
+{"kind":"shape","id":"sh/neloj2t8","slide":33,"name":"Shape 18","bbox":[723.6,273.6,5.76,100.8]}
+{"kind":"textbox","id":"sh/ytsvu9kn","slide":33,"name":"Text 19","text":"AI services","textPreview":"AI services","textChars":11,"textLines":1,"bbox":[738,288.96,140.4,32.64]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":33,"name":"Text 20","text":"LLM planning • image generation/editing","textPreview":"LLM planning • image generation/editing","textChars":39,"textLines":1,"bbox":[738,329.28,140.4,33.6]}
+{"kind":"shape","id":"sh/cbulwval","slide":33,"name":"Shape 21","bbox":[536.4,408,356.4,110.4]}
+{"kind":"shape","id":"sh/nqxs72x4","slide":33,"name":"Shape 22","bbox":[536.4,408,5.76,110.4]}
+{"kind":"textbox","id":"sh/u54zidon","slide":33,"name":"Text 23","text":"Deployment principle","textPreview":"Deployment principle","textChars":20,"textLines":1,"bbox":[550.8,423.36,327.6,32.64]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":33,"name":"Text 24","text":"Client handles direct manipulation; server handles AI workflows and persistence.","textPreview":"Client handles direct manipulation; server handles AI workflows and persistence.","textChars":80,"textLines":1,"bbox":[550.8,463.68,327.6,43.2]}
+{"kind":"shape","id":"sh/gbq1oryt","slide":33,"name":"Shape 25","bbox":[536.4,552,356.4,69.12]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":33,"name":"Text 26","text":"Runs store inputs, stages, outputs, and evaluation artifacts for traceability.","textPreview":"Runs store inputs, stages, outputs, and evaluation artifacts for traceability.","textChars":78,"textLines":1,"bbox":[549.36,559.68,330.48,53.76]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":33,"name":"rf4-title-34","text":"Backup: Implementation and Deployment","textPreview":"Backup: Implementation and Deployment","textChars":37,"textLines":1,"bbox":[25,7,890,30]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":33,"name":"pro-auto-slide-number-30","text":"32","textPreview":"32","textChars":2,"textLines":1,"bbox":[895,684,45,18]}
+{"kind":"image","id":"im/ra5gbq1o","slide":33,"name":"Image 1","bbox":[50.48,165,460.64,327]}
+{"kind":"image","id":"im/gvy90je9","slide":33,"name":"","bbox":[0,0,960,720]}
+{"kind":"notes","id":"nt/3ex0nuxc","slide":33,"text":""}

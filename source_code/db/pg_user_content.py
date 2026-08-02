@@ -1,0 +1,703 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from psycopg.types.json import Jsonb
+
+from db.models import (
+    AuthSession,
+    GeneratedRender,
+    GeneratedRenderId,
+    SavedLayout,
+    SavedLayoutCase,
+    SavedLayoutCaseId,
+    SavedLayoutId,
+    SessionId,
+    TenantId,
+    UserAccount,
+    UserAuthRecord,
+    UserId,
+    UserRole,
+)
+from db.pg_utils import (
+    RowMapping,
+    to_bool,
+    to_json_dict,
+    to_optional_bytes,
+    to_optional_int,
+    to_optional_str,
+    to_str,
+)
+from db.postgres import create_connection
+
+
+_SUPPORTED_GENERATED_RENDER_SOURCE = "snapshot_render"
+
+
+class PostgresUserContentRepository:
+    def __init__(self, connection_factory=None) -> None:
+        self._connection_factory = connection_factory or create_connection
+
+    def create_user(self, record: UserAuthRecord) -> None:
+        query = """
+            INSERT INTO user_accounts (
+                id,
+                email,
+                display_name,
+                tenant_id,
+                password_salt,
+                password_hash,
+                role,
+                is_active
+            )
+            VALUES (
+                %(id)s,
+                %(email)s,
+                %(display_name)s,
+                %(tenant_id)s,
+                %(password_salt)s,
+                %(password_hash)s,
+                %(role)s,
+                %(is_active)s
+            )
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": record.user.id,
+                        "email": record.user.email,
+                        "display_name": record.user.display_name,
+                        "tenant_id": record.user.tenant_id,
+                        "password_salt": record.password_salt,
+                        "password_hash": record.password_hash,
+                        "role": record.user.role,
+                        "is_active": record.user.is_active,
+                    },
+                )
+
+    def get_user_auth_by_email(self, email: str) -> UserAuthRecord | None:
+        query = "SELECT * FROM user_accounts WHERE lower(email) = lower(%(email)s)"
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"email": email})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_user_auth(row)
+
+    def get_user_by_id(self, user_id: UserId) -> UserAccount | None:
+        query = "SELECT * FROM user_accounts WHERE id = %(user_id)s"
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_user(row)
+
+    def list_users(self) -> Sequence[UserAccount]:
+        query = """
+            SELECT *
+            FROM user_accounts
+            ORDER BY created_at DESC, email ASC
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {})
+                rows = cur.fetchall()
+        return [_row_to_user(row) for row in rows]
+
+    def update_user_account(
+        self,
+        *,
+        user_id: UserId,
+        display_name: str | None,
+        role: UserRole,
+        is_active: bool,
+    ) -> UserAccount | None:
+        query = """
+            UPDATE user_accounts
+            SET
+                display_name = %(display_name)s,
+                role = %(role)s,
+                is_active = %(is_active)s,
+                updated_at = NOW()
+            WHERE id = %(user_id)s
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "user_id": user_id,
+                        "display_name": display_name,
+                        "role": role,
+                        "is_active": is_active,
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_user(row)
+
+    def create_session(self, session: AuthSession) -> None:
+        query = """
+            INSERT INTO auth_sessions (
+                id,
+                user_id,
+                token_hash,
+                created_at,
+                expires_at,
+                last_seen_at,
+                revoked_at
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(token_hash)s,
+                %(created_at)s,
+                %(expires_at)s,
+                %(last_seen_at)s,
+                %(revoked_at)s
+            )
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": session.id,
+                        "user_id": session.user_id,
+                        "token_hash": session.token_hash,
+                        "created_at": session.created_at,
+                        "expires_at": session.expires_at,
+                        "last_seen_at": session.last_seen_at,
+                        "revoked_at": session.revoked_at,
+                    },
+                )
+
+    def get_session_by_token_hash(self, token_hash: str) -> AuthSession | None:
+        query = "SELECT * FROM auth_sessions WHERE token_hash = %(token_hash)s"
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"token_hash": token_hash})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_session(row)
+
+    def revoke_session(self, session_id: SessionId) -> None:
+        query = "UPDATE auth_sessions SET revoked_at = NOW() WHERE id = %(session_id)s"
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"session_id": session_id})
+
+    def revoke_user_sessions(self, user_id: UserId) -> None:
+        query = """
+            UPDATE auth_sessions
+            SET revoked_at = NOW()
+            WHERE user_id = %(user_id)s AND revoked_at IS NULL
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"user_id": user_id})
+
+    def touch_session(self, session_id: SessionId) -> None:
+        query = (
+            "UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = %(session_id)s"
+        )
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"session_id": session_id})
+
+    def upsert_saved_layout_case(self, layout_case: SavedLayoutCase) -> SavedLayoutCase:
+        query = """
+            INSERT INTO saved_layout_cases (
+                id,
+                user_id,
+                name,
+                source_pipeline_case_id,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(name)s,
+                %(source_pipeline_case_id)s,
+                %(meta)s
+            )
+            ON CONFLICT (id)
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                source_pipeline_case_id = EXCLUDED.source_pipeline_case_id,
+                meta = EXCLUDED.meta,
+                updated_at = NOW()
+            WHERE saved_layout_cases.user_id = EXCLUDED.user_id
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout_case.id,
+                        "user_id": layout_case.user_id,
+                        "name": layout_case.name,
+                        "source_pipeline_case_id": layout_case.source_pipeline_case_id,
+                        "meta": Jsonb(layout_case.meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            raise PermissionError("Saved layout case already belongs to another user.")
+        return _row_to_saved_layout_case(row)
+
+    def get_saved_layout_case(
+        self, case_id: SavedLayoutCaseId, user_id: UserId
+    ) -> SavedLayoutCase | None:
+        query = """
+            SELECT *
+            FROM saved_layout_cases
+            WHERE id = %(case_id)s AND user_id = %(user_id)s
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"case_id": case_id, "user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_saved_layout_case(row)
+
+    def create_saved_layout(self, layout: SavedLayout) -> None:
+        query = """
+            INSERT INTO saved_layouts (
+                id,
+                user_id,
+                name,
+                floorplan_json,
+                design_json,
+                styled_result_json,
+                case_id,
+                option_id,
+                option_index,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(name)s,
+                %(floorplan_json)s,
+                %(design_json)s,
+                %(styled_result_json)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
+                %(meta)s
+            )
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout.id,
+                        "user_id": layout.user_id,
+                        "name": layout.name,
+                        "floorplan_json": Jsonb(layout.floorplan_json),
+                        "design_json": Jsonb(layout.design_json)
+                        if layout.design_json is not None
+                        else None,
+                        "styled_result_json": Jsonb(layout.styled_result_json)
+                        if layout.styled_result_json is not None
+                        else None,
+                        "case_id": layout.case_id,
+                        "option_id": layout.option_id,
+                        "option_index": layout.option_index,
+                        "meta": Jsonb(layout.meta),
+                    },
+                )
+
+    def upsert_saved_layout_option(self, layout: SavedLayout) -> SavedLayout:
+        query = """
+            INSERT INTO saved_layouts (
+                id,
+                user_id,
+                name,
+                floorplan_json,
+                design_json,
+                styled_result_json,
+                case_id,
+                option_id,
+                option_index,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(name)s,
+                %(floorplan_json)s,
+                %(design_json)s,
+                %(styled_result_json)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
+                %(meta)s
+            )
+            ON CONFLICT (user_id, case_id, option_id)
+            WHERE case_id IS NOT NULL AND option_id IS NOT NULL
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                floorplan_json = EXCLUDED.floorplan_json,
+                design_json = EXCLUDED.design_json,
+                styled_result_json = EXCLUDED.styled_result_json,
+                option_index = EXCLUDED.option_index,
+                meta = EXCLUDED.meta,
+                updated_at = NOW()
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout.id,
+                        "user_id": layout.user_id,
+                        "name": layout.name,
+                        "floorplan_json": Jsonb(layout.floorplan_json),
+                        "design_json": Jsonb(layout.design_json)
+                        if layout.design_json is not None
+                        else None,
+                        "styled_result_json": Jsonb(layout.styled_result_json)
+                        if layout.styled_result_json is not None
+                        else None,
+                        "case_id": layout.case_id,
+                        "option_id": layout.option_id,
+                        "option_index": layout.option_index,
+                        "meta": Jsonb(layout.meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return layout
+        stored = self.get_saved_layout(
+            SavedLayoutId(to_str(row.get("id"))), layout.user_id
+        )
+        return stored or _row_to_saved_layout(row)
+
+    def update_saved_layout(self, layout: SavedLayout) -> SavedLayout | None:
+        query = """
+            UPDATE saved_layouts
+            SET
+                name = %(name)s,
+                floorplan_json = %(floorplan_json)s,
+                design_json = %(design_json)s,
+                styled_result_json = %(styled_result_json)s,
+                meta = %(meta)s,
+                updated_at = NOW()
+            WHERE id = %(id)s AND user_id = %(user_id)s
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": layout.id,
+                        "user_id": layout.user_id,
+                        "name": layout.name,
+                        "floorplan_json": Jsonb(layout.floorplan_json),
+                        "design_json": Jsonb(layout.design_json)
+                        if layout.design_json is not None
+                        else None,
+                        "styled_result_json": Jsonb(layout.styled_result_json)
+                        if layout.styled_result_json is not None
+                        else None,
+                        "meta": Jsonb(layout.meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        stored = self.get_saved_layout(layout.id, layout.user_id)
+        return stored or _row_to_saved_layout(row)
+
+    def list_saved_layouts(
+        self, user_id: UserId, case_id: SavedLayoutCaseId | None = None
+    ) -> Sequence[SavedLayout]:
+        case_filter = "AND l.case_id = %(case_id)s" if case_id is not None else ""
+        query = """
+            SELECT l.*, c.name AS case_name
+            FROM saved_layouts AS l
+            LEFT JOIN saved_layout_cases AS c
+              ON c.id = l.case_id AND c.user_id = l.user_id
+            WHERE l.user_id = %(user_id)s
+            {case_filter}
+            ORDER BY
+              COALESCE(c.updated_at, l.updated_at, l.created_at) DESC,
+              l.case_id NULLS FIRST,
+              l.option_index NULLS LAST,
+              l.updated_at DESC,
+              l.created_at DESC
+        """
+        query = query.format(case_filter=case_filter)
+        params: dict[str, object] = {"user_id": user_id}
+        if case_id is not None:
+            params["case_id"] = case_id
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
+        return [_row_to_saved_layout(row) for row in rows]
+
+    def get_saved_layout(
+        self, layout_id: SavedLayoutId, user_id: UserId
+    ) -> SavedLayout | None:
+        query = """
+            SELECT l.*, c.name AS case_name
+            FROM saved_layouts AS l
+            LEFT JOIN saved_layout_cases AS c
+              ON c.id = l.case_id AND c.user_id = l.user_id
+            WHERE l.id = %(layout_id)s AND l.user_id = %(user_id)s
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, {"layout_id": layout_id, "user_id": user_id})
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_saved_layout(row)
+
+    def create_generated_render(self, render: GeneratedRender) -> None:
+        query = """
+            INSERT INTO generated_renders (
+                id,
+                user_id,
+                source,
+                model_name,
+                prompt,
+                negative_prompt,
+                root_layout_id,
+                case_id,
+                option_id,
+                option_index,
+                image_bytes,
+                mime_type,
+                meta
+            )
+            VALUES (
+                %(id)s,
+                %(user_id)s,
+                %(source)s,
+                %(model_name)s,
+                %(prompt)s,
+                %(negative_prompt)s,
+                %(root_layout_id)s,
+                %(case_id)s,
+                %(option_id)s,
+                %(option_index)s,
+                %(image_bytes)s,
+                %(mime_type)s,
+                %(meta)s
+            )
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "id": render.id,
+                        "user_id": render.user_id,
+                        "source": render.source,
+                        "model_name": render.model_name,
+                        "prompt": render.prompt,
+                        "negative_prompt": render.negative_prompt,
+                        "root_layout_id": render.root_layout_id,
+                        "case_id": render.case_id,
+                        "option_id": render.option_id,
+                        "option_index": render.option_index,
+                        "image_bytes": render.image_bytes,
+                        "mime_type": render.mime_type,
+                        "meta": Jsonb(render.meta),
+                    },
+                )
+
+    def list_generated_renders(self, user_id: UserId) -> Sequence[GeneratedRender]:
+        query = """
+            SELECT *
+            FROM generated_renders
+            WHERE user_id = %(user_id)s
+              AND source = %(source)s
+            ORDER BY created_at DESC
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
+                    },
+                )
+                rows = cur.fetchall()
+        return [_row_to_generated_render(row) for row in rows]
+
+    def get_generated_render(
+        self, render_id: GeneratedRenderId, user_id: UserId
+    ) -> GeneratedRender | None:
+        query = """
+            SELECT *
+            FROM generated_renders
+            WHERE id = %(render_id)s
+              AND user_id = %(user_id)s
+              AND source = %(source)s
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "render_id": render_id,
+                        "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_generated_render(row)
+
+    def update_generated_render_meta(
+        self,
+        render_id: GeneratedRenderId,
+        user_id: UserId,
+        meta: dict[str, object],
+    ) -> GeneratedRender | None:
+        query = """
+            UPDATE generated_renders
+            SET meta = %(meta)s
+            WHERE id = %(render_id)s
+              AND user_id = %(user_id)s
+              AND source = %(source)s
+            RETURNING *
+        """
+        with self._connection_factory() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    {
+                        "render_id": render_id,
+                        "user_id": user_id,
+                        "source": _SUPPORTED_GENERATED_RENDER_SOURCE,
+                        "meta": Jsonb(meta),
+                    },
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return _row_to_generated_render(row)
+
+
+def _row_to_user(row: RowMapping) -> UserAccount:
+    return UserAccount(
+        id=UserId(to_str(row.get("id"))),
+        email=to_str(row.get("email")),
+        display_name=to_optional_str(row.get("display_name")),
+        tenant_id=TenantId(to_str(row.get("tenant_id"))),
+        role=_row_to_user_role(row),
+        is_active=to_bool(row.get("is_active"), default=True),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+
+
+def _row_to_user_role(row: RowMapping) -> UserRole:
+    role = to_optional_str(row.get("role")) or "user"
+    if role == "admin":
+        return "admin"
+    return "user"
+
+
+def _row_to_user_auth(row: RowMapping) -> UserAuthRecord:
+    user = _row_to_user(row)
+    return UserAuthRecord(
+        user=user,
+        password_salt=to_str(row.get("password_salt")),
+        password_hash=to_str(row.get("password_hash")),
+    )
+
+
+def _row_to_session(row: RowMapping) -> AuthSession:
+    return AuthSession(
+        id=SessionId(to_str(row.get("id"))),
+        user_id=UserId(to_str(row.get("user_id"))),
+        token_hash=to_str(row.get("token_hash")),
+        created_at=row.get("created_at"),
+        expires_at=row.get("expires_at"),
+        last_seen_at=row.get("last_seen_at"),
+        revoked_at=row.get("revoked_at"),
+    )
+
+
+def _row_to_saved_layout_case(row: RowMapping) -> SavedLayoutCase:
+    return SavedLayoutCase(
+        id=SavedLayoutCaseId(to_str(row.get("id"))),
+        user_id=UserId(to_str(row.get("user_id"))),
+        name=to_str(row.get("name")),
+        source_pipeline_case_id=to_optional_str(row.get("source_pipeline_case_id")),
+        meta=to_json_dict(row.get("meta")),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+
+
+def _row_to_saved_layout(row: RowMapping) -> SavedLayout:
+    raw_case_id = to_optional_str(row.get("case_id"))
+    raw_option_index = row.get("option_index")
+    return SavedLayout(
+        id=SavedLayoutId(to_str(row.get("id"))),
+        user_id=UserId(to_str(row.get("user_id"))),
+        name=to_str(row.get("name")),
+        floorplan_json=to_json_dict(row.get("floorplan_json")),
+        design_json=to_json_dict(row.get("design_json"))
+        if row.get("design_json") is not None
+        else None,
+        styled_result_json=to_json_dict(row.get("styled_result_json"))
+        if row.get("styled_result_json") is not None
+        else None,
+        case_id=SavedLayoutCaseId(raw_case_id) if raw_case_id is not None else None,
+        option_id=to_optional_str(row.get("option_id")),
+        option_index=int(raw_option_index) if raw_option_index is not None else None,
+        case_name=to_optional_str(row.get("case_name")),
+        meta=to_json_dict(row.get("meta")),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+
+
+def _row_to_generated_render(row: RowMapping) -> GeneratedRender:
+    source = to_str(row.get("source"))
+    if source != _SUPPORTED_GENERATED_RENDER_SOURCE:
+        raise ValueError(f"Unsupported render source: {source}")
+    raw_root_layout_id = to_optional_str(row.get("root_layout_id"))
+    raw_case_id = to_optional_str(row.get("case_id"))
+    return GeneratedRender(
+        id=GeneratedRenderId(to_str(row.get("id"))),
+        user_id=UserId(to_str(row.get("user_id"))),
+        source=source,
+        model_name=to_str(row.get("model_name")),
+        prompt=to_str(row.get("prompt")),
+        negative_prompt=to_optional_str(row.get("negative_prompt")),
+        root_layout_id=SavedLayoutId(raw_root_layout_id)
+        if raw_root_layout_id is not None
+        else None,
+        case_id=SavedLayoutCaseId(raw_case_id) if raw_case_id is not None else None,
+        option_id=to_optional_str(row.get("option_id")),
+        option_index=to_optional_int(row.get("option_index")),
+        image_bytes=to_optional_bytes(row.get("image_bytes")),
+        mime_type=to_str(row.get("mime_type")),
+        meta=to_json_dict(row.get("meta")),
+        created_at=row.get("created_at"),
+    )

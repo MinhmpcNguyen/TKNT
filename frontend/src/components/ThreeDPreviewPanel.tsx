@@ -224,6 +224,7 @@ const SNAPSHOT_WALL_OCCLUSION_OPACITY_THRESHOLD = 0.5;
 const MAX_RENDERER_PIXEL_RATIO = 2;
 const STRUCTURAL_EDGE_COLOR_HEX = '#111827';
 const STRUCTURAL_EDGE_OPACITY = 0.72;
+const DEFAULT_DOOR_ASSET_ID = 'door_002';
 const EDIT_BOX_COLORS = [
   '#f97316',
   '#2563eb',
@@ -1569,6 +1570,46 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => {
     window.URL.revokeObjectURL(url);
   }, 0);
+}
+
+function downloadDataUrl(dataUrl: string, filename: string): void {
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    downloadBlob(blob, filename);
+    return;
+  } catch {
+    const anchor = document.createElement('a');
+    anchor.href = dataUrl;
+    anchor.download = filename;
+    anchor.click();
+  }
+}
+
+function imageExtensionFromMimeType(mimeType: string): string {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes('jpeg') || normalized.includes('jpg')) {
+    return 'jpg';
+  }
+  if (normalized.includes('webp')) {
+    return 'webp';
+  }
+  if (normalized.includes('png')) {
+    return 'png';
+  }
+  return 'png';
+}
+
+function buildRenderedImageFileName(params: {
+  render: SnapshotImageRenderResult;
+  savedRenderId: string | null;
+  selectedVariantId: string | null;
+}): string {
+  const { render, savedRenderId, selectedVariantId } = params;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const mode = sanitizeSnapshotFileSegment(render.request.render_mode);
+  const identity = sanitizeSnapshotFileSegment(savedRenderId ?? selectedVariantId);
+  const extension = imageExtensionFromMimeType(render.image.mime_type);
+  return `tknt-render-${mode}-${identity}-${timestamp}.${extension}`;
 }
 
 function canvasToDataUrl(canvas: HTMLCanvasElement): string {
@@ -3590,6 +3631,31 @@ export const ThreeDPreviewPanel: React.FC = () => {
   const activeRenderIsFinal = renderedSnapshotImage !== null && !isStreamPreviewVisible;
   const streamPreviewChipLabel =
     streamPreviewPhase === 'source' ? 'Source preview' : 'Rendering';
+
+  const handleDownloadRenderedSnapshotImage = useCallback((): void => {
+    if (!renderedSnapshotImage) {
+      return;
+    }
+    const imageDataUrl = renderedSnapshotImage.image.data_url;
+    if (!imageDataUrl) {
+      setRenderStatus({
+        tone: 'error',
+        text: 'No rendered image is available to download.',
+      });
+      return;
+    }
+    const fileName = buildRenderedImageFileName({
+      render: renderedSnapshotImage,
+      savedRenderId,
+      selectedVariantId,
+    });
+    downloadDataUrl(imageDataUrl, fileName);
+    appendRunLog(`Downloaded rendered image: ${fileName}`);
+    setRenderStatus({
+      tone: 'success',
+      text: 'Rendered image download started.',
+    });
+  }, [appendRunLog, renderedSnapshotImage, savedRenderId, selectedVariantId]);
 
   useEffect(() => {
     cameraPresetsRef.current = cameraPresets;
@@ -6022,7 +6088,7 @@ export const ThreeDPreviewPanel: React.FC = () => {
 
           const resolution = resolveInventoryItemForPreview({
             inventory,
-            assetId: readOpeningAssetId(door, 'door') ?? doorId,
+            assetId: readOpeningAssetId(door, 'door') ?? DEFAULT_DOOR_ASSET_ID,
             objectType: 'door',
             material: typeof door?.material === 'string' ? door.material : null,
             preferredStyle: userInput.style,
@@ -7662,6 +7728,14 @@ export const ThreeDPreviewPanel: React.FC = () => {
                       Saved to account: {savedRenderId}
                     </span>
                   ) : null}
+                  <button
+                    className="ghost three-render-download-button"
+                    disabled={isRenderingImage}
+                    onClick={handleDownloadRenderedSnapshotImage}
+                    type="button"
+                  >
+                    Download image
+                  </button>
                 </>
               ) : (
                 <>

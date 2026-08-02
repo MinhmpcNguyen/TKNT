@@ -32,6 +32,7 @@ type PreviewScene = {
   polygon: Point[];
   shapes: Array<PreviewRect | PreviewLine>;
   viewBox: string;
+  floorColor: string;
 };
 
 type LayoutDiagnosticSummary = {
@@ -39,8 +40,60 @@ type LayoutDiagnosticSummary = {
   items: string[];
 };
 
+const LAYOUT_CONCEPT_FAMILIES = [
+  'focal_axis',
+  'edge_weighted',
+  'daylight_oriented',
+  'open_center',
+  'zoned',
+] as const;
+
+type LayoutConceptFamily = (typeof LAYOUT_CONCEPT_FAMILIES)[number];
+
+type LayoutVariantPresentation = {
+  name: string;
+  description: string;
+  highlights: readonly string[];
+};
+
 const LAYOUT_DIAGNOSTIC_EXPLANATION =
   'Typical diagnostics include furniture that is too large for the room, blocked door or window clearance, insufficient circulation, or unsupported relations between requested objects. These diagnostics help the user understand why automatic layout generation failed and decide whether to relax optional requirements, change the room input, or continue with manual editing.';
+const DEFAULT_PREVIEW_FLOOR_COLOR = '#faf7f1';
+const LAYOUT_VARIANT_PRESENTATIONS: Record<
+  LayoutConceptFamily,
+  LayoutVariantPresentation
+> = {
+  focal_axis: {
+    name: 'Focal-point layout',
+    description: 'Furniture faces a clear focal point, keeping the main view easy to enjoy.',
+    highlights: ['Clear focal direction', 'Balanced sightlines'],
+  },
+  edge_weighted: {
+    name: 'Perimeter layout',
+    description: 'Larger pieces stay near the walls, leaving more usable space in the room.',
+    highlights: ['Open floor area', 'Wall-aligned furniture'],
+  },
+  daylight_oriented: {
+    name: 'Daylight-focused layout',
+    description: 'Key furniture makes better use of windows and natural light.',
+    highlights: ['Window-aware placement', 'Brighter activity area'],
+  },
+  open_center: {
+    name: 'Open-center layout',
+    description: 'The center stays open for easier movement and a more spacious feel.',
+    highlights: ['Clear center', 'Easy circulation'],
+  },
+  zoned: {
+    name: 'Zoned layout',
+    description: 'Furniture forms distinct areas for different activities.',
+    highlights: ['Defined activity areas', 'Organized grouping'],
+  },
+};
+const DEFAULT_LAYOUT_VARIANT_PRESENTATION: LayoutVariantPresentation = {
+  name: 'Balanced layout',
+  description: 'A practical arrangement that balances furniture placement and movement.',
+  highlights: ['Balanced placement', 'Comfortable circulation'],
+};
 
 export const LayoutVariantsGallery: React.FC = () => {
   const layoutVariants = useEditorStore((state) => state.layoutVariants);
@@ -101,6 +154,7 @@ export const LayoutVariantsGallery: React.FC = () => {
       <div className="layout-variants-grid">
         {layoutVariants.map((variant) => {
           const scene = buildPreviewScene(variant);
+          const presentation = resolveLayoutVariantPresentation(variant);
           const isSelected = variant.variant_id === selectedVariantId;
           const hasBlockingIssues = variantHasBlockingFunctionalIssues(variant);
           const isEligible =
@@ -122,7 +176,7 @@ export const LayoutVariantsGallery: React.FC = () => {
               <div className="layout-variant-card-header">
                 <div>
                   <div className="layout-variant-title">{variant.label}</div>
-                  <div className="layout-variant-source">{variant.source}</div>
+                  <div className="layout-variant-style">{presentation.name}</div>
                 </div>
                 <div className="layout-variant-score">
                   <span className={isEligible ? 'ok' : 'warn'}>
@@ -133,7 +187,7 @@ export const LayoutVariantsGallery: React.FC = () => {
               <svg className="layout-variant-svg" viewBox={scene.viewBox}>
                 <polygon
                   points={scene.polygon.map((point) => `${point.x},${point.y}`).join(' ')}
-                  fill="#faf7f1"
+                  fill={scene.floorColor}
                   stroke="#b8b0a2"
                   strokeWidth={60}
                 />
@@ -165,18 +219,12 @@ export const LayoutVariantsGallery: React.FC = () => {
                 )}
               </svg>
               <div className="layout-variant-card-body">
-                <p>{variant.reason || 'Alternative layout generated from the same room brief.'}</p>
-                <div className="layout-variant-metrics">
-                  <span>Score {variant.layout_score}</span>
-                  <span>{variant.notes.length} notes</span>
+                <p>{presentation.description}</p>
+                <div className="layout-variant-highlights">
+                  {presentation.highlights.map((highlight) => (
+                    <span key={highlight}>{highlight}</span>
+                  ))}
                 </div>
-                {variant.notes.length > 0 ? (
-                  <div className="layout-variant-notes">
-                    {variant.notes.slice(0, 3).map((note) => (
-                      <span key={note}>{note}</span>
-                    ))}
-                  </div>
-                ) : null}
                 {diagnostics ? (
                   <div className="layout-variant-diagnostics">
                     <div className="layout-variant-diagnostics-title">Diagnostics</div>
@@ -198,6 +246,18 @@ export const LayoutVariantsGallery: React.FC = () => {
     </section>
   );
 };
+
+function resolveLayoutVariantPresentation(
+  variant: LayoutVariant,
+): LayoutVariantPresentation {
+  const variantContext = `${variant.reason} ${variant.source}`.toLowerCase();
+  const conceptFamily = LAYOUT_CONCEPT_FAMILIES.find((family) =>
+    variantContext.includes(family),
+  );
+  return conceptFamily
+    ? LAYOUT_VARIANT_PRESENTATIONS[conceptFamily]
+    : DEFAULT_LAYOUT_VARIANT_PRESENTATION;
+}
 
 function variantHasBlockingFunctionalIssues(variant: LayoutVariant): boolean {
   const verifySummary = getVariantVerifySummary(variant);
@@ -399,7 +459,41 @@ function buildPreviewScene(variant: LayoutVariant): PreviewScene {
     polygon: transformed.polygon,
     shapes: transformed.shapes,
     viewBox: `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`,
+    floorColor: resolvePreviewFloorColor(variant),
   };
+}
+
+function resolvePreviewFloorColor(variant: LayoutVariant): string {
+  const styledRoom = variant.styled_result?.room;
+  const absoluteRoom = variant.absolute_layout?.room;
+  return (
+    normalizePreviewHexColor(
+      variant.design?.floorplan_geometry?.room?.floor_color_hex,
+    ) ??
+    normalizePreviewHexColor(styledRoom?.surfaces?.floor_color_hex) ??
+    normalizePreviewHexColor(styledRoom?.surfaces?.floorColorHex) ??
+    normalizePreviewHexColor(styledRoom?.floor_color_hex) ??
+    normalizePreviewHexColor(styledRoom?.floorColorHex) ??
+    normalizePreviewHexColor(absoluteRoom?.surfaces?.floor_color_hex) ??
+    normalizePreviewHexColor(absoluteRoom?.surfaces?.floorColorHex) ??
+    normalizePreviewHexColor(absoluteRoom?.floor_color_hex) ??
+    normalizePreviewHexColor(absoluteRoom?.floorColorHex) ??
+    DEFAULT_PREVIEW_FLOOR_COLOR
+  );
+}
+
+function normalizePreviewHexColor(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const raw = value.trim();
+  if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(raw)) {
+    return raw;
+  }
+  if (/^[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(raw)) {
+    return `#${raw}`;
+  }
+  return null;
 }
 
 function buildPreviewObjectRows(variant: LayoutVariant): any[] {
@@ -784,7 +878,11 @@ function findNearestPreviewWindow(
 function flipPreviewSceneY(input: {
   polygon: Point[];
   shapes: Array<PreviewRect | PreviewLine>;
-}): PreviewScene {
+}): {
+  polygon: Point[];
+  shapes: Array<PreviewRect | PreviewLine>;
+  viewBox: string;
+} {
   const worldBounds = computeSceneExtents(input.polygon, input.shapes);
   const maxY = worldBounds ? worldBounds.maxY : 0;
   const polygon = input.polygon.map((point) => ({

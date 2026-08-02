@@ -59,7 +59,7 @@ export const UserInputPanel: React.FC = () => {
       </button>
       {isOpen ? (
         <div className="panel-collapse-body">
-          <div className="inspector-row">
+          <div className="inspector-row user-input-case-name">
             <label>Case Name</label>
             <input
               value={userInput.case_name}
@@ -67,14 +67,15 @@ export const UserInputPanel: React.FC = () => {
               placeholder="Living room movie night"
             />
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-description">
             <label>Description</label>
             <textarea
+              rows={5}
               value={userInput.description}
               onChange={(evt) => updateUserInput({ description: evt.target.value })}
             />
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-room-type">
             <label>Room Type</label>
             <select
               value={roomTypeValue}
@@ -87,7 +88,7 @@ export const UserInputPanel: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-style">
             <label>Style</label>
             <select
               value={styleValue}
@@ -100,7 +101,7 @@ export const UserInputPanel: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-floor-area">
             <label>Floor Area (m²)</label>
             <input
               type="number"
@@ -108,7 +109,7 @@ export const UserInputPanel: React.FC = () => {
               onChange={(evt) => updateUserInput({ floor_area_m2: Number(evt.target.value) })}
             />
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-height">
             <label>Height (mm)</label>
             <input
               type="number"
@@ -116,7 +117,7 @@ export const UserInputPanel: React.FC = () => {
               onChange={(evt) => updateUserInput({ height: Number(evt.target.value) })}
             />
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-windows">
             <label>Windows</label>
             <input
               type="number"
@@ -124,7 +125,7 @@ export const UserInputPanel: React.FC = () => {
               onChange={(evt) => updateUserInput({ windows: Number(evt.target.value) })}
             />
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-room-points">
             <label>Room Points</label>
             <div className="point-list">
               {userInput.shape_points.length === 0 && <div className="muted">No points yet.</div>}
@@ -140,7 +141,7 @@ export const UserInputPanel: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="inspector-row">
+          <div className="inspector-row user-input-selected-wall">
             <label>Selected Wall</label>
             {wall ? (
               <div className="wall-panel">

@@ -469,6 +469,14 @@ def render_layout_png(*, layout: LayoutView, output_path: Path, dpi: int) -> Non
         room_polygon=layout.room_polygon,
     )
     for row in sorted(layout.objects, key=_object_layer):
+        if _is_curtain_like(row.object_type):
+            _draw_curtain_object(
+                ax=ax,
+                row=row,
+                openings=layout.openings,
+                room_polygon=layout.room_polygon,
+            )
+            continue
         color = _object_color(row)
         alpha = 0.52 if _has_any_token(row.object_type, _FLOOR_LAYER_TOKENS) else 0.92
         edge_color = "#4b4843" if alpha > 0.6 else "#6d766e"
@@ -766,6 +774,85 @@ def _draw_window_opening(*, ax: object, opening: OpeningView) -> None:
     )
 
 
+def _draw_curtain_object(
+    *,
+    ax: object,
+    row: ObjectView,
+    openings: Sequence[OpeningView],
+    room_polygon: Sequence[Point2D],
+) -> None:
+    start, end = _curtain_segment(row=row, openings=openings)
+    color = _object_color(row)
+    _plot_segment(
+        ax=ax,
+        start=start,
+        end=end,
+        color="#ffffff",
+        linewidth=7.0,
+        zorder=14,
+        alpha=0.88,
+    )
+    _plot_segment(
+        ax=ax,
+        start=start,
+        end=end,
+        color=color,
+        linewidth=4.2,
+        zorder=15,
+        linestyle=(0, (6, 3)),
+        alpha=0.96,
+    )
+    _plot_segment(
+        ax=ax,
+        start=start,
+        end=end,
+        color="#9b5e4a",
+        linewidth=1.2,
+        zorder=16,
+        alpha=0.86,
+    )
+    _draw_curtain_label(ax=ax, start=start, end=end, room_polygon=room_polygon)
+
+
+def _draw_curtain_label(
+    *,
+    ax: object,
+    start: Point2D,
+    end: Point2D,
+    room_polygon: Sequence[Point2D],
+) -> None:
+    center = _segment_center(start, end)
+    tangent = _normalized(Point2D(x=end.x - start.x, y=end.y - start.y))
+    first_normal = Point2D(x=-tangent.y, y=tangent.x)
+    room_center = _polygon_center(room_polygon)
+    toward_room = Point2D(x=room_center.x - center.x, y=room_center.y - center.y)
+    normal = first_normal
+    if normal.x * toward_room.x + normal.y * toward_room.y < 0:
+        normal = Point2D(x=-normal.x, y=-normal.y)
+    label_center = Point2D(
+        x=center.x + normal.x * 115.0,
+        y=center.y + normal.y * 115.0,
+    )
+    ax.text(
+        label_center.x,
+        label_center.y,
+        "curtain",
+        fontsize=6.4,
+        fontweight="bold",
+        color="#8f4e3e",
+        ha="center",
+        va="center",
+        bbox={
+            "boxstyle": "round,pad=0.16",
+            "facecolor": "#fff4ee",
+            "edgecolor": "#d6a191",
+            "linewidth": 0.8,
+            "alpha": 0.94,
+        },
+        zorder=30,
+    )
+
+
 def _plot_segment(
     *,
     ax: object,
@@ -940,7 +1027,10 @@ def _layout_extents(layout: LayoutView) -> tuple[float, float, float, float]:
     for opening in layout.openings:
         points.extend((opening.start, opening.end))
     for row in layout.objects:
-        points.extend(row.polygon)
+        if _is_curtain_like(row.object_type):
+            points.extend(_curtain_segment(row=row, openings=layout.openings))
+        else:
+            points.extend(row.polygon)
     if not points:
         return (0.0, 0.0, 1000.0, 1000.0)
     min_x = min(point.x for point in points)
@@ -1039,6 +1129,80 @@ def _object_layer(row: ObjectView) -> int:
     return 1
 
 
+def _is_curtain_like(object_type: str) -> bool:
+    return _has_any_token(object_type, ("curtain", "blind", "drape"))
+
+
+def _curtain_segment(
+    *,
+    row: ObjectView,
+    openings: Sequence[OpeningView],
+) -> tuple[Point2D, Point2D]:
+    matched_window = _nearest_window_for_object(row=row, openings=openings)
+    if matched_window is not None:
+        return matched_window.start, matched_window.end
+    return _dominant_polygon_axis(row.polygon, row=row)
+
+
+def _nearest_window_for_object(
+    *,
+    row: ObjectView,
+    openings: Sequence[OpeningView],
+) -> OpeningView | None:
+    windows = [opening for opening in openings if opening.kind == "window"]
+    if not windows:
+        return None
+    center = _polygon_center(row.polygon)
+    min_x, min_y, max_x, max_y = _polygon_bounds(row.polygon)
+    diagonal = ((max_x - min_x) ** 2 + (max_y - min_y) ** 2) ** 0.5
+    max_snap_distance = max(900.0, diagonal * 0.75)
+    ranked = sorted(
+        (
+            (_point_to_segment_distance(point=center, start=opening.start, end=opening.end), opening)
+            for opening in windows
+        ),
+        key=lambda item: item[0],
+    )
+    if ranked and ranked[0][0] <= max_snap_distance:
+        return ranked[0][1]
+    return None
+
+
+def _dominant_polygon_axis(points: Sequence[Point2D], *, row: ObjectView) -> tuple[Point2D, Point2D]:
+    center = _polygon_center(points)
+    longest_edge: tuple[float, Point2D] | None = None
+    for start, end in zip(points, (*points[1:], points[0])):
+        length = _distance(start, end)
+        if longest_edge is None or length > longest_edge[0]:
+            longest_edge = (
+                length,
+                _normalized(Point2D(x=end.x - start.x, y=end.y - start.y)),
+            )
+    if longest_edge is not None and longest_edge[0] > 1e-6:
+        length, tangent = longest_edge
+        half_length = length / 2.0
+        return (
+            Point2D(x=center.x - tangent.x * half_length, y=center.y - tangent.y * half_length),
+            Point2D(x=center.x + tangent.x * half_length, y=center.y + tangent.y * half_length),
+        )
+
+    min_x, min_y, max_x, max_y = _polygon_bounds(points)
+    width = max_x - min_x
+    height = max_y - min_y
+    length = max(width, height, 1.0)
+    direction = _object_direction(row)
+    tangent = Point2D(x=1.0, y=0.0)
+    if direction is not None:
+        tangent = _normalized(Point2D(x=-direction.y, y=direction.x))
+    elif height > width:
+        tangent = Point2D(x=0.0, y=1.0)
+    half_length = length / 2.0
+    return (
+        Point2D(x=center.x - tangent.x * half_length, y=center.y - tangent.y * half_length),
+        Point2D(x=center.x + tangent.x * half_length, y=center.y + tangent.y * half_length),
+    )
+
+
 def _object_color(row: ObjectView) -> str:
     raw_color = _first_string(row.raw, "color_hex", "color", "fill")
     if _is_hex_color(raw_color):
@@ -1103,6 +1267,10 @@ def _polygon_center(points: Sequence[Point2D]) -> Point2D:
         x=sum(point.x for point in points) / len(points),
         y=sum(point.y for point in points) / len(points),
     )
+
+
+def _segment_center(start: Point2D, end: Point2D) -> Point2D:
+    return Point2D(x=(start.x + end.x) / 2.0, y=(start.y + end.y) / 2.0)
 
 
 def _polygon_bounds(points: Sequence[Point2D]) -> tuple[float, float, float, float]:
@@ -1184,6 +1352,18 @@ def _normalized_angle_delta(value: float) -> float:
 
 def _distance(first: Point2D, second: Point2D) -> float:
     return ((second.x - first.x) ** 2 + (second.y - first.y) ** 2) ** 0.5
+
+
+def _point_to_segment_distance(*, point: Point2D, start: Point2D, end: Point2D) -> float:
+    dx = end.x - start.x
+    dy = end.y - start.y
+    length_squared = dx * dx + dy * dy
+    if length_squared <= 1e-9:
+        return _distance(point, start)
+    ratio = ((point.x - start.x) * dx + (point.y - start.y) * dy) / length_squared
+    ratio = _clamp(ratio, 0.0, 1.0)
+    projected = Point2D(x=start.x + dx * ratio, y=start.y + dy * ratio)
+    return _distance(point, projected)
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

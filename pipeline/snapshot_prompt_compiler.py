@@ -95,15 +95,19 @@ _TYPE_LABELS: dict[str, str] = {
     "sectional_sofa": "sectional sofa",
     "side_table": "side table",
     "storage_cabinet": "storage cabinet",
-    "tv_console": "TV console with integrated flat-screen TV",
+    # TV-console-specific identity wording is disabled by default.
+    # "tv_console": "TV console with integrated flat-screen TV",
+    "tv_console": "TV console",
     "wall_art": "wall art",
 }
 
-_TV_CONSOLE_RENDER_IDENTITY_HINT = (
-    "preserve the integrated black flat-screen TV/screen panel together with the "
-    "console cabinet; do not simplify it into a plain cabinet or box and do not "
-    "add a separate duplicate TV"
-)
+# TV-console-specific identity hints are disabled so prompt text uses the same
+# generic object treatment as other furniture unless payload metadata overrides it.
+# _TV_CONSOLE_RENDER_IDENTITY_HINT = (
+#     "preserve the integrated black flat-screen TV/screen panel together with the "
+#     "console cabinet; do not simplify it into a plain cabinet or box and do not "
+#     "add a separate duplicate TV"
+# )
 
 
 @dataclass(frozen=True)
@@ -1029,8 +1033,9 @@ def _object_layout_fact(
     )
     if opening_relation:
         sentence += f", {opening_relation}"
-    if item.canonical_type == "tv_console":
-        sentence += f"; {_TV_CONSOLE_RENDER_IDENTITY_HINT}"
+    # Disabled TV-console-specific identity hint.
+    # if item.canonical_type == "tv_console":
+    #     sentence += f"; {_TV_CONSOLE_RENDER_IDENTITY_HINT}"
     return sentence + "."
 
 

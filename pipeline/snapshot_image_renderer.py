@@ -89,12 +89,14 @@ _STRICT_LAYOUT_USER_PROMPT = (
     "depth order. Only improve material realism, finish detail, lighting "
     "quality, and exterior scenery visible through existing windows."
 )
-_TV_CONSOLE_RENDER_IDENTITY_LABEL = "TV console with integrated flat-screen TV"
-_TV_CONSOLE_RENDER_IDENTITY_HINT = (
-    "Preserve the integrated black flat-screen TV/screen panel together with the "
-    "console cabinet; do not simplify this object into a plain cabinet or box "
-    "and do not add a separate duplicate TV."
-)
+# TV-console-specific identity overrides are disabled so this object renders
+# from its generic type unless the payload provides explicit identity metadata.
+# _TV_CONSOLE_RENDER_IDENTITY_LABEL = "TV console with integrated flat-screen TV"
+# _TV_CONSOLE_RENDER_IDENTITY_HINT = (
+#     "Preserve the integrated black flat-screen TV/screen panel together with the "
+#     "console cabinet; do not simplify this object into a plain cabinet or box "
+#     "and do not add a separate duplicate TV."
+# )
 _SUPPORTED_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 _SUPPORTED_ASPECT_RATIOS: tuple[tuple[str, float], ...] = (
     ("1:1", 1.0),
@@ -4401,8 +4403,9 @@ def _visible_object_name(payload: Mapping[str, object]) -> str:
     )
     if render_identity_label:
         return render_identity_label
-    if _string(payload.get("type")).lower() == "tv_console":
-        return _TV_CONSOLE_RENDER_IDENTITY_LABEL
+    # Disabled TV-console fallback; explicit payload labels still win above.
+    # if _string(payload.get("type")).lower() == "tv_console":
+    #     return _TV_CONSOLE_RENDER_IDENTITY_LABEL
     for key in (
         "label",
         "assetId",
@@ -4427,9 +4430,10 @@ def _visible_object_render_identity_hint(payload: Mapping[str, object]) -> str |
     )
     if hint:
         return hint
-    object_type = _string(payload.get("type")).lower()
-    if object_type == "tv_console":
-        return _TV_CONSOLE_RENDER_IDENTITY_HINT
+    # Disabled TV-console fallback; explicit payload hints still win above.
+    # object_type = _string(payload.get("type")).lower()
+    # if object_type == "tv_console":
+    #     return _TV_CONSOLE_RENDER_IDENTITY_HINT
     return None
 
 

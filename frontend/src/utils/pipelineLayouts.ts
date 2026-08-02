@@ -34,6 +34,7 @@ type FloorplanPreparation = {
 };
 
 const REFILL_OBJECT_ID_PATTERN = /__(?:reintroduced|accessory_refill)(?:_\d+)?$/i;
+const DEFAULT_DOOR_ASSET_ID = 'door_002';
 const FLOOR_COVERING_WALL_CLEARANCE_MM = 40;
 const FLOOR_COVERING_MIN_SIZE_MM = 320;
 
@@ -241,6 +242,12 @@ function buildFloorplanFromRoomArtifact(
         const segment = Array.isArray(door?.segment_mm) ? door.segment_mm : [];
         return {
           door_id: door?.id ?? `door_${index + 1}`,
+          asset_id:
+            readString(door?.asset_id) ??
+            readString(door?.assetId) ??
+            readString(door?.door_asset_id) ??
+            readString(door?.doorAssetId) ??
+            DEFAULT_DOOR_ASSET_ID,
           start_mm: shiftPoint(segment[0]),
           end_mm: shiftPoint(segment[1]),
         };

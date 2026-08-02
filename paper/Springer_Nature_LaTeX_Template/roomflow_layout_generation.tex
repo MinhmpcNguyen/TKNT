@@ -1,0 +1,629 @@
+% Version 3.1 December 2024 Springer Nature template.
+% This manuscript is intentionally self-contained: no section is imported with
+% \input or \include, and the bibliography is embedded at the end of this file.
+%
+% Author checklist before submission:
+% 1. Confirm the author list, author order, and corresponding-author email.
+% 2. Replace the data/code availability statement with the public artifact URL.
+% 3. Adapt the document-class option and declaration wording to the target venue.
+
+\PassOptionsToPackage{hypertexnames=false}{hyperref}
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage[title]{appendix}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{manyfoot}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{tabularx}
+\usepackage{array}
+
+\graphicspath{{../../roomflow_overleaf_latex_source-5-/figures/chapter4/}}
+\hypersetup{
+  pdftitle={Constraint-Aware Interior Layout Generation through LLM-Based Semantic Planning and Deterministic Geometric Solving},
+  pdfauthor={Thanh Minh Nguyen and Tuan Dat Trinh}
+}
+
+\newcommand{\method}{RoomFlow}
+\newcommand{\scoreOverall}{S_{\mathrm{all}}}
+\newcommand{\scoreSpatial}{S_{\mathrm{sp}}}
+\newcommand{\scoreBrief}{S_{\mathrm{br}}}
+\newcommand{\scoreFunction}{S_{\mathrm{fn}}}
+\newcommand{\scoreUsable}{S_{\mathrm{us}}}
+
+\raggedbottom
+
+\begin{document}
+
+\title[Constraint-Aware Interior Layout Generation]{Constraint-Aware Interior Layout Generation through LLM-Based Semantic Planning and Deterministic Geometric Solving}
+
+\author[1]{\fnm{Thanh Minh} \sur{Nguyen}}
+\author[1]{\fnm{Tuan Dat} \sur{Trinh}}
+
+\affil[1]{\orgdiv{School of Information and Communications Technology},
+  \orgname{Hanoi University of Science and Technology},
+  \orgaddress{\city{Hanoi}, \country{Vietnam}}}
+
+\abstract{Natural-language interior design requires both interpretation of an underspecified brief and exact reasoning about room geometry. Large language models are useful for the former but unreliable as direct coordinate generators, while geometric solvers enforce feasibility but do not understand free-form intent. We present \method, a hybrid layout-generation method that separates these responsibilities. Given a room polygon with fixed openings, a furniture inventory, and a textual brief, an LLM produces a typed semantic plan containing object priorities, functional clusters, spatial relations, and style preferences---not final coordinates. A deterministic compiler converts the plan into an object program, and an anchor-first solver searches, repairs, and ranks placements under explicit containment, non-overlap, opening-clearance, and circulation constraints. The output is a diagnostic, editable gallery rather than a rendered image. On a controlled 50-case benchmark, \method\ improves paired overall score by 15.4 points over an I-Design adaptation (95\% confidence interval: 10.5--20.4; Holm-adjusted \(p<0.001\)) and by 58.6 points over a FlairGPT adaptation. Removing semantic planning reduces overall score from 95.3 to 85.0, and retaining only minimal context reduces it to 77.1. A separate 10-case holdout, executed twice, yields a robustness score of 94.5 and worst-case score of 86.9. These results support explicit semantic--geometric separation for constrained editable layouts, while the controlled benchmark and automatic metrics limit claims about professional design quality.}
+
+\keywords{interior layout generation, large language models, constraint solving, spatial reasoning, scene synthesis, editable design}
+
+\maketitle
+
+\section{Introduction}\label{sec:introduction}
+
+Automatic interior layout design is not merely an image-generation problem. A useful system must decide what a room should contain, interpret qualitative requests such as ``keep the desk near daylight,'' and place dimensioned objects without crossing the boundary, colliding with one another, blocking a door, or destroying circulation. The resulting state should remain editable: every object needs an identity, footprint, position, orientation, and relation to the original brief. A visually plausible rendering cannot substitute for this structured state.
+
+Existing work addresses parts of this problem from different directions. Classical methods optimize furniture arrangements using encoded design guidelines~\cite{merrell2011interactive,yu2011make}. Learned scene-synthesis models capture distributions of professionally designed rooms~\cite{fu20213dfront,paschalidou2021atiss,tang2024diffuscene}, while language-guided systems use large language models (LLMs) to predict layouts, scene graphs, objects, or spatial constraints~\cite{feng2023layoutgpt,celen2024idesign,yang2024holodeck,lin2024instructscene,yang2024llplace,littlefair2025flairgpt}. These developments improve controllability, yet expose a persistent division of labor: language models can infer intent and common-sense relations, but direct coordinate generation remains difficult to validate; geometric optimization is precise, but only after the design intent has been converted into a tractable representation.
+
+This paper studies the following question:
+
+\begin{quote}
+\emph{Can an LLM-based semantic planner and a deterministic geometric solver be coupled so that natural-language requests are preserved while the returned layouts remain feasible under explicit room boundaries and openings?}
+\end{quote}
+
+We answer this question with \method, a hybrid neural--symbolic pipeline for inventory-bounded, editable furniture layout generation. The central design choice is a strict interface between semantic and geometric reasoning. The LLM assigns object priorities, functional roles, relations, and preferences, but it never supplies the final coordinates. A deterministic room compiler and anchor-first solver then interpret these signals under hard spatial constraints. Hard feasibility and soft design quality are kept separate: a visually attractive relation cannot compensate for an object outside the room, and an optional accessory cannot invalidate a required circulation path.
+
+The paper makes four contributions:
+
+\begin{enumerate}
+  \item A \emph{typed semantic contract} that converts a free-form brief into required, preferred-if-fit, optional, and excluded objects; functional clusters; anchor roles; pairwise relations; and style or region preferences, without delegating final placement to the LLM.
+  \item An \emph{anchor-first geometric procedure} that compiles the semantic contract into a bounded object program, places large functional anchors before dependent objects, repairs near-valid candidates, and verifies containment, collision, opening, and circulation constraints.
+  \item A \emph{hard--soft separation} that treats physical validity as an acceptance condition and uses geometric and semantic costs only to rank feasible candidates, producing structured diagnostics and a non-redundant editable gallery.
+  \item A controlled evaluation over 50 living-room and bedroom cases, including fixed openings and non-rectangular rooms, external comparisons, semantic ablations, and a separate 10-case robustness holdout with two executions per case.
+\end{enumerate}
+
+The contribution is deliberately narrower than end-to-end room generation. We do not generate room meshes, panoramic imagery, neural radiance fields, or photorealistic renders. The output studied here is a structured furniture layout. We likewise do not claim professional aesthetic equivalence: the reported functional and arrangement measures are automatic proxies, and no multi-rater designer study is available.
+
+\section{Related Work}\label{sec:related-work}
+
+\subsection{Optimization and learned indoor-scene synthesis}
+
+Furniture placement has long been formulated as an optimization problem. Merrell et al.~\cite{merrell2011interactive} encoded interior-design guidelines in an interactive layout optimizer, while Yu et al.~\cite{yu2011make} optimized furniture arrangements using ergonomic and visual criteria. These methods provide interpretable objectives but depend on explicit rules and do not directly interpret unrestricted user language.
+
+The release of 3D-FRONT~\cite{fu20213dfront} enabled data-driven synthesis from professionally designed rooms. ATISS~\cite{paschalidou2021atiss} models unordered object sets autoregressively, and DiffuScene~\cite{tang2024diffuscene} applies diffusion to indoor-scene layouts. PhyScene~\cite{yang2024physcene} further introduces physics- and interaction-guided generation. These models learn useful scene priors, but their performance and vocabulary are tied to training distributions. Our setting instead starts from an explicit, user-provided polygon, openings, and a finite inventory; it does not train a coordinate generator.
+
+\subsection{Language-guided layout generation}
+
+LayoutGPT~\cite{feng2023layoutgpt} demonstrates that LLMs can act as few-shot visual planners, including for indoor scenes. I-Design~\cite{celen2024idesign} uses multiple LLM agents to form a scene graph before placement, InstructScene~\cite{lin2024instructscene} introduces a semantic graph prior, and LLplace~\cite{yang2024llplace} fine-tunes an open model for layout generation and editing. HOLODECK~\cite{yang2024holodeck} asks an LLM for spatial constraints and optimizes object placement in diverse embodied environments.
+
+FlairGPT~\cite{littlefair2025flairgpt} is especially relevant: it probes an LLM for objects and placement constraints, constructs a design-layout graph, and solves the graph with constrained optimization. Co-Layout~\cite{xiang2025colayout} subsequently combines LLM-extracted constraints with grid-based integer programming and a coarse-to-fine strategy. Function2Scene~\cite{wang2026function2scene} derives functional design constraints from occupant activities and performs tool-augmented checking and repair. These systems reinforce the value of structured intermediate constraints; consequently, we make no ``first'' claim for combining language and optimization.
+
+\method\ differs in emphasis and operational scope. Its semantic contract includes explicit requirement tiers and inventory grounding; its solver is an inspectable anchor-first heuristic for arbitrary polygonal rooms and fixed openings; and its output is a set of editable object states with feasibility diagnostics. The 50-case evaluation isolates opening and non-rectangular geometry, while the 10-case holdout separately evaluates repeated-run reliability and gallery diversity. This positions \method\ as an engineering and empirical contribution to constraint-aware layout generation, rather than a new general-purpose scene foundation model.
+
+\subsection{Evaluation of generated scenes}
+
+Indoor-scene evaluation often measures distributional realism, object statistics, collisions, or text alignment. Recent work argues for a more explicit separation between fidelity to stated requirements and implicit plausibility. SceneEval~\cite{tam2026sceneeval}, for example, evaluates object counts, attributes, relations, support, collision, and navigability. Our evaluator follows the same general principle of reporting semantic and geometric dimensions separately, but is smaller and task-specific. It evaluates controlled 2D furniture footprints and must not be interpreted as a universal measure of interior-design quality.
+
+\section{Problem Formulation}\label{sec:problem}
+
+\subsection{Input and output}
+
+An input instance is
+\begin{equation}
+  \mathcal{X} = (B, \mathcal{R}, \mathcal{I}),
+\end{equation}
+where \(B\) is a natural-language brief, \(\mathcal{R}=(P,H,\mathcal{O})\) is the room specification, and \(\mathcal{I}\) is the available furniture inventory. \(P\subset\mathbb{R}^{2}\) is a simple, potentially non-convex floor polygon, \(H\) is room height, and \(\mathcal{O}\) contains fixed doors and windows attached to boundary segments. Each inventory record contains a normalized category, footprint dimensions, style and material metadata, and an optional 3D asset reference.
+
+The output is a gallery
+\begin{equation}
+  \mathcal{G} = \{(L_k,q_k,d_k)\}_{k=1}^{K},
+\end{equation}
+where \(L_k\) is a layout, \(q_k\) is its score, and \(d_k\) contains diagnostics. A placed object
+\begin{equation}
+  x_i=(u_i,c_i,w_i,\ell_i,p_i,\theta_i,r_i,\eta_i)
+\end{equation}
+stores identity \(u_i\), category \(c_i\), width and length, center \(p_i=(x_i,y_i)\), orientation \(\theta_i\), functional role \(r_i\), and metadata \(\eta_i\). This representation can be inspected and edited without reconstructing geometry from an image.
+
+\subsection{Hard feasibility}
+
+Let \(F_i(p_i,\theta_i)\) be the oriented footprint of a blocking object, \(C_k\) the protected clearance of opening \(k\), and \(D\) the door-access region. A layout is feasible only if:
+
+\begin{align}
+  A(F_i \setminus P) &= 0, && \forall i, \label{eq:containment}\\
+  A(F_i \cap F_j) &= 0, && \forall i\neq j, \label{eq:collision}\\
+  A(F_i \cap C_k) &= 0, && \forall i,k, \label{eq:opening}\\
+  \operatorname{Path}(D,P_{\mathrm{interior}}\setminus\cup_i F_i) &\neq \varnothing. && \label{eq:path}
+\end{align}
+
+Equations~\eqref{eq:containment}--\eqref{eq:path} capture containment, pairwise non-overlap, opening clearance, and a traversable route from a door toward the room interior. Additional relation-specific hard checks are activated when required by the object program, for example an access zone in front of a wardrobe. Supported-on relations are handled separately from floor-level blocking overlap.
+
+Required objects must participate in any returned layout. Preferred-if-fit objects may be dropped only after the solver fails to place them with the required set, and incur a penalty. Optional objects are deferred until the blocking layout is valid. This priority order prevents a decorative object from displacing essential furniture or making a door unusable.
+
+\subsection{Soft quality}
+
+Let \(\mathcal{F}(\mathcal{X})\) be the set of hard-valid layouts. The solver ranks, rather than validates, layouts with
+\begin{equation}
+  L^{*}=\arg\min_{L\in\mathcal{F}(\mathcal{X})}
+  E(L), \qquad
+  E(L)=\sum_m\lambda_m\phi_m(L)+\sum_n\mu_n\psi_n(L).
+  \label{eq:soft-objective}
+\end{equation}
+The \(\phi_m\) terms describe residual geometric costs such as repair distance, weak clearance, inefficient circulation, or poor space usage. The \(\psi_n\) terms encode semantic preferences such as adjacency, facing, wall anchoring, visibility, symmetry, and daylight proximity. Finite soft weights cannot admit a layout rejected by the hard constraints. This separation is important both methodologically and diagnostically: the system can explain whether a request failed because it was physically impossible or merely because a preferred relation was weak.
+
+\section{Method}\label{sec:method}
+
+\subsection{Overview}
+
+Figure~\ref{fig:overview} shows the five-stage pipeline. The semantic branch interprets \(B\), while the geometric branch compiles \(\mathcal{R}\). Both meet in a typed object program. The solver then produces and verifies concrete object states before gallery selection.
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\textwidth]{problem1_flow_overview.pdf}
+  \caption{Overview of \method. The LLM operates in the \emph{understand} stage and emits semantic constraints, not final coordinates. Room compilation, placement, hard validation, repair, scoring, and duplicate removal are deterministic given a semantic plan. The output is a gallery of editable layouts and diagnostics.}
+  \label{fig:overview}
+\end{figure}
+
+\subsection{Deterministic room compilation}
+
+The room compiler normalizes polygon winding and units, validates the boundary, extracts wall segments, and attaches each opening to its host wall. It derives three solver-facing artifacts:
+
+\begin{enumerate}
+  \item \emph{protected regions}, including door swings and opening clearances;
+  \item \emph{affordance regions}, including usable wall intervals, corners, centers, and daylight-preferred zones;
+  \item \emph{connectivity targets}, used for the door-to-interior circulation check.
+\end{enumerate}
+
+Keeping this stage deterministic avoids asking a language model to reconstruct geometry already provided by the user. It also lets the same semantic plan be re-solved after a wall, opening, or furniture dimension changes.
+
+\subsection{LLM-based semantic contract}
+
+The semantic planner receives the brief, a compact description of the compiled room, and the inventory vocabulary. It returns a schema-validated contract rather than free text. Table~\ref{tab:semantic-contract} summarizes the principal fields.
+
+\begin{table}[!t]
+  \caption{Core fields in the semantic contract.}\label{tab:semantic-contract}
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{@{}p{0.24\textwidth}X X@{}}
+    \toprule
+    Field & Meaning & Example \\
+    \midrule
+    Request tier & Required, preferred-if-fit, optional, or excluded & bed: required; vanity: optional \\
+    Functional cluster & Objects serving one activity & work: desk, chair, task lamp \\
+    Anchor role & Object that structures a cluster & bed for the sleep cluster \\
+    Pairwise relation & Solver-compatible qualitative relation & nightstand beside bed \\
+    Region/wall preference & Preferred geometric affordance & desk near window \\
+    Access/view requirement & Usability or orientation signal & clear front of wardrobe \\
+    Style policy & Density, palette, material, and style tags & low density; warm wood \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The output is sanitized before solving. Object names are mapped to supported inventory categories, quantities are bounded, contradictory preferences are simplified, and unsupported relations are removed or downgraded. Schema failure triggers a constrained repair attempt; if the contract still cannot be validated, deterministic room-type defaults are used and the fallback is recorded. Thus an LLM response is treated as untrusted input to a typed boundary, not as executable geometry.
+
+The planner's role is semantic compression. For the request ``a compact guest bedroom with a desk near the window,'' it may identify a bed and wardrobe as required, the desk as preferred-if-fit, a vanity as optional, a bed-centered sleep cluster, and a daylight preference for the work cluster. It does not decide that the bed center is \((2300,1850)\) mm.
+
+\subsection{Object-program compilation}
+
+The object-program compiler joins the semantic contract with actual inventory records. It selects concrete dimensions, instantiates quantities, and builds a directed cluster graph. Nodes are assigned one of three roles:
+
+\begin{itemize}
+  \item \emph{anchors}: large objects that determine a functional zone, such as beds, sofas, wardrobes, desks, or media consoles;
+  \item \emph{supports}: objects placed relative to an anchor, such as nightstands, chairs, and coffee tables;
+  \item \emph{deferred objects}: low-priority accessories added only after the blocking arrangement passes validation.
+\end{itemize}
+
+Relations are compiled into candidate generators and checks. ``Against a wall'' produces wall-aligned targets and an orientation; ``faces the television'' couples orientation and visibility; ``beside the bed'' produces lateral support slots; and ``near the window'' changes ranking within the allowed region. A semantic preference is promoted to a hard condition only when the request contract marks it required and a corresponding geometric predicate exists.
+
+\subsection{Anchor-first solving, repair, and validation}
+
+Placing all objects jointly creates a large continuous-discrete search space. \method\ reduces it by resolving structural decisions first. Algorithm~\ref{alg:solver} enumerates wall, corner, center, and relation-derived placements for each required anchor, combines non-conflicting anchor assignments, attaches support objects, and repairs near-valid candidates through bounded local shifts. Optional accessories are considered only after exact validation.
+
+\begin{algorithm}[!t]
+  \caption{Anchor-first search with hard validation}\label{alg:solver}
+  \begin{algorithmic}[1]
+    \Require room model \(M\), object program \(\Pi\), gallery size \(K\)
+    \Ensure ranked layouts \(\mathcal{G}\) or infeasibility diagnostics
+    \State \(A \gets\) required anchors in descending footprint and priority
+    \ForAll{\(a\in A\)}
+      \State \(T_a \gets\) wall, corner, center, and relation-derived targets
+      \State quantize \(T_a\) and enumerate allowed orientations
+    \EndFor
+    \State \(\mathcal{P}\gets\) recursively combine non-conflicting anchor targets
+    \State \(\mathcal{C}\gets\varnothing\)
+    \ForAll{partial anchor layout \(L\in\mathcal{P}\)}
+      \State attach required supports from relation-specific slots
+      \State attempt preferred-if-fit objects; record any deferred object
+      \State locally shift near-valid placements within the repair radius
+      \If{\(L\) satisfies all active hard predicates}
+        \State add eligible optional objects without invalidating \(L\)
+        \State compute the soft energy \(E(L)\) and diagnostics
+        \State \(\mathcal{C}\gets\mathcal{C}\cup\{L\}\)
+      \EndIf
+    \EndFor
+    \State remove hard-invalid and structurally duplicate layouts from \(\mathcal{C}\)
+    \State \Return the \(K\) lowest-energy diverse layouts, or failure diagnostics
+  \end{algorithmic}
+\end{algorithm}
+
+The implementation uses a 50-mm placement grid. Search is explicitly capped: at most 36 anchor candidates are retained per cluster, 16 support solutions per anchor, 24 object-level solutions, and 36 support-slot candidates. Local repair tests at most 120 shifts within a radius of 1800 mm. Access and view templates use nominal depths or widths of 750 and 900 mm, respectively. These values bound runtime and make behavior reproducible, but they are design parameters rather than learned human-factors standards.
+
+Validation is reapplied after every repair and after optional-object insertion. The validator reports the precise source of rejection: out-of-bound footprint, pairwise blocking overlap, protected-region conflict, missing access path, failed required orientation/view relation, or missing required object. This makes failures actionable. For example, a user can remove an oversized optional chair or reduce a wardrobe footprint instead of receiving a visually plausible but invalid image.
+
+\subsection{Soft ranking and gallery selection}
+
+Feasible candidates are ranked using a weighted combination of functionality, geometric naturalness, semantic satisfaction, and spatial efficiency. The production implementation uses weights \(0.32\), \(0.24\), \(0.24\), and \(0.20\), respectively. Candidate ranking also penalizes dropped preferred objects and repair magnitude. These weights do not affect hard acceptance.
+
+Returning only the best numerical score can hide meaningful alternatives. Gallery selection therefore filters state-level near-duplicates and preserves layouts with different anchor walls, orientations, or circulation patterns. The default target is five variants. This step supports editability and choice, but it is not presented as evidence of a human-in-the-loop design improvement; no controlled interaction study was conducted.
+
+\section{Experimental Protocol}\label{sec:experiments}
+
+\subsection{Research questions}
+
+The experiments address three questions:
+
+\begin{description}
+  \item[RQ1:] Does the complete pipeline produce stronger controlled layouts than two language-driven interior-layout baselines under a common evaluator?
+  \item[RQ2:] Does structured semantic context improve a deterministic solver compared with weakened or minimal context?
+  \item[RQ3:] Are gains concentrated in the geometrically difficult conditions involving openings and non-rectangular boundaries?
+\end{description}
+
+\subsection{Benchmark cases}
+
+The author-created benchmark contains 50 living-room and bedroom cases. Table~\ref{tab:benchmark} separates semantic detail, geometry, and openings instead of reporting only a pooled average. Every case stores millimeter-scale polygon vertices, opening segments, room metadata, a natural-language brief, and object requirements.
+
+\begin{table}[!t]
+  \caption{Composition of the controlled 50-case benchmark.}\label{tab:benchmark}
+  \centering
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Scenario family & Without openings & With openings & Total \\
+    \midrule
+    Minimal rectangular & 10 & 10 & 20 \\
+    Detailed rectangular & 10 & 10 & 20 \\
+    Detailed non-rectangular & 2 & 8 & 10 \\
+    \midrule
+    Total & 22 & 28 & 50 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Minimal cases use short briefs and basic room dimensions. Detailed rectangular cases add explicit furniture and functional relations. Non-rectangular cases include L-shaped, chamfered, recessed, and bay-like boundaries. Openings are fixed, not generated by the compared systems.
+
+\subsection{Compared systems and normalization}
+
+We compare the full \method\ pipeline with local adaptations of the public I-Design~\cite{celen2024idesign} and FlairGPT~\cite{littlefair2025flairgpt} pipelines. \method\ receives the brief, polygon, openings, and inventory. I-Design receives an adapted description with geometry-derived dimensions, required objects, and textual opening descriptions. FlairGPT receives an equivalent textual description of room shape, openings, objects, and spatial relations. These are not claims about hosted commercial systems; they are reproducible adapter-level comparisons against the public research workflows.
+
+All outputs are normalized to the same object schema: category, footprint, position, and orientation. A shared evaluator then applies the same containment, overlap, opening, access, request, and object-count checks. Missing or failed outputs receive zero for the affected case. Input expressivity remains unequal because the external methods do not natively consume the same polygon-plus-inventory schema; we treat this as a threat to validity rather than claiming perfect baseline equivalence.
+
+\subsection{Metrics}
+
+Four component scores are reported on a 0--100 scale. Spatial feasibility penalizes out-of-bound objects, blocking overlaps, opening conflicts, access failures, and violation area:
+
+\begin{align}
+  \scoreSpatial = \operatorname{clip}_{[0,100]}\bigg(
+    100
+    &-22n_{\mathrm{oob}}
+    -24n_{\mathrm{ov}}
+    -16n_{\mathrm{open}}
+    -12n_{\mathrm{access}} \nonumber\\
+    &-\min(A_{\mathrm{oob}}/40000,18)
+    -\min(A_{\mathrm{ov}}/50000,18)
+  \bigg).
+  \label{eq:spatial-metric}
+\end{align}
+
+The evaluator ignores insignificant numerical slivers below 5000 mm\(^2\) for out-of-bound area and 10000 mm\(^2\) for overlap area. It uses a nominal 700-mm path width. Design-brief compliance is
+\begin{equation}
+  \scoreBrief = 100\,N_{\mathrm{passed}}/N_{\mathrm{checked}}.
+\end{equation}
+Functional arrangement is an automatic violation proxy,
+\begin{equation}
+  \scoreFunction=\operatorname{clip}_{[0,100]}
+  (100-18n_{\mathrm{ov}}-14n_{\mathrm{oob}}
+  -12n_{\mathrm{open}}-10n_{\mathrm{access}}),
+\end{equation}
+and usable-object completeness discounts missing objects from a case-specific minimum,
+\begin{equation}
+  \scoreUsable=\operatorname{clip}_{[0,100]}(100-18n_{\mathrm{missing}}).
+\end{equation}
+The overall score is
+\begin{equation}
+  \scoreOverall =
+  0.30\scoreSpatial+0.25\scoreBrief+
+  0.25\scoreFunction+0.20\scoreUsable.
+  \label{eq:overall-metric}
+\end{equation}
+
+These metrics are transparent and applied identically to normalized outputs, but they are custom task metrics. In particular, \(\scoreFunction\) is not a professional designer rating, and \(\scoreUsable\) should not be read independently of spatial feasibility.
+
+\subsection{Ablations and robustness holdout}
+
+The primary ablation evaluates the full pipeline, variants that remove request tiers, style/material or gallery processing, a \emph{no-semantic} variant that weakens object roles and relations, and a \emph{minimal-context} variant that supplies only basic room and prompt information. All variants share the same solver and evaluator. Consequently, this experiment isolates the value of semantic context but does not isolate every solver mechanism; a direct ``no hard validator'' or ``no anchor ordering'' experiment remains future work.
+
+A separate robustness holdout contains 10 richer cases with style, material, palette, and gallery-diversity targets. Each case is executed twice, producing 20 case-run observations per variant. For an observation \(r\),
+\begin{equation}
+  R_r=0.50C_r+0.25SM_r+0.15G_r+0.10Q_r,
+  \label{eq:robustness}
+\end{equation}
+where \(C\) is canonical layout quality, \(SM\) style-material consistency, \(G\) gallery diversity, and \(Q\) run completion. This holdout is secondary because style and diversity are not the core physical-feasibility claim. The reported run fixed the semantic text model to \texttt{gpt-5.4-mini} and disabled model fallback.
+
+\section{Results}\label{sec:results}
+
+\subsection{External comparison}
+
+Table~\ref{tab:external-results} reports every benchmark stratum. The easiest condition is intentionally informative: I-Design obtains 99.4 overall in minimal rectangles without openings, compared with 93.3 for \method. The proposed method therefore does not dominate simply by including more machinery. Its advantage appears when fixed openings and irregular boundaries activate constraints that direct or weakly constrained placement can violate.
+
+\begin{table}[!t]
+  \caption{External comparison by scenario family and opening condition. Values are mean scores over cases; overall also reports standard deviation. Best overall per stratum is bold. \(O\): overall, \(S\): spatial feasibility, \(B\): brief compliance, \(F\): functional proxy, \(U\): usable completeness.}\label{tab:external-results}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{3.1pt}
+  \begin{tabular}{@{}llrrrrr@{}}
+    \toprule
+    Scenario & System & \(O\;(\mu\pm\sigma)\) & \(S\) & \(B\) & \(F\) & \(U\) \\
+    \midrule
+    Minimal, no opening
+      & \method & \(93.3\pm9.4\) & 100.0 & 82.5 & 100.0 & 88.3 \\
+      & I-Design & \(\mathbf{99.4\pm2.8}\) & 98.7 & 100.0 & 99.1 & 100.0 \\
+      & FlairGPT & \(61.3\pm25.9\) & 37.1 & 80.0 & 53.4 & 83.8 \\
+    \addlinespace
+    Minimal, opening
+      & \method & \(\mathbf{87.9\pm9.6}\) & 97.6 & 70.0 & 98.0 & 82.9 \\
+      & I-Design & \(73.7\pm11.5\) & 46.8 & 100.0 & 58.8 & 100.0 \\
+      & FlairGPT & \(49.3\pm15.7\) & 11.9 & 85.0 & 24.4 & 91.9 \\
+    \addlinespace
+    Detailed, no opening
+      & \method & \(\mathbf{100.0\pm0.0}\) & 100.0 & 100.0 & 100.0 & 100.0 \\
+      & I-Design & \(96.7\pm5.5\) & 96.0 & 95.3 & 97.3 & 99.0 \\
+      & FlairGPT & \(22.6\pm14.4\) & 0.0 & 51.6 & 0.2 & 48.0 \\
+    \addlinespace
+    Detailed, opening
+      & \method & \(\mathbf{92.3\pm22.0}\) & 91.4 & 91.9 & 92.0 & 94.5 \\
+      & I-Design & \(72.1\pm10.2\) & 48.0 & 92.6 & 59.0 & 99.0 \\
+      & FlairGPT & \(21.9\pm15.8\) & 0.0 & 49.4 & 0.0 & 47.5 \\
+    \addlinespace
+    Non-rect., no opening
+      & \method & \(\mathbf{100.0\pm0.0}\) & 100.0 & 100.0 & 100.0 & 100.0 \\
+      & I-Design & \(82.6\pm6.3\) & 59.3 & 96.9 & 82.5 & 100.0 \\
+      & FlairGPT & \(0.0\pm0.0\) & 0.0 & 0.0 & 0.0 & 0.0 \\
+    \addlinespace
+    Non-rect., opening
+      & \method & \(\mathbf{99.7\pm0.9}\) & 100.0 & 98.7 & 100.0 & 100.0 \\
+      & I-Design & \(46.9\pm26.8\) & 17.6 & 68.4 & 35.9 & 77.9 \\
+      & FlairGPT & \(31.7\pm9.8\) & 0.0 & 69.9 & 0.0 & 71.2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+In minimal rooms with a door and window, \method\ retains 97.6 spatial and 98.0 functional scores, while I-Design falls to 46.8 and 58.8. The same pattern strengthens in detailed rectangular rooms with openings: overall scores are 92.3, 72.1, and 21.9 for \method, I-Design, and FlairGPT, respectively. In the eight non-rectangular cases with openings, \method\ reaches 99.7 overall, compared with 46.9 and 31.7. FlairGPT's zero in the two-case non-rectangular/no-opening branch is caused by execution failures and should not be generalized beyond that small subset.
+
+Across paired cases, \method\ improves overall score over I-Design by 15.4 points (95\% confidence interval 10.5--20.4; Holm-adjusted \(p<0.001\)). The paired spatial and functional gains are 34.7 and 26.1 points. Against FlairGPT, the corresponding gains are 58.6 overall, 88.0 spatial, 82.4 functional, and 27.5 usable-object completeness; all reported paired differences are positive and significant after correction.
+
+Figure~\ref{fig:qualitative} illustrates the mechanism behind these aggregates. All methods recover several requested bedroom objects, but only \method\ preserves the chamfered boundary and fixed openings without a blocking overlap. This is a geometric result, not an aesthetic judgment.
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\textwidth]{case_comparisons/bedroom_chamfer_comparison.png}
+  \caption{Representative chamfered-bedroom case with a door and window. The normalized outputs are shown in the same coordinate frame. \method\ preserves the clipped corner and openings, while the compared outputs contain out-of-bound or overlapping blocking footprints. Scores in the source visualization use ``geom'' for spatial feasibility and ``arrange'' for the functional proxy.}
+  \label{fig:qualitative}
+\end{figure}
+
+\subsection{Semantic-context ablation}
+
+Table~\ref{tab:ablation} shows that the main loss occurs when semantic context is removed. The full system obtains 95.3 overall; no-semantic drops to 85.0 and minimal-context to 77.1. Brief compliance falls from 87.0 to 67.5 in no-semantic, and usable completeness from 92.5 to 77.1. These changes support the claim that a geometric solver benefits from explicit object roles, priorities, and relations.
+
+\begin{table}[!t]
+  \caption{Selected ablations on the primary benchmark metrics. Bold marks the highest score in each column, not necessarily the full method.}\label{tab:ablation}
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    Variant & Overall & Spatial & Brief & Function & Usable \\
+    \midrule
+    Full & 95.3 & \textbf{100.0} & 87.0 & \textbf{100.0} & 92.5 \\
+    No style policy & \textbf{97.4} & \textbf{100.0} & 93.3 & \textbf{100.0} & 95.5 \\
+    No gallery selector & 97.3 & \textbf{100.0} & 93.1 & \textbf{100.0} & 95.4 \\
+    No stylist stage & 97.3 & \textbf{100.0} & 92.8 & \textbf{100.0} & 95.5 \\
+    No material stage & 97.1 & 99.5 & 91.9 & 99.6 & \textbf{97.0} \\
+    No request tiers & 95.7 & \textbf{100.0} & 87.5 & \textbf{100.0} & 94.0 \\
+    No capacity tiers & 95.4 & 95.8 & \textbf{94.4} & 95.8 & 95.4 \\
+    No semantic planner & 85.0 & 95.8 & 67.5 & 95.8 & 77.1 \\
+    Minimal context & 77.1 & 76.2 & 74.5 & 78.5 & 80.0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Some later-stage ablations score \emph{higher} than the full system on the primary metrics. This counter-result is important. The primary evaluator rewards containment, counted request checks, basic access, and usable object quantity; it contains little direct information about palette, material consistency, or gallery diversity. Removing a stage can therefore simplify the output and improve these narrow scores. Table~\ref{tab:ablation} supports the semantic-planning claim, but does not by itself justify every production component.
+
+\subsection{Ten-case repeated robustness holdout}
+
+The separate robustness holdout addresses some of these blind spots. It contains 10 cases, and every case is executed twice, for 20 observations per variant. Table~\ref{tab:robustness} reports the full results. The complete system obtains 94.5 robustness, 86.9 worst-case robustness, 97.3 canonical quality, 83.3 style-material consistency, and 100 gallery diversity.
+
+\begin{table}[!t]
+  \caption{Results on the 10-case robustness holdout, with two runs per case (20 observations per variant).}\label{tab:robustness}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    Variant & Robustness & Worst case & Canonical & Style/material & Gallery \\
+    \midrule
+    Full & \textbf{94.5} & \textbf{86.9} & \textbf{97.3} & \textbf{83.3} & \textbf{100.0} \\
+    No stylist stage & 90.8 & 7.4 & 92.8 & 82.5 & 95.0 \\
+    No request tiers & 89.6 & 8.1 & 92.0 & 79.3 & 95.0 \\
+    No capacity tiers & 90.1 & 7.4 & 92.4 & 80.4 & 95.0 \\
+    No gallery selector & 86.4 & 7.4 & 88.2 & 79.2 & 90.0 \\
+    No style policy & 85.9 & 7.4 & 87.6 & 78.6 & 90.0 \\
+    No material stage & 86.4 & 7.4 & 88.4 & 79.9 & 88.3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The large worst-case discontinuity in the ablations is driven by at least one failure-coded observation and the reliability term in Equation~\eqref{eq:robustness}; it should not be interpreted as a smooth perceptual-quality difference. With only two repetitions, the holdout exposes severe lower-tail behavior but cannot precisely estimate a failure probability. The defensible conclusion is limited: the complete configuration was more stable on these 10 repeated, style-sensitive cases, whereas the primary benchmark alone did not reveal that behavior.
+
+\subsection{Answers to the research questions}
+
+\textbf{RQ1.} Under the common normalized evaluator, the complete pipeline improves paired overall, spatial, and functional scores relative to the two tested adaptations. The evidence is strongest for explicit geometry and access, not for professional aesthetics.
+
+\textbf{RQ2.} Removing semantic planning produces a 10.3-point overall loss, and minimal context produces an 18.2-point loss. Structured semantic information therefore improves the same deterministic placement machinery. Existing results do not yet quantify each geometric subcomponent independently.
+
+\textbf{RQ3.} The advantage is conditional on difficulty. I-Design exceeds \method\ in the easiest minimal/no-opening stratum. \method's advantage becomes large with doors, windows, and non-rectangular boundaries, consistent with the intended role of deterministic spatial validation.
+
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Why semantic--geometric separation helps}
+
+The experiments indicate that the LLM and solver contribute different information. The no-semantic and minimal-context variants remain capable of placing objects, because the deterministic solver still knows containment and collision. They lose request compliance and usable completeness because they no longer know which objects are essential, which form a functional cluster, or which relation should guide a support slot. Conversely, the external comparison shows that recovering requested object names does not guarantee a usable layout: several baseline strata retain high brief or object-completeness scores while spatial feasibility collapses.
+
+The intermediate contract is therefore more than a serialization detail. It creates an error boundary. Language errors can be detected as unsupported categories, invalid counts, or contradictory relations before coordinates exist. Geometry errors can be reported as exact predicates after placement. This is preferable to a monolithic prompt whose failure can only be observed in the final scene.
+
+\subsection{Hard constraints, soft preferences, and editability}
+
+Interior requirements have unequal logical status. A sofa ``preferably facing the television'' may admit several acceptable angles, but a sofa crossing the room boundary is invalid. Collapsing both conditions into one weighted score permits a sufficiently attractive but infeasible layout. \method\ instead uses feasibility as a gate and preferences as a ranking signal. Requirement tiers add a second hierarchy: required objects are protected, preferred objects may be sacrificed under capacity pressure, and accessories are added last.
+
+The output representation also matters. Because every candidate stores object identity, dimensions, coordinates, orientation, and diagnostics, a user can move or replace one object without inferring it from pixels. The present evaluation verifies that the representation is editable; it does not test whether interactive editing improves task time or user satisfaction.
+
+\subsection{Failure modes}
+
+Three failure classes remain. First, the semantic planner can map an unusual phrase to an unsupported inventory category or promote an implausible quantity. Schema validation bounds the damage but may lose nuance. Second, the heuristic search can return no layout even when a solution exists, particularly when large anchors compete for a narrow non-convex region. Candidate caps and a 50-mm grid trade completeness for predictable computation. Third, hand-authored clearance, visibility, and relation templates can encode brittle assumptions. The nominal 700--900-mm access parameters are consistent inside this benchmark but are not substitutes for jurisdiction-specific accessibility standards.
+
+When no solution survives, \method\ returns diagnostics rather than silently dropping required objects. This behavior is useful operationally, but the benchmark's zero scoring for failed cases makes the statistical results sensitive to rare failures, as the robustness worst-case column demonstrates.
+
+\section{Limitations and Threats to Validity}\label{sec:limitations}
+
+\textbf{Benchmark scope.} The 50 cases are controlled and author-created, cover only living rooms and bedrooms, and are not sampled from occupied homes. The non-rectangular/no-opening branch contains only two cases. Generalization to kitchens, offices, multi-room plans, articulated furniture, or building-code compliance is untested.
+
+\textbf{Metric validity.} The four primary scores are deterministic task metrics, not community standards. They emphasize properties that explicit geometry represents well and do not measure comfort, aesthetics, cultural preference, or long-term use. The style-material holdout is also programmatic. A high-rank empirical claim about design quality requires a preregistered, multi-rater study with professional designers or end users.
+
+\textbf{Baseline equivalence.} I-Design and FlairGPT were adapted to a common case schema because their native inputs differ from \method's polygon, opening, and inventory interface. All outputs share an evaluator, but conversion quality and model dependencies can affect the comparison. The results describe the tested adapters and versions, not every possible implementation of those methods. Co-Layout and Function2Scene were not included in the completed benchmark and should be evaluated in future work.
+
+\textbf{Ablation coverage.} The completed internal evidence isolates semantic context and later style/gallery stages, but does not provide clean ``no anchor-first,'' ``no hard--soft separation,'' or ``no local repair'' comparisons over all 50 cases. External gains are consistent with geometric validation but conflate several architectural differences. These missing ablations are the most important experimental addition before making a stronger algorithmic novelty claim.
+
+\textbf{Stochastic evidence.} The robustness study correctly contains 10 cases, each run twice, but two repetitions give weak estimates of variance and failure probability. Provider-hosted LLM behavior may also change across model snapshots. Releasing exact normalized inputs, prompts, model identifiers, outputs, and evaluator code is necessary for reproducibility.
+
+\section{Conclusion}\label{sec:conclusion}
+
+This paper presented \method, a constraint-aware method for converting a natural-language brief, explicit room geometry, and a bounded inventory into editable furniture layouts. The key idea is to use an LLM for typed semantic planning and a deterministic anchor-first solver for coordinates, hard validation, repair, and ranking. On the controlled 50-case benchmark, the method's gains over the tested I-Design and FlairGPT adaptations are concentrated in rooms with fixed openings and non-rectangular boundaries. Semantic ablations show that geometry alone is insufficient for request alignment, while the 10-case, two-run holdout shows that primary feasibility metrics alone miss lower-tail and gallery behavior.
+
+The evidence supports semantic--geometric separation as a practical design principle; it does not yet establish professional design quality or universal superiority. The most valuable next steps are direct solver-component ablations, comparison with recent hybrid optimizers, broader public benchmarks, and a multi-rater designer study. Within its tested scope, \method\ provides a transparent route from free-form intent to structured layouts whose physical validity can be checked before visualization or downstream rendering.
+
+\backmatter
+
+\section*{Declarations}
+
+\textbf{Funding.} No external funding is reported for this study.
+
+\textbf{Competing interests.} The authors declare no competing interests.
+
+\textbf{Ethics approval.} Not applicable. The reported experiments use synthetic room specifications and generated layouts; no human participants or personal data are involved.
+
+\textbf{Data and code availability.} The benchmark definitions, normalized evaluation schema, and scoring implementation are available from the corresponding author on reasonable request. An anonymized public artifact containing exact inputs, adapters, outputs, and evaluation scripts should accompany peer review.
+
+\textbf{Author contributions.} T.M.N. designed and implemented the system, conducted the experiments, and drafted the manuscript. T.D.T. supervised the research and reviewed the methodology and manuscript. All authors approved the final manuscript.
+
+\begin{thebibliography}{99}
+
+\bibitem{merrell2011interactive}
+Merrell, P., Schkufza, E., Li, Z., Agrawala, M., Koltun, V.:
+Interactive furniture layout using interior design guidelines.
+ACM Transactions on Graphics \textbf{30}(4), 87 (2011).
+\url{https://doi.org/10.1145/2010324.1964982}
+
+\bibitem{yu2011make}
+Yu, L.-F., Yeung, S.-K., Tang, C.-K., Terzopoulos, D., Chan, T.F., Osher, S.J.:
+Make it home: Automatic optimization of furniture arrangement.
+ACM Transactions on Graphics \textbf{30}(4), 86 (2011).
+\url{https://doi.org/10.1145/2010324.1964981}
+
+\bibitem{fu20213dfront}
+Fu, H., Cai, B., Gao, L., Zhang, L., Wang, J., Li, C., Zeng, Q., Sun, C.,
+Jia, R., Zhao, B., Zhang, H.:
+3D-FRONT: 3D furnished rooms with layouts and semantics.
+In: Proceedings of the IEEE/CVF International Conference on Computer Vision,
+pp. 10933--10942 (2021).
+\url{https://arxiv.org/abs/2011.09127}
+
+\bibitem{paschalidou2021atiss}
+Paschalidou, D., Kar, A., Shugrina, M., Kreis, K., Geiger, A., Fidler, S.:
+ATISS: Autoregressive transformers for indoor scene synthesis.
+In: Advances in Neural Information Processing Systems, vol. 34,
+pp. 12013--12026 (2021).
+\url{https://arxiv.org/abs/2110.03675}
+
+\bibitem{tang2024diffuscene}
+Tang, J., Nie, Y., Markhasin, L., Dai, A., Thies, J., Niessner, M.:
+DiffuScene: Denoising diffusion models for generative indoor scene synthesis.
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pp. 20507--20518 (2024).
+\url{https://arxiv.org/abs/2303.14207}
+
+\bibitem{yang2024physcene}
+Yang, Y., Jia, B., Zhi, P., Huang, S.:
+PhyScene: Physically interactable 3D scene synthesis for embodied AI.
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pp. 16262--16272 (2024).
+\url{https://openaccess.thecvf.com/content/CVPR2024/html/Yang_PhyScene_Physically_Interactable_3D_Scene_Synthesis_for_Embodied_AI_CVPR_2024_paper.html}
+
+\bibitem{feng2023layoutgpt}
+Feng, W., Zhu, W., Fu, T.-J., Jampani, V., Akula, A., He, X., Basu, S.,
+Wang, X.E., Wang, W.Y.:
+LayoutGPT: Compositional visual planning and generation with large language
+models. In: Advances in Neural Information Processing Systems, vol. 36
+(2023). \url{https://arxiv.org/abs/2305.15393}
+
+\bibitem{celen2024idesign}
+Çelen, A., Han, G., Schindler, K., Van Gool, L., Armeni, I., Obukhov, A.,
+Wang, X.:
+I-Design: Personalized LLM interior designer.
+arXiv preprint arXiv:2404.02838 (2024).
+\url{https://arxiv.org/abs/2404.02838}
+
+\bibitem{yang2024holodeck}
+Yang, Y., Sun, F.-Y., Weihs, L., VanderBilt, E., Herrasti, A., Han, W.,
+Wu, J., Haber, N., Krishna, R., Liu, L., Callison-Burch, C., Yatskar, M.,
+Kembhavi, A., Clark, C.:
+HOLODECK: Language guided generation of 3D embodied AI environments.
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pp. 16227--16237 (2024).
+\url{https://openaccess.thecvf.com/content/CVPR2024/html/Yang_Holodeck_Language_Guided_Generation_of_3D_Embodied_AI_Environments_CVPR_2024_paper.html}
+
+\bibitem{lin2024instructscene}
+Lin, C., Mu, Y.:
+InstructScene: Instruction-driven 3D indoor scene synthesis with semantic
+graph prior. arXiv preprint arXiv:2402.04717 (2024).
+\url{https://arxiv.org/abs/2402.04717}
+
+\bibitem{yang2024llplace}
+Yang, Y., Lu, J., Zhao, Z., Luo, Z., Yu, J.J.Q., Sanchez, V., Zheng, F.:
+LLplace: The 3D indoor scene layout generation and editing via large language
+model. arXiv preprint arXiv:2406.03866 (2024).
+\url{https://arxiv.org/abs/2406.03866}
+
+\bibitem{littlefair2025flairgpt}
+Littlefair, G., Dutt, N.S., Mitra, N.J.:
+FlairGPT: Repurposing LLMs for interior designs.
+Computer Graphics Forum \textbf{44}, e70036 (2025).
+\url{https://doi.org/10.1111/cgf.70036}
+
+\bibitem{xiang2025colayout}
+Xiang, C., Bao, R., Feng, B., Wu, W., Liu, Z., Guan, Y., Liu, L.:
+Co-Layout: LLM-driven co-optimization for interior layout.
+arXiv preprint arXiv:2511.12474 (2025).
+\url{https://arxiv.org/abs/2511.12474}
+
+\bibitem{tam2026sceneeval}
+Tam, H.I.I., Pun, H.I.D., Wang, A.T., Chang, A.X., Savva, M.:
+SceneEval: Evaluating semantic coherence in text-conditioned 3D indoor scene
+synthesis. In: Proceedings of the IEEE/CVF Winter Conference on Applications
+of Computer Vision, pp. 7355--7365 (2026).
+\url{https://openaccess.thecvf.com/content/WACV2026/html/Tam_SceneEval_Evaluating_Semantic_Coherence_in_Text-Conditioned_3D_Indoor_Scene_Synthesis_WACV_2026_paper.html}
+
+\bibitem{wang2026function2scene}
+Wang, R., Chen, Q., Ritchie, D., Chang, A.X., Savva, M., Wang, K., Zhang, H.:
+Function2Scene: 3D indoor scene layout from functional specifications.
+arXiv preprint arXiv:2605.30819 (2026).
+\url{https://arxiv.org/abs/2605.30819}
+
+\end{thebibliography}
+
+\end{document}

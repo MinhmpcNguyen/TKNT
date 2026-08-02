@@ -1,0 +1,7 @@
+Source deck: RoomFlow thesis defense, 4:3 deck with HUST footer/chrome.
+Visual route: template-following edit of the latest revised PPTX.
+Typography and chrome: preserve the source title bar, footer, page markers, rounded cards, and existing palette.
+Slide 13 issue: the previous slide had many equal-weight boxes, so the downstream handoff was implicit.
+Slide 13 edit: reuse existing cards to show brief -> parsed needs -> validated plan, then emphasize a placement-ready plan and what placement consumes.
+Slide 14 edit: preserve the eight-step placement-search layout and rewrite text so step 1 clearly consumes the checked plan.
+No new visual primitives are required; all visible changes rewrite or reposition inherited objects.

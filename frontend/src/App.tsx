@@ -275,6 +275,9 @@ export const App: React.FC = () => {
       {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} /> : null}
       {bootError ? <div className="app-banner-error">{bootError}</div> : null}
       <Toolbar />
+      <div className="user-input-strip">
+        <UserInputPanel />
+      </div>
       <div className={workspaceClassName}>
         <div className="left-stack">
           <button
@@ -313,7 +316,6 @@ export const App: React.FC = () => {
             <span>{rightDockOpen ? 'Hide' : 'Workspace'}</span>
           </button>
           <div className="dock-panel-content right-dock-content">
-            <UserInputPanel />
             <AccountPanel />
           </div>
         </div>

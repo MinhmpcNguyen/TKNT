@@ -13,6 +13,7 @@ const DOOR_MARKER_COLOR = '#2f3437';
 const DOOR_LABEL_FILL = '#fff3e7';
 const DOOR_LABEL_STROKE = '#d2a06a';
 const DOOR_LABEL_TEXT = '#704417';
+const DEFAULT_DOOR_ASSET_ID = 'door_002';
 const WINDOW_MARKER_COLOR = '#4f9fbd';
 const WINDOW_LABEL_FILL = '#edf8ff';
 const WINDOW_LABEL_STROKE = '#8ec6d9';
@@ -731,6 +732,7 @@ export const Canvas2D: React.FC = () => {
         const nextDoor: Door = {
           door_id: `door_${Date.now()}`,
           wall_id: snap.wall_id,
+          asset_id: asset.asset_id || DEFAULT_DOOR_ASSET_ID,
           start_mm: snap.start,
           end_mm: snap.end,
           leaf_width_mm: length,

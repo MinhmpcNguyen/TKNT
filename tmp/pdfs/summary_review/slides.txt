@@ -1,0 +1,581 @@
+An Interactive Generative AI System for
+Constraint-Aware Interior Layout and
+Photorealistic Synthesis
+Nguyen Thanh Minh | 20225450
+Supervisor: Dr. Trịnh Tuấn Đạt
+Data Science and Artificial Intelligence
+Hanoi, 07/2026
+2
+3
+Interior Design Decisions Start Before Hiring
+
+
+
+
+                                           150–250k
+
+125k                              →
+                                           VND/m²
+                                           design cost
+
+                                                             →
+                                                                     Explore first.
+                                                                     Hire later.
+ housing transactions
+ in 2024                                   10–20
+                                           days                      Users need fast
+                                           typical process
+                                                                     feedback before
+                                                                     committing to a full
+                                                                     design service.
+      New homes create                    Cost and waiting
+   early furniture decisions               delay feedback
+
+
+
+
+                    RoomFlow provides editable furniture arrangements for early exploration.
+
+
+
+
+                                                                                               4
+Existing Tools Cover Only Part of the Process
+
+
+                                          Furniture
+                                          arrangement tools                Room planning tools
+     AI image tools
+
+
+
+
+    realistic images —              structured arrangements —
+      hard to control                      limited realism            planning support —
+                                                                      weak edit/control link
+
+
+                         GAP                  GAP                    GAP
+
+
+
+                                               ↓
+            Need: One editable process from furniture arrangement to realistic image.
+
+
+
+
+                                                                                               5
+6
+RoomFlow: Auto Layout Design, Create and Edit Image
+
+
+
+             1                             2                           3
+
+
+                                  Create a realistic         Edit one selected
+   Arrange furniture
+                                       image                        area
+
+
+
+  User request + room rules
+                              →     Selected 3D view
+                                                         →    Selected area + edit
+                                                                    request
+             ↓                             ↓
+                                                                       ↓
+    Editable 2D/3D layout         Realistic room image
+                                                                Updated image
+
+
+
+
+                                                                                     7
+Stage 1: Creates an Editable Layout Design
+
+
+
+
+User description + Room                  Editable 2D layout                   3D preview
+        shape
+
+
+  1    understand request     →      2      auto place furniture   →      3       3D room
+
+
+
+                            AI planning + furniture placement → 3D room
+
+
+
+                                                                                            8
+From User Request to Editable Layout
+
+
+                                       User request
+                                 1
+                                       room + doors + windows + furniture
+
+
+
+                                       AI identifies furniture
+                                 2
+                                       style + placement rules
+
+
+
+                                       AI plan
+                                 3
+                                       furniture groups + placement rules
+
+
+
+
+                                       Engine searches for valid placement
+                                 4
+                                       inside room + clear doors + no overlap
+
+
+
+
+                                       Options that fit
+                                 5
+                                       ranked by usability
+
+
+
+
+                                                                                9
+Why AI Planning and Layout Placement Engine?
+
+
+     AI understands                                Placement engine
+
+
+
+                                                                     • exact positions
+
+                                                                     • clear doorways
+
+      • flexible requests                                            • no overlap
+                                design plan
+      • room purpose                                                 • other options
+                                                                     that also fit
+      • how each item is used
+
+      • design preferences
+
+
+
+   AI interprets the request; the placement engine converts it into a valid
+                            editable arrangement.
+
+
+                                                                                    10
+How AI Turns a Brief into a Checked Plan
+
+
+    1    User brief                        2      AI planning stages                        3      Checked plan
+    Family living room for lounging,
+                                                Furniture & priorities                         Fixed fields are validated
+   games, and media. Include a sofa,
+                                                Functional relations                          before furniture placement
+     TV console, coffee table, rug,
+     bookshelf, and 1–2 armchairs.               Style preferences                                       begins.
+
+
+
+
+         Structured plan for this case                                                Plan validation
+   Must-have: sofa, TV console, coffee table,                        ✓   Schema complete: all required fields are present
+   bookshelf, rug
+   Optional: 1–2 armchairs                                           ✓   Catalog matched: furniture names are valid
+
+                                                                     ✓   Relations explicit: no vague instruction left
+   Relation: main seating faces the media group
+                                                                     ✓   Retry if invalid: output must be clean
+   Preference: keep the center open
+
+
+
+
+                     The output is a checked structured plan, not free-form text.
+
+
+
+                                                                                                                            11
+How Placement Search Works
+
+
+  1    Use plan to find          2    Try possible       3   Place must-have        4    Add related
+       candidate spots                directions             items                       furniture
+
+
+
+
+                                                                         X
+
+  walls, corners, center,            each position × 4   reject severe conflicts;        place relative to
+  and related positions                 directions           flag minor ones              main furniture
+
+
+
+
+  8    Rank and show the         7    Score valid        6   Add optional           5    Repair minor
+       best options                   layouts                accessories                 conflicts
+
+          1. option 1                 A    B     C
+                                      ★    ★     ★
+                                      ★    ★
+          2. option 2
+                                      ★
+          3. option 3
+                                     compare function,
+      include scores and                                     only after main            shift within allowed
+                                         spacing,
+        diagnostic notes                                      furniture fits                   zones
+                                      and preferences
+
+
+
+
+                        Generate candidates → Repair and complete → Score and rank
+
+
+
+
+                                                                                                               12
+The Result Remains Editable
+
+                         Structured layout
+
+
+
+    Move
+  furniture
+
+
+
+                                                 Change
+                                                 colors
+
+
+
+
+   Keep
+   room
+ geometry
+                                             Rotate
+                                             items
+
+
+
+
+                                                          13
+Stage 2: Turn the Layout Design into a Realistic Image
+
+
+             3D preview                                           Realistic image
+
+
+
+
+         ✓    Furniture            ✓   Camera angle                  ✓   Room shape
+
+
+                          Checked arrangement → realistic image
+
+
+         The arrangement keeps furniture, camera angle, and room shape unchanged.
+
+
+
+                                                                                      14
+Layout Constraints Keep the Generated Image Aligned
+
+
+
+
+    INPUTS                                                                                            OUTPUT
+
+
+                                   Constraint-guided image generation
+
+  3D room +
+ camera angle
+                    1
+                         Visual                  2
+                                                      Guidance                3
+                                                                                   Image
+                         constraints                  package                      model
+                     Room geometry,                 Visual guide,                 Generates a
+                    furniture positions,          object constraints,          perspective image
+                       camera view                   style prompt               from constraints
+                                                                                                   Realistic image
+                                                                                                   with fixed layout
+
+ Style + lighting
+        +               Geometry and furniture positions stay fixed while style changes.
+    scenery
+
+
+
+
+                                                                                                                  15
+A Realistic Image Without Changing the Placement
+
+
+    3D preview                           Visual guide                           Realistic image
+
+
+
+
+                          →                                        →
+
+
+
+
+                            3D view + chosen style + visual guide
+
+
+       The image looks realistic while the room shape and furniture positions stay fixed.
+
+
+
+                                                                                                  16
+Stage 3: Edit Realistic Image
+
+
+
+
+    Source image                     Target box                         Edited image
+
+
+
+
+          ADD               REMOVE               REPLACE               RECOLOR
+
+
+                   Select area → describe change → edited image
+
+            The user chooses the area; the rest of the room stays unchanged.
+
+
+
+                                                                                       17
+18
+Evaluation Setup
+
+
+ 1            LAYOUT DESIGN                     2                  IMAGE GENERATION & EDITING
+
+
+             Is the furniture                                Does the
+                                                                                             Does only the
+                                                             render
+             arrangement                                                                     selected area
+                                                             keep the
+             usable?                                         arrangement?
+                                                                                             change?
+
+ Furniture fit &                                 Image match                       Targeted edit
+   usability
+                                                                                 Compared on editing
+ Compared layout systems                        Compared render variants
+                                                                                 operations
+                                                    SP        CO        CP           ADD           REMOVE
+ RoomFlow      I-Design        FlairGPT
+
+                                                    LG       LVP      SE-ESG       REPLACE         RECOLOR
+
+ 50 cases Minimal · Detailed
+          Non-rectangular
+                                                    Arrangement-preservation        Selected region changes;
+                                                            metrics                 surroundings stay stable
+
+
+
+
+     Layout systems are compared for furniture fit; render and editing variants are evaluated separately.
+
+
+
+
+                                                                                                               19
+Representative Layout Case
+
+
+
+
+                        Chamfer bedroom
+
+
+
+
+                                          Video demo link
+                                                       20
+RoomFlow Performs Best on Difficult Room Shapes
+
+                                                   RoomFlow              I-Design          FlairGPT
+
+ Furniture Fits (Spatial Feasibility)                                               Matches Request (Design Brief Compliance)
+           98                                      99                                            100                 93            99
+  100                          91                                                   100                       92
+                                                                                                         85
+                                                                                          70                                                68       70
+
+
+                  47                  48                                                                                      49
+  50                                                                                 50
+
+
+                                                            18
+                          12
+                                               0                     0
+   0                                                                                 0
+                Minimal             Detailed             Non-rect.                             Minimal             Detailed              Non-rect.
+
+
+ Practical Arrangement (Functional Arrangement                                      Required Furniture Included (Usable Object
+ Quality)                                                                           Completeness)
+           98                                      100                                           100          95     99            100
+  100                          92                                                   100                  92
+                                                                                          83
+                                                                                                                                            78
+                                                                                                                                                     71
+                  59                  59
+                                                                                                                              48
+  50                                                                                 50
+                                                            36
+                          24
+
+
+                                               0                     0
+   0                                                                                 0
+                Minimal             Detailed             Non-rect.                             Minimal             Detailed              Non-rect.
+
+
+
+
+        Across simple requests, detailed requests, and non-rectangular rooms, RoomFlow leads on fit and
+                                                   practicality.
+
+
+                                                                                                                                                          21
+Image Generate Results
+
+
+                                                                                                                                                              Variants
+ 0,8
+                                                                                                                                                           • Text only
+                                           0,7   0,7
+                                                                                                                                                             (SP)
+                                                       0,7
+                                                             0,7
+                                                                   0,7
+                                                                         0,7
+                                                                                                                                                           • Visible
+       0,6
+                                                                                                                                                             furniture list
+ 0,6                                                                            0,6
+             0,6                                                                      0,6
+                                                                                             0,5                                                             (CO)
+                   0,5
+                                                                                                   0,5   0,5   0,5
+                         0,5   0,5   0,5                                                                                   0,5                             • Keep-
+                                                                                                                     0,4           0,4
+                                                                                                                                                             arrangemen
+ 0,4
+                                                                                                                                         0,4
+                                                                                                                                               0,4   0,4
+                                                                                                                                                             t rules (CP)
+
+                                                                                                                                                           • Shape +
+                                                                                                                                                             position
+                                                                                                                                                             guide (LG)
+ 0,2
+                                                                                                                                                           • AI checks
+                                                                                                                                                             3D preview
+                                                                                                                                                             (LVP)
+
+ 0,0                                                                                                                                                       • Outline
+                    Edge                                Depth                               DINO patch                           DINO object                 guide (SE-
+                                                 SE-ESG            SP     LVP         LG      CP         CO                                                  ESG, ours)
+
+
+             The outline guide is strongest overall; text-only is slightly better for depth and furniture match.
+
+
+
+
+                                                                                                                                                                      22
+Edit Image Result
+
+
+     Edit score ratio by edit type                                                            Scoring checklist
+  100 ,0   97,5   96,3
+                                 100,0
+                                              96,3   97,5
+                                                                                     95,6                Add
+                                                                       88,8   89,7                inside target box
+                                                              87,5
+
+
+                         77,5
+   80,0                                                                                               Recolor
+                                                                                             color changes; shape stays
+
+   60,0
+                                                                                                       Remove
+                                                                                            target gone; background fixed
+
+   40,0
+                                                                                                       Replace
+                                                                                             right object; same footprint
+   20,0
+
+                                                                                                 Common checks
+                                                                                             camera, room, objects stay
+    0,0
+              Add         Recolor              Remove          Replace          Overall
+
+                                Prompt only      Selected target box
+
+
+
+
+                                                                                                                            23
+Contributions, Limitations, and Future Work
+
+
+             1                                    2                                   3
+
+   AI understands the                  Furniture arrangement
+                                                                         Edit one selected area
+        request                         controls the image
+  Turns everyday language                Uses the 3D room and            Changes one item; the rest
+    into a furniture plan.                 furniture outline.               stays unchanged.
+
+
+
+
+     What RoomFlow adds                                 Limitations and Future Work
+
+      Better arrangements for                              More room types
+      non-rectangular rooms
+
+                                                           Same room from different
+      More reliable realistic images
+                                                           camera angles
+
+
+
+
+         RoomFlow combines flexible AI with accurate furniture placement.
+
+
+                                                                                                      24
+25
+

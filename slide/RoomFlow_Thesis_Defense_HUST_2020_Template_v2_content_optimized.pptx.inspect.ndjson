@@ -1,0 +1,637 @@
+{"kind":"deck","id":"pr/w5onlm","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"DEFAULT"}
+{"kind":"slide","id":"sl/2x4nap4r","slide":1,"title":"GRADUATION THESIS DEFENSE","textShapes":4}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":1,"name":"Text 0","text":"GRADUATION THESIS DEFENSE","textPreview":"GRADUATION THESIS DEFENSE","textChars":25,"textLines":1,"bbox":[52.8,120,710.4,33.6]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":1,"name":"Text 1","text":"An Interactive Generative AI System for\nConstraint-Aware Interior Layout and\nPhotorealistic Synthesis","textPreview":"An Interactive Generative AI System for | Constraint-Aware Interior Layout and | Photorealistic Synthesis","textChars":101,"textLines":3,"bbox":[52.8,168,720,206.4]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":1,"name":"Text 2","text":"ROOMFLOW","textPreview":"ROOMFLOW","textChars":8,"textLines":1,"bbox":[55.68,395.52,288,46.08]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":1,"name":"Text 3","text":"Nguyễn Thành Minh  |  20225450\nData Science and Artificial Intelligence\nSupervisor: Dr. Trịnh Tuấn Đạt\nHanoi, 07/2026","textPreview":"Nguyễn Thành Minh  |  20225450 | Data Science and Artificial Intelligence | Supervisor: Dr. Trịnh Tuấn Đạt | Hanoi, 07/2026","textChars":117,"textLines":4,"bbox":[55.68,453.12,566.4,139.2]}
+{"kind":"image","id":"im/4byhgn29","slide":1,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/2x4nap4r","slide":1,"text":""}
+{"kind":"slide","id":"sl/pg3ex0nu","slide":2,"title":"The core gap is editable room design","textShapes":20}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":2,"name":"Text 0","text":"The core gap is editable room design","textPreview":"The core gap is editable room design","textChars":36,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/r65wjudg","slide":2,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":2,"name":"Text 2","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":2,"name":"Text 3","text":"MOTIVATION","textPreview":"MOTIVATION","textChars":10,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":2,"name":"Text 4","text":"Users need fast room concepts they can inspect, edit, and turn into realistic views.","textPreview":"Users need fast room concepts they can inspect, edit, and turn into realistic views.","textChars":84,"textLines":1,"bbox":[67.2,139.2,1142.4,62.4]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":2,"name":"Text 5","text":"Fast","textPreview":"Fast","textChars":4,"textLines":1,"bbox":[76.8,235.2,307.2,44.16]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":2,"name":"Text 6","text":"early exploration","textPreview":"early exploration","textChars":17,"textLines":1,"bbox":[76.8,281.28,307.2,40.32]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":2,"name":"Text 7","text":"Correct","textPreview":"Correct","textChars":7,"textLines":1,"bbox":[484.8,235.2,307.2,44.16]}
+{"kind":"textbox","id":"sh/lwval87e","slide":2,"name":"Text 8","text":"room constraints","textPreview":"room constraints","textChars":16,"textLines":1,"bbox":[484.8,281.28,307.2,40.32]}
+{"kind":"textbox","id":"sh/e9cvixcz","slide":2,"name":"Text 9","text":"Editable","textPreview":"Editable","textChars":8,"textLines":1,"bbox":[892.8,235.2,307.2,44.16]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":2,"name":"Text 10","text":"layout and render","textPreview":"layout and render","textChars":17,"textLines":1,"bbox":[892.8,281.28,307.2,40.32]}
+{"kind":"shape","id":"sh/w3m94fu1","slide":2,"name":"Shape 11","bbox":[76.8,364.8,355.2,168]}
+{"kind":"shape","id":"sh/loj2t83i","slide":2,"name":"Shape 12","bbox":[76.8,364.8,7.68,168]}
+{"kind":"textbox","id":"sh/ex0nuxc3","slide":2,"name":"Text 13","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[94.08,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":2,"name":"Text 14","text":"Quick alternatives","textPreview":"Quick alternatives","textChars":18,"textLines":1,"bbox":[151.68,380.16,261.12,32.64]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":2,"name":"Text 15","text":"Draft variants before committing to furniture or renovation.","textPreview":"Draft variants before committing to furniture or renovation.","textChars":60,"textLines":1,"bbox":[96,420.48,316.8,100.8]}
+{"kind":"shape","id":"sh/lkjm1cfa","slide":2,"name":"Shape 16","bbox":[462.72,364.8,355.2,168]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":2,"name":"Shape 17","bbox":[462.72,364.8,7.68,168]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":2,"name":"Text 18","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[480,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":2,"name":"Text 19","text":"Geometry-aware","textPreview":"Geometry-aware","textChars":14,"textLines":1,"bbox":[537.6,380.16,261.12,32.64]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":2,"name":"Text 20","text":"Walls, openings, dimensions, and circulation must agree.","textPreview":"Walls, openings, dimensions, and circulation must agree.","textChars":56,"textLines":1,"bbox":[481.92,420.48,316.8,100.8]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":2,"name":"Shape 21","bbox":[848.64,364.8,355.2,168]}
+{"kind":"shape","id":"sh/wfyxobm5","slide":2,"name":"Shape 22","bbox":[848.64,364.8,7.68,168]}
+{"kind":"textbox","id":"sh/7u54zido","slide":2,"name":"Text 23","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[865.92,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":2,"name":"Text 24","text":"Not static images","textPreview":"Not static images","textChars":17,"textLines":1,"bbox":[923.52,380.16,261.12,32.64]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":2,"name":"Text 25","text":"A nice render is not enough if objects cannot be moved.","textPreview":"A nice render is not enough if objects cannot be moved.","textChars":55,"textLines":1,"bbox":[867.84,420.48,316.8,100.8]}
+{"kind":"shape","id":"sh/w7mp0bi9","slide":2,"name":"Shape 26","bbox":[153.6,576,969.6,52.8]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":2,"name":"Text 27","text":"Goal: turn a brief plus real room geometry into editable layouts and layout-consistent visuals.","textPreview":"Goal: turn a brief plus real room geometry into editable layouts and layout-consistent visuals.","textChars":95,"textLines":1,"bbox":[170.88,583.68,935.04,37.44]}
+{"kind":"image","id":"im/g7adsji5","slide":2,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/pg3ex0nu","slide":2,"text":""}
+{"kind":"slide","id":"sl/s72x4nap","slide":3,"title":"RoomFlow solves one end-to-end design task","textShapes":17}
+{"kind":"textbox","id":"sh/dsji5sne","slide":3,"name":"Text 0","text":"RoomFlow solves one end-to-end design task","textPreview":"RoomFlow solves one end-to-end design task","textChars":42,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":3,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":3,"name":"Text 2","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":3,"name":"Text 3","text":"PROBLEM STATEMENT","textPreview":"PROBLEM STATEMENT","textChars":17,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":3,"name":"Shape 4","bbox":[72,153.6,312,115.2]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":3,"name":"Shape 5","bbox":[72,153.6,7.68,115.2]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":3,"name":"Text 6","text":"Room + intent","textPreview":"Room + intent","textChars":13,"textLines":1,"bbox":[91.2,168.96,273.6,32.64]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":3,"name":"Text 7","text":"Brief, dimensions, openings, and furniture inventory","textPreview":"Brief, dimensions, openings, and furniture inventory","textChars":52,"textLines":1,"bbox":[91.2,209.28,273.6,48]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":3,"name":"Shape 8","bbox":[393.6,211.2,86.4,0]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":3,"name":"Shape 9","bbox":[484.8,139.2,312,144]}
+{"kind":"shape","id":"sh/oj2t83it","slide":3,"name":"Shape 10","bbox":[484.8,139.2,7.68,144]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":3,"name":"Text 11","text":"RoomFlow","textPreview":"RoomFlow","textChars":8,"textLines":1,"bbox":[504,154.56,273.6,32.64]}
+{"kind":"textbox","id":"sh/61032lsz","slide":3,"name":"Text 12","text":"Plan, solve, render, and edit through one shared state","textPreview":"Plan, solve, render, and edit through one shared state","textChars":54,"textLines":1,"bbox":[504,194.88,273.6,76.8]}
+{"kind":"shape","id":"sh/dsji5sne","slide":3,"name":"Shape 13","bbox":[806.4,211.2,86.4,0]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":3,"name":"Shape 14","bbox":[897.6,153.6,307.2,115.2]}
+{"kind":"shape","id":"sh/vahoza1g","slide":3,"name":"Shape 15","bbox":[897.6,153.6,7.68,115.2]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":3,"name":"Text 16","text":"Editable design","textPreview":"Editable design","textChars":15,"textLines":1,"bbox":[916.8,168.96,268.8,32.64]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":3,"name":"Text 17","text":"Valid layout, 3D view, and layout-consistent render","textPreview":"Valid layout, 3D view, and layout-consistent render","textChars":51,"textLines":1,"bbox":[916.8,209.28,268.8,48]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":3,"name":"Text 18","text":"Two linked stages","textPreview":"Two linked stages","textChars":17,"textLines":1,"bbox":[81.6,340.8,307.2,33.6]}
+{"kind":"shape","id":"sh/wval87ed","slide":3,"name":"Shape 19","bbox":[81.6,388.8,532.8,144]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":3,"name":"Shape 20","bbox":[81.6,388.8,7.68,144]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":3,"name":"Text 21","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[98.88,403.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":3,"name":"Text 22","text":"1. Generate a valid editable layout","textPreview":"1. Generate a valid editable layout","textChars":35,"textLines":1,"bbox":[156.48,404.16,438.72,32.64]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":3,"name":"Text 23","text":"Place furniture with geometric and functional constraints.","textPreview":"Place furniture with geometric and functional constraints.","textChars":58,"textLines":1,"bbox":[100.8,444.48,494.4,76.8]}
+{"kind":"shape","id":"sh/psfil0rq","slide":3,"name":"Shape 24","bbox":[667.2,388.8,532.8,144]}
+{"kind":"shape","id":"sh/ed8bat47","slide":3,"name":"Shape 25","bbox":[667.2,388.8,7.68,144]}
+{"kind":"textbox","id":"sh/7u54zido","slide":3,"name":"Text 26","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[684.48,403.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":3,"name":"Text 27","text":"2. Render and edit from layout","textPreview":"2. Render and edit from layout","textChars":30,"textLines":1,"bbox":[742.08,404.16,438.72,32.64]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":3,"name":"Text 28","text":"Use the selected 3D view as structural evidence.","textPreview":"Use the selected 3D view as structural evidence.","textChars":48,"textLines":1,"bbox":[686.4,444.48,494.4,76.8]}
+{"kind":"shape","id":"sh/bq1oryts","slide":3,"name":"Shape 29","bbox":[134.4,580.8,1017.6,52.8]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":3,"name":"Text 30","text":"Success means every realistic image remains traceable to an editable layout.","textPreview":"Success means every realistic image remains traceable to an editable layout.","textChars":76,"textLines":1,"bbox":[151.68,588.48,983.04,37.44]}
+{"kind":"image","id":"im/i9s36hcr","slide":3,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/s72x4nap","slide":3,"text":""}
+{"kind":"slide","id":"sl/val87ed8","slide":4,"title":"The editable layout is the control layer","textShapes":14}
+{"kind":"textbox","id":"sh/je9cvixc","slide":4,"name":"Text 0","text":"The editable layout is the control layer","textPreview":"The editable layout is the control layer","textChars":40,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/87ed8bat","slide":4,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/xs72x4na","slide":4,"name":"Text 2","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":4,"name":"Text 3","text":"DESIGN PRINCIPLE","textPreview":"DESIGN PRINCIPLE","textChars":16,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/fmlkjm1c","slide":4,"name":"Shape 4","bbox":[427.2,211.2,422.4,129.6]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":4,"name":"Shape 5","bbox":[427.2,211.2,7.68,129.6]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":4,"name":"Text 6","text":"EDITABLE LAYOUT STATE","textPreview":"EDITABLE LAYOUT STATE","textChars":21,"textLines":1,"bbox":[446.4,226.56,384,32.64]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":4,"name":"Text 7","text":"Objects, dimensions, positions, openings, camera","textPreview":"Objects, dimensions, positions, openings, camera","textChars":48,"textLines":1,"bbox":[446.4,266.88,384,62.4]}
+{"kind":"shape","id":"sh/8bat47y1","slide":4,"name":"Shape 8","bbox":[72,139.2,288,100.8]}
+{"kind":"shape","id":"sh/jqh0fepk","slide":4,"name":"Shape 9","bbox":[72,139.2,7.68,100.8]}
+{"kind":"textbox","id":"sh/q5o7qpg3","slide":4,"name":"Text 10","text":"Language planning","textPreview":"Language planning","textChars":17,"textLines":1,"bbox":[91.2,154.56,249.6,32.64]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":4,"name":"Text 11","text":"Understand intent and produce structured requirements","textPreview":"Understand intent and produce structured requirements","textChars":53,"textLines":1,"bbox":[91.2,194.88,249.6,33.6]}
+{"kind":"shape","id":"sh/8nqxs72x","slide":4,"name":"Shape 12","bbox":[72,408,288,100.8]}
+{"kind":"shape","id":"sh/j2t83itg","slide":4,"name":"Shape 13","bbox":[72,408,7.68,100.8]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":4,"name":"Text 14","text":"Geometric solver","textPreview":"Geometric solver","textChars":16,"textLines":1,"bbox":[91.2,423.36,249.6,32.64]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":4,"name":"Text 15","text":"Validate containment, collisions, clearances, and circulation","textPreview":"Validate containment, collisions, clearances, and circulation","textChars":61,"textLines":1,"bbox":[91.2,463.68,249.6,33.6]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":4,"name":"Shape 16","bbox":[921.6,139.2,288,100.8]}
+{"kind":"shape","id":"sh/sfil0rqd","slide":4,"name":"Shape 17","bbox":[921.6,139.2,7.68,100.8]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":4,"name":"Text 18","text":"3D preview","textPreview":"3D preview","textChars":10,"textLines":1,"bbox":[940.8,154.56,249.6,32.64]}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":4,"name":"Text 19","text":"Inspect and adjust the selected layout and camera view","textPreview":"Inspect and adjust the selected layout and camera view","textChars":54,"textLines":1,"bbox":[940.8,194.88,249.6,33.6]}
+{"kind":"shape","id":"sh/zupwb2hw","slide":4,"name":"Shape 20","bbox":[921.6,408,288,100.8]}
+{"kind":"shape","id":"sh/orytsvu9","slide":4,"name":"Shape 21","bbox":[921.6,408,7.68,100.8]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":4,"name":"Text 22","text":"Rendering & editing","textPreview":"Rendering & editing","textChars":19,"textLines":1,"bbox":[940.8,423.36,249.6,32.64]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":4,"name":"Text 23","text":"Improve realism without replacing the structural design state","textPreview":"Improve realism without replacing the structural design state","textChars":61,"textLines":1,"bbox":[940.8,463.68,249.6,33.6]}
+{"kind":"shape","id":"sh/z61032ls","slide":4,"name":"Shape 24","bbox":[364.8,189.12,62.4,65.28]}
+{"kind":"shape","id":"sh/oza1gvy9","slide":4,"name":"Shape 25","bbox":[364.8,458.88,62.4,-156.48]}
+{"kind":"shape","id":"sh/hk3q5o7q","slide":4,"name":"Shape 26","bbox":[849.6,254.4,72,-65.28]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":4,"name":"Shape 27","bbox":[849.6,302.4,72,156.48]}
+{"kind":"shape","id":"sh/e1w7mp0b","slide":4,"name":"Shape 28","bbox":[134.4,585.6,1012.8,52.8]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":4,"name":"Text 29","text":"Image generation becomes a visual layer over the design state.","textPreview":"Image generation becomes a visual layer over the design state.","textChars":62,"textLines":1,"bbox":[151.68,593.28,978.24,37.44]}
+{"kind":"image","id":"im/7y1kre1w","slide":4,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/val87ed8","slide":4,"text":""}
+{"kind":"slide","id":"sl/mlkjm1cf","slide":5,"title":"One loop connects planning, rendering, and revision","textShapes":5}
+{"kind":"textbox","id":"sh/dg7adsji","slide":5,"name":"Text 0","text":"One loop connects planning, rendering, and revision","textPreview":"One loop connects planning, rendering, and revision","textChars":51,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":5,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":5,"name":"Text 2","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":5,"name":"Text 3","text":"USER JOURNEY","textPreview":"USER JOURNEY","textChars":12,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":5,"name":"Shape 4","bbox":[734.4,124.8,470.4,532.8]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":5,"name":"Text 5","text":"1. Define room geometry and openings\n2. Write a design brief or arrange furniture\n3. Generate and compare layout variants\n4. Preview the selected layout in 3D\n5. Render, edit, then return to layout if needed","textPreview":"1. Define room geometry and openings | 2. Write a design brief or arrange furniture | 3. Generate and compare layout variants | 4. Previe...","textChars":207,"textLines":5,"bbox":[76.8,148.8,600,470.4]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":5,"name":"Shape 6","bbox":[76.8,552,604.8,72]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":5,"name":"Text 7","text":"The user always returns to the editable layout, so render feedback can improve the design.","textPreview":"The user always returns to the editable layout, so render feedback can improve the design.","textChars":90,"textLines":1,"bbox":[94.08,562,570.24,48]}
+{"kind":"image","id":"im/yxobm58z","slide":5,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/nih4byhg","slide":5,"name":"Image 1","bbox":[776.56,124.8,386.09,532.8]}
+{"kind":"notes","id":"nt/mlkjm1cf","slide":5,"text":""}
+{"kind":"slide","id":"sl/58z25kb6","slide":6,"title":"SUB-PROBLEM 1","textShapes":4}
+{"kind":"textbox","id":"sh/r65wjudg","slide":6,"name":"Text 0","text":"SUB-PROBLEM 1","textPreview":"SUB-PROBLEM 1","textChars":13,"textLines":1,"bbox":[489.6,148.8,720,33.6]}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":6,"name":"Text 1","text":"Automatic Interior Layout Design","textPreview":"Automatic Interior Layout Design","textChars":32,"textLines":1,"bbox":[489.6,196.8,724.8,120]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":6,"name":"Text 2","text":"Generate geometrically valid, editable furniture layouts from a room brief.","textPreview":"Generate geometrically valid, editable furniture layouts from a room brief.","textChars":75,"textLines":1,"bbox":[489.6,340.8,691.2,105.6]}
+{"kind":"shape","id":"sh/yxobm58z","slide":6,"name":"Shape 3","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/nih4byhg","slide":6,"name":"Text 4","text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"image","id":"im/5wjudg7a","slide":6,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/58z25kb6","slide":6,"text":""}
+{"kind":"slide","id":"sl/0z61032l","slide":7,"title":"Layout generation moves from intent to candidates","textShapes":14}
+{"kind":"textbox","id":"sh/8jqh0fep","slide":7,"name":"Text 0","text":"Layout generation moves from intent to candidates","textPreview":"Layout generation moves from intent to candidates","textChars":49,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/fa9w3m94","slide":7,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":7,"name":"Text 2","text":"7","textPreview":"7","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/xczed8v6","slide":7,"name":"Text 3","text":"LAYOUT PIPELINE","textPreview":"LAYOUT PIPELINE","textChars":15,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/je9cvixc","slide":7,"name":"Shape 4","bbox":[72,129.6,686.4,532.8]}
+{"kind":"shape","id":"sh/qtcj6tov","slide":7,"name":"Shape 5","bbox":[792,139.2,40.32,36.48]}
+{"kind":"textbox","id":"sh/svu9knih","slide":7,"name":"Text 6","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[799.68,143.04,24.96,26.88]}
+{"kind":"textbox","id":"sh/hgn29gr2","slide":7,"name":"Text 7","text":"Room interpretation","textPreview":"Room interpretation","textChars":19,"textLines":1,"bbox":[842.88,136.32,340.8,44.16]}
+{"kind":"shape","id":"sh/ap4r65wj","slide":7,"name":"Shape 8","bbox":[792,228.48,40.32,36.48]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":7,"name":"Text 9","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[799.68,232.32,24.96,26.88]}
+{"kind":"textbox","id":"sh/s36hcrmh","slide":7,"name":"Text 10","text":"Semantic planning","textPreview":"Semantic planning","textChars":17,"textLines":1,"bbox":[842.88,225.6,340.8,44.16]}
+{"kind":"shape","id":"sh/hoza1gvy","slide":7,"name":"Shape 11","bbox":[792,317.76,40.32,36.48]}
+{"kind":"textbox","id":"sh/a1gvy90j","slide":7,"name":"Text 12","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[799.68,321.6,24.96,26.88]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":7,"name":"Text 13","text":"Layout program","textPreview":"Layout program","textChars":14,"textLines":1,"bbox":[842.88,314.88,340.8,44.16]}
+{"kind":"shape","id":"sh/s72x4nap","slide":7,"name":"Shape 14","bbox":[792,407.04,40.32,36.48]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":7,"name":"Text 15","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[799.68,410.88,24.96,26.88]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":7,"name":"Text 16","text":"Geometric solving","textPreview":"Geometric solving","textChars":17,"textLines":1,"bbox":[842.88,404.16,340.8,44.16]}
+{"kind":"shape","id":"sh/wval87ed","slide":7,"name":"Shape 17","bbox":[792,496.32,40.32,36.48]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":7,"name":"Text 18","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[799.68,500.16,24.96,26.88]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":7,"name":"Text 19","text":"Finalization & selection","textPreview":"Finalization & selection","textChars":24,"textLines":1,"bbox":[842.88,493.44,340.8,44.16]}
+{"kind":"shape","id":"sh/psfil0rq","slide":7,"name":"Shape 20","bbox":[792,580.8,398.4,59.52]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":7,"name":"Text 21","text":"Output: a small gallery of valid editable layouts.","textPreview":"Output: a small gallery of valid editable layouts.","textChars":50,"textLines":1,"bbox":[809.28,588.48,363.84,44.16]}
+{"kind":"image","id":"im/cvixczed","slide":7,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/5gbq1ory","slide":7,"name":"Image 1","bbox":[78.12,129.6,674.16,532.8]}
+{"kind":"notes","id":"nt/0z61032l","slide":7,"text":""}
+{"kind":"slide","id":"sl/fu18jqh0","slide":8,"title":"Semantic planning separates intent from geometry","textShapes":8}
+{"kind":"textbox","id":"sh/judg7ads","slide":8,"name":"Text 0","text":"Semantic planning separates intent from geometry","textPreview":"Semantic planning separates intent from geometry","textChars":48,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/c7u54zid","slide":8,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":8,"name":"Text 2","text":"8","textPreview":"8","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":8,"name":"Text 3","text":"ROOM FACTS + DESIGN INTENT","textPreview":"ROOM FACTS + DESIGN INTENT","textChars":26,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/cvixczed","slide":8,"name":"Shape 4","bbox":[67.2,148.8,561.6,264]}
+{"kind":"shape","id":"sh/18jqh0fe","slide":8,"name":"Shape 5","bbox":[650.88,148.8,561.6,264]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":8,"name":"Text 6","text":"ROOM MODELING","textPreview":"ROOM MODELING","textChars":13,"textLines":1,"bbox":[86.4,427.2,513.6,28.8]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":8,"name":"Text 7","text":"Boundary, openings, clearances, circulation, usable walls","textPreview":"Boundary, openings, clearances, circulation, usable walls","textChars":57,"textLines":1,"bbox":[91.2,460.8,499.2,86.4]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":8,"name":"Text 8","text":"SEMANTIC PLANNING","textPreview":"SEMANTIC PLANNING","textChars":17,"textLines":1,"bbox":[672,427.2,513.6,28.8]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":8,"name":"Text 9","text":"Required objects, relations, style, density","textPreview":"Required objects, relations, style, density","textChars":43,"textLines":1,"bbox":[676.8,460.8,499.2,86.4]}
+{"kind":"shape","id":"sh/8bat47y1","slide":8,"name":"Shape 10","bbox":[129.6,576,1022.4,57.6]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":8,"name":"Text 11","text":"LLM planning decides what should exist; geometry modules decide where it can fit.","textPreview":"LLM planning decides what should exist; geometry modules decide where it can fit.","textChars":81,"textLines":1,"bbox":[146.88,583.68,987.84,42.24]}
+{"kind":"image","id":"im/x0nuxc3y","slide":8,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/mlkjm1cf","slide":8,"name":"Image 1","bbox":[101.9,148.8,492.2,264]}
+{"kind":"image","id":"im/f6dcbulw","slide":8,"name":"Image 2","bbox":[712.36,148.8,438.65,264]}
+{"kind":"notes","id":"nt/fu18jqh0","slide":8,"text":""}
+{"kind":"slide","id":"sl/qh0fepkz","slide":9,"title":"Constraints decide what can be accepted","textShapes":10}
+{"kind":"textbox","id":"sh/dg7adsji","slide":9,"name":"Text 0","text":"Constraints decide what can be accepted","textPreview":"Constraints decide what can be accepted","textChars":39,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":9,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":9,"name":"Text 2","text":"9","textPreview":"9","textChars":1,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":9,"name":"Text 3","text":"ANCHOR-FIRST SEARCH","textPreview":"ANCHOR-FIRST SEARCH","textChars":19,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":9,"name":"Shape 4","bbox":[69.12,132.48,705.6,388.8]}
+{"kind":"shape","id":"sh/vy90je9c","slide":9,"name":"Shape 5","bbox":[806.4,139.2,384,96]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":9,"name":"Shape 6","bbox":[806.4,139.2,7.68,96]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":9,"name":"Text 7","text":"Hard constraints","textPreview":"Hard constraints","textChars":16,"textLines":1,"bbox":[825.6,154.56,345.6,32.64]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":9,"name":"Text 8","text":"Containment, collision, opening clearance, circulation","textPreview":"Containment, collision, opening clearance, circulation","textChars":54,"textLines":1,"bbox":[825.6,194.88,345.6,28.8]}
+{"kind":"shape","id":"sh/gbq1oryt","slide":9,"name":"Shape 9","bbox":[806.4,264,384,96]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":9,"name":"Shape 10","bbox":[806.4,264,7.68,96]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":9,"name":"Text 11","text":"Placement strategy","textPreview":"Placement strategy","textChars":18,"textLines":1,"bbox":[825.6,279.36,345.6,32.64]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":9,"name":"Text 12","text":"Place anchors first, then attach support objects.","textPreview":"Place anchors first, then attach support objects.","textChars":49,"textLines":1,"bbox":[825.6,319.68,345.6,28.8]}
+{"kind":"shape","id":"sh/gn29gr2p","slide":9,"name":"Shape 13","bbox":[806.4,388.8,384,96]}
+{"kind":"shape","id":"sh/neloj2t8","slide":9,"name":"Shape 14","bbox":[806.4,388.8,7.68,96]}
+{"kind":"textbox","id":"sh/ytsvu9kn","slide":9,"name":"Text 15","text":"Candidate repair & ranking","textPreview":"Candidate repair & ranking","textChars":26,"textLines":1,"bbox":[825.6,404.16,345.6,32.64]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":9,"name":"Text 16","text":"Repair near-valid placements; reject hard failures.","textPreview":"Repair near-valid placements; reject hard failures.","textChars":51,"textLines":1,"bbox":[825.6,444.48,345.6,28.8]}
+{"kind":"shape","id":"sh/vixczed8","slide":9,"name":"Shape 17","bbox":[134.4,561.6,1008,59.52]}
+{"kind":"textbox","id":"sh/k3q5o7qp","slide":9,"name":"Text 18","text":"Final coordinates are accepted only after deterministic checks.","textPreview":"Final coordinates are accepted only after deterministic checks.","textChars":63,"textLines":1,"bbox":[151.68,569.28,973.44,44.16]}
+{"kind":"image","id":"im/25kb6xkf","slide":9,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/9knih4by","slide":9,"name":"Image 1","bbox":[136.47,132.48,570.9,388.8]}
+{"kind":"notes","id":"nt/qh0fepkz","slide":9,"text":""}
+{"kind":"slide","id":"sl/29gr2p8n","slide":10,"title":"The user chooses among valid layout variants","textShapes":10}
+{"kind":"textbox","id":"sh/gvy90je9","slide":10,"name":"Text 0","text":"The user chooses among valid layout variants","textPreview":"The user chooses among valid layout variants","textChars":44,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/r2p8nqxs","slide":10,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":10,"name":"Text 2","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":10,"name":"Text 3","text":"AI RESULT AS STARTING POINT","textPreview":"AI RESULT AS STARTING POINT","textChars":27,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/rqd4vmtw","slide":10,"name":"Shape 4","bbox":[67.2,134.4,595.2,446.4]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":10,"name":"Shape 5","bbox":[696,148.8,489.6,100.8]}
+{"kind":"shape","id":"sh/4fu18jqh","slide":10,"name":"Shape 6","bbox":[696,148.8,7.68,100.8]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":10,"name":"Text 7","text":"1. Filter and rank","textPreview":"1. Filter and rank","textChars":18,"textLines":1,"bbox":[715.2,164.16,451.2,32.64]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":10,"name":"Text 8","text":"Keep valid candidates and remove near-duplicates.","textPreview":"Keep valid candidates and remove near-duplicates.","textChars":49,"textLines":1,"bbox":[715.2,204.48,451.2,33.6]}
+{"kind":"shape","id":"sh/fu18jqh0","slide":10,"name":"Shape 9","bbox":[696,278.4,489.6,100.8]}
+{"kind":"shape","id":"sh/83itgfml","slide":10,"name":"Shape 10","bbox":[696,278.4,7.68,100.8]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":10,"name":"Text 11","text":"2. Preserve structured state","textPreview":"2. Preserve structured state","textChars":28,"textLines":1,"bbox":[715.2,293.76,451.2,32.64]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":10,"name":"Text 12","text":"Each object keeps identity, dimensions, pose, and metadata.","textPreview":"Each object keeps identity, dimensions, pose, and metadata.","textChars":59,"textLines":1,"bbox":[715.2,334.08,451.2,33.6]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":10,"name":"Shape 13","bbox":[696,408,489.6,100.8]}
+{"kind":"shape","id":"sh/4zidonyd","slide":10,"name":"Shape 14","bbox":[696,408,7.68,100.8]}
+{"kind":"textbox","id":"sh/xkf6dcbu","slide":10,"name":"Text 15","text":"3. Continue editing","textPreview":"3. Continue editing","textChars":19,"textLines":1,"bbox":[715.2,423.36,451.2,32.64]}
+{"kind":"textbox","id":"sh/xczed8v6","slide":10,"name":"Text 16","text":"Move, rotate, replace, or delete furniture before 3D preview.","textPreview":"Move, rotate, replace, or delete furniture before 3D preview.","textChars":61,"textLines":1,"bbox":[715.2,463.68,451.2,33.6]}
+{"kind":"shape","id":"sh/8v6psfil","slide":10,"name":"Shape 17","bbox":[696,552,489.6,69.12]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":10,"name":"Text 18","text":"Generation proposes options; the user controls the working layout.","textPreview":"Generation proposes options; the user controls the working layout.","textChars":66,"textLines":1,"bbox":[713.28,559.68,455.04,53.76]}
+{"kind":"image","id":"im/lc7u54zi","slide":10,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/ed8bat47","slide":10,"name":"Image 1","bbox":[72.92,134.4,583.75,446.4]}
+{"kind":"notes","id":"nt/29gr2p8n","slide":10,"text":""}
+{"kind":"slide","id":"sl/re1w7mp0","slide":11,"title":"SUB-PROBLEM 2","textShapes":4}
+{"kind":"textbox","id":"sh/vahoza1g","slide":11,"name":"Text 0","text":"SUB-PROBLEM 2","textPreview":"SUB-PROBLEM 2","textChars":13,"textLines":1,"bbox":[489.6,148.8,720,33.6]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":11,"name":"Text 1","text":"Layout-Guided Photorealistic Rendering","textPreview":"Layout-Guided Photorealistic Rendering","textChars":38,"textLines":1,"bbox":[489.6,196.8,724.8,120]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":11,"name":"Text 2","text":"Use the selected 3D layout and camera as evidence for realistic generation and localized editing.","textPreview":"Use the selected 3D layout and camera as evidence for realistic generation and localized editing.","textChars":97,"textLines":1,"bbox":[489.6,340.8,691.2,105.6]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":11,"name":"Shape 3","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":11,"name":"Text 4","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"image","id":"im/lwval87e","slide":11,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/re1w7mp0","slide":11,"text":""}
+{"kind":"slide","id":"sl/4fu18jqh","slide":12,"title":"Rendering uses the layout as structural evidence","textShapes":9}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":12,"name":"Text 0","text":"Rendering uses the layout as structural evidence","textPreview":"Rendering uses the layout as structural evidence","textChars":48,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/adsji5sn","slide":12,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":12,"name":"Text 2","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/sji5snel","slide":12,"name":"Text 3","text":"STRUCTURE FIRST, REALISM SECOND","textPreview":"STRUCTURE FIRST, REALISM SECOND","textChars":31,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/ap4r65wj","slide":12,"name":"Shape 4","bbox":[69.12,129.6,576,475.2]}
+{"kind":"shape","id":"sh/z61032ls","slide":12,"name":"Shape 5","bbox":[676.8,139.2,163.2,196.8]}
+{"kind":"shape","id":"sh/hcrmhk3q","slide":12,"name":"Shape 6","bbox":[859.2,139.2,163.2,196.8]}
+{"kind":"shape","id":"sh/zupwb2hw","slide":12,"name":"Shape 7","bbox":[1041.6,139.2,163.2,196.8]}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":12,"name":"Text 8","text":"3D snapshot","textPreview":"3D snapshot","textChars":11,"textLines":1,"bbox":[676.8,343.68,163.2,28.8]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":12,"name":"Text 9","text":"Structural guide","textPreview":"Structural guide","textChars":16,"textLines":1,"bbox":[859.2,343.68,163.2,28.8]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":12,"name":"Text 10","text":"Generated render","textPreview":"Generated render","textChars":16,"textLines":1,"bbox":[1041.6,343.68,163.2,28.8]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":12,"name":"Shape 11","bbox":[676.8,398.4,528,129.6]}
+{"kind":"shape","id":"sh/65wjudg7","slide":12,"name":"Shape 12","bbox":[676.8,398.4,7.68,129.6]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":12,"name":"Text 13","text":"Conditioning package","textPreview":"Conditioning package","textChars":20,"textLines":1,"bbox":[696,413.76,489.6,32.64]}
+{"kind":"textbox","id":"sh/7u54zido","slide":12,"name":"Text 14","text":"3D snapshot, visible-object map, style, lighting, scenery","textPreview":"3D snapshot, visible-object map, style, lighting, scenery","textChars":57,"textLines":1,"bbox":[696,454.08,489.6,62.4]}
+{"kind":"shape","id":"sh/wfyxobm5","slide":12,"name":"Shape 15","bbox":[676.8,561.6,528,74.88]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":12,"name":"Text 16","text":"A render is valid only if it improves appearance without drifting from the room shell or furniture arrangement.","textPreview":"A render is valid only if it improves appearance without drifting from the room shell or furniture arrangement.","textChars":111,"textLines":1,"bbox":[694.08,569.28,493.44,59.52]}
+{"kind":"image","id":"im/1032lszq","slide":12,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/cfa9w3m9","slide":12,"name":"Image 1","bbox":[69.12,182.78,576,368.84]}
+{"kind":"image","id":"im/judg7ads","slide":12,"name":"Image 2","bbox":[676.8,179.14,163.2,118.53]}
+{"kind":"image","id":"im/u9knih4b","slide":12,"name":"Image 3","bbox":[859.2,179.14,163.2,118.53]}
+{"kind":"image","id":"im/54zidony","slide":12,"name":"Image 4","bbox":[1041.6,184,163.2,108.8]}
+{"kind":"notes","id":"nt/4fu18jqh","slide":12,"text":""}
+{"kind":"slide","id":"sl/lwval87e","slide":13,"title":"Edits change targets while preserving context","textShapes":9}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":13,"name":"Text 0","text":"Edits change targets while preserving context","textPreview":"Edits change targets while preserving context","textChars":45,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/36hcrmhk","slide":13,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":13,"name":"Text 2","text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":13,"name":"Text 3","text":"TARGETED CHANGE","textPreview":"TARGETED CHANGE","textChars":15,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/7adsji5s","slide":13,"name":"Shape 4","bbox":[69.12,129.6,585.6,504]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":13,"name":"Shape 5","bbox":[676.8,139.2,523.2,283.2]}
+{"kind":"shape","id":"sh/x4nap4r6","slide":13,"name":"Shape 6","bbox":[686.4,456,110.4,36.48]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":13,"name":"Text 7","text":"ADD","textPreview":"ADD","textChars":3,"textLines":1,"bbox":[694.08,459.84,95.04,26.88]}
+{"kind":"shape","id":"sh/fyxobm58","slide":13,"name":"Shape 8","bbox":[816,456,110.4,36.48]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":13,"name":"Text 9","text":"REMOVE","textPreview":"REMOVE","textChars":6,"textLines":1,"bbox":[823.68,459.84,95.04,26.88]}
+{"kind":"shape","id":"sh/xczed8v6","slide":13,"name":"Shape 10","bbox":[945.6,456,110.4,36.48]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":13,"name":"Text 11","text":"REPLACE","textPreview":"REPLACE","textChars":7,"textLines":1,"bbox":[953.28,459.84,95.04,26.88]}
+{"kind":"shape","id":"sh/fa9w3m94","slide":13,"name":"Shape 12","bbox":[1075.2,456,110.4,36.48]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":13,"name":"Text 13","text":"RECOLOR","textPreview":"RECOLOR","textChars":7,"textLines":1,"bbox":[1082.88,459.84,95.04,26.88]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":13,"name":"Text 14","text":"The edit request names a target, builds an edit guide, and protects unrelated regions.","textPreview":"The edit request names a target, builds an edit guide, and protects unrelated regions.","textChars":86,"textLines":1,"bbox":[681.6,508.8,513.6,91.2]}
+{"kind":"shape","id":"sh/loj2t83i","slide":13,"name":"Shape 15","bbox":[681.6,600,513.6,48]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":13,"name":"Text 16","text":"Image edits stay linked to the source render and editable layout.","textPreview":"Image edits stay linked to the source render and editable layout.","textChars":65,"textLines":1,"bbox":[698.88,607.68,479.04,32.64]}
+{"kind":"image","id":"im/8v6psfil","slide":13,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/xczed8v6","slide":13,"name":"Image 1","bbox":[69.12,153.81,585.6,359.58]}
+{"kind":"image","id":"im/qd4vmtwr","slide":13,"name":"Image 2","bbox":[676.8,183.01,523.2,214.79]}
+{"kind":"notes","id":"nt/lwval87e","slide":13,"text":""}
+{"kind":"slide","id":"sl/25kb6xkf","slide":14,"title":"RoomFlow is implemented as an end-to-end prototype","textShapes":9}
+{"kind":"textbox","id":"sh/dcbulwva","slide":14,"name":"Text 0","text":"RoomFlow is implemented as an end-to-end prototype","textPreview":"RoomFlow is implemented as an end-to-end prototype","textChars":50,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/2x4nap4r","slide":14,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/vixczed8","slide":14,"name":"Text 2","text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/k3q5o7qp","slide":14,"name":"Text 3","text":"WORKING PROTOTYPE","textPreview":"WORKING PROTOTYPE","textChars":17,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/29gr2p8n","slide":14,"name":"Shape 4","bbox":[67.2,134.4,590.4,436.8]}
+{"kind":"shape","id":"sh/3ylc7u54","slide":14,"name":"Shape 5","bbox":[672,134.4,537.6,436.8]}
+{"kind":"shape","id":"sh/adsji5sn","slide":14,"name":"Shape 6","bbox":[91.2,585.6,192,36.48]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":14,"name":"Text 7","text":"2D room editor","textPreview":"2D room editor","textChars":14,"textLines":1,"bbox":[98.88,589.44,176.64,26.88]}
+{"kind":"shape","id":"sh/sji5snel","slide":14,"name":"Shape 8","bbox":[307.2,585.6,192,36.48]}
+{"kind":"textbox","id":"sh/3m94fu18","slide":14,"name":"Text 9","text":"Layout variants","textPreview":"Layout variants","textChars":15,"textLines":1,"bbox":[314.88,589.44,176.64,26.88]}
+{"kind":"shape","id":"sh/a5gbq1or","slide":14,"name":"Shape 10","bbox":[523.2,585.6,192,36.48]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":14,"name":"Text 11","text":"3D preview","textPreview":"3D preview","textChars":10,"textLines":1,"bbox":[530.88,589.44,176.64,26.88]}
+{"kind":"shape","id":"sh/s72x4nap","slide":14,"name":"Shape 12","bbox":[739.2,585.6,192,36.48]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":14,"name":"Text 13","text":"Render controls","textPreview":"Render controls","textChars":15,"textLines":1,"bbox":[746.88,589.44,176.64,26.88]}
+{"kind":"shape","id":"sh/a1gvy90j","slide":14,"name":"Shape 14","bbox":[955.2,585.6,192,36.48]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":14,"name":"Text 15","text":"Localized editing","textPreview":"Localized editing","textChars":17,"textLines":1,"bbox":[962.88,589.44,176.64,26.88]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":14,"name":"Text 16","text":"One prototype links layout generation, 3D preview, rendering, and localized editing.","textPreview":"One prototype links layout generation, 3D preview, rendering, and localized editing.","textChars":84,"textLines":1,"bbox":[96,548,1094.4,32]}
+{"kind":"image","id":"im/nyd0z610","slide":14,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/udg7adsj","slide":14,"name":"Image 1","bbox":[67.2,174.56,590.4,308.48]}
+{"kind":"image","id":"im/5gbq1ory","slide":14,"name":"Image 2","bbox":[672,173.69,537.6,286.22]}
+{"kind":"notes","id":"nt/25kb6xkf","slide":14,"text":""}
+{"kind":"slide","id":"sl/7y1kre1w","slide":15,"title":"Evaluation checks validity and control","textShapes":23}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":15,"name":"Text 0","text":"Evaluation checks validity and control","textPreview":"Evaluation checks validity and control","textChars":38,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/g7adsji5","slide":15,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":15,"name":"Text 2","text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":15,"name":"Text 3","text":"WHAT WAS MEASURED","textPreview":"WHAT WAS MEASURED","textChars":17,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":15,"name":"Text 4","text":"Automatic Interior Layout Design","textPreview":"Automatic Interior Layout Design","textChars":32,"textLines":1,"bbox":[72,129.6,556.8,38.4]}
+{"kind":"shape","id":"sh/g3ex0nux","slide":15,"name":"Shape 5","bbox":[72,182.4,254.4,110.4]}
+{"kind":"shape","id":"sh/5o7qpg3e","slide":15,"name":"Shape 6","bbox":[72,182.4,7.68,110.4]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":15,"name":"Text 7","text":"Spatial feasibility","textPreview":"Spatial feasibility","textChars":19,"textLines":1,"bbox":[91.2,197.76,216,32.64]}
+{"kind":"textbox","id":"sh/cvixczed","slide":15,"name":"Text 8","text":"Boundary, overlap, openings, circulation","textPreview":"Boundary, overlap, openings, circulation","textChars":40,"textLines":1,"bbox":[91.2,238.08,216,43.2]}
+{"kind":"shape","id":"sh/nap4r65w","slide":15,"name":"Shape 9","bbox":[355.2,182.4,254.4,110.4]}
+{"kind":"shape","id":"sh/upwb2hwf","slide":15,"name":"Shape 10","bbox":[355.2,182.4,7.68,110.4]}
+{"kind":"textbox","id":"sh/54zidony","slide":15,"name":"Text 11","text":"Brief compliance","textPreview":"Brief compliance","textChars":16,"textLines":1,"bbox":[374.4,197.76,216,32.64]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":15,"name":"Text 12","text":"Objects and requested relations","textPreview":"Objects and requested relations","textChars":31,"textLines":1,"bbox":[374.4,238.08,216,43.2]}
+{"kind":"shape","id":"sh/nyd0z610","slide":15,"name":"Shape 13","bbox":[72,316.8,254.4,110.4]}
+{"kind":"shape","id":"sh/udg7adsj","slide":15,"name":"Shape 14","bbox":[72,316.8,7.68,110.4]}
+{"kind":"textbox","id":"sh/1032lszq","slide":15,"name":"Text 15","text":"Functional quality","textPreview":"Functional quality","textChars":18,"textLines":1,"bbox":[91.2,332.16,216,32.64]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":15,"name":"Text 16","text":"Access, orientation, arrangement","textPreview":"Access, orientation, arrangement","textChars":32,"textLines":1,"bbox":[91.2,372.48,216,43.2]}
+{"kind":"shape","id":"sh/obm58z25","slide":15,"name":"Shape 17","bbox":[355.2,316.8,254.4,110.4]}
+{"kind":"shape","id":"sh/hwfyxobm","slide":15,"name":"Shape 18","bbox":[355.2,316.8,7.68,110.4]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":15,"name":"Text 19","text":"Usable completeness","textPreview":"Usable completeness","textChars":19,"textLines":1,"bbox":[374.4,332.16,216,32.64]}
+{"kind":"textbox","id":"sh/zqtcj6to","slide":15,"name":"Text 20","text":"Present and usable requested objects","textPreview":"Present and usable requested objects","textChars":36,"textLines":1,"bbox":[374.4,372.48,216,43.2]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":15,"name":"Text 21","text":"Layout-Guided Rendering and Editing","textPreview":"Layout-Guided Rendering and Editing","textChars":35,"textLines":1,"bbox":[667.2,129.6,537.6,38.4]}
+{"kind":"shape","id":"sh/hk3q5o7q","slide":15,"name":"Shape 22","bbox":[667.2,182.4,254.4,110.4]}
+{"kind":"shape","id":"sh/6xkf6dcb","slide":15,"name":"Shape 23","bbox":[667.2,182.4,7.68,110.4]}
+{"kind":"textbox","id":"sh/zed8v6ps","slide":15,"name":"Text 24","text":"Layout preservation","textPreview":"Layout preservation","textChars":19,"textLines":1,"bbox":[686.4,197.76,216,32.64]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":15,"name":"Text 25","text":"Edges, depth, DINO signals","textPreview":"Edges, depth, DINO signals","textChars":26,"textLines":1,"bbox":[686.4,238.08,216,43.2]}
+{"kind":"shape","id":"sh/hcrmhk3q","slide":15,"name":"Shape 26","bbox":[950.4,182.4,254.4,110.4]}
+{"kind":"shape","id":"sh/72x4nap4","slide":15,"name":"Shape 27","bbox":[950.4,182.4,7.68,110.4]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":15,"name":"Text 28","text":"Preset fidelity","textPreview":"Preset fidelity","textChars":15,"textLines":1,"bbox":[969.6,197.76,216,32.64]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":15,"name":"Text 29","text":"Style, lighting, scene","textPreview":"Style, lighting, scene","textChars":22,"textLines":1,"bbox":[969.6,238.08,216,43.2]}
+{"kind":"shape","id":"sh/0nuxc3yl","slide":15,"name":"Shape 30","bbox":[667.2,316.8,254.4,110.4]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":15,"name":"Shape 31","bbox":[667.2,316.8,7.68,110.4]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":15,"name":"Text 32","text":"Edit success","textPreview":"Edit success","textChars":12,"textLines":1,"bbox":[686.4,332.16,216,32.64]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":15,"name":"Text 33","text":"Requested target changed","textPreview":"Requested target changed","textChars":24,"textLines":1,"bbox":[686.4,372.48,216,43.2]}
+{"kind":"shape","id":"sh/0z61032l","slide":15,"name":"Shape 34","bbox":[950.4,316.8,254.4,110.4]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":15,"name":"Shape 35","bbox":[950.4,316.8,7.68,110.4]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":15,"name":"Text 36","text":"Edit scope","textPreview":"Edit scope","textChars":10,"textLines":1,"bbox":[969.6,332.16,216,32.64]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":15,"name":"Text 37","text":"Unrelated regions preserved","textPreview":"Unrelated regions preserved","textChars":27,"textLines":1,"bbox":[969.6,372.48,216,43.2]}
+{"kind":"shape","id":"sh/32lszqtc","slide":15,"name":"Shape 38","bbox":[96,499.2,1084.8,55.68]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":15,"name":"Text 39","text":"Layout tests compare RoomFlow with baselines.","textPreview":"Layout tests compare RoomFlow with baselines.","textChars":45,"textLines":1,"bbox":[113.28,506.88,1050.24,40.32]}
+{"kind":"shape","id":"sh/l87ed8ba","slide":15,"name":"Shape 40","bbox":[96,571.2,1084.8,55.68]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":15,"name":"Text 41","text":"Image tests check preservation, fidelity, and edit scope.","textPreview":"Image tests check preservation, fidelity, and edit scope.","textChars":57,"textLines":1,"bbox":[113.28,578.88,1050.24,40.32]}
+{"kind":"image","id":"im/kzupwb2h","slide":15,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/7y1kre1w","slide":15,"text":""}
+{"kind":"slide","id":"sl/8z25kb6x","slide":16,"title":"Harder rooms show the largest gains","textShapes":25}
+{"kind":"textbox","id":"sh/wval87ed","slide":16,"name":"Text 0","text":"Harder rooms show the largest gains","textPreview":"Harder rooms show the largest gains","textChars":35,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":16,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":16,"name":"Text 2","text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":16,"name":"Text 3","text":"LAYOUT RESULTS","textPreview":"LAYOUT RESULTS","textChars":14,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":16,"name":"Text 4","text":"Overall score","textPreview":"Overall score","textChars":13,"textLines":1,"bbox":[76.8,129.6,672,38.4]}
+{"kind":"textbox","id":"sh/7u54zido","slide":16,"name":"Text 5","text":"Minimal rectangular","textPreview":"Minimal rectangular","textChars":19,"textLines":1,"bbox":[78.72,201.6,139.2,48]}
+{"kind":"shape","id":"sh/ed8bat47","slide":16,"name":"Shape 6","bbox":[225.6,192,396.6,19.2]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":16,"name":"Text 7","text":"87.9","textPreview":"87.9","textChars":4,"textLines":1,"bbox":[629.88,189.12,57.6,24]}
+{"kind":"shape","id":"sh/d8v6psfi","slide":16,"name":"Shape 8","bbox":[225.6,223.68,332.53,19.2]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":16,"name":"Text 9","text":"73.7","textPreview":"73.7","textChars":4,"textLines":1,"bbox":[565.81,220.8,57.6,24]}
+{"kind":"shape","id":"sh/z25kb6xk","slide":16,"name":"Shape 10","bbox":[225.6,255.36,222.44,19.2]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":16,"name":"Text 11","text":"49.3","textPreview":"49.3","textChars":4,"textLines":1,"bbox":[455.72,252.48,57.6,24]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":16,"name":"Text 12","text":"Detailed rectangular","textPreview":"Detailed rectangular","textChars":20,"textLines":1,"bbox":[78.72,340.8,139.2,48]}
+{"kind":"shape","id":"sh/6tovahoz","slide":16,"name":"Shape 13","bbox":[225.6,331.2,416.46,19.2]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":16,"name":"Text 14","text":"92.3","textPreview":"92.3","textChars":4,"textLines":1,"bbox":[649.74,328.32,57.6,24]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":16,"name":"Shape 15","bbox":[225.6,362.88,325.32,19.2]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":16,"name":"Text 16","text":"72.1","textPreview":"72.1","textChars":4,"textLines":1,"bbox":[558.6,360,57.6,24]}
+{"kind":"shape","id":"sh/hk3q5o7q","slide":16,"name":"Shape 17","bbox":[225.6,394.56,98.81,19.2]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":16,"name":"Text 18","text":"21.9","textPreview":"21.9","textChars":4,"textLines":1,"bbox":[332.09,391.68,57.6,24]}
+{"kind":"textbox","id":"sh/zed8v6ps","slide":16,"name":"Text 19","text":"Non-rectangular","textPreview":"Non-rectangular","textChars":15,"textLines":1,"bbox":[78.72,480,139.2,48]}
+{"kind":"shape","id":"sh/6xkf6dcb","slide":16,"name":"Shape 20","bbox":[225.6,470.4,449.85,19.2]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":16,"name":"Text 21","text":"99.7","textPreview":"99.7","textChars":4,"textLines":1,"bbox":[683.13,467.52,57.6,24]}
+{"kind":"shape","id":"sh/obm58z25","slide":16,"name":"Shape 22","bbox":[225.6,502.08,211.61,19.2]}
+{"kind":"textbox","id":"sh/zqtcj6to","slide":16,"name":"Text 23","text":"46.9","textPreview":"46.9","textChars":4,"textLines":1,"bbox":[444.89,499.2,57.6,24]}
+{"kind":"shape","id":"sh/65wjudg7","slide":16,"name":"Shape 24","bbox":[225.6,533.76,143.03,19.2]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":16,"name":"Text 25","text":"31.7","textPreview":"31.7","textChars":4,"textLines":1,"bbox":[376.31,530.88,57.6,24]}
+{"kind":"shape","id":"sh/sfil0rqd","slide":16,"name":"Shape 26","bbox":[86.4,609.6,17.28,17.28]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":16,"name":"Text 27","text":"RoomFlow","textPreview":"RoomFlow","textChars":8,"textLines":1,"bbox":[108.48,604.8,120,26.88]}
+{"kind":"shape","id":"sh/bi9s36hc","slide":16,"name":"Shape 28","bbox":[235.2,609.6,17.28,17.28]}
+{"kind":"textbox","id":"sh/032lszqt","slide":16,"name":"Text 29","text":"I-Design","textPreview":"I-Design","textChars":8,"textLines":1,"bbox":[257.28,604.8,120,26.88]}
+{"kind":"shape","id":"sh/tovahoza","slide":16,"name":"Shape 30","bbox":[384,609.6,17.28,17.28]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":16,"name":"Text 31","text":"FlairGPT","textPreview":"FlairGPT","textChars":8,"textLines":1,"bbox":[406.08,604.8,120,26.88]}
+{"kind":"shape","id":"sh/bulwval8","slide":16,"name":"Shape 32","bbox":[753.6,144,446.4,129.6]}
+{"kind":"shape","id":"sh/0fepkzup","slide":16,"name":"Shape 33","bbox":[753.6,144,7.68,129.6]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":16,"name":"Text 34","text":"Opening robustness","textPreview":"Opening robustness","textChars":18,"textLines":1,"bbox":[772.8,159.36,408,32.64]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":16,"name":"Text 35","text":"High feasibility with doors and windows.","textPreview":"High feasibility with doors and windows.","textChars":40,"textLines":1,"bbox":[772.8,199.68,408,62.4]}
+{"kind":"shape","id":"sh/byhgn29g","slide":16,"name":"Shape 36","bbox":[753.6,297.6,446.4,129.6]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":16,"name":"Shape 37","bbox":[753.6,297.6,7.68,129.6]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":16,"name":"Text 38","text":"Irregular geometry","textPreview":"Irregular geometry","textChars":18,"textLines":1,"bbox":[772.8,312.96,408,32.64]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":16,"name":"Text 39","text":"Non-rectangular rooms: RoomFlow 99.7, I-Design 46.9.","textPreview":"Non-rectangular rooms: RoomFlow 99.7, I-Design 46.9.","textChars":52,"textLines":1,"bbox":[772.8,353.28,408,62.4]}
+{"kind":"shape","id":"sh/83itgfml","slide":16,"name":"Shape 40","bbox":[753.6,451.2,446.4,129.6]}
+{"kind":"shape","id":"sh/fu18jqh0","slide":16,"name":"Shape 41","bbox":[753.6,451.2,7.68,129.6]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":16,"name":"Text 42","text":"Main interpretation","textPreview":"Main interpretation","textChars":19,"textLines":1,"bbox":[772.8,466.56,408,32.64]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":16,"name":"Text 43","text":"Objects stay usable inside real room constraints.","textPreview":"Objects stay usable inside real room constraints.","textChars":49,"textLines":1,"bbox":[772.8,506.88,408,62.4]}
+{"kind":"image","id":"im/bi9s36hc","slide":16,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/8z25kb6x","slide":16,"text":""}
+{"kind":"slide","id":"sl/54zidony","slide":17,"title":"Rendering keeps layout structure while enabling edits","textShapes":21}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":17,"name":"Text 0","text":"Rendering keeps layout structure while enabling edits","textPreview":"Rendering keeps layout structure while enabling edits","textChars":53,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":17,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":17,"name":"Text 2","text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":17,"name":"Text 3","text":"RENDERING + EDITING RESULTS","textPreview":"RENDERING + EDITING RESULTS","textChars":27,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/fepkzupw","slide":17,"name":"Shape 4","bbox":[67.2,129.6,609.6,350.4]}
+{"kind":"shape","id":"sh/oj2t83it","slide":17,"name":"Shape 5","bbox":[700.8,129.6,504,254.4]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":17,"name":"Text 6","text":"Rendering preservation (macro mean)","textPreview":"Rendering preservation (macro mean)","textChars":35,"textLines":1,"bbox":[76.8,486,566.4,24]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":17,"name":"Shape 7","bbox":[81.6,535.9,52.8,83.3]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":17,"name":"Text 8","text":"SE-ESG","textPreview":"SE-ESG","textChars":6,"textLines":1,"bbox":[70.08,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":17,"name":"Text 9","text":"0.587","textPreview":"0.587","textChars":5,"textLines":1,"bbox":[72,525.98,72,19.2]}
+{"kind":"shape","id":"sh/dsji5sne","slide":17,"name":"Shape 10","bbox":[175.68,541.98,52.8,77.22]}
+{"kind":"textbox","id":"sh/61032lsz","slide":17,"name":"Text 11","text":"SP","textPreview":"SP","textChars":2,"textLines":1,"bbox":[164.16,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":17,"name":"Text 12","text":"0.577","textPreview":"0.577","textChars":5,"textLines":1,"bbox":[166.08,532.06,72,19.2]}
+{"kind":"shape","id":"sh/ovahoza1","slide":17,"name":"Shape 13","bbox":[269.76,555.97,52.8,63.23]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":17,"name":"Text 14","text":"LVP","textPreview":"LVP","textChars":3,"textLines":1,"bbox":[258.24,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":17,"name":"Text 15","text":"0.554","textPreview":"0.554","textChars":5,"textLines":1,"bbox":[260.16,546.05,72,19.2]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":17,"name":"Shape 16","bbox":[363.84,582.11,52.8,37.09]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":17,"name":"Text 17","text":"LG","textPreview":"LG","textChars":2,"textLines":1,"bbox":[352.32,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":17,"name":"Text 18","text":"0.511","textPreview":"0.511","textChars":5,"textLines":1,"bbox":[354.24,572.19,72,19.2]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":17,"name":"Shape 19","bbox":[457.92,586.98,52.8,32.22]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":17,"name":"Text 20","text":"CP","textPreview":"CP","textChars":2,"textLines":1,"bbox":[446.4,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":17,"name":"Text 21","text":"0.503","textPreview":"0.503","textChars":5,"textLines":1,"bbox":[448.32,577.06,72,19.2]}
+{"kind":"shape","id":"sh/ulwval87","slide":17,"name":"Shape 22","bbox":[552,589.41,52.8,29.79]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":17,"name":"Text 23","text":"CO","textPreview":"CO","textChars":2,"textLines":1,"bbox":[540.48,624,76.8,21.12]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":17,"name":"Text 24","text":"0.499","textPreview":"0.499","textChars":5,"textLines":1,"bbox":[542.4,579.49,72,19.2]}
+{"kind":"shape","id":"sh/mhk3q5o7","slide":17,"name":"Shape 25","bbox":[700.8,408,235.2,139.2]}
+{"kind":"shape","id":"sh/b2hwfyxo","slide":17,"name":"Shape 26","bbox":[700.8,408,7.68,139.2]}
+{"kind":"textbox","id":"sh/4nap4r65","slide":17,"name":"Text 27","text":"Overall edit score","textPreview":"Overall edit score","textChars":18,"textLines":1,"bbox":[720,423.36,196.8,32.64]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":17,"name":"Text 28","text":"Object-scope: 0.956\nPrompt-only: 0.897","textPreview":"Object-scope: 0.956 | Prompt-only: 0.897","textChars":38,"textLines":2,"bbox":[720,463.68,196.8,72]}
+{"kind":"shape","id":"sh/m58z25kb","slide":17,"name":"Shape 29","bbox":[964.8,408,235.2,139.2]}
+{"kind":"shape","id":"sh/bq1oryts","slide":17,"name":"Shape 30","bbox":[964.8,408,7.68,139.2]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":17,"name":"Text 31","text":"Recolor score","textPreview":"Recolor score","textChars":13,"textLines":1,"bbox":[984,423.36,196.8,32.64]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":17,"name":"Text 32","text":"Object-scope: 1.000\nPrompt-only: 0.775","textPreview":"Object-scope: 1.000 | Prompt-only: 0.775","textChars":38,"textLines":2,"bbox":[984,463.68,196.8,72]}
+{"kind":"shape","id":"sh/m1cfa9w3","slide":17,"name":"Shape 33","bbox":[700.8,576,499.2,65.28]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":17,"name":"Text 34","text":"SE-ESG gives the best preservation trade-off; object scope improves targeted edits.","textPreview":"SE-ESG gives the best preservation trade-off; object scope improves targeted edits.","textChars":83,"textLines":1,"bbox":[718.08,583.68,464.64,49.92]}
+{"kind":"image","id":"im/cfa9w3m9","slide":17,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/1032lszq","slide":17,"name":"Image 1","bbox":[91.68,129.6,560.64,350.4]}
+{"kind":"image","id":"im/u9knih4b","slide":17,"name":"Image 2","bbox":[700.8,162.23,504,142.74]}
+{"kind":"notes","id":"nt/54zidony","slide":17,"text":""}
+{"kind":"slide","id":"sl/m58z25kb","slide":18,"title":"RoomFlow makes generative design editable","textShapes":17}
+{"kind":"textbox","id":"sh/4nap4r65","slide":18,"name":"Text 0","text":"RoomFlow makes generative design editable","textPreview":"RoomFlow makes generative design editable","textChars":41,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/bq1oryts","slide":18,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":18,"name":"Text 2","text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":18,"name":"Text 3","text":"THESIS CONTRIBUTIONS","textPreview":"THESIS CONTRIBUTIONS","textChars":20,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/4byhgn29","slide":18,"name":"Shape 4","bbox":[67.2,139.2,369.6,196.8]}
+{"kind":"shape","id":"sh/bm58z25k","slide":18,"name":"Shape 5","bbox":[67.2,139.2,7.68,196.8]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":18,"name":"Text 6","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[84.48,153.6,52.8,36.48]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":18,"name":"Text 7","text":"Constraint-aware layouts","textPreview":"Constraint-aware layouts","textChars":24,"textLines":1,"bbox":[142.08,154.56,275.52,32.64]}
+{"kind":"textbox","id":"sh/1032lszq","slide":18,"name":"Text 8","text":"Briefs become valid, editable furniture arrangements.","textPreview":"Briefs become valid, editable furniture arrangements.","textChars":53,"textLines":1,"bbox":[86.4,194.88,331.2,129.6]}
+{"kind":"shape","id":"sh/u9knih4b","slide":18,"name":"Shape 9","bbox":[456,139.2,369.6,196.8]}
+{"kind":"shape","id":"sh/judg7ads","slide":18,"name":"Shape 10","bbox":[456,139.2,7.68,196.8]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":18,"name":"Text 11","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[473.28,153.6,52.8,36.48]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":18,"name":"Text 12","text":"Layout-guided rendering","textPreview":"Layout-guided rendering","textChars":23,"textLines":1,"bbox":[530.88,154.56,275.52,32.64]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":18,"name":"Text 13","text":"The selected 3D view conditions realistic outputs.","textPreview":"The selected 3D view conditions realistic outputs.","textChars":50,"textLines":1,"bbox":[475.2,194.88,331.2,129.6]}
+{"kind":"shape","id":"sh/jm1cfa9w","slide":18,"name":"Shape 14","bbox":[844.8,139.2,369.6,196.8]}
+{"kind":"shape","id":"sh/cvixczed","slide":18,"name":"Shape 15","bbox":[844.8,139.2,7.68,196.8]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":18,"name":"Text 16","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[862.08,153.6,52.8,36.48]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":18,"name":"Text 17","text":"End-to-end prototype","textPreview":"End-to-end prototype","textChars":20,"textLines":1,"bbox":[919.68,154.56,275.52,32.64]}
+{"kind":"textbox","id":"sh/gfmlkjm1","slide":18,"name":"Text 18","text":"Room editing, variants, rendering, edits, and artifacts stay linked.","textPreview":"Room editing, variants, rendering, edits, and artifacts stay linked.","textChars":68,"textLines":1,"bbox":[864,194.88,331.2,129.6]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":18,"name":"Text 19","text":"Key findings","textPreview":"Key findings","textChars":12,"textLines":1,"bbox":[74.88,379.2,211.2,34.56]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":18,"name":"Text 20","text":"Validity checks matter for irregular rooms.\nLayout evidence preserves structure.\nObject-level edits localize changes.","textPreview":"Validity checks matter for irregular rooms. | Layout evidence preserves structure. | Object-level edits localize changes.","textChars":117,"textLines":3,"bbox":[81.6,420.48,595.2,163.2]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":18,"name":"Text 21","text":"Future work","textPreview":"Future work","textChars":11,"textLines":1,"bbox":[700.8,379.2,211.2,34.56]}
+{"kind":"textbox","id":"sh/g7adsji5","slide":18,"name":"Text 22","text":"Broader room types, richer inventories, stronger multi-view consistency.","textPreview":"Broader room types, richer inventories, stronger multi-view consistency.","textChars":72,"textLines":1,"bbox":[705.6,420.48,489.6,163.2]}
+{"kind":"shape","id":"sh/rmhk3q5o","slide":18,"name":"Shape 23","bbox":[110.4,600,1060.8,48]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":18,"name":"Text 24","text":"RoomFlow is an early-stage design assistant for exploration and communication.","textPreview":"RoomFlow is an early-stage design assistant for exploration and communication.","textChars":78,"textLines":1,"bbox":[127.68,607.68,1026.24,32.64]}
+{"kind":"image","id":"im/q1orytsv","slide":18,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/m58z25kb","slide":18,"text":""}
+{"kind":"slide","id":"sl/bat47y1k","slide":19,"title":"Questions & Discussion","textShapes":3}
+{"kind":"textbox","id":"sh/je9cvixc","slide":19,"name":"Text 0","text":"Questions & Discussion","textPreview":"Questions & Discussion","textChars":22,"textLines":1,"bbox":[604.8,436.8,556.8,46.08]}
+{"kind":"textbox","id":"sh/87ed8bat","slide":19,"name":"Text 1","text":"Nguyễn Thành Minh  •  20225450","textPreview":"Nguyễn Thành Minh  •  20225450","textChars":30,"textLines":1,"bbox":[604.8,489.6,556.8,33.6]}
+{"kind":"shape","id":"sh/xs72x4na","slide":19,"name":"Shape 2","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":19,"name":"Text 3","text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"image","id":"im/yxobm58z","slide":19,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/bat47y1k","slide":19,"text":""}
+{"kind":"slide","id":"sl/j2t83itg","slide":20,"title":"Backup — Requirements and Use Cases","textShapes":24}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":20,"name":"Text 0","text":"Backup — Requirements and Use Cases","textPreview":"Backup — Requirements and Use Cases","textChars":35,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/4byhgn29","slide":20,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":20,"name":"Text 2","text":"20","textPreview":"20","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":20,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/bq1oryts","slide":20,"name":"Shape 4","bbox":[67.2,139.2,206.4,120]}
+{"kind":"shape","id":"sh/47y1kre1","slide":20,"name":"Shape 5","bbox":[67.2,139.2,7.68,120]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":20,"name":"Text 6","text":"Usability","textPreview":"Usability","textChars":9,"textLines":1,"bbox":[86.4,154.56,168,32.64]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":20,"name":"Text 7","text":"No drafting expertise required","textPreview":"No drafting expertise required","textChars":30,"textLines":1,"bbox":[86.4,194.88,168,52.8]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":20,"name":"Shape 8","bbox":[307.2,139.2,206.4,120]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":20,"name":"Shape 9","bbox":[307.2,139.2,7.68,120]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":20,"name":"Text 10","text":"Editability","textPreview":"Editability","textChars":11,"textLines":1,"bbox":[326.4,154.56,168,32.64]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":20,"name":"Text 11","text":"AI output remains directly editable","textPreview":"AI output remains directly editable","textChars":35,"textLines":1,"bbox":[326.4,194.88,168,52.8]}
+{"kind":"shape","id":"sh/g7adsji5","slide":20,"name":"Shape 12","bbox":[547.2,139.2,206.4,120]}
+{"kind":"shape","id":"sh/rmhk3q5o","slide":20,"name":"Shape 13","bbox":[547.2,139.2,7.68,120]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":20,"name":"Text 14","text":"Spatial consistency","textPreview":"Spatial consistency","textChars":19,"textLines":1,"bbox":[566.4,154.56,168,32.64]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":20,"name":"Text 15","text":"Room geometry and openings are preserved","textPreview":"Room geometry and openings are preserved","textChars":40,"textLines":1,"bbox":[566.4,194.88,168,52.8]}
+{"kind":"shape","id":"sh/g3ex0nux","slide":20,"name":"Shape 16","bbox":[787.2,139.2,206.4,120]}
+{"kind":"shape","id":"sh/cfa9w3m9","slide":20,"name":"Shape 17","bbox":[787.2,139.2,7.68,120]}
+{"kind":"textbox","id":"sh/1032lszq","slide":20,"name":"Text 18","text":"Visualization consistency","textPreview":"Visualization consistency","textChars":25,"textLines":1,"bbox":[806.4,154.56,168,32.64]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":20,"name":"Text 19","text":"Render follows layout and camera","textPreview":"Render follows layout and camera","textChars":32,"textLines":1,"bbox":[806.4,194.88,168,52.8]}
+{"kind":"shape","id":"sh/judg7ads","slide":20,"name":"Shape 20","bbox":[1027.2,139.2,206.4,120]}
+{"kind":"shape","id":"sh/c7u54zid","slide":20,"name":"Shape 21","bbox":[1027.2,139.2,7.68,120]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":20,"name":"Text 22","text":"Traceability","textPreview":"Traceability","textChars":12,"textLines":1,"bbox":[1046.4,154.56,168,32.64]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":20,"name":"Text 23","text":"Artifacts remain linked to their sources","textPreview":"Artifacts remain linked to their sources","textChars":40,"textLines":1,"bbox":[1046.4,194.88,168,52.8]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":20,"name":"Text 24","text":"Three thesis-critical use cases","textPreview":"Three thesis-critical use cases","textChars":31,"textLines":1,"bbox":[72,307.2,441.6,40.32]}
+{"kind":"shape","id":"sh/cvixczed","slide":20,"name":"Shape 25","bbox":[72,364.8,350.4,158.4]}
+{"kind":"shape","id":"sh/5gbq1ory","slide":20,"name":"Shape 26","bbox":[72,364.8,7.68,158.4]}
+{"kind":"textbox","id":"sh/val87ed8","slide":20,"name":"Text 27","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[89.28,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/6psfil0r","slide":20,"name":"Text 28","text":"UC01 — Auto Design Room Layout","textPreview":"UC01 — Auto Design Room Layout","textChars":30,"textLines":1,"bbox":[146.88,380.16,256.32,32.64]}
+{"kind":"textbox","id":"sh/dcbulwva","slide":20,"name":"Text 29","text":"Generate editable variants from the brief, room geometry, openings, and inventory.","textPreview":"Generate editable variants from the brief, room geometry, openings, and inventory.","textChars":82,"textLines":1,"bbox":[91.2,420.48,312,91.2]}
+{"kind":"shape","id":"sh/kre1w7mp","slide":20,"name":"Shape 30","bbox":[463.68,364.8,350.4,158.4]}
+{"kind":"shape","id":"sh/vixczed8","slide":20,"name":"Shape 31","bbox":[463.68,364.8,7.68,158.4]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":20,"name":"Text 32","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[480.96,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/donyd0z6","slide":20,"name":"Text 33","text":"UC02 — Generate Perspective Image","textPreview":"UC02 — Generate Perspective Image","textChars":33,"textLines":1,"bbox":[538.56,380.16,256.32,32.64]}
+{"kind":"textbox","id":"sh/k3q5o7qp","slide":20,"name":"Text 34","text":"Capture the selected 3D view and generate a layout-linked realistic render.","textPreview":"Capture the selected 3D view and generate a layout-linked realistic render.","textChars":75,"textLines":1,"bbox":[482.88,420.48,312,91.2]}
+{"kind":"shape","id":"sh/vu9knih4","slide":20,"name":"Shape 35","bbox":[855.36,364.8,350.4,158.4]}
+{"kind":"shape","id":"sh/29gr2p8n","slide":20,"name":"Shape 36","bbox":[855.36,364.8,7.68,158.4]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":20,"name":"Text 37","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[872.64,379.2,52.8,36.48]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":20,"name":"Text 38","text":"UC03 — Edit Perspective Image","textPreview":"UC03 — Edit Perspective Image","textChars":29,"textLines":1,"bbox":[930.24,380.16,256.32,32.64]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":20,"name":"Text 39","text":"Apply add, remove, replace, or recolor operations to a selected target.","textPreview":"Apply add, remove, replace, or recolor operations to a selected target.","textChars":71,"textLines":1,"bbox":[874.56,420.48,312,91.2]}
+{"kind":"shape","id":"sh/pwb2hwfy","slide":20,"name":"Shape 40","bbox":[96,580.8,1094.4,52.8]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":20,"name":"Text 41","text":"Supporting functions enable the workflow, but the defense focuses on layout generation and layout-guided rendering/editing.","textPreview":"Supporting functions enable the workflow, but the defense focuses on layout generation and layout-guided rendering/editing.","textChars":123,"textLines":1,"bbox":[113.28,588.48,1059.84,37.44]}
+{"kind":"image","id":"im/onyd0z61","slide":20,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/j2t83itg","slide":20,"text":""}
+{"kind":"slide","id":"sl/mhk3q5o7","slide":21,"title":"Backup — Detailed System Architecture","textShapes":3}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":21,"name":"Text 0","text":"Backup — Detailed System Architecture","textPreview":"Backup — Detailed System Architecture","textChars":37,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/6tovahoz","slide":21,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":21,"name":"Text 2","text":"21","textPreview":"21","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":21,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/61032lsz","slide":21,"name":"Shape 4","bbox":[81.6,129.6,1118.4,542.4]}
+{"kind":"image","id":"im/ap4r65wj","slide":21,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/0je9cvix","slide":21,"name":"Image 1","bbox":[141.65,129.6,998.3,542.4]}
+{"kind":"notes","id":"nt/mhk3q5o7","slide":21,"text":""}
+{"kind":"slide","id":"sl/5wjudg7a","slide":22,"title":"Backup — Evaluation Metrics","textShapes":20}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":22,"name":"Text 0","text":"Backup — Evaluation Metrics","textPreview":"Backup — Evaluation Metrics","textChars":27,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/r65wjudg","slide":22,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":22,"name":"Text 2","text":"22","textPreview":"22","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":22,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/gr2p8nqx","slide":22,"name":"Shape 4","bbox":[72,129.6,278.4,120]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":22,"name":"Shape 5","bbox":[72,129.6,7.68,120]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":22,"name":"Text 6","text":"Spatial feasibility","textPreview":"Spatial feasibility","textChars":19,"textLines":1,"bbox":[91.2,144.96,240,32.64]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":22,"name":"Text 7","text":"Inside room • no overlap • opening clearance • circulation","textPreview":"Inside room • no overlap • opening clearance • circulation","textChars":58,"textLines":1,"bbox":[91.2,185.28,240,52.8]}
+{"kind":"shape","id":"sh/lwval87e","slide":22,"name":"Shape 8","bbox":[369.6,129.6,278.4,120]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":22,"name":"Shape 9","bbox":[369.6,129.6,7.68,120]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":22,"name":"Text 10","text":"Brief compliance","textPreview":"Brief compliance","textChars":16,"textLines":1,"bbox":[388.8,144.96,240,32.64]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":22,"name":"Text 11","text":"Required objects • user relations • intent alignment","textPreview":"Required objects • user relations • intent alignment","textChars":52,"textLines":1,"bbox":[388.8,185.28,240,52.8]}
+{"kind":"shape","id":"sh/loj2t83i","slide":22,"name":"Shape 12","bbox":[667.2,129.6,278.4,120]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":22,"name":"Shape 13","bbox":[667.2,129.6,7.68,120]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":22,"name":"Text 14","text":"Functional quality","textPreview":"Functional quality","textChars":18,"textLines":1,"bbox":[686.4,144.96,240,32.64]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":22,"name":"Text 15","text":"Access • orientation • focal relationships • room flow","textPreview":"Access • orientation • focal relationships • room flow","textChars":54,"textLines":1,"bbox":[686.4,185.28,240,52.8]}
+{"kind":"shape","id":"sh/lkjm1cfa","slide":22,"name":"Shape 16","bbox":[964.8,129.6,240,120]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":22,"name":"Shape 17","bbox":[964.8,129.6,7.68,120]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":22,"name":"Text 18","text":"Usable completeness","textPreview":"Usable completeness","textChars":19,"textLines":1,"bbox":[984,144.96,201.6,32.64]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":22,"name":"Text 19","text":"Present objects that are also geometrically usable","textPreview":"Present objects that are also geometrically usable","textChars":50,"textLines":1,"bbox":[984,185.28,201.6,52.8]}
+{"kind":"shape","id":"sh/eloj2t83","slide":22,"name":"Shape 20","bbox":[72,292.8,278.4,120]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":22,"name":"Shape 21","bbox":[72,292.8,7.68,120]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":22,"name":"Text 22","text":"Edge similarity","textPreview":"Edge similarity","textChars":15,"textLines":1,"bbox":[91.2,308.16,240,32.64]}
+{"kind":"textbox","id":"sh/7u54zido","slide":22,"name":"Text 23","text":"Preservation of visible boundaries and room structure","textPreview":"Preservation of visible boundaries and room structure","textChars":53,"textLines":1,"bbox":[91.2,348.48,240,52.8]}
+{"kind":"shape","id":"sh/ed8bat47","slide":22,"name":"Shape 24","bbox":[369.6,292.8,278.4,120]}
+{"kind":"shape","id":"sh/psfil0rq","slide":22,"name":"Shape 25","bbox":[369.6,292.8,7.68,120]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":22,"name":"Text 26","text":"Depth similarity","textPreview":"Depth similarity","textChars":16,"textLines":1,"bbox":[388.8,308.16,240,32.64]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":22,"name":"Text 27","text":"Preservation of large-scale spatial ordering","textPreview":"Preservation of large-scale spatial ordering","textChars":44,"textLines":1,"bbox":[388.8,348.48,240,52.8]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":22,"name":"Shape 28","bbox":[667.2,292.8,278.4,120]}
+{"kind":"shape","id":"sh/obm58z25","slide":22,"name":"Shape 29","bbox":[667.2,292.8,7.68,120]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":22,"name":"Text 30","text":"DINO patch/object","textPreview":"DINO patch/object","textChars":17,"textLines":1,"bbox":[686.4,308.16,240,32.64]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":22,"name":"Text 31","text":"Semantic and local appearance consistency","textPreview":"Semantic and local appearance consistency","textChars":41,"textLines":1,"bbox":[686.4,348.48,240,52.8]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":22,"name":"Shape 32","bbox":[964.8,292.8,240,120]}
+{"kind":"shape","id":"sh/oza1gvy9","slide":22,"name":"Shape 33","bbox":[964.8,292.8,7.68,120]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":22,"name":"Text 34","text":"Preset & edit fidelity","textPreview":"Preset & edit fidelity","textChars":22,"textLines":1,"bbox":[984,308.16,201.6,32.64]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":22,"name":"Text 35","text":"Visual preset following and requested edit success","textPreview":"Visual preset following and requested edit success","textChars":50,"textLines":1,"bbox":[984,348.48,201.6,52.8]}
+{"kind":"shape","id":"sh/z61032ls","slide":22,"name":"Shape 36","bbox":[96,513.6,1084.8,65.28]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":22,"name":"Text 37","text":"Use metrics as evidence bundles; human inspection remains required for image edits.","textPreview":"Use metrics as evidence bundles; human inspection remains required for image edits.","textChars":83,"textLines":1,"bbox":[113.28,521.28,1050.24,49.92]}
+{"kind":"image","id":"im/x4nap4r6","slide":22,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/5wjudg7a","slide":22,"text":""}
+{"kind":"slide","id":"sl/crmhk3q5","slide":23,"title":"Backup — Ablation Study","textShapes":20}
+{"kind":"textbox","id":"sh/47y1kre1","slide":23,"name":"Text 0","text":"Backup — Ablation Study","textPreview":"Backup — Ablation Study","textChars":23,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/bat47y1k","slide":23,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":23,"name":"Text 2","text":"23","textPreview":"23","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":23,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":23,"name":"Text 4","text":"Overall score","textPreview":"Overall score","textChars":13,"textLines":1,"bbox":[76.8,129.6,585.6,34.56]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":23,"name":"Text 5","text":"Full","textPreview":"Full","textChars":4,"textLines":1,"bbox":[86.4,189.12,148.8,24]}
+{"kind":"shape","id":"sh/mhk3q5o7","slide":23,"name":"Shape 6","bbox":[249.6,192,411.7,26.88]}
+{"kind":"textbox","id":"sh/0z61032l","slide":23,"name":"Text 7","text":"95.3","textPreview":"95.3","textChars":4,"textLines":1,"bbox":[689.28,190.08,57.6,24]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":23,"name":"Text 8","text":"No request","textPreview":"No request","textChars":10,"textLines":1,"bbox":[86.4,263.04,148.8,24]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":23,"name":"Shape 9","bbox":[249.6,265.92,413.42,26.88]}
+{"kind":"textbox","id":"sh/7ed8bat4","slide":23,"name":"Text 10","text":"95.7","textPreview":"95.7","textChars":4,"textLines":1,"bbox":[689.28,264,57.6,24]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":23,"name":"Text 11","text":"No tier","textPreview":"No tier","textChars":7,"textLines":1,"bbox":[86.4,336.96,148.8,24]}
+{"kind":"shape","id":"sh/p8nqxs72","slide":23,"name":"Shape 12","bbox":[249.6,339.84,412.13,26.88]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":23,"name":"Text 13","text":"95.4","textPreview":"95.4","textChars":4,"textLines":1,"bbox":[689.28,337.92,57.6,24]}
+{"kind":"textbox","id":"sh/72x4nap4","slide":23,"name":"Text 14","text":"No semantic","textPreview":"No semantic","textChars":11,"textLines":1,"bbox":[86.4,410.88,148.8,24]}
+{"kind":"shape","id":"sh/wjudg7ad","slide":23,"name":"Shape 15","bbox":[249.6,413.76,367.2,26.88]}
+{"kind":"textbox","id":"sh/p4r65wju","slide":23,"name":"Text 16","text":"85.0","textPreview":"85.0","textChars":4,"textLines":1,"bbox":[689.28,411.84,57.6,24]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":23,"name":"Text 17","text":"Minimal context","textPreview":"Minimal context","textChars":15,"textLines":1,"bbox":[86.4,484.8,148.8,24]}
+{"kind":"shape","id":"sh/gvy90je9","slide":23,"name":"Shape 18","bbox":[249.6,487.68,333.07,26.88]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":23,"name":"Text 19","text":"77.1","textPreview":"77.1","textChars":4,"textLines":1,"bbox":[689.28,485.76,57.6,24]}
+{"kind":"shape","id":"sh/2p8nqxs7","slide":23,"name":"Shape 20","bbox":[777.6,148.8,403.2,120]}
+{"kind":"shape","id":"sh/94fu18jq","slide":23,"name":"Shape 21","bbox":[777.6,148.8,7.68,120]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":23,"name":"Text 22","text":"Strongest degradation","textPreview":"Strongest degradation","textChars":21,"textLines":1,"bbox":[796.8,164.16,364.8,32.64]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":23,"name":"Text 23","text":"Removing structured semantic context weakens object roles and relations.","textPreview":"Removing structured semantic context weakens object roles and relations.","textChars":72,"textLines":1,"bbox":[796.8,204.48,364.8,52.8]}
+{"kind":"shape","id":"sh/2hwfyxob","slide":23,"name":"Shape 24","bbox":[777.6,302.4,403.2,120]}
+{"kind":"shape","id":"sh/9w3m94fu","slide":23,"name":"Shape 25","bbox":[777.6,302.4,7.68,120]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":23,"name":"Text 26","text":"Primary metrics are incomplete","textPreview":"Primary metrics are incomplete","textChars":30,"textLines":1,"bbox":[796.8,317.76,364.8,32.64]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":23,"name":"Text 27","text":"Some ablations score similarly because diversity and style are measured separately.","textPreview":"Some ablations score similarly because diversity and style are measured separately.","textChars":83,"textLines":1,"bbox":[796.8,358.08,364.8,52.8]}
+{"kind":"shape","id":"sh/judg7ads","slide":23,"name":"Shape 28","bbox":[777.6,456,403.2,120]}
+{"kind":"shape","id":"sh/cfa9w3m9","slide":23,"name":"Shape 29","bbox":[777.6,456,7.68,120]}
+{"kind":"textbox","id":"sh/1032lszq","slide":23,"name":"Text 30","text":"Interpretation","textPreview":"Interpretation","textChars":14,"textLines":1,"bbox":[796.8,471.36,364.8,32.64]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":23,"name":"Text 31","text":"Weak context still places objects, but alignment with the intent degrades.","textPreview":"Weak context still places objects, but alignment with the intent degrades.","textChars":74,"textLines":1,"bbox":[796.8,511.68,364.8,52.8]}
+{"kind":"image","id":"im/kre1w7mp","slide":23,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"notes","id":"nt/crmhk3q5","slide":23,"text":""}
+{"kind":"slide","id":"sl/bq1oryts","slide":24,"title":"Backup — Representative Layout Cases","textShapes":6}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":24,"name":"Text 0","text":"Backup — Representative Layout Cases","textPreview":"Backup — Representative Layout Cases","textChars":36,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":24,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":24,"name":"Text 2","text":"24","textPreview":"24","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":24,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/gr2p8nqx","slide":24,"name":"Shape 4","bbox":[67.2,129.6,379.2,475.2]}
+{"kind":"shape","id":"sh/tovahoza","slide":24,"name":"Shape 5","bbox":[451.2,129.6,379.2,475.2]}
+{"kind":"shape","id":"sh/bi9s36hc","slide":24,"name":"Shape 6","bbox":[835.2,129.6,379.2,475.2]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":24,"name":"Text 7","text":"Simple rectangular","textPreview":"Simple rectangular","textChars":18,"textLines":1,"bbox":[81.6,428,350.4,28.8]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":24,"name":"Text 8","text":"L-shaped living room","textPreview":"L-shaped living room","textChars":20,"textLines":1,"bbox":[465.6,428,350.4,28.8]}
+{"kind":"textbox","id":"sh/0fepkzup","slide":24,"name":"Text 9","text":"Chamfered bedroom","textPreview":"Chamfered bedroom","textChars":17,"textLines":1,"bbox":[849.6,428,350.4,28.8]}
+{"kind":"image","id":"im/wfyxobm5","slide":24,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/l0rqd4vm","slide":24,"name":"Image 1","bbox":[67.2,180.72,379.2,208.56]}
+{"kind":"image","id":"im/e1w7mp0b","slide":24,"name":"Image 2","bbox":[451.2,180.72,379.2,208.56]}
+{"kind":"image","id":"im/7mp0bi9s","slide":24,"name":"Image 3","bbox":[835.2,180.72,379.2,208.56]}
+{"kind":"notes","id":"nt/bq1oryts","slide":24,"text":""}
+{"kind":"slide","id":"sl/61032lsz","slide":25,"title":"Backup — Implementation and Deployment","textShapes":14}
+{"kind":"textbox","id":"sh/t47y1kre","slide":25,"name":"Text 0","text":"Backup — Implementation and Deployment","textPreview":"Backup — Implementation and Deployment","textChars":38,"textLines":1,"bbox":[50,48,1158,74]}
+{"kind":"shape","id":"sh/il0rqd4v","slide":25,"name":"Shape 1","bbox":[1204.8,676.8,52.8,24]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":25,"name":"Text 2","text":"25","textPreview":"25","textChars":2,"textLines":1,"bbox":[1207.68,672,43.2,21.12]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":25,"name":"Text 3","text":"BACKUP","textPreview":"BACKUP","textChars":6,"textLines":1,"bbox":[59.52,107.52,403.2,21.12]}
+{"kind":"shape","id":"sh/ixczed8v","slide":25,"name":"Shape 4","bbox":[67.2,129.6,614.4,456]}
+{"kind":"shape","id":"sh/bi9s36hc","slide":25,"name":"Shape 5","bbox":[715.2,139.2,225.6,100.8]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":25,"name":"Shape 6","bbox":[715.2,139.2,7.68,100.8]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":25,"name":"Text 7","text":"Frontend","textPreview":"Frontend","textChars":8,"textLines":1,"bbox":[734.4,154.56,187.2,32.64]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":25,"name":"Text 8","text":"React • Canvas • Three.js","textPreview":"React • Canvas • Three.js","textChars":25,"textLines":1,"bbox":[734.4,194.88,187.2,33.6]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":25,"name":"Shape 9","bbox":[964.8,139.2,225.6,100.8]}
+{"kind":"shape","id":"sh/rmhk3q5o","slide":25,"name":"Shape 10","bbox":[964.8,139.2,7.68,100.8]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":25,"name":"Text 11","text":"Backend","textPreview":"Backend","textChars":7,"textLines":1,"bbox":[984,154.56,187.2,32.64]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":25,"name":"Text 12","text":"FastAPI • SSE • provider clients","textPreview":"FastAPI • SSE • provider clients","textChars":32,"textLines":1,"bbox":[984,194.88,187.2,33.6]}
+{"kind":"shape","id":"sh/g7adsji5","slide":25,"name":"Shape 13","bbox":[715.2,273.6,225.6,100.8]}
+{"kind":"shape","id":"sh/nih4byhg","slide":25,"name":"Shape 14","bbox":[715.2,273.6,7.68,100.8]}
+{"kind":"textbox","id":"sh/yxobm58z","slide":25,"name":"Text 15","text":"Data","textPreview":"Data","textChars":4,"textLines":1,"bbox":[734.4,288.96,187.2,32.64]}
+{"kind":"textbox","id":"sh/61032lsz","slide":25,"name":"Text 16","text":"PostgreSQL • JSON artifacts • saved renders","textPreview":"PostgreSQL • JSON artifacts • saved renders","textChars":43,"textLines":1,"bbox":[734.4,329.28,187.2,33.6]}
+{"kind":"shape","id":"sh/vmtwra5g","slide":25,"name":"Shape 17","bbox":[964.8,273.6,225.6,100.8]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":25,"name":"Shape 18","bbox":[964.8,273.6,7.68,100.8]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":25,"name":"Text 19","text":"AI services","textPreview":"AI services","textChars":11,"textLines":1,"bbox":[984,288.96,187.2,32.64]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":25,"name":"Text 20","text":"LLM planning • image generation/editing","textPreview":"LLM planning • image generation/editing","textChars":39,"textLines":1,"bbox":[984,329.28,187.2,33.6]}
+{"kind":"shape","id":"sh/vy90je9c","slide":25,"name":"Shape 21","bbox":[715.2,408,475.2,110.4]}
+{"kind":"shape","id":"sh/oj2t83it","slide":25,"name":"Shape 22","bbox":[715.2,408,7.68,110.4]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":25,"name":"Text 23","text":"Deployment principle","textPreview":"Deployment principle","textChars":20,"textLines":1,"bbox":[734.4,423.36,436.8,32.64]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":25,"name":"Text 24","text":"Keep direct manipulation in the browser; keep credentials, persistence, and long-running AI workflows on the backend.","textPreview":"Keep direct manipulation in the browser; keep credentials, persistence, and long-running AI workflows on the backend.","textChars":117,"textLines":1,"bbox":[734.4,463.68,436.8,43.2]}
+{"kind":"shape","id":"sh/z25kb6xk","slide":25,"name":"Shape 25","bbox":[715.2,552,475.2,69.12]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":25,"name":"Text 26","text":"Each pipeline run stores inputs, stage outputs, status files, layout variants, and evaluation artifacts for traceability.","textPreview":"Each pipeline run stores inputs, stage outputs, status files, layout variants, and evaluation artifacts for traceability.","textChars":121,"textLines":1,"bbox":[732.48,559.68,440.64,53.76]}
+{"kind":"image","id":"im/j6tovaho","slide":25,"name":"Image 0","bbox":[0,0,1279.97,720]}
+{"kind":"image","id":"im/crmhk3q5","slide":25,"name":"Image 1","bbox":[67.3,165,614.19,327]}
+{"kind":"notes","id":"nt/61032lsz","slide":25,"text":""}
